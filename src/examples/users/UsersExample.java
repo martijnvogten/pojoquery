@@ -1,15 +1,16 @@
-package users;
+package examples.users;
 
 import java.util.Date;
 
 import javax.sql.DataSource;
 
-import system.db.DB;
-import system.sql.Query;
-import system.sql.annotations.Id;
-import system.sql.annotations.Table;
+import nl.pojoquery.DB;
+import nl.pojoquery.PojoQuery;
+import nl.pojoquery.annotations.Id;
+import nl.pojoquery.annotations.Table;
 
-public class Main {
+
+public class UsersExample {
 
 	public static class Entity {
 		@Id
@@ -42,21 +43,20 @@ public class Main {
 		public String email;
 	}
 	
-	public static void main(String[] args) {
-		DataSource db = DB.getDataSource("jdbc:mysql://localhost/users", "root", "");
+	public static void run(DataSource db) {
 		DB.executeDDL(db, "DELETE FROM user");
 		
 		User john = new User();
 		john.firstName = "John";
 		john.lastName = "Ewbank";
 		john.email = "john@ewbank.nl";
-		john.id = Query.insertOrUpdate(db, john);
+		john.id = PojoQuery.insertOrUpdate(db, john);
 		
 		john.modifiedBy_id = john.id;
 		john.modificationDate = john.modificationDate;
-		Query.insertOrUpdate(db, john);
+		PojoQuery.insertOrUpdate(db, john);
 		
-		Query<UserWithAudit> q = Query.buildQuery(UserWithAudit.class);
+		PojoQuery<UserWithAudit> q = PojoQuery.create(UserWithAudit.class);
 		System.out.println(q.toSql());
 		
 		for(UserWithAudit u : q.execute(db)) {

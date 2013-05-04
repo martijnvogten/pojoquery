@@ -1,4 +1,4 @@
-package system.sql;
+package nl.pojoquery;
 
 import java.util.Collections;
 

@@ -1,6 +1,6 @@
-package system.sql;
+package nl.pojoquery;
 
-import static system.util.Strings.implode;
+import static nl.pojoquery.util.Strings.*;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -11,16 +11,9 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
-import system.db.DB;
-import system.sql.annotations.GroupBy;
-import system.sql.annotations.Id;
-import system.sql.annotations.Join;
-import system.sql.annotations.Link;
-import system.sql.annotations.Select;
-import system.sql.annotations.Table;
+import nl.pojoquery.annotations.*;
 
-
-public class Query<T> {
+public class PojoQuery<T> {
 
 	private Class<T> resultClass; 
 	private String table;
@@ -30,36 +23,36 @@ public class Query<T> {
 	private List<String> groupBy = new ArrayList<String>();
 	private List<Object> parameters = new ArrayList<Object>();
 
-	public Query(String table) {
+	public PojoQuery(String table) {
 		this.table = table;
 	}
 
-	public Query<T> addField(String expression) {
+	public PojoQuery<T> addField(String expression) {
 		fields.add(expression);
 		return this;
 	}
 
-	public Query<T> addJoin(String join) {
+	public PojoQuery<T> addJoin(String join) {
 		joins.add(join);
 		return this;
 	}
 	
-	public Query<T> addGroupBy(String group) {
+	public PojoQuery<T> addGroupBy(String group) {
 		groupBy.add(group);
 		return this;
 	}
 	
-	public Query<T> addWhere(String where) {
+	public PojoQuery<T> addWhere(String where) {
 		wheres.add(new SqlExpression(where));
 		return this;
 	}
 	
-	public Query<T> addWhere(String sql, Object... params) {
+	public PojoQuery<T> addWhere(String sql, Object... params) {
 		wheres.add(new SqlExpression(sql, Arrays.asList(params)));
 		return this;
 	}
 	
-	public Query<T> setResultClass(Class<T> resultClass) {
+	public PojoQuery<T> setResultClass(Class<T> resultClass) {
 		this.resultClass = resultClass;
 		return this;
 	}
@@ -82,7 +75,12 @@ public class Query<T> {
 			whereClause = "\nWHERE " + implode("\n AND ", clauses);
 		}
 		
-		return implode(" ", Arrays.asList("SELECT\n", implode(",\n ", fields), "\nFROM", table, "\n", implode("\n ", joins), whereClause, groupByClause));
+		return implode(" ", Arrays.asList("SELECT\n", 
+				implode(",\n ", fields), 
+				"\nFROM", table, "\n", 
+				implode("\n ", joins), 
+				whereClause, 
+				groupByClause));
 	}
 	
 	public List<T> execute(DataSource db) {
@@ -200,10 +198,10 @@ public class Query<T> {
 		}
 	}
 
-	public static <T> Query<T> buildQuery(Class<T> clz) {
+	public static <T> PojoQuery<T> create(Class<T> clz) {
 		String table = determineTableName(clz);
 		
-		Query<T> q = new Query<T>(table);
+		PojoQuery<T> q = new PojoQuery<T>(table);
 		q.setResultClass(clz);
 		
 		if (clz.getAnnotation(Join.class) != null) {
@@ -236,7 +234,7 @@ public class Query<T> {
 		return table;
 	}
 	
-	private static <T> void addFields(Query<T> q, String tableAlias, Class<?> clz) {
+	private static <T> void addFields(PojoQuery<T> q, String tableAlias, Class<?> clz) {
 		String table = determineTableName(clz);
 		for(Field f : collectFieldsOfClass(clz)) {
 			if (f.getAnnotation(Link.class) != null) {

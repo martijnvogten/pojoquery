@@ -1,15 +1,16 @@
-package blog;
+package examples.blog;
 
 import java.util.Date;
 import java.util.List;
 
 import javax.sql.DataSource;
 
-import system.sql.Query;
-import system.sql.annotations.GroupBy;
-import system.sql.annotations.Join;
-import system.sql.annotations.Select;
-import system.sql.annotations.Table;
+import nl.pojoquery.PojoQuery;
+import nl.pojoquery.annotations.GroupBy;
+import nl.pojoquery.annotations.Join;
+import nl.pojoquery.annotations.Select;
+import nl.pojoquery.annotations.Table;
+
 
 @Table("blog")
 @Join("LEFT JOIN comment ON comment.blog_id = blog.id")
@@ -25,7 +26,7 @@ public class ArticleView {
 	Date lastCommentDate;
 
 	public static void main(String[] args) {
-		List<ArticleView> articles = Query.buildQuery(ArticleView.class).addWhere("blog.id=?", 3L).execute(getDatabase());
+		List<ArticleView> articles = PojoQuery.create(ArticleView.class).addWhere("blog.id=?", 3L).execute(getDatabase());
 		
 	}
 

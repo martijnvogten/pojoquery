@@ -1,4 +1,4 @@
-package system.util;
+package nl.pojoquery.util;
 
 public class Strings {
 

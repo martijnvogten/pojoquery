@@ -1,7 +1,7 @@
-package events;
+package examples.events;
 
-import system.sql.annotations.Id;
-import system.sql.annotations.Table;
+import nl.pojoquery.annotations.Id;
+import nl.pojoquery.annotations.Table;
 
 @Table("emailaddress")
 public class EmailAddress {

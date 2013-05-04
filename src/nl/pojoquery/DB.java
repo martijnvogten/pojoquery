@@ -1,6 +1,6 @@
-package system.db;
+package nl.pojoquery;
 
-import static system.util.Strings.implode;
+import static nl.pojoquery.util.Strings.implode;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -15,8 +15,6 @@ import java.util.List;
 import java.util.Map;
 
 import javax.sql.DataSource;
-
-import com.mysql.jdbc.jdbc2.optional.MysqlConnectionPoolDataSource;
 
 public class DB {
 	private enum QueryType {
@@ -140,18 +138,4 @@ public class DB {
 		return fieldNames;
 	}
 	
-	public static DataSource getDataSource(String jdbcUrl, String user, String pass) {
-		try {
-			MysqlConnectionPoolDataSource dataSource = new MysqlConnectionPoolDataSource();
-			dataSource.setUrl(jdbcUrl);
-			dataSource.setUser(user);
-			dataSource.setPassword(pass);
-			dataSource.setCharacterEncoding("utf8");
-			dataSource.setUseUnicode(true);
-			return dataSource;
-		} catch (Exception e) {
-			throw new RuntimeException(e);
-		}
-	}
-
 }

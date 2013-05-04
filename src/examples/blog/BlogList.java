@@ -1,12 +1,13 @@
-package blog;
+package examples.blog;
 
 import java.util.Date;
 
-import system.sql.annotations.GroupBy;
-import system.sql.annotations.Id;
-import system.sql.annotations.Join;
-import system.sql.annotations.Select;
-import system.sql.annotations.Table;
+import nl.pojoquery.annotations.GroupBy;
+import nl.pojoquery.annotations.Id;
+import nl.pojoquery.annotations.Join;
+import nl.pojoquery.annotations.Select;
+import nl.pojoquery.annotations.Table;
+
 
 @Table("blog")
 @Join("LEFT JOIN comment ON comment.blog_id = blog.id")

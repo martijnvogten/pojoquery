@@ -1,4 +1,4 @@
-package system.sql.annotations;
+package nl.pojoquery.annotations;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;

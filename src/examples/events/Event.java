@@ -1,9 +1,10 @@
-package events;
+package examples.events;
 
 import java.util.Date;
 
-import system.sql.annotations.Id;
-import system.sql.annotations.Table;
+import nl.pojoquery.annotations.Id;
+import nl.pojoquery.annotations.Table;
+
 
 @Table("event")
 public class Event {

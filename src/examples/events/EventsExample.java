@@ -1,4 +1,4 @@
-package events;
+package examples.events;
 
 import java.util.Date;
 import java.util.HashMap;
@@ -7,13 +7,14 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
-import system.db.DB;
-import system.sql.Query;
-import system.sql.annotations.Id;
-import system.sql.annotations.Link;
-import system.sql.annotations.Table;
+import nl.pojoquery.DB;
+import nl.pojoquery.PojoQuery;
+import nl.pojoquery.annotations.Id;
+import nl.pojoquery.annotations.Link;
+import nl.pojoquery.annotations.Table;
 
-public class Main {
+
+public class EventsExample {
 	
 	@Table("event")
 	public static class EventWithPersons extends Event {
@@ -74,8 +75,7 @@ public class Main {
 		}
 	}
 	
-	public static void main(String[] args) {
-		DataSource db = DB.getDataSource("jdbc:mysql://localhost/events", "root", "");
+	public static void run(DataSource db) {
 		DB.executeDDL(db, "DELETE FROM event");
 		DB.executeDDL(db, "DELETE FROM person");
 		DB.executeDDL(db, "DELETE FROM event_person");
@@ -84,24 +84,24 @@ public class Main {
 		Event e = new Event();
 		e.setDate(new Date());
 		e.setTitle("My Event");
-		Long eventId = Query.insertOrUpdate(db, e);
+		Long eventId = PojoQuery.insertOrUpdate(db, e);
 		
 		Event concert = new Event();
 		concert.setDate(new Date());
 		concert.setTitle("The concert");
-		Long concertId = Query.insertOrUpdate(db, concert);
+		Long concertId = PojoQuery.insertOrUpdate(db, concert);
 		
 		PersonRecord p = new PersonRecord();
 		p.setFirstname("John");
 		p.setLastname("Ewbank");
 		p.setAge(38);
-		Long personId = Query.insertOrUpdate(db, p);
+		Long personId = PojoQuery.insertOrUpdate(db, p);
 		
 		EmailAddress em = new EmailAddress();
 		em.setPerson_id(personId);
 		em.setName("John Ewbank");
 		em.setEmail("john.ewbank@endemol.nl");
-		Query.insertOrUpdate(db, em);
+		PojoQuery.insertOrUpdate(db, em);
 		
 		DB.insertOrUpdate(db, "event_person", map("event_id", eventId, "person_id", personId));
 		DB.insertOrUpdate(db, "event_person", map("event_id", concertId, "person_id", personId));
@@ -113,13 +113,13 @@ public class Main {
 //		Long marcoId = Query.insertOrUpdate(db, marco);
 //		DB.insertOrUpdate(db, "event_person", map("event_id", eventId, "person_id", marcoId));
 		
-		Query<EventPersonLink> links = Query.buildQuery(EventPersonLink.class);
+		PojoQuery<EventPersonLink> links = PojoQuery.create(EventPersonLink.class);
 		System.out.println(links.toSql());
 		for(EventPersonLink epl : links.execute(db)) {
 			System.out.println(epl.event.getTitle() + " " + epl.person);
 		}
 		
-		Query<EventWithPersons> q = Query.buildQuery(EventWithPersons.class)
+		PojoQuery<EventWithPersons> q = PojoQuery.create(EventWithPersons.class)
 					.addWhere("persons.firstname=?", "John");
 		
 		System.out.println(q.toSql());

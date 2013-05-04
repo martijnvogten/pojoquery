@@ -1,9 +1,10 @@
-package events;
+package examples.events;
 
 import java.util.List;
 
-import system.sql.annotations.Link;
-import system.sql.annotations.Table;
+import nl.pojoquery.annotations.Link;
+import nl.pojoquery.annotations.Table;
+
 
 @Table("person")
 public class Person extends PersonRecord {

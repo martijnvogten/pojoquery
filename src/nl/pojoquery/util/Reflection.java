@@ -1,4 +1,4 @@
-package system.util;
+package nl.pojoquery.util;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
