@@ -5,19 +5,20 @@ PojoQuery is a light-weight alternative to traditional Object Relational Mapping
 Unlike JPA or Hibernate, PojoQuery does not try to abstract away the database, but instead makes working with a relational database in Java as simple and pleasant as possible.
 
 The basic idea is this: Instead of writing an SQL query in plain text, we create a Plain Old Java Object (POJO).
-Each field or property in the POJO corresponds to a field in the SELECT clause of the query.
+Each field or property in the POJO corresponds to a field in the SELECT clause of the query, and as a consequence, to each column in the query result. 
 
-	@Table("employee")
-	public class Employee {
+
+	@Table("article")
+	public class Article {
 		Long id;
-		String firstName;
-		String lastName;
+		String title;
+		String content;
 	}
 
-	// SELECT id, firstName, lastName FROM employee
-	List<Employee> employees = PojoQuery.build(Employee.class).execute(getDataSource());
+	// SELECT id, title, content FROM article
+	List<Article> articles = PojoQuery.create(Article.class).execute(getDataSource());
 
-PojoQuery creates a query from the pojo, and transforms the JDBC ResultSet into a list of `Employee` instances.
+PojoQuery creates a query from the `Article` pojo, and transforms the JDBC ResultSet into a list of `Article` instances.
 Note that instead of a table, the POJO maps to the `ResultSet` which can also contain aggregate fields as is shown in a
 more complex example:
 
