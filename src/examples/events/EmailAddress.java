@@ -1,6 +1,5 @@
 package examples.events;
 
-import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
 
 @Table("emailaddress")

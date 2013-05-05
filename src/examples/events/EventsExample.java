@@ -16,18 +16,9 @@ import nl.pojoquery.annotations.Table;
 
 public class EventsExample {
 	
-	@Table("event")
 	public static class EventWithPersons extends Event {
 		@Link(linktable="event_person", resultClass=Person.class)
-		private List<Person> persons;
-
-		public List<Person> getPersons() {
-			return persons;
-		}
-
-		public void setPersons(List<Person> persons) {
-			this.persons = persons;
-		}
+		public List<Person> persons;
 
 		@Override
 		public String toString() {
@@ -37,7 +28,6 @@ public class EventsExample {
 		}
 	}
 	
-	@Table("person")
 	public static class PersonWithEvents extends Person {
 		@Link(linktable="event_person", resultClass=Event.class)
 		private List<Event> events;
@@ -76,11 +66,8 @@ public class EventsExample {
 	}
 	
 	public static void run(DataSource db) {
-		DB.executeDDL(db, "DELETE FROM event");
-		DB.executeDDL(db, "DELETE FROM person");
-		DB.executeDDL(db, "DELETE FROM event_person");
-		DB.executeDDL(db, "DELETE FROM emailaddress");
-		
+		createTables(db);
+
 		Event e = new Event();
 		e.setDate(new Date());
 		e.setTitle("My Event");
@@ -113,18 +100,21 @@ public class EventsExample {
 //		Long marcoId = Query.insertOrUpdate(db, marco);
 //		DB.insertOrUpdate(db, "event_person", map("event_id", eventId, "person_id", marcoId));
 		
-		PojoQuery<EventPersonLink> links = PojoQuery.create(EventPersonLink.class);
+
+		long start = System.currentTimeMillis();
+		PojoQuery<EventPersonLink> links = PojoQuery.build(EventPersonLink.class);
+		System.out.println("Finished in " + (System.currentTimeMillis() - start) + " ms");
 		System.out.println(links.toSql());
 		for(EventPersonLink epl : links.execute(db)) {
 			System.out.println(epl.event.getTitle() + " " + epl.person);
 		}
 		
-		PojoQuery<EventWithPersons> q = PojoQuery.create(EventWithPersons.class)
+		PojoQuery<EventWithPersons> q = PojoQuery.build(EventWithPersons.class)
 					.addWhere("persons.firstname=?", "John");
 		
 		System.out.println(q.toSql());
 		for(EventWithPersons event : q.execute(db)) {
-			System.out.println(event.getPersons().get(0).getEmailAddresses().get(0));
+			System.out.println(event.persons.get(0).getEmailAddresses().get(0));
 		}
 //		
 //		for(PersonWithEvents person : Query.buildQuery(PersonWithEvents.class).execute(db)) {
@@ -136,6 +126,13 @@ public class EventsExample {
 //		}
 	}
 
+	private static void createTables(DataSource db) {
+		DB.executeDDL(db, "CREATE TABLE event  (id BIGINT NOT NULL AUTO_INCREMENT, title TEXT, `date` DATETIME, PRIMARY KEY(id))");
+		DB.executeDDL(db, "CREATE TABLE person (id BIGINT NOT NULL AUTO_INCREMENT, age INT, firstName VARCHAR(255), lastName VARCHAR(255), PRIMARY KEY(id))");
+		DB.executeDDL(db, "CREATE TABLE event_person (person_id BIGINT NOT NULL, event_id BIGINT NOT NULL, PRIMARY KEY(person_id, event_id))");
+		DB.executeDDL(db, "CREATE TABLE emailaddress (person_id BIGINT NOT NULL, name VARCHAR(128), email VARCHAR(128) NOT NULL, PRIMARY KEY(person_id, name, email))");
+	}
+	
 	private static <K,V> Map<K,V> map(K k1, V v1, K k2, V v2) {
 		Map<K,V> result = new HashMap<K,V>();
 		result.put(k1, v1);

@@ -21,7 +21,6 @@ public class UsersExample {
 		public Date creationDate;
 	}
 	
-	@Table("user")
 	public static class UserWithAudit extends User {
 		public UserRef modifiedBy; 
 		public UserRef createdBy; 
@@ -44,7 +43,7 @@ public class UsersExample {
 	}
 	
 	public static void run(DataSource db) {
-		DB.executeDDL(db, "DELETE FROM user");
+		createTables(db);
 		
 		User john = new User();
 		john.firstName = "John";
@@ -56,11 +55,26 @@ public class UsersExample {
 		john.modificationDate = john.modificationDate;
 		PojoQuery.insertOrUpdate(db, john);
 		
-		PojoQuery<UserWithAudit> q = PojoQuery.create(UserWithAudit.class);
+		PojoQuery<UserWithAudit> q = PojoQuery.build(UserWithAudit.class);
 		System.out.println(q.toSql());
 		
 		for(UserWithAudit u : q.execute(db)) {
 			System.out.println(u.modifiedBy.email);
 		}
+	}
+
+	private static void createTables(DataSource db) {
+		DB.executeDDL(db, "CREATE TABLE `user` (\n" + 
+				"  `id` bigint(20) NOT NULL AUTO_INCREMENT,\n" + 
+				"  `modifiedBy_id` bigint(20) DEFAULT NULL,\n" + 
+				"  `createdBy_id` bigint(20) DEFAULT NULL,\n" + 
+				"  `firstName` varchar(255) DEFAULT NULL,\n" + 
+				"  `lastName` varchar(255) DEFAULT NULL,\n" + 
+				"  `password` varchar(255) DEFAULT NULL,\n" + 
+				"  `email` varchar(255) DEFAULT NULL,\n" + 
+				"  `modificationDate` datetime DEFAULT NULL,\n" + 
+				"  `creationDate` datetime DEFAULT NULL,\n" + 
+				"  PRIMARY KEY (`id`)\n" + 
+				")");
 	}
 }

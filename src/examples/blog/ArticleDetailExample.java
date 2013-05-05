@@ -57,7 +57,7 @@ public class ArticleDetailExample {
 		
 		insertData(db);
 		
-		for(ArticleDetail article : PojoQuery.create(ArticleDetail.class)
+		for(ArticleDetail article : PojoQuery.build(ArticleDetail.class)
 				.addWhere("article.id=?", 1L)
 				.addOrderBy("comments.submitdate DESC")
 				.execute(db)) {

@@ -231,7 +231,7 @@ public class PojoQuery<T> {
 		}
 	}
 
-	public static <T> PojoQuery<T> create(Class<T> clz) {
+	public static <T> PojoQuery<T> build(Class<T> clz) {
 		String table = determineTableName(clz);
 		
 		PojoQuery<T> q = new PojoQuery<T>(table);
@@ -372,13 +372,13 @@ public class PojoQuery<T> {
 			}
 			if (f.getAnnotation(Link.class) != null) {
 				Class<?> linkedClass = f.getAnnotation(Link.class).resultClass();
-				String linkedAlias = f.getName();
+				String linkedAlias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
 				classes.put(linkedAlias, linkedClass);
 				
 				linkFields.put(linkedAlias, f);
 				linkReverse.put(f, tableAlias);
 				
-				processClass(linkedClass, combinedAlias(tableAlias, linkedAlias, isPrincipalAlias), classes, classFields, linkFields, linkReverse, idFields, false);
+				processClass(linkedClass, linkedAlias, classes, classFields, linkFields, linkReverse, idFields, false);
 			} else if (!f.getType().isPrimitive() && f.getType().getAnnotation(Table.class) != null) {
 				Class<?> linkedClass = f.getType();
 				String linkedAlias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
