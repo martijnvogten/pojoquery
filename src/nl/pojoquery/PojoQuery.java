@@ -2,6 +2,7 @@ package nl.pojoquery;
 
 import static nl.pojoquery.util.Strings.*;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -21,6 +22,7 @@ public class PojoQuery<T> {
 	private List<String> joins = new ArrayList<String>();
 	private List<SqlExpression> wheres = new ArrayList<SqlExpression>();
 	private List<String> groupBy = new ArrayList<String>();
+	private List<String> orderBy = new ArrayList<String>();
 	private List<Object> parameters = new ArrayList<Object>();
 
 	public PojoQuery(String table) {
@@ -52,6 +54,11 @@ public class PojoQuery<T> {
 		return this;
 	}
 	
+	public PojoQuery<T> addOrderBy(String order) {
+		orderBy.add(order);
+		return this;
+	}
+	
 	public PojoQuery<T> setResultClass(Class<T> resultClass) {
 		this.resultClass = resultClass;
 		return this;
@@ -62,6 +69,10 @@ public class PojoQuery<T> {
 		String groupByClause = "";
 		if (groupBy.size() > 0) {
 			groupByClause = "GROUP BY " + implode(", ", groupBy);
+		}
+		String orderByClause = "";
+		if (orderBy.size() > 0) {
+			orderByClause = "ORDER BY " + implode(", ", orderBy);
 		}
 		String whereClause = "";
 		if (wheres.size() > 0) {
@@ -80,7 +91,8 @@ public class PojoQuery<T> {
 				"\nFROM", table, "\n", 
 				implode("\n ", joins), 
 				whereClause, 
-				groupByClause));
+				groupByClause,
+				orderByClause));
 	}
 	
 	public List<T> execute(DataSource db) {
@@ -101,7 +113,7 @@ public class PojoQuery<T> {
 			Map<String,Field> linkFields = new HashMap<String,Field>();
 			Map<Field,String> linkReverse = new HashMap<Field,String>();
 			
-			processClass(clz, table, classes, classFields, linkFields, linkReverse, idFields);
+			processClass(clz, table, classes, classFields, linkFields, linkReverse, idFields, true);
 			
 			List<R> result = new ArrayList<R>(rows.size());
 			
@@ -112,12 +124,11 @@ public class PojoQuery<T> {
 				Map<String,Object> onThisRow = new HashMap<String,Object>();
 				
 				for(String key : row.keySet()) {
-					String[] parts = key.split("\\.");
 					String tableAlias = table;
-					if (parts.length > 1) {
-						tableAlias = parts[0];
+					int dotpos = key.lastIndexOf('.');
+					if (dotpos > 0) {
+						tableAlias = key.substring(0, dotpos);
 					}
-					
 					if (!onThisRow.containsKey(tableAlias)) {
 						Object instance = classes.get(tableAlias).newInstance();
 						onThisRow.put(tableAlias, instance);
@@ -184,6 +195,28 @@ public class PojoQuery<T> {
 									coll.add(entity);
 								}
 								linkField.set(parent, coll);
+							} else if (linkField.getType().isArray()) {
+								Object arr = linkField.get(parent);
+								if (arr == null) {
+									arr = Array.newInstance(linkField.getType().getComponentType(), 0);
+								}
+								boolean contains = false;
+								int arrlen = Array.getLength(arr);
+								for(int i = 0; i < arrlen; i++) {
+									if (Array.get(arr, i).equals(entity)) {
+										contains = true;
+										break;
+									}
+								}
+								if (!contains && entity != null) {
+									Object extended = Array.newInstance(linkField.getType().getComponentType(), arrlen + 1);
+									if (arrlen > 0) {
+										System.arraycopy(arr, 0, extended, 0, arrlen);
+									}
+									Array.set(extended, arrlen, entity);
+									arr = extended;
+								}
+								linkField.set(parent, arr);
 							} else {
 								linkField.set(parent, entity);
 							}
@@ -218,33 +251,41 @@ public class PojoQuery<T> {
 			}
 		}
 		
-		addFields(q, table, clz);
+		addFields(q, table, clz, true);
 		
 		return q;
 	}
 
 	private static String determineTableName(Class<?> clz) {
-		Table tableAnn = clz.getAnnotation(Table.class);
-		String table;
-		if (tableAnn != null) {
-			table = tableAnn.value();
-		} else {
-			table = clz.getSimpleName();
+		String ret = null;
+		while(clz != null) {
+			Table tableAnn = clz.getAnnotation(Table.class);
+			if (tableAnn != null) {
+				ret = tableAnn.value();
+				break;
+			}
+			clz = clz.getSuperclass();
 		}
-		return table;
+		return ret;
 	}
 	
-	private static <T> void addFields(PojoQuery<T> q, String tableAlias, Class<?> clz) {
+	private static <T> void addFields(PojoQuery<T> q, String tableAlias, Class<?> clz, boolean isPrincipalAlias) {
 		String table = determineTableName(clz);
+		
 		for(Field f : collectFieldsOfClass(clz)) {
+			if (f.getName().startsWith("this$")) {
+				// For inner classes, this$X is the reference to the containing class(es)
+				continue;
+			}
 			if (f.getAnnotation(Link.class) != null) {
 				String linktable = f.getAnnotation(Link.class).linktable();
 				if (!linktable.equals(Link.NONE)) {
 					// many to many
 					String idfield = tableAlias + ".id";
-					String linkfield = linktable + "." + table + "_id";
+					String linktableAlias = combinedAlias(tableAlias, linktable, isPrincipalAlias);
+					String linkfield = "`" + linktableAlias + "`." + table + "_id";
 					
-					q.addJoin("LEFT JOIN " + linktable + " ON " + linkfield + "=" + idfield);
+					q.addJoin("LEFT JOIN " + linktable + " `" + linktableAlias + "` ON " + linkfield + "=" + idfield);
 					
 					String foreigntable = null;
 					for(String t : linktable.split("_")) {
@@ -254,42 +295,69 @@ public class PojoQuery<T> {
 							foreigntable = t;
 						}
 					}
-					String foreignlinkfield = linktable + "." + foreigntable + "_id";
-					String foreignAlias = f.getName();
-					String foreignidfield = foreignAlias + "." + "id";
+					String foreignlinkfield = "`" + linktableAlias + "`." + foreigntable + "_id";
+					String foreignAlias = combinedAlias(linktableAlias, f.getName(), isPrincipalAlias);
+					String foreignidfield = "`" + foreignAlias + "`." + "id";
 					
 					q.addJoin("LEFT JOIN " + foreigntable + " " + foreignAlias + " ON " + foreignlinkfield + "=" + foreignidfield);
 					
-					addFields(q, f.getName(), f.getAnnotation(Link.class).resultClass());
+					addFields(q, foreignAlias, f.getAnnotation(Link.class).resultClass(), false);
 				} else {
 					Class<?> foreignClass = f.getAnnotation(Link.class).resultClass();
 					String foreigntable = foreignClass.getAnnotation(Table.class).value();
-					String foreignalias = f.getName();
-					String foreignlinkfield = foreignalias + "." + table + "_id";
-					String idfield = tableAlias + ".id";
-					q.addJoin("LEFT JOIN " + foreigntable + " " + foreignalias + " ON " + foreignlinkfield + "=" + idfield);
+					String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
+					String foreignlinkfield = "`" + foreignalias + "`." + table + "_id";
+					String idfield = "`" + tableAlias + "`.id";
+					q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + foreignlinkfield + "=" + idfield);
 					
-					addFields(q, f.getName(), foreignClass);
+					addFields(q, foreignalias, foreignClass, false);
 				}
 				continue;
 			} 
-			if (!f.getType().isPrimitive() && f.getType().getAnnotation(Table.class) != null) {
-				String foreigntable = f.getType().getAnnotation(Table.class).value();
-				String linkfield = tableAlias + "." + f.getName().toLowerCase() + "_id";
-				String idfield = foreigntable + ".id";
-				q.addJoin("LEFT JOIN " + foreigntable + " " + f.getName() + " ON " + linkfield + "=" + idfield);
-				addFields(q, f.getName(), f.getType());
+			if (!f.getType().isPrimitive() && determineTableName(f.getType()) != null) {
+				String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias); 
+				addOneToManyLink(q, tableAlias, foreignalias, f.getType(), f.getName());
+				addFields(q, foreignalias, f.getType(), false);
+				continue;
+			}
+			if (f.getType().isArray()) {
+				String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias); 
+				addManyToOneLink(q, tableAlias, table, foreignalias, f.getType().getComponentType(), f.getName());
+				addFields(q, foreignalias, f.getType().getComponentType(), false);
 				continue;
 			}
 			if (f.getAnnotation(Select.class) != null) {
 				q.addField(f.getAnnotation(Select.class).value() + " `" + tableAlias + "." + f.getName() + "`");
 			} else {
-				q.addField(tableAlias + "." + f.getName() + " `" + tableAlias + "." + f.getName() + "`");
+				q.addField("`" + tableAlias + "`." + f.getName() + " `" + tableAlias + "." + f.getName() + "`");
 			}
 		}
 	}
+
+	private static <T> void addManyToOneLink(PojoQuery<T> q, String tableAlias, String localTable, String foreignalias,
+			Class<?> linkedType, String fieldName) {
+		String foreigntable = determineTableName(linkedType);
+		String linkfield = "`" + foreignalias + "`." + localTable + "_id";
+		String idfield = "`" + tableAlias + "`.id";
+		q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + linkfield + "=" + idfield);
+	}
 	
-	private static void processClass(Class<?> clz, String tableAlias, Map<String,Class<?>> classes, Map<String,Field> classFields, Map<String,Field> linkFields, Map<Field,String> linkReverse, Map<String,List<Field>> idFields) {
+	private static <T> void addOneToManyLink(PojoQuery<T> q, String tableAlias, String foreignalias,
+			Class<?> linkedType, String fieldName) {
+		String foreigntable = determineTableName(linkedType);
+		String linkfield = "`" + tableAlias + "`." + fieldName.toLowerCase() + "_id";
+		String idfield = "`" + foreignalias + "`.id";
+		q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + linkfield + "=" + idfield);
+	}
+
+	private static String combinedAlias(String tableAlias, String fieldName, boolean isPrincipalAlias) {
+		if (!isPrincipalAlias) {
+			return tableAlias + "." + fieldName;
+		}
+		return fieldName;
+	}
+	
+	private static void processClass(Class<?> clz, String tableAlias, Map<String,Class<?>> classes, Map<String,Field> classFields, Map<String,Field> linkFields, Map<Field,String> linkReverse, Map<String,List<Field>> idFields, boolean isPrincipalAlias) {
 		classes.put(tableAlias, clz);
 
 		List<Field> nonLinkFields = new ArrayList<Field>();
@@ -310,16 +378,25 @@ public class PojoQuery<T> {
 				linkFields.put(linkedAlias, f);
 				linkReverse.put(f, tableAlias);
 				
-				processClass(linkedClass, linkedAlias, classes, classFields, linkFields, linkReverse, idFields);
+				processClass(linkedClass, combinedAlias(tableAlias, linkedAlias, isPrincipalAlias), classes, classFields, linkFields, linkReverse, idFields, false);
 			} else if (!f.getType().isPrimitive() && f.getType().getAnnotation(Table.class) != null) {
 				Class<?> linkedClass = f.getType();
-				String linkedAlias = f.getName();
+				String linkedAlias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
 				classes.put(linkedAlias, linkedClass);
 				
 				linkFields.put(linkedAlias, f);
 				linkReverse.put(f, tableAlias);
 				
-				processClass(linkedClass, linkedAlias, classes, classFields, linkFields, linkReverse, idFields);
+				processClass(linkedClass, linkedAlias, classes, classFields, linkFields, linkReverse, idFields, false);
+			} else if (f.getType().isArray()) {
+				Class<?> linkedClass = f.getType().getComponentType();
+				String linkedAlias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
+				classes.put(linkedAlias, linkedClass);
+				
+				linkFields.put(linkedAlias, f);
+				linkReverse.put(f, tableAlias);
+				
+				processClass(linkedClass, linkedAlias, classes, classFields, linkFields, linkReverse, idFields, false);
 			} else {
 				nonLinkFields.add(f);
 			}
