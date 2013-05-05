@@ -62,10 +62,9 @@ public class ArticleDetailExample {
 				.addOrderBy("comments.submitdate DESC")
 				.execute(db)) {
 			if (article.comments != null) {
-				System.out.println("Article #" + article.id + " has " + article.comments.length + " comments");
+				System.out.println("Article #" + article.id + " by " + article.author.getFullName() + " has " + article.comments.length + " comments");
 				for(CommentDetail comment : article.comments) {
-					System.out.println("The first comment was written by " + comment.author.getFullName() + ": \"" + comment.comment + "\"");
-					break;
+					System.out.println("One comment by " + comment.author.getFullName() + ": \"" + comment.comment + "\"");
 				}
 			}
 		}
@@ -85,17 +84,30 @@ public class ArticleDetailExample {
 		john.lastName = "Ewbank";
 		john.id = PojoQuery.insertOrUpdate(db, john);
 		
+		User albert = new User();
+		albert.email = "albert@einstein.com";
+		albert.firstName = "Albert";
+		albert.lastName = "Einstein";
+		albert.id = PojoQuery.insertOrUpdate(db, albert);
+		
 		Article article = new Article();
 		article.title = "King's song";
 		article.content = "I wrote it";
 		article.author_id = john.id;
 		article.id = PojoQuery.insertOrUpdate(db, article);
 		
-		Comment comment = new Comment();
-		comment.author_id = john.id;
-		comment.article_id = article.id;
-		comment.comment = "I like it too!";
-		comment.submitdate = new Date();
-		comment.id = PojoQuery.insertOrUpdate(db, comment);
+		Comment ilikeit = new Comment();
+		ilikeit.author_id = john.id;
+		ilikeit.article_id = article.id;
+		ilikeit.comment = "I like it too!";
+		ilikeit.submitdate = new Date();
+		ilikeit.id = PojoQuery.insertOrUpdate(db, ilikeit);
+		
+		Comment relativity = new Comment();
+		relativity.author_id = albert.id;
+		relativity.article_id = article.id;
+		relativity.comment = "It all depends on how you look at it";
+		relativity.submitdate = new Date();
+		relativity.id = PojoQuery.insertOrUpdate(db, relativity);
 	}
 }
