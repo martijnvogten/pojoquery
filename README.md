@@ -113,10 +113,11 @@ we only need to show an author. Easy enough:
 ### Customization through Annotations
 
 You still have full control over the SQL that is generated:
-Let's say we want to improve on the list by adding the number of comments and date of last comment. We can add custom query clauses using annotations.
+Let's say we want to improve on the list by adding the number of comments and date of last comment. 
+We can add custom query clauses using annotations.
 
 	@Join("LEFT JOIN comment ON comment.article_id=article.id")
-	@GroupBy("comment.id")
+	@GroupBy("article.id")
 	class ArticleListView extends Article {
 		Author author;
 		
