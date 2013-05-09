@@ -83,7 +83,7 @@ output:
 	ORDER BY comments.submitdate
 
 Note that PojoQuery 'guesses' names of linkfields using the default strategy [linkname]_id
-(you can use annotations to override field and table names at any time).
+(you can use annotations to override field and table names).
 
 ### No lazy loading: views!
 
