@@ -82,7 +82,7 @@ output:
 	WHERE article.id=?  
 	ORDER BY comments.submitdate
 
-Note that PojoQuery 'guesses' names of linkfields using the default strategy [tablename]_id
+Note that PojoQuery 'guesses' names of linkfields using the default strategy [linkfield]_id
 (you can use annotations to override field and table names at any time).
 
 ### No lazy loading: views!
