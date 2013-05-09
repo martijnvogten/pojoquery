@@ -9,7 +9,7 @@ of the query, the resultset maps perfectly to the defining classes to obtain a
 type-safe result.
 
 	class ArticleExample {
-		DataSource database;
+		javax.sql.DataSource database = .... ;
 		
 		ArticleDetail fetchArticle(Long articleId) {
 			return PojoQuery.build(ArticleDetail.class)
