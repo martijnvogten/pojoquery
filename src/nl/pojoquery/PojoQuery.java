@@ -1,6 +1,6 @@
 package nl.pojoquery;
 
-import static nl.pojoquery.util.Strings.*;
+import static nl.pojoquery.util.Strings.implode;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
@@ -12,7 +12,12 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
-import nl.pojoquery.annotations.*;
+import nl.pojoquery.annotations.GroupBy;
+import nl.pojoquery.annotations.Id;
+import nl.pojoquery.annotations.Join;
+import nl.pojoquery.annotations.Link;
+import nl.pojoquery.annotations.Select;
+import nl.pojoquery.annotations.Table;
 
 public class PojoQuery<T> {
 
@@ -23,7 +28,9 @@ public class PojoQuery<T> {
 	private List<SqlExpression> wheres = new ArrayList<SqlExpression>();
 	private List<String> groupBy = new ArrayList<String>();
 	private List<String> orderBy = new ArrayList<String>();
-	private List<Object> parameters = new ArrayList<Object>();
+	private List<Object> parameters = new ArrayList<Object>();	
+	private int offset = -1; 
+	private int rowCount = -1;
 
 	public PojoQuery(String table) {
 		this.table = table;
@@ -58,6 +65,12 @@ public class PojoQuery<T> {
 		orderBy.add(order);
 		return this;
 	}
+
+	public PojoQuery<T> setLimit(int offset, int rowCount) {
+		this.offset = offset;
+		this.rowCount = rowCount;
+		return this;
+	}
 	
 	public PojoQuery<T> setResultClass(Class<T> resultClass) {
 		this.resultClass = resultClass;
@@ -68,11 +81,11 @@ public class PojoQuery<T> {
 		parameters.clear();
 		String groupByClause = "";
 		if (groupBy.size() > 0) {
-			groupByClause = "GROUP BY " + implode(", ", groupBy);
+			groupByClause = "\nGROUP BY " + implode(", ", groupBy);
 		}
 		String orderByClause = "";
 		if (orderBy.size() > 0) {
-			orderByClause = "ORDER BY " + implode(", ", orderBy);
+			orderByClause = "\nORDER BY " + implode(", ", orderBy);
 		}
 		String whereClause = "";
 		if (wheres.size() > 0) {
@@ -85,14 +98,28 @@ public class PojoQuery<T> {
 			}
 			whereClause = "\nWHERE " + implode("\n AND ", clauses);
 		}
+		String limitClause = "";
+		if (offset > -1 || rowCount > -1) {
+			if (rowCount < 0) {
+				// No rowcount
+				rowCount = Integer.MAX_VALUE;
+			}
+			if (offset > -1) {
+				limitClause = "\nLIMIT " + offset + "," + rowCount;
+			} else {
+				limitClause = "\nLIMIT " + rowCount;
+			}
+		}
 		
-		return implode(" ", Arrays.asList("SELECT\n", 
+		return implode(" ", Arrays.asList(
+				"SELECT\n", 
 				implode(",\n ", fields), 
 				"\nFROM", table, "\n", 
 				implode("\n ", joins), 
 				whereClause, 
 				groupByClause,
-				orderByClause));
+				orderByClause,
+				limitClause));
 	}
 	
 	public List<T> execute(DataSource db) {
