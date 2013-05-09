@@ -3,7 +3,7 @@ PojoQuery
 
 PojoQuery is a light-weight alternative to traditional Object Relational Mapping (ORM) frameworks in Java.
 Instead of writing a SQL query in plain text, pojoQuery leverages plain Java classes to define the set of fields and tables (joins) we want to fetch.
-Because each field or property in the POJO corresponds to a field in the SELECT clause of the query we can map the results to the same classes and obtain a type-safe set of results.
+Because each field or property in the POJO corresponds to a field in the SELECT clause of the query, the resultset maps perfectly to the defining classes to obtain a type-safe set of results.
 
 	@Table("user")
 	class User {
