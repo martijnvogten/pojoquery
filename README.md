@@ -1,9 +1,12 @@
 PojoQuery
 =========
 
-PojoQuery is a light-weight alternative to traditional Object Relational Mapping (ORM) frameworks in Java.
-Instead of writing a SQL query in plain text, pojoQuery leverages plain Java classes to define the set of fields and tables (joins) we want to fetch.
-Because each field or property in the POJO corresponds to a field in the SELECT clause of the query, the resultset maps perfectly to the defining classes to obtain a type-safe set of results.
+PojoQuery is a light-weight utility for working with relational databases in Java. 
+Instead of writing a SQL query in plain text, pojoQuery leverages plain Java classes 
+to define the set of fields and tables (joins) we want to fetch.
+Because each field or property in the POJO corresponds to a field in the SELECT clause 
+of the query, the resultset maps perfectly to the defining classes to obtain a 
+type-safe result.
 
 	@Table("user")
 	class User {
@@ -45,7 +48,8 @@ Because each field or property in the POJO corresponds to a field in the SELECT 
 		}
 	}
 
-PojoQuery creates a SQL query from the `ArticleDetail` pojo, and transforms the JDBC ResultSet into `ArticleDetail` instances.
+PojoQuery creates a SQL query from the `ArticleDetail` pojo, and transforms the JDBC ResultSet 
+into `ArticleDetail` instances.
 The exact SQL is easy to read and understand, much like you would write yourself:
 
 	PojoQuery.build(ArticleDetail.class)
@@ -79,24 +83,35 @@ The exact SQL is easy to read and understand, much like you would write yourself
 	WHERE article.id=?  
 	ORDER BY comments.submitdate DESC 
 
-Note that PojoQuery 'guesses' names of linkfields using the default strategy [tablename]_id. (You can use annotations to override field and table names at any time).
+Note that PojoQuery 'guesses' names of linkfields using the default strategy [tablename]_id
+(you can use annotations to override field and table names at any time).
 
-The major difference with JPA is that instead of POJO's defining ALL links in the database we only specify the links to FETCH.
-This means that there is no lazy loading.
+No lazy loading: Views!
+-----------------------
 
-Although lazy loading has its obvious benefits (i.e. no need to specify which linked entities to load beforehand), the drawbacks are significant: 
-all business logic must be contained in a session
-we cannot serialize classes easily
-generating proxy classes that kill instanceof and easy debugging
-the implementing framework needs to handle a lot of complexity
+The major difference with traditional Java ORM frameworks (JPA, Hibernate) is that instead of defining 
+_all links_ in the database we only specify the _links to fetch_. This means that there is _no lazy loading_.
 
-The alternative that PojoQuery offers is best to think of as a 'view': a set of fields and tables with their respective join conditions.
-Thought of it this way, ArticleDetail is a 'view' that contains all information needed to display an article in a blog: the title, content, comments and their respective authors.
-When displaying artiles in a list, we would create a different view, because we are not interested in the comments, we only need to show an author. Easy enough:
+Although lazy loading has its obvious benefits (i.e. no need to specify which linked entities to load beforehand), 
+the drawbacks are significant: 
+- all business logic must be contained in a session
+- we cannot serialize classes easily to JSON, XML
+- proxy classes kill `instanceof`, `getClass` and complicate debugging
+- overall increased complexity
+
+The alternative that PojoQuery offers is best to think of as a _view_: a set of fields and tables 
+with their respective join conditions. Thought of it this way, ArticleDetail is a 'view' that contains 
+all information needed to display an article in a blog: the title, content, comments and their respective authors.
+
+When displaying articles in a list, we would create a different view, because we are not interested in the comments, 
+we only need to show an author. Easy enough:
 
 	class ArticleListView extends Article {
 		User author;
 	}
+
+Customization through Annotations
+---------------------------------
 
 You still have full control over the SQL that is generated:
 Let's say we want to improve on the list by adding the number of comments and date of last comment. We can add custom query clauses using annotations.
