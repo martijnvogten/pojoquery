@@ -8,20 +8,20 @@ Because each field or property in the POJO corresponds to a field in the SELECT 
 of the query, the resultset maps perfectly to the defining classes to obtain a 
 type-safe result.
 
-	@Table("user")
-	class User {
-		Long id;
-		String firstName;
-		String lastName;
-		String email;
+	class ArticleExample {
+		DataSource database;
+		
+		ArticleDetail fetchArticle(Long articleId) {
+			return PojoQuery.build(ArticleDetail.class)
+				.addWhere("article.id=?", articleId)
+				.addOrderBy("comments.submitdate")
+				.execute(database).get(0);
+		}
 	}
 	
-	@Table("comment")
-	class CommentDetail {
-		Long id;
-		String comment;
-		Date submitdate;
+	class ArticleDetail extends Article {
 		User author;
+		CommentDetail[] comments;
 	}
 	
 	@Table("article")
@@ -32,21 +32,23 @@ type-safe result.
 		Date publishdate;
 	}
 	
-	class ArticleDetail extends Article {
+	@Table("comment")
+	class CommentDetail {
+		Long id;
+		String comment;
+		Date submitdate;
 		User author;
-		CommentDetail[] comments;
 	}
 	
-	class ArticleExample {
-		DataSource database;
-		
-		ArticleDetail fetchArticle(Long articleId) {
-			return PojoQuery.build(ArticleDetail.class)
-					.addWhere("article.id=?", articleId)
-					.addOrderBy("comments.submitdate")
-					.execute(database).get(0);
-		}
+	@Table("user")
+	class User {
+		Long id;
+		String firstName;
+		String lastName;
+		String email;
 	}
+	
+	
 
 PojoQuery creates a SQL query from the `ArticleDetail` pojo, and transforms the JDBC ResultSet 
 into `ArticleDetail` instances.
