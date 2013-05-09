@@ -110,7 +110,7 @@ we only need to show an author. Easy enough:
 		User author;
 	}
 
-### Customization through Annotations
+### Customization through annotations
 
 You still have full control over the SQL that is generated:
 Let's say we want to improve on the list by adding the number of comments and date of last comment. 
