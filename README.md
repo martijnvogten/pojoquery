@@ -113,8 +113,8 @@ purpose we create a different view, which only specifies a link to the author of
 
 ### Customization through annotations
 
-You still have full control over the SQL that is generated:
-Let's say we want to improve on the list by adding the number of comments and date of last comment. 
+You still have full control over the SQL that is generated.
+Let's say we want to improve on the list by adding two fields: the number of comments and the date of the last comment. 
 We can add custom query clauses using annotations.
 
 	@Join("LEFT JOIN comment ON comment.article_id=article.id")
