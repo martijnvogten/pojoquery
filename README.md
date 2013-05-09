@@ -104,11 +104,18 @@ The alternative that PojoQuery offers is best to think of as a _view_: a set of 
 with their respective join conditions. Thought of it this way, `ArticleDetail` is a _view_ that contains 
 all information needed to display an article in a blog: the title, content, comments and their authors.
 
-In contrast, when displaying articles in a list, we are not interested in individual comments. For this 
+As an alternative example, when displaying articles in a list, we are not interested in individual comments. For this 
 purpose we create a different view, which only specifies a link to the author of the article. Easy enough:
 
 	class ArticleListView extends Article {
 		User author;
+	}
+	
+	List<ArticleListView> listArticles(int startIndex, int maxResults) {
+		PojoQuery.build(ArticleListView.class)
+			.addOrderBy("article.publishdate DESC")
+			.setLimit(startIndex, maxResults)
+			.execute(db);
 	}
 
 ### Customization through annotations
