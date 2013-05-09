@@ -105,7 +105,7 @@ with their respective join conditions. Thought of it this way, `ArticleDetail` i
 all information needed to display an article in a blog: the title, content, comments and their authors.
 
 As an alternative example, when displaying articles in a list, we are not interested in individual comments. For this 
-purpose we create a different view, which only specifies a link to the author of the article. Easy enough:
+purpose we create a different view, which only specifies a link to the author of the article.
 
 	class ArticleListView extends Article {
 		User author;
