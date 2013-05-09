@@ -95,7 +95,7 @@ _all links_ in the database we only specify the _links to fetch_. This means tha
 Although lazy loading has its obvious benefits (i.e. no need to specify which linked entities to load beforehand), 
 the drawbacks are significant: 
 - all business logic must be contained in a session
-- we cannot serialize classes easily to JSON, XML
+- we cannot serialize objects easily to JSON, XML
 - proxy classes kill `instanceof`, `getClass` and complicate debugging
 - overall increased complexity
 
