@@ -32,7 +32,7 @@ type-safe result.
 		Date publishdate;
 	}
 	
-	class ArticleDetail {
+	class ArticleDetail extends Article {
 		User author;
 		CommentDetail[] comments;
 	}
