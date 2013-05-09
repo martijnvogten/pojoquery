@@ -43,7 +43,7 @@ type-safe result.
 		ArticleDetail fetchArticle(Long articleId) {
 			return PojoQuery.build(ArticleDetail.class)
 					.addWhere("article.id=?", articleId)
-					.addOrderBy("comments.submitdate DESC")
+					.addOrderBy("comments.submitdate")
 					.execute(database).get(0);
 		}
 	}
@@ -56,7 +56,7 @@ The exact SQL is easy to read and understand, much like you would write yourself
 		.addWhere("article.id=?", articleId)
 		.addOrderBy("comments.submitdate DESC")
 		.toSql()	
-	// returns:
+output:
 
 	SELECT
 	 `article`.id `article.id`,
@@ -81,7 +81,7 @@ The exact SQL is easy to read and understand, much like you would write yourself
 	 LEFT JOIN comment `comments` ON `comments`.article_id=`article`.id
 	 LEFT JOIN user `comments.author` ON `comments`.author_id=`comments.author`.id 
 	WHERE article.id=?  
-	ORDER BY comments.submitdate DESC 
+	ORDER BY comments.submitdate
 
 Note that PojoQuery 'guesses' names of linkfields using the default strategy [tablename]_id
 (you can use annotations to override field and table names at any time).
