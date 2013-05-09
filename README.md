@@ -86,8 +86,8 @@ The exact SQL is easy to read and understand, much like you would write yourself
 Note that PojoQuery 'guesses' names of linkfields using the default strategy [tablename]_id
 (you can use annotations to override field and table names at any time).
 
-No lazy loading: Views!
------------------------
+### No lazy loading: Views!
+
 
 The major difference with traditional Java ORM frameworks (JPA, Hibernate) is that instead of defining 
 _all links_ in the database we only specify the _links to fetch_. This means that there is _no lazy loading_.
@@ -110,8 +110,7 @@ we only need to show an author. Easy enough:
 		User author;
 	}
 
-Customization through Annotations
----------------------------------
+### Customization through Annotations
 
 You still have full control over the SQL that is generated:
 Let's say we want to improve on the list by adding the number of comments and date of last comment. We can add custom query clauses using annotations.
