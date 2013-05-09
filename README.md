@@ -102,7 +102,7 @@ the drawbacks are significant:
 
 The alternative that PojoQuery offers is best to think of as a _view_: a set of fields and tables 
 with their respective join conditions. Thought of it this way, `ArticleDetail` is a _view_ that contains 
-all information needed to display an article in a blog: the title, content, comments and their respective authors.
+all information needed to display an article in a blog: the title, content, comments and their authors.
 
 In contrast, when displaying articles in a list, we are not interested in individual comments. For this 
 purpose we create a different view, which only specifies a link to the author of the article. Easy enough:
