@@ -11,7 +11,7 @@ public class BlogExample {
 	
 	public static void run(DataSource db) {
 		
-		PojoQuery<BlogList> q = PojoQuery.build(BlogList.class).addWhere("blog_id=?", 1L);
+		PojoQuery<BlogList> q = PojoQuery.build(BlogList.class).addWhere("article_id=?", 1L);
 		System.out.println(q.toSql());
 		
 		List<BlogList> results = q.execute(db);
