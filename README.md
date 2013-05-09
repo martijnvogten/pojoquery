@@ -119,7 +119,7 @@ We can add custom query clauses using annotations.
 	@Join("LEFT JOIN comment ON comment.article_id=article.id")
 	@GroupBy("article.id")
 	class ArticleListView extends Article {
-		Author author;
+		User author;
 		
 		@Select("COUNT(comment.id)")
 		int commentCount;
@@ -130,3 +130,18 @@ We can add custom query clauses using annotations.
 
 The Join, GroupBy and Select clauses are simply copied into the query.
 
+	SELECT
+	 `article`.id `article.id`,
+	 `article`.title `article.title`,
+	 `article`.content `article.content`,
+	 `author`.id `author.id`,
+	 `author`.firstName `author.firstName`,
+	 `author`.lastName `author.lastName`,
+	 `author`.email `author.email`,
+	 COUNT(comment.id) `article.commentCount`,
+	 MAX(comment.submitdate) `article.lastCommentDate` 
+	FROM article 
+	 LEFT JOIN comment ON comment.article_id = article.id
+	 LEFT JOIN user `author` ON `article`.author_id=`author`.id 
+	WHERE article_id=? 
+	GROUP BY article.id  
