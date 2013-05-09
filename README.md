@@ -85,7 +85,7 @@ output:
 Note that PojoQuery 'guesses' names of linkfields using the default strategy [linkname]_id
 (you can use annotations to override field and table names).
 
-### No lazy loading: views!
+### No lazy loading: no complexity...
 
 
 The major difference with traditional Java ORM frameworks (JPA, Hibernate) is that instead of defining 
@@ -98,12 +98,14 @@ the drawbacks are significant:
 - proxy classes kill `instanceof`, `getClass` and complicate debugging
 - overall increased complexity
 
+### ... instead: views!
+
 The alternative that PojoQuery offers is best to think of as a _view_: a set of fields and tables 
-with their respective join conditions. Thought of it this way, ArticleDetail is a 'view' that contains 
+with their respective join conditions. Thought of it this way, `ArticleDetail` is a _view_ that contains 
 all information needed to display an article in a blog: the title, content, comments and their respective authors.
 
-When displaying articles in a list, we would create a different view, because we are not interested in the comments, 
-we only need to show an author. Easy enough:
+In contrast, when displaying articles in a list, we are not interested in individual comments. For this 
+purpose we create a different view, which only specifies a link to the author of the article. Easy enough:
 
 	class ArticleListView extends Article {
 		User author;
