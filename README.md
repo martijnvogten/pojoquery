@@ -56,7 +56,7 @@ The exact SQL is easy to read and understand, much like you would write yourself
 
 	PojoQuery.build(ArticleDetail.class)
 		.addWhere("article.id=?", articleId)
-		.addOrderBy("comments.submitdate DESC")
+		.addOrderBy("comments.submitdate")
 		.toSql()	
 output:
 
