@@ -86,7 +86,7 @@ The exact SQL is easy to read and understand, much like you would write yourself
 Note that PojoQuery 'guesses' names of linkfields using the default strategy [tablename]_id
 (you can use annotations to override field and table names at any time).
 
-### No lazy loading: Views!
+### No lazy loading: views!
 
 
 The major difference with traditional Java ORM frameworks (JPA, Hibernate) is that instead of defining 
