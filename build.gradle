@@ -1,0 +1,30 @@
+apply plugin:'java'
+apply plugin:'eclipse'
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  testCompile 'junit:junit:4.11'
+  testCompile 'mysql:mysql-connector-java:5.1.25'
+}
+
+sourceSets {
+	main {
+	   java {
+		  srcDir 'src'
+	   }
+	   resources {
+		  srcDir 'src'
+	   }
+	}
+	test {
+	   java {
+		  srcDir 'test'
+	   }
+	   resources {
+		  srcDir 'test'
+	   }
+	}
+ }
