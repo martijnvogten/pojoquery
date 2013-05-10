@@ -161,6 +161,7 @@ public class PojoQuery<T> {
 					if (dotpos > 0) {
 						tableAlias = key.substring(0, dotpos);
 					}
+					System.out.println(tableAlias);
 					if (!onThisRow.containsKey(tableAlias)) {
 						Object instance = classes.get(tableAlias).newInstance();
 						onThisRow.put(tableAlias, instance);
@@ -381,9 +382,10 @@ public class PojoQuery<T> {
 			} else {
 				if (f.getAnnotation(Embedded.class) != null) {
 					String prefix = determinePrefix(f);
-					
+
+					String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
 					for(Field embeddedField : collectFieldsOfClass(f.getType())) {
-						q.addField("`" + tableAlias + "`." + prefix + embeddedField.getName() + " `" + tableAlias + "." + f.getName() + "." + embeddedField.getName() + "`");
+						q.addField("`" + tableAlias + "`." + prefix + embeddedField.getName() + " `" + foreignalias + "." + embeddedField.getName() + "`");
 					}
 					continue;
 				}
@@ -447,7 +449,7 @@ public class PojoQuery<T> {
 				linkReverse.put(f, tableAlias);
 
 				processClass(linkedClass, linkedAlias, classes, classFields, linkFields, linkReverse, idFields, false);
-			} else if (!f.getType().isPrimitive() && f.getType().getAnnotation(Table.class) != null) {
+			} else if (!f.getType().isPrimitive() && (f.getType().getAnnotation(Table.class) != null || f.getAnnotation(Embedded.class) != null)) {
 				Class<?> linkedClass = f.getType();
 				String linkedAlias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
 				classes.put(linkedAlias, linkedClass);

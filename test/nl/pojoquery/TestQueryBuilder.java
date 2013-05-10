@@ -14,11 +14,6 @@ public class TestQueryBuilder {
 	
 	@Test
 	public void testBasicSql() {
-		assertEquals("SELECT `article`.id `article.id` FROM article", norm(PojoQuery.build(Article.class).toSql()));
-	}
-	
-	private static String norm(String str) {
-		// replace any whitespace with single space
-		return str.replaceAll("\\s+", " ").trim();
+		assertEquals("SELECT `article`.id `article.id` FROM article", TestUtils.norm(PojoQuery.build(Article.class).toSql()));
 	}
 }
