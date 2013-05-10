@@ -8,6 +8,7 @@ import nl.pojoquery.DB;
 import nl.pojoquery.PojoQuery;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
+import examples.util.MysqlDatabases;
 
 
 public class UsersExample {
@@ -42,18 +43,20 @@ public class UsersExample {
 		public String email;
 	}
 	
-	public static void run(DataSource db) {
+	public static void main(String[] args) {
+		DataSource db = MysqlDatabases.dropAndCreateDatabase("pojoquery_users");
 		createTables(db);
 		
 		User john = new User();
 		john.firstName = "John";
 		john.lastName = "Ewbank";
 		john.email = "john@ewbank.nl";
-		john.id = PojoQuery.insertOrUpdate(db, john);
+		john.id = PojoQuery.insert(db, john);
 		
 		john.modifiedBy_id = john.id;
 		john.modificationDate = john.modificationDate;
-		PojoQuery.insertOrUpdate(db, john);
+		int affectedRows = PojoQuery.update(db, john);
+		System.out.println("Affected rows: " + affectedRows);
 		
 		PojoQuery<UserWithAudit> q = PojoQuery.build(UserWithAudit.class);
 		System.out.println(q.toSql());

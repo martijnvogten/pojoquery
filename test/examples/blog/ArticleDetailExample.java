@@ -51,8 +51,8 @@ public class ArticleDetailExample {
 		public CommentDetail[] comments;
 	}
 
-	public static void run(DataSource db) {
-		BlogDb.create(db);
+	public static void main(String[] args) {
+		DataSource db = BlogDb.create("pojoquery_blog");
 		
 		PojoQuery<ArticleDetail> q = PojoQuery.build(ArticleDetail.class)
 				.addWhere("article.id=?", 1L)

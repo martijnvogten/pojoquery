@@ -47,7 +47,8 @@ public class CommentsExample {
 				.execute(db);
 	}
 	
-	public static void run(DataSource db) {
+	public static void main(String[] args) {
+		DataSource db = BlogDb.create("pojoquery_blog");
 //		SELECT
 //		 `comment`.id `comment.id`,
 //		 `comment`.comment `comment.comment`,

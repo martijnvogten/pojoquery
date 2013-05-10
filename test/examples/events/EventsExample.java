@@ -7,6 +7,8 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
+import examples.util.MysqlDatabases;
+
 import nl.pojoquery.DB;
 import nl.pojoquery.PojoQuery;
 import nl.pojoquery.annotations.Id;
@@ -65,9 +67,10 @@ public class EventsExample {
 		}
 	}
 	
-	public static void run(DataSource db) {
+	public static void main(String[] args) {
+		DataSource db = MysqlDatabases.dropAndCreateDatabase("pojoquery_events");
 		createTables(db);
-
+		
 		Event e = new Event();
 		e.setDate(new Date());
 		e.setTitle("My Event");

@@ -52,17 +52,37 @@ public class DB {
 		}
 	}
 
-	public static Long insertOrUpdate(DataSource db, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsert(tableName, values);
+	public static int update(DataSource db, String tableName, Map<String, Object> values, Map<String, Object> ids) {
+		SqlExpression updateSql = buildUpdate(tableName, values, ids);
+		return execute(db, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
+	}
+	
+	public static int update(Connection connection, String tableName, Map<String, Object> values, Map<String, Object> ids) {
+		SqlExpression updateSql = buildUpdate(tableName, values, ids);
+		return execute(connection, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
+	}
+	
+	public static <PK> PK insert(DataSource db, String tableName, Map<String, ? extends Object> values) {
+		SqlExpression insertSql = buildInsertOrUpdate(tableName, values, false);
 		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 	
-	public static Long insertOrUpdate(Connection connection, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsert(tableName, values);
+	public static <PK> PK insert(Connection connection, String tableName, Map<String, ? extends Object> values) {
+		SqlExpression insertSql = buildInsertOrUpdate(tableName, values, false);
 		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
-
-	private static SqlExpression buildInsert(String tableName, Map<String, ? extends Object> values) {
+	
+	public static <PK> PK insertOrUpdate(DataSource db, String tableName, Map<String, ? extends Object> values) {
+		SqlExpression insertSql = buildInsertOrUpdate(tableName, values, true);
+		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
+	}
+	
+	public static <PK> PK insertOrUpdate(Connection connection, String tableName, Map<String, ? extends Object> values) {
+		SqlExpression insertSql = buildInsertOrUpdate(tableName, values, true);
+		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
+	}
+	
+	private static SqlExpression buildInsertOrUpdate(String tableName, Map<String, ? extends Object> values, boolean addOnDuplicateKeyClause) {
 		List<String> qmarks = new ArrayList<String>();
 		List<String> quotedFields = new ArrayList<String>();
 		List<Object> params = new ArrayList<Object>();
@@ -75,11 +95,38 @@ public class DB {
 			params.add(values.get(f));
 			updateList.add(quotedField + "=?");
 		}
-		params.addAll(new ArrayList<Object>(params));
-		String sql = "INSERT INTO `" + tableName + "` (" + implode(",", quotedFields) + ")" + " VALUES (" + implode(",", qmarks) + ")" + " ON DUPLICATE KEY UPDATE " + implode(",", updateList);
+		if (addOnDuplicateKeyClause) {
+			params.addAll(new ArrayList<Object>(params));
+		}
+		String sql = "INSERT INTO `" + tableName + "` (" + implode(",", quotedFields) + ")" + " VALUES (" + implode(",", qmarks) + ")";
 		
-		SqlExpression insertSql = new SqlExpression(sql, params);
-		return insertSql;
+		if (addOnDuplicateKeyClause) {
+			sql += " ON DUPLICATE KEY UPDATE " + implode(",", updateList);
+		}
+		
+		return new SqlExpression(sql, params);
+	}
+	
+	private static SqlExpression buildUpdate(String tableName, Map<String, ? extends Object> values, Map<String, ? extends Object> ids) {
+		List<String> qmarks = new ArrayList<String>();
+		List<String> assignments = new ArrayList<String>();
+		List<Object> params = new ArrayList<Object>();
+		List<String> wheres = new ArrayList<String>();
+
+		for (String f : values.keySet()) {
+			qmarks.add("?");
+			assignments.add("`" + f + "`=?");
+			params.add(values.get(f));
+		}
+		
+		for (String idField : ids.keySet()) {
+			qmarks.add("?");
+			wheres.add("`" + idField + "`=?");
+			params.add(ids.get(idField));
+		}
+		
+		String sql = "UPDATE `" + tableName + "` SET " + implode(", ", assignments) + " WHERE " + implode(" AND ", wheres);
+		return new SqlExpression(sql, params);
 	}
 
 	public static void executeDDL(DataSource db, String ddl) {

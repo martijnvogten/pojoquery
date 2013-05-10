@@ -162,7 +162,6 @@ public class PojoQuery<T> {
 						tableAlias = key.substring(0, dotpos);
 					}
 					if (!onThisRow.containsKey(tableAlias)) {
-						System.out.println(tableAlias);
 						Object instance = classes.get(tableAlias).newInstance();
 						onThisRow.put(tableAlias, instance);
 					}
@@ -496,6 +495,26 @@ public class PojoQuery<T> {
 		return result;
 	}
 
+	public static Long insert(DataSource db, Object o) {
+		return DB.insert(db, determineTableName(o.getClass()), extractValues(o));
+	}
+	
+	public static Long insert(Connection connection, Object o) {
+		return DB.insert(connection, determineTableName(o.getClass()), extractValues(o));
+	}
+	
+	public static int update(DataSource db, Object object) {
+		Map<String, Object> values = extractValues(object);
+		Map<String, Object> ids = splitIdFields(object, values);
+		return DB.update(db, determineTableName(object.getClass()), values, ids);
+	}
+
+	public static int update(Connection db, Object object) {
+		Map<String, Object> values = extractValues(object);
+		Map<String, Object> ids = splitIdFields(object, values);
+		return DB.update(db, determineTableName(object.getClass()), values, ids);
+	}
+	
 	public static Long insertOrUpdate(DataSource db, Object o) {
 		return DB.insertOrUpdate(db, determineTableName(o.getClass()), extractValues(o));
 	}
@@ -531,5 +550,28 @@ public class PojoQuery<T> {
 		}
 	}
 
+	private static Map<String, Object> splitIdFields(Object object, Map<String, Object> values) {
+		List<Field> idFields = findIdFields(object.getClass());
+		if (idFields.size() == 0) {
+			throw new RuntimeException("No @Id annotations found on fields of class " + object.getClass().getName());
+		}
+		Map<String, Object> ids = new HashMap<String,Object>();
+		for(Field f : idFields) {
+			ids.put(f.getName(), values.get(f.getName()));
+			values.remove(f.getName());
+		}
+		return ids;
+	}
+	
+	private static final List<Field> findIdFields(Class<?> clz) {
+		Iterable<Field> fields = collectFieldsOfClass(clz);
+		ArrayList<Field> result = new ArrayList<Field>();
+		for(Field f : fields) {
+			if (f.getAnnotation(Id.class) != null) {
+				result.add(f);
+			}
+		}
+		return result;
+	}
 
 }

@@ -9,12 +9,15 @@ import nl.pojoquery.PojoQuery;
 import examples.blog.ArticleDetailExample.Article;
 import examples.blog.ArticleDetailExample.Comment;
 import examples.blog.ArticleDetailExample.User;
+import examples.util.MysqlDatabases;
 
 public class BlogDb {
 
-	public static void create(DataSource db) {
+	public static DataSource create(String schemaname) {
+		DataSource db = MysqlDatabases.dropAndCreateDatabase(schemaname);
 		createTables(db);
 		insertData(db);
+		return db;
 	}
 	
 	private static void createTables(DataSource db) {
