@@ -8,7 +8,7 @@ import nl.pojoquery.DB;
 import nl.pojoquery.PojoQuery;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
-import examples.util.MysqlDatabases;
+import nl.pojoquery.integrationtest.MysqlDatabases;
 
 
 public class UsersExample {

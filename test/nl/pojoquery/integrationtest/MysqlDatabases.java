@@ -1,4 +1,4 @@
-package examples.util;
+package nl.pojoquery.integrationtest;
 
 import javax.sql.DataSource;
 

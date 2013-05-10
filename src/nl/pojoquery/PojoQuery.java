@@ -133,7 +133,7 @@ public class PojoQuery<T> {
 		return (List<R>) processRows(rows, clz);
 	}
 
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public static <R> List<R> processRows(List<Map<String, Object>> rows, Class<R> clz) {
 		try {
 			String table = determineTableName(clz);
@@ -161,17 +161,31 @@ public class PojoQuery<T> {
 					if (dotpos > 0) {
 						tableAlias = key.substring(0, dotpos);
 					}
-					System.out.println(tableAlias);
 					if (!onThisRow.containsKey(tableAlias)) {
-						Object instance = classes.get(tableAlias).newInstance();
-						onThisRow.put(tableAlias, instance);
+						Class<?> valClass = classes.get(tableAlias);
+						Object instance;
+						if (!valClass.isEnum()) {
+							instance = valClass.newInstance();
+							onThisRow.put(tableAlias, instance);
+						} else {
+							Object val = row.get(key);
+							if (val instanceof String) {
+								instance = Enum.valueOf((Class<? extends Enum>)valClass, (String)val);
+								onThisRow.put(tableAlias, instance);
+							}
+							continue;
+						}
 					}
 					Object instance = onThisRow.get(tableAlias);
 
 					Field f = classFields.get(key);
 					f.setAccessible(true);
 					if (row.get(key) != null || !f.getType().isPrimitive()) {
-						f.set(instance, row.get(key));
+						Object val = row.get(key);
+						if (val instanceof String && f.getType().isEnum()) {
+							val = Enum.valueOf((Class<? extends Enum>)f.getType(), (String)val);
+						}
+						f.set(instance, val);
 					}
 				}
 
@@ -180,6 +194,9 @@ public class PojoQuery<T> {
 						allEntities.put(tableAlias, new HashMap<Object, Object>());
 					}
 					Object entity = onThisRow.get(tableAlias);
+					if (entity.getClass().isEnum()) {
+						continue;
+					}
 					List<Field> ids = idFields.get(tableAlias);
 					Object id;
 					boolean isNull = true;
@@ -321,13 +338,14 @@ public class PojoQuery<T> {
 				if (!linktable.equals(Link.NONE)) {
 					String foreignvaluefield = f.getAnnotation(Link.class).foreignvaluefield();
 					if (!foreignvaluefield.equals(Link.NONE)) {
+						// A list of values
 						String idfield = tableAlias + ".id";
 						String linktableAlias = combinedAlias(tableAlias, linktable, isPrincipalAlias);
 						String linkfield = "`" + linktableAlias + "`." + table + "_id";
 						
 						q.addJoin("LEFT JOIN " + linktable + " `" + linktableAlias + "` ON " + linkfield + "=" + idfield);
 						
-						q.addField("`" + linktableAlias + "`." + foreignvaluefield + " `" + tableAlias + "." + f.getName() + "`");
+						q.addField("`" + linktableAlias + "`." + foreignvaluefield + " `" + combinedAlias(tableAlias, f.getName(), isPrincipalAlias) + ".value`");
 					} else {
 						// many to many
 						String idfield = tableAlias + ".id";
@@ -441,14 +459,20 @@ public class PojoQuery<T> {
 				idFields.get(tableAlias).add(f);
 			}
 			if (f.getAnnotation(Link.class) != null) {
-				Class<?> linkedClass = f.getAnnotation(Link.class).resultClass();
+				Class<?> linkedClass;
+				if (f.getType().isArray()) {
+					linkedClass = f.getType().getComponentType();
+				} else {
+					linkedClass = f.getAnnotation(Link.class).resultClass();
+				}
 				String linkedAlias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
 				classes.put(linkedAlias, linkedClass);
-
 				linkFields.put(linkedAlias, f);
 				linkReverse.put(f, tableAlias);
-
-				processClass(linkedClass, linkedAlias, classes, classFields, linkFields, linkReverse, idFields, false);
+					
+				if (f.getAnnotation(Link.class).foreignvaluefield().equals(Link.NONE)) {
+					processClass(linkedClass, linkedAlias, classes, classFields, linkFields, linkReverse, idFields, false);
+				}
 			} else if (!f.getType().isPrimitive() && (f.getType().getAnnotation(Table.class) != null || f.getAnnotation(Embedded.class) != null)) {
 				Class<?> linkedClass = f.getType();
 				String linkedAlias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
@@ -497,12 +521,20 @@ public class PojoQuery<T> {
 		return result;
 	}
 
-	public static Long insert(DataSource db, Object o) {
-		return DB.insert(db, determineTableName(o.getClass()), extractValues(o));
+	public static <PK> PK insert(DataSource db, Object o) {
+		PK ids = DB.insert(db, determineTableName(o.getClass()), extractValues(o));
+		if (ids != null) {
+			applyGeneratedId(o, ids);
+		}
+		return ids;
 	}
-	
-	public static Long insert(Connection connection, Object o) {
-		return DB.insert(connection, determineTableName(o.getClass()), extractValues(o));
+
+	public static <PK> PK insert(Connection connection, Object o) {
+		PK ids = DB.insert(connection, determineTableName(o.getClass()), extractValues(o));
+		if (ids != null) {
+			applyGeneratedId(o, ids);
+		}
+		return ids;
 	}
 	
 	public static int update(DataSource db, Object object) {
@@ -511,10 +543,10 @@ public class PojoQuery<T> {
 		return DB.update(db, determineTableName(object.getClass()), values, ids);
 	}
 
-	public static int update(Connection db, Object object) {
+	public static int update(Connection connection, Object object) {
 		Map<String, Object> values = extractValues(object);
 		Map<String, Object> ids = splitIdFields(object, values);
-		return DB.update(db, determineTableName(object.getClass()), values, ids);
+		return DB.update(connection, determineTableName(object.getClass()), values, ids);
 	}
 	
 	public static Long insertOrUpdate(DataSource db, Object o) {
@@ -576,4 +608,17 @@ public class PojoQuery<T> {
 		return result;
 	}
 
+	private static <PK> void applyGeneratedId(Object o, PK ids) {
+		List<Field> idFields = findIdFields(o.getClass());
+		try {
+			if (ids != null && idFields.size() == 1) {
+				Field idField = idFields.get(0);
+				idField.setAccessible(true);
+				idField.set(o, ids);
+			}
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+	
 }

@@ -162,7 +162,11 @@ public class DB {
 			if (params != null) {
 				int index = 1;
 				for (Object val : params) {
-					stmt.setObject(index++, val);
+					if (val != null && val.getClass().isEnum()) {
+						stmt.setObject(index++, ((Enum<?>)val).name());
+					} else {
+						stmt.setObject(index++, val);
+					}
 				}
 			}
 			boolean success = false;

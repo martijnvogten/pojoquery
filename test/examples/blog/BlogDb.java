@@ -6,10 +6,10 @@ import javax.sql.DataSource;
 
 import nl.pojoquery.DB;
 import nl.pojoquery.PojoQuery;
+import nl.pojoquery.integrationtest.MysqlDatabases;
 import examples.blog.ArticleDetailExample.Article;
 import examples.blog.ArticleDetailExample.Comment;
 import examples.blog.ArticleDetailExample.User;
-import examples.util.MysqlDatabases;
 
 public class BlogDb {
 
