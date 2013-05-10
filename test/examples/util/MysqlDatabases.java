@@ -13,7 +13,7 @@ public class MysqlDatabases {
 		DB.executeDDL(db, "DROP DATABASE IF EXISTS " + schema);
 		DB.executeDDL(db, "CREATE DATABASE " + schema + " DEFAULT CHARSET utf8");
 
-		return getDataSource("jdbc:mysql://" + host + "/" + schema, "root", "");
+		return getDataSource("jdbc:mysql://" + host + "/" + schema, username, password);
 	}
 	
 	private static DataSource getDataSource(String jdbcUrl, String user, String pass) {
