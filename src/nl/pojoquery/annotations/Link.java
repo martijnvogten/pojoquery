@@ -10,4 +10,5 @@ public @interface Link {
 	
 	String linktable() default NONE;
 	Class<?> resultClass() default DEFAULT.class;
+	String foreignvaluefield() default NONE;
 }
