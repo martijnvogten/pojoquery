@@ -55,8 +55,7 @@ public class UsersExample {
 		
 		john.modifiedBy_id = john.id;
 		john.modificationDate = john.modificationDate;
-		int affectedRows = PojoQuery.update(db, john);
-		System.out.println("Affected rows: " + affectedRows);
+		PojoQuery.update(db, john);
 		
 		PojoQuery<UserWithAudit> q = PojoQuery.build(UserWithAudit.class);
 		System.out.println(q.toSql());
