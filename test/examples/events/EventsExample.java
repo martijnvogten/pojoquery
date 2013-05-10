@@ -22,12 +22,6 @@ public class EventsExample {
 		@Link(linktable="event_person", resultClass=Person.class)
 		public List<Person> persons;
 
-		@Override
-		public String toString() {
-			return "EventWithPersons [persons=" + persons + ", getId()="
-					+ getId() + ", getDate()=" + getDate() + ", getTitle()="
-					+ getTitle() + "]";
-		}
 	}
 	
 	public static class PersonWithEvents extends Person {
@@ -42,11 +36,6 @@ public class EventsExample {
 			this.events = events;
 		}
 
-		public String toString() {
-			return "PersonWithEvents [events=" + events + ", getId()="
-					+ getId() + ", getAge()=" + getAge() + ", getFirstname()="
-					+ getFirstname() + ", getLastname()=" + getLastname() + "]";
-		}
 	}
 	
 	@Table("event_person")
@@ -60,73 +49,58 @@ public class EventsExample {
 		public Person person;
 		public Event event;
 
-		@Override
-		public String toString() {
-			return "EventPersonLink [event_id=" + event_id + ", person_id="
-					+ person_id + "]";
-		}
 	}
 	
 	public static void main(String[] args) {
 		DataSource db = MysqlDatabases.createDatabase("localhost", "pojoquery_events", "root", "");
 		createTables(db);
-		
-		Event e = new Event();
-		e.setDate(new Date());
-		e.setTitle("My Event");
-		Long eventId = PojoQuery.insertOrUpdate(db, e);
-		
-		Event concert = new Event();
-		concert.setDate(new Date());
-		concert.setTitle("The concert");
-		Long concertId = PojoQuery.insertOrUpdate(db, concert);
-		
-		PersonRecord p = new PersonRecord();
-		p.setFirstname("John");
-		p.setLastname("Ewbank");
-		p.setAge(38);
-		Long personId = PojoQuery.insertOrUpdate(db, p);
-		
-		EmailAddress em = new EmailAddress();
-		em.setPerson_id(personId);
-		em.setName("John Ewbank");
-		em.setEmail("john.ewbank@endemol.nl");
-		PojoQuery.insertOrUpdate(db, em);
-		
-		DB.insertOrUpdate(db, "event_person", map("event_id", eventId, "person_id", personId));
-		DB.insertOrUpdate(db, "event_person", map("event_id", concertId, "person_id", personId));
-		
-//		Person marco = new Person();
-//		marco.setFirstname("Marco");
-//		marco.setLastname("Borsato");
-//		marco.setAge(38);
-//		Long marcoId = Query.insertOrUpdate(db, marco);
-//		DB.insertOrUpdate(db, "event_person", map("event_id", eventId, "person_id", marcoId));
-		
+		insertData(db);
 
-		long start = System.currentTimeMillis();
 		PojoQuery<EventPersonLink> links = PojoQuery.build(EventPersonLink.class);
-		System.out.println("Finished in " + (System.currentTimeMillis() - start) + " ms");
-		System.out.println(links.toSql());
 		for(EventPersonLink epl : links.execute(db)) {
-			System.out.println(epl.event.getTitle() + " " + epl.person);
+			System.out.println(epl.event.getTitle() + " is visited by " + epl.person.getFullName());
 		}
 		
 		PojoQuery<EventWithPersons> q = PojoQuery.build(EventWithPersons.class)
 					.addWhere("persons.firstname=?", "John");
 		
-		System.out.println(q.toSql());
 		for(EventWithPersons event : q.execute(db)) {
 			System.out.println(event.persons.get(0).getEmailAddresses().get(0));
 		}
-//		
-//		for(PersonWithEvents person : Query.buildQuery(PersonWithEvents.class).execute(db)) {
-//			System.out.println(person.getEvents());
-//		}
-//		
-//		for(Event event : Query.buildQuery(Event.class).execute(db)) {
-//			System.out.println(event);
-//		}
+	}
+
+	private static void insertData(DataSource db) {
+		Event e = new Event();
+		e.setDate(new Date());
+		e.setTitle("My Event");
+		Long eventId = PojoQuery.insert(db, e);
+		
+		Event concert = new Event();
+		concert.setDate(new Date());
+		concert.setTitle("The concert");
+		Long concertId = PojoQuery.insert(db, concert);
+		
+		PersonRecord p = new PersonRecord();
+		p.setFirstname("John");
+		p.setLastname("Ewbank");
+		p.setAge(38);
+		Long personId = PojoQuery.insert(db, p);
+		
+		EmailAddress em = new EmailAddress();
+		em.setPerson_id(personId);
+		em.setName("John Ewbank");
+		em.setEmail("john.ewbank@endemol.nl");
+		PojoQuery.insert(db, em);
+		
+		DB.insert(db, "event_person", map("event_id", eventId, "person_id", personId));
+		DB.insert(db, "event_person", map("event_id", concertId, "person_id", personId));
+		
+//		Person marco = new Person();
+//		marco.setFirstname("Marco");
+//		marco.setLastname("Borsato");
+//		marco.setAge(38);
+//		Long marcoId = Query.insert(db, marco);
+//		DB.insert(db, "event_person", map("event_id", eventId, "person_id", marcoId));
 	}
 
 	private static void createTables(DataSource db) {

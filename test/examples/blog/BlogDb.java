@@ -13,8 +13,8 @@ import examples.util.MysqlDatabases;
 
 public class BlogDb {
 
-	public static DataSource create(String schemaname) {
-		DataSource db = MysqlDatabases.createDatabase("localhost", schemaname, "root", "");
+	public static DataSource create(String host, String schemaname, String username, String password) {
+		DataSource db = MysqlDatabases.createDatabase(host, schemaname, username, password);
 		createTables(db);
 		insertData(db);
 		return db;
@@ -52,12 +52,12 @@ public class BlogDb {
 		ilikeit.submitdate = new Date();
 		ilikeit.id = PojoQuery.insert(db, ilikeit);
 		
-		Comment relativity = new Comment();
-		relativity.author_id = albert.id;
-		relativity.article_id = article.id;
-		relativity.comment = "It all depends on how you look at it";
-		relativity.submitdate = new Date();
-		relativity.id = PojoQuery.insert(db, relativity);
+		Comment imagindation = new Comment();
+		imagindation.author_id = albert.id;
+		imagindation.article_id = article.id;
+		imagindation.comment = "Imagination is more important than knowledge.";
+		imagindation.submitdate = new Date();
+		imagindation.id = PojoQuery.insert(db, imagindation);
 	}
 
 

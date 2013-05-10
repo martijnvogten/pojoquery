@@ -52,7 +52,7 @@ public class ArticleDetailExample {
 	}
 
 	public static void main(String[] args) {
-		DataSource db = BlogDb.create("pojoquery_blog");
+		DataSource db = BlogDb.create("localhost", "pojoquery_blog", "root", "");
 		
 		PojoQuery<ArticleDetail> q = PojoQuery.build(ArticleDetail.class)
 				.addWhere("article.id=?", 1L)

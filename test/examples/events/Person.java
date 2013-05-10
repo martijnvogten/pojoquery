@@ -19,4 +19,8 @@ public class Person extends PersonRecord {
 		this.emailAddresses = emailAddresses;
 	}
 
+	public String getFullName() {
+		return getFirstname() + " " + getLastname();
+	}
+
 }
