@@ -68,7 +68,7 @@ public class EventsExample {
 	}
 	
 	public static void main(String[] args) {
-		DataSource db = MysqlDatabases.dropAndCreateDatabase("pojoquery_events");
+		DataSource db = MysqlDatabases.createDatabase("localhost", "pojoquery_events", "root", "");
 		createTables(db);
 		
 		Event e = new Event();

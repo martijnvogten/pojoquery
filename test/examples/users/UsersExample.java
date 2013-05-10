@@ -44,7 +44,7 @@ public class UsersExample {
 	}
 	
 	public static void main(String[] args) {
-		DataSource db = MysqlDatabases.dropAndCreateDatabase("pojoquery_users");
+		DataSource db = MysqlDatabases.createDatabase("localhost", "pojoquery_users", "root", "");
 		createTables(db);
 		
 		User john = new User();

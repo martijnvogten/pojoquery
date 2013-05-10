@@ -14,7 +14,7 @@ import examples.util.MysqlDatabases;
 public class BlogDb {
 
 	public static DataSource create(String schemaname) {
-		DataSource db = MysqlDatabases.dropAndCreateDatabase(schemaname);
+		DataSource db = MysqlDatabases.createDatabase("localhost", schemaname, "root", "");
 		createTables(db);
 		insertData(db);
 		return db;
