@@ -24,35 +24,50 @@ public class DB {
 	public interface ResultSetProcessor<T> {
 		T process(ResultSet resultSet);
 	}
-	
+
+	public static List<Map<String, Object>> queryRows(Connection connection, String sql, Object... params) {
+		return execute(connection, QueryType.SELECT, sql, Arrays.asList(params), new RowProcessor() );
+	}
+
 	public static List<Map<String, Object>> queryRows(DataSource db, String sql, Object... params) {
-		return execute(db, QueryType.SELECT, sql, Arrays.asList(params), new ResultSetProcessor<List<Map<String, Object>>>() {
-			@Override
-			public List<Map<String, Object>> process(ResultSet rs) {
-				List<Map<String, Object>> result = new ArrayList<Map<String,Object>>();
-				try {
-					List<String> fieldNames = extractResultSetFieldNames(rs);
-					while (rs.next()) {
-						Map<String, Object> row = new HashMap<String, Object>(fieldNames.size());
-						for (String fieldName : fieldNames) {
-							row.put(fieldName, rs.getObject(fieldName));
-						}
-						result.add(row);
-					}
-					return result;
-				} catch (Exception e) {
-					throw new RuntimeException(e);
-				}
-			}
-		});
+		return execute(db, QueryType.SELECT, sql, Arrays.asList(params), new RowProcessor() );
 	}
 	
+	private static class RowProcessor implements ResultSetProcessor<List<Map<String, Object>>> {
+		public List<Map<String, Object>> process(ResultSet rs) {
+			List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
+			try {
+				List<String> fieldNames = extractResultSetFieldNames(rs);
+				while (rs.next()) {
+					Map<String, Object> row = new HashMap<String, Object>(fieldNames.size());
+					for (String fieldName : fieldNames) {
+						row.put(fieldName, rs.getObject(fieldName));
+					}
+					result.add(row);
+				}
+				return result;
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
+	}
+
 	public static Long insertOrUpdate(DataSource db, String tableName, Map<String, ? extends Object> values) {
+		SqlExpression insertSql = buildInsert(tableName, values);
+		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
+	}
+	
+	public static Long insertOrUpdate(Connection connection, String tableName, Map<String, ? extends Object> values) {
+		SqlExpression insertSql = buildInsert(tableName, values);
+		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
+	}
+
+	private static SqlExpression buildInsert(String tableName, Map<String, ? extends Object> values) {
 		List<String> qmarks = new ArrayList<String>();
 		List<String> quotedFields = new ArrayList<String>();
 		List<Object> params = new ArrayList<Object>();
 		List<String> updateList = new ArrayList<String>();
-		
+
 		for (String f : values.keySet()) {
 			qmarks.add("?");
 			String quotedField = "`" + f + "`";
@@ -62,18 +77,40 @@ public class DB {
 		}
 		params.addAll(new ArrayList<Object>(params));
 		String sql = "INSERT INTO `" + tableName + "` (" + implode(",", quotedFields) + ")" + " VALUES (" + implode(",", qmarks) + ")" + " ON DUPLICATE KEY UPDATE " + implode(",", updateList);
-		return execute(db, QueryType.INSERT, sql, params, null);
+		
+		SqlExpression insertSql = new SqlExpression(sql, params);
+		return insertSql;
 	}
-	
+
 	public static void executeDDL(DataSource db, String ddl) {
 		execute(db, QueryType.DDL, ddl, null, null);
 	}
 
-	@SuppressWarnings("unchecked")
-	private static <T> T execute(DataSource db, QueryType type, String sql, List<Object> params, ResultSetProcessor<T> processor) {
+	public static void executeDDL(Connection connection, String ddl) {
+		execute(connection, QueryType.DDL, ddl, null, null);
+	}
+
+	private static <T> T execute(DataSource db, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
 		Connection connection = null;
 		try {
 			connection = db.getConnection();
+			return execute(connection, type, sql, params, processor);
+		} catch (SQLException e) {
+			throw new RuntimeException(e);
+		} finally {
+			try {
+				if (connection != null) {
+					connection.close();
+				}
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static <T> T execute(Connection connection, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
+		try {
 			PreparedStatement stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
 			if (params != null) {
 				int index = 1;
@@ -94,20 +131,20 @@ public class DB {
 					if (processor != null) {
 						return processor.process(resultSet);
 					}
-					return (T)resultSet;
+					return (T) resultSet;
 				case INSERT:
 					stmt.executeUpdate();
 					success = true;
 					ResultSet keysResult = stmt.getGeneratedKeys();
 					if (keysResult != null && keysResult.next()) {
-						return (T)keysResult.getObject(1);
+						return (T) keysResult.getObject(1);
 					} else {
 						return null;
 					}
 				case UPDATE:
 					Integer affectedRows = stmt.executeUpdate();
 					success = true;
-					return (T)affectedRows;
+					return (T) affectedRows;
 				}
 			} finally {
 				stmt.close();
@@ -117,15 +154,8 @@ public class DB {
 			}
 			return null;
 		} catch (SQLException e) {
+			System.err.println(e.getMessage());
 			throw new RuntimeException(e);
-		} finally {
-			try {
-				if (connection != null) {
-					connection.close();
-				}
-			} catch (SQLException e) {
-				e.printStackTrace();
-			}
 		}
 	}
 
@@ -137,5 +167,5 @@ public class DB {
 		}
 		return fieldNames;
 	}
-	
+
 }
