@@ -3,6 +3,7 @@ package nl.pojoquery;
 import static nl.pojoquery.util.Strings.implode;
 
 import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.sql.Connection;
@@ -10,8 +11,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.sql.DataSource;
 
@@ -132,6 +135,66 @@ public class PojoQuery<T> {
 		List<Map<String, Object>> rows = DB.queryRows(db, sql, params);
 		return (List<R>) processRows(rows, clz);
 	}
+	
+	public T findById(Connection connection, Object id) {
+		wheres.addAll(buildIdCondition(resultClass, id));
+		return returnSingleRow(execute(connection));
+	}
+
+	public T findById(DataSource db, Object id) {
+		wheres.addAll(buildIdCondition(resultClass, id));
+		return returnSingleRow(execute(db));
+	}
+
+	public static int delete(DataSource db, Class<?> clz, Object id) {
+		List<SqlExpression> wheres = buildIdCondition(clz, id);
+		String tableName = determineTableName(clz);
+		
+		List<String> whereClauses = new ArrayList<String>();
+		List<Object> params = new ArrayList<Object>();
+		for(SqlExpression w : wheres) {
+			whereClauses.add(w.getSql());
+			for (Object o : w.getParameters()) {
+				params.add(o);
+			}
+		}
+		
+		return DB.update(db, new SqlExpression("DELETE FROM `" + tableName + "` WHERE " + implode(" AND ", whereClauses), Arrays.asList((Object)params)));
+	}
+
+	private T returnSingleRow(List<T> resultList) {
+		if (resultList.size() == 1) {
+			return resultList.get(0);
+		}
+		if (resultList.size() > 1) {
+			throw new RuntimeException("More than one result found in findById on class " + resultClass.getName());
+		}
+		return null;
+	}
+	
+	private static List<SqlExpression> buildIdCondition(Class<?> resultClass, Object id) {
+		List<Field> idFields = determineIdFields(resultClass);
+		if (idFields.size() == 0) {
+			throw new RuntimeException("No @Id annotations found on fields of class " + resultClass.getName());
+		}
+		String tableName = determineTableName(resultClass);
+		if (idFields.size() == 1) {
+			return Arrays.asList(new SqlExpression("`" + tableName + "`." + idFields.get(0).getName() + "=?", Arrays.asList((Object)id)));
+		} else {
+			if (id instanceof Map) {
+				@SuppressWarnings("unchecked")
+				Map<String,Object> idvalues = (Map<String, Object>) id;
+				
+				List<SqlExpression> result = new ArrayList<SqlExpression>();
+				for(String field : idvalues.keySet()) {
+					result.add(new SqlExpression("`" + tableName + "`." + field + "=?", Arrays.asList((Object)idvalues.get(field))));
+				}
+				return result;
+			} else {
+				throw new RuntimeException("Multiple @Id annotations on class " + resultClass.getName() + ": expecting a map id.");
+			}
+		}
+	}
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public static <R> List<R> processRows(List<Map<String, Object>> rows, Class<R> clz) {
@@ -165,7 +228,9 @@ public class PojoQuery<T> {
 						Class<?> valClass = classes.get(tableAlias);
 						Object instance;
 						if (!valClass.isEnum()) {
-							instance = valClass.newInstance();
+							Constructor<?> constructor = valClass.getDeclaredConstructor();
+							constructor.setAccessible(true);
+							instance = constructor.newInstance();
 							onThisRow.put(tableAlias, instance);
 						} else {
 							Object val = row.get(key);
@@ -240,11 +305,20 @@ public class PojoQuery<T> {
 								List<Object> coll = (List<Object>) linkField.get(parent);
 								if (coll == null) {
 									coll = new ArrayList<Object>();
+									linkField.set(parent, coll);
 								}
 								if (!coll.contains(entity) && entity != null) {
 									coll.add(entity);
 								}
-								linkField.set(parent, coll);
+							} else if (Set.class.isAssignableFrom(linkField.getType())) {
+								Set<Object> coll = (Set<Object>) linkField.get(parent);
+								if (coll == null) {
+									coll = new HashSet<Object>();
+									linkField.set(parent, coll);
+								}
+								if (!coll.contains(entity) && entity != null) {
+									coll.add(entity);
+								}
 							} else if (linkField.getType().isArray()) {
 								Object arr = linkField.get(parent);
 								if (arr == null) {
@@ -311,7 +385,7 @@ public class PojoQuery<T> {
 		return q;
 	}
 
-	static String determineTableName(Class<?> clz) {
+	public static String determineTableName(Class<?> clz) {
 		String ret = null;
 		while (clz != null) {
 			Table tableAnn = clz.getAnnotation(Table.class);
@@ -585,7 +659,7 @@ public class PojoQuery<T> {
 	}
 
 	private static Map<String, Object> splitIdFields(Object object, Map<String, Object> values) {
-		List<Field> idFields = findIdFields(object.getClass());
+		List<Field> idFields = determineIdFields(object.getClass());
 		if (idFields.size() == 0) {
 			throw new RuntimeException("No @Id annotations found on fields of class " + object.getClass().getName());
 		}
@@ -597,7 +671,7 @@ public class PojoQuery<T> {
 		return ids;
 	}
 	
-	private static final List<Field> findIdFields(Class<?> clz) {
+	private static final List<Field> determineIdFields(Class<?> clz) {
 		Iterable<Field> fields = collectFieldsOfClass(clz);
 		ArrayList<Field> result = new ArrayList<Field>();
 		for(Field f : fields) {
@@ -609,7 +683,7 @@ public class PojoQuery<T> {
 	}
 
 	private static <PK> void applyGeneratedId(Object o, PK ids) {
-		List<Field> idFields = findIdFields(o.getClass());
+		List<Field> idFields = determineIdFields(o.getClass());
 		try {
 			if (ids != null && idFields.size() == 1) {
 				Field idField = idFields.get(0);
