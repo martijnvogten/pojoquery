@@ -17,6 +17,10 @@ import java.util.Map;
 import javax.sql.DataSource;
 
 public class DB {
+	public interface Transaction<T> {
+		public T run(Connection connection);
+	}
+
 	private enum QueryType {
 		DDL, SELECT, UPDATE, INSERT
 	}
@@ -60,6 +64,14 @@ public class DB {
 	public static int update(Connection connection, String tableName, Map<String, Object> values, Map<String, Object> ids) {
 		SqlExpression updateSql = buildUpdate(tableName, values, ids);
 		return execute(connection, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
+	}
+	
+	public static int update(DataSource db, SqlExpression update) {
+		return execute(db, QueryType.UPDATE, update.getSql(), update.getParameters(), null);
+	}
+
+	public static int update(Connection conn, SqlExpression update) {
+		return execute(conn, QueryType.UPDATE, update.getSql(), update.getParameters(), null);
 	}
 	
 	public static <PK> PK insert(DataSource db, String tableName, Map<String, ? extends Object> values) {
@@ -137,7 +149,7 @@ public class DB {
 		execute(connection, QueryType.DDL, ddl, null, null);
 	}
 
-	private static <T> T execute(DataSource db, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
+	public static <T> T execute(DataSource db, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
 		Connection connection = null;
 		try {
 			connection = db.getConnection();
@@ -217,6 +229,45 @@ public class DB {
 			fieldNames.add(metaData.getColumnLabel(i + 1));
 		}
 		return fieldNames;
+	}
+
+	public static <T> T runInTransaction(Connection connection, Transaction<T> transaction) {
+		boolean success = false;
+		try {
+			connection.setAutoCommit(false);
+			T result = transaction.run(connection);
+			connection.commit();
+			success = true;
+			return result;
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		} finally {
+			if (!success) {
+				try {
+					connection.rollback();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
+	public static <T> T runInTransaction(DataSource dataSource, Transaction<T> transaction) {
+		Connection connection = null;
+		try {
+			connection = dataSource.getConnection();
+			return runInTransaction(connection, transaction);
+		} catch (SQLException e) {
+			throw new RuntimeException(e);
+		} finally {
+			try {
+				if (connection != null) {
+					connection.close();
+				}
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
 	}
 
 }
