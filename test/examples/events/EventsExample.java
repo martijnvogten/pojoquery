@@ -7,7 +7,6 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
-
 import nl.pojoquery.DB;
 import nl.pojoquery.PojoQuery;
 import nl.pojoquery.annotations.Id;
