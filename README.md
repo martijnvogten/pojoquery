@@ -3,11 +3,12 @@ PojoQuery
 
 PojoQuery is a light-weight utility for working with relational databases in Java. 
 Instead of writing a SQL query in plain text, PojoQuery leverages Plain Old Java classes (POJO's) 
-to define the set of fields and tables (joins) we need to fetch.
+to define the set of fields and tables (joins) to fetch.
 Because each field or property in the POJO corresponds to a field in the SELECT clause 
 of the query, the resultset maps perfectly to the defining classes to obtain a 
 type-safe result.
 
+	```java
 	class ArticleExample {
 		javax.sql.DataSource database = .... ;
 		
@@ -47,19 +48,22 @@ type-safe result.
 		String lastName;
 		String email;
 	}
-	
+	```
 	
 
 PojoQuery creates a SQL query from the `ArticleDetail` pojo, and transforms the JDBC ResultSet 
 into `ArticleDetail` instances.
 The exact SQL is easy to read and understand, much like you would write yourself:
 
+	```java
 	PojoQuery.build(ArticleDetail.class)
 		.addWhere("article.id=?", articleId)
 		.addOrderBy("comments.submitdate")
-		.toSql()	
+		.toSql()
+	```
 output:
 
+	```sql
 	SELECT
 	 `article`.id `article.id`,
 	 `article`.title `article.title`,
@@ -81,6 +85,7 @@ output:
 	 LEFT JOIN user `comments.author` ON `comments`.author_id=`comments.author`.id 
 	WHERE article.id=?  
 	ORDER BY comments.submitdate
+	```
 
 Note that PojoQuery 'guesses' names of linkfields using the default strategy [linkname]_id
 (you can use annotations to override field and table names).
@@ -107,16 +112,12 @@ all information needed to display an article in a blog: the title, content, comm
 As an alternative example, when displaying articles in a list, we are not interested in individual comments. For this 
 purpose we create a different view, which only specifies a link to the author of the article.
 
+	```java
 	class ArticleListView extends Article {
 		User author;
 	}
+	```
 	
-	List<ArticleListView> listArticles(int startIndex, int maxResults) {
-		PojoQuery.build(ArticleListView.class)
-			.addOrderBy("article.publishdate DESC")
-			.setLimit(startIndex, maxResults)
-			.execute(db);
-	}
 
 ### Customization through annotations
 
@@ -124,6 +125,7 @@ You still have full control over the SQL that is generated.
 Let's say we want to improve on the list by adding two fields: the number of comments and the date of the last comment. 
 We can add custom query clauses using annotations.
 
+	```java
 	@Join("LEFT JOIN comment ON comment.article_id=article.id")
 	@GroupBy("article.id")
 	class ArticleListView extends Article {
@@ -135,9 +137,11 @@ We can add custom query clauses using annotations.
 		@Select("MAX(comment.submitDate)")
 		Date lastCommentDate;
 	}
+	```
 
 The Join, GroupBy and Select clauses are simply copied into the query.
 
+	```sql
 	SELECT
 	 `article`.id `article.id`,
 	 `article`.title `article.title`,
@@ -152,4 +156,5 @@ The Join, GroupBy and Select clauses are simply copied into the query.
 	 LEFT JOIN comment ON comment.article_id = article.id
 	 LEFT JOIN user `author` ON `article`.author_id=`author`.id 
 	WHERE article_id=? 
-	GROUP BY article.id  
+	GROUP BY article.id 
+	```
