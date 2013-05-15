@@ -10,7 +10,7 @@ type-safe result.
 
 ```java
 class ArticleExample {
-	javax.sql.DataSource database = .... ;
+	javax.sql.DataSource database = DB.getDataSource();
 	
 	ArticleDetail fetchArticle(Long articleId) {
 		return PojoQuery.build(ArticleDetail.class)
@@ -53,15 +53,7 @@ class User {
 
 PojoQuery creates a SQL query from the `ArticleDetail` pojo, and transforms the JDBC ResultSet 
 into `ArticleDetail` instances.
-The exact SQL is easy to read and understand, much like you would write yourself:
-
-```java
-PojoQuery.build(ArticleDetail.class)
-	.addWhere("article.id=?", articleId)
-	.addOrderBy("comments.submitdate")
-	.toSql()
-```
-output:
+The generated SQL is _predictable_ and easy to read, much like you would write yourself:
 
 ```sql
 SELECT
@@ -87,21 +79,20 @@ WHERE article.id=?
 ORDER BY comments.submitdate
 ```
 
-Note that PojoQuery 'guesses' names of linkfields using the default strategy [linkname]_id
-(you can use annotations to override field and table names).
+Note that PojoQuery uses the POJO _fieldnames_ `comments` and `author` to construct linkfield names `author_id` and 
+aliases for fields and tables `comments.author.id` and `comments.author` (you can also specify your own 
+using annotations).
 
 ### No lazy loading: no complexity...
-
 
 The major difference with traditional Java ORM frameworks (JPA, Hibernate) is that instead of defining 
 _all links_ in the database we only specify the _links to fetch_. This means that there is _no lazy loading_.
 
 Although lazy loading has its obvious benefits (i.e. no need to specify which linked entities to load beforehand), 
 the drawbacks are significant: 
-- all business logic must be contained in a session
-- we cannot serialize objects easily to JSON, XML
-- proxy classes kill `instanceof`, `getClass` and complicate debugging
-- overall increased complexity
+- entities can only be used [in the context of a session](https://www.google.nl/search?q=lazyinitializationexception)
+- we cannot serialize objects easily to JSON, XML, [GWT](https://developers.google.com/web-toolkit/articles/using_gwt_with_hibernate)
+- proxy classes kill `instanceof` and `getClass`, complicate debugging and testing
 
 ### ... instead: views!
 
@@ -121,9 +112,12 @@ class ArticleListView extends Article {
 
 ### Customization through annotations
 
-You still have full control over the SQL that is generated.
-Let's say we want to improve on the list by adding two fields: the number of comments and the date of the last comment. 
-We can add custom query clauses using annotations.
+Because the generated SQL is completely predictable it is easy to extend. You can add clauses 
+using the methods `.addJoin()`, `addGroupBy()`, etc. or you can define them beforehand on the POJO itself
+using annotations.
+Let's say we want to improve on `ArticleListView` by adding two fields: the number of comments and 
+the date of the last comment. 
+
 
 ```java
 @Join("LEFT JOIN comment ON comment.article_id=article.id")
