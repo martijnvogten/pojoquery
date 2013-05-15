@@ -89,7 +89,7 @@ _all links_ in the database we only specify the _links to fetch_. This means tha
 
 Although lazy loading has its obvious benefits (i.e. no need to specify which linked entities to load beforehand), 
 the drawbacks are significant: 
-- result objects can only be used inside a [session](https://www.google.nl/search?q=lazyinitializationexception)
+- entities can only be used [in the context of a session](https://www.google.nl/search?q=lazyinitializationexception)
 - we cannot serialize objects easily to JSON, XML, [GWT](https://developers.google.com/web-toolkit/articles/using_gwt_with_hibernate)
 - proxy classes kill `instanceof`, `getClass` and complicate debugging
 
