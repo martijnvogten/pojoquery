@@ -111,7 +111,8 @@ class ArticleListView extends Article {
 
 ### Customization through annotations
 
-You still have full control over the SQL that is generated.
+Because the generated SQL is completely predictable it is easy to extend. You can add clauses 
+using the methods `.addJoin()`, `addGroupBy()`, etc. or you can define them beforehand on the POJO itself using annotations.
 Let's say we want to improve on the list by adding two fields: the number of comments and the date of the last comment. 
 We can add custom query clauses using annotations.
 
