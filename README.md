@@ -10,7 +10,7 @@ type-safe result.
 
 ```java
 class ArticleExample {
-	javax.sql.DataSource database = .... ;
+	javax.sql.DataSource database = DB.getDataSource();
 	
 	ArticleDetail fetchArticle(Long articleId) {
 		return PojoQuery.build(ArticleDetail.class)
@@ -79,8 +79,8 @@ WHERE article.id=?
 ORDER BY comments.submitdate
 ```
 
-Note that PojoQuery 'guesses' names of linkfields (e.g. `author_id`) using the default strategy [linkname]_id and
-table aliases (e.g. `comments.author`) are constructed using the POJO fieldnames connected with dots `.`. 
+Note that PojoQuery uses the POJO _fieldnames_ `comments` and `author` to guess the names of the linkfield `author_id`, 
+and to construct the table alias `comments.author` and field alias `comments.author.id`.
 
 ### No lazy loading: no complexity...
 
