@@ -79,8 +79,8 @@ WHERE article.id=?
 ORDER BY comments.submitdate
 ```
 
-Note that PojoQuery uses the POJO _fieldnames_ `comments` and `author` to guess the names of the linkfield `author_id`, 
-and to construct the table alias `comments.author` and field alias `comments.author.id` (you can also specify your own 
+Note that PojoQuery uses the POJO _fieldnames_ `comments` and `author` to construct linkfield names `author_id` and 
+aliases for fields and tables `comments.author.id` and `comments.author` (you can also specify your own 
 using annotations).
 
 ### No lazy loading: no complexity...
