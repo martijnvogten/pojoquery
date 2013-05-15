@@ -92,7 +92,6 @@ the drawbacks are significant:
 - all business logic must be contained in a session
 - we cannot serialize objects easily to JSON, XML, [GWT](https://developers.google.com/web-toolkit/articles/using_gwt_with_hibernate)
 - proxy classes kill `instanceof`, `getClass` and complicate debugging
-- overall increased complexity
 
 ### ... instead: views!
 
