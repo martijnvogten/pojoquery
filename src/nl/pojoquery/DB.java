@@ -29,10 +29,18 @@ public class DB {
 		T process(ResultSet resultSet);
 	}
 
+	public static List<Map<String, Object>> queryRows(Connection connection, SqlExpression queryStatement) {
+		return execute(connection, QueryType.SELECT, queryStatement.getSql(), queryStatement.getParameters(), new RowProcessor() );
+	}
+
+	public static List<Map<String, Object>> queryRows(DataSource db, SqlExpression queryStatement) {
+		return execute(db, QueryType.SELECT, queryStatement.getSql(), queryStatement.getParameters(), new RowProcessor() );
+	}
+	
 	public static List<Map<String, Object>> queryRows(Connection connection, String sql, Object... params) {
 		return execute(connection, QueryType.SELECT, sql, Arrays.asList(params), new RowProcessor() );
 	}
-
+	
 	public static List<Map<String, Object>> queryRows(DataSource db, String sql, Object... params) {
 		return execute(db, QueryType.SELECT, sql, Arrays.asList(params), new RowProcessor() );
 	}

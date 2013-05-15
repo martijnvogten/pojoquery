@@ -105,7 +105,14 @@ public class PojoQuery<T> {
 			}
 		}
 		
-		String sql = implode(" ", Arrays.asList("SELECT\n", implode(",\n ", fields), "\nFROM", table, "\n", implode("\n ", joins), whereClause.getSql(), groupByClause, orderByClause, limitClause));
+		String sql = implode(" ", Arrays.asList(
+				"SELECT\n", implode(",\n ", fields), 
+				"\nFROM", table, "\n", 
+				implode("\n ", joins), 
+				whereClause.getSql(), 
+				groupByClause, 
+				orderByClause, 
+				limitClause));
 		return new SqlExpression(sql, whereClause.getParameters());
 	}
 
@@ -125,29 +132,24 @@ public class PojoQuery<T> {
 		return new SqlExpression(whereClause, parameters);
 	}
 
-	private static String buildClause(String which, List<String> parts) {
+	private static String buildClause(String preamble, List<String> parts) {
 		String groupByClause = "";
 		if (parts.size() > 0) {
-			groupByClause = "\n" + which + " " + implode(", ", parts);
+			groupByClause = "\n" + preamble + " " + implode(", ", parts);
 		}
 		return groupByClause;
 	}
 
 	public List<T> execute(DataSource db) {
-		SqlExpression combined = buildQueryStatement();
-		List<Map<String, Object>> rows = DB.queryRows(db, combined.getSql(), combined.getParameters());
-		return (List<T>) processRows(rows, resultClass);
+		return processRows(DB.queryRows(db, buildQueryStatement()), resultClass);
 	}
 	
 	public List<T> execute(Connection connection) {
-		SqlExpression combined = buildQueryStatement();
-		List<Map<String, Object>> rows = DB.queryRows(connection, combined.getSql(), combined.getParameters());
-		return (List<T>) processRows(rows, resultClass);
+		return processRows(DB.queryRows(connection, buildQueryStatement()), resultClass);
 	}
 
 	public static <R> List<R> execute(DataSource db, Class<R> clz, String sql, Object... params) {
-		List<Map<String, Object>> rows = DB.queryRows(db, sql, params);
-		return (List<R>) processRows(rows, clz);
+		return processRows(DB.queryRows(db, sql, params), clz);
 	}
 	
 	public T findById(Connection connection, Object id) {
@@ -718,24 +720,31 @@ public class PojoQuery<T> {
 		return this;
 	}
 
-	public int countTotal(DataSource db) {
+	SqlExpression buildCountStatement() {
 		List<Field> idFields = determineIdFields(resultClass);
+		String tableAlias = determineTableName(resultClass);
 		List<String> idFieldNames = new ArrayList<String>();
 		for(Field f : idFields) {
-			idFieldNames.add(f.getName());
+			idFieldNames.add(tableAlias + "." + f.getName());
 		}
 		
 		String groupByClause = buildClause("GROUP BY", groupBy);
 		SqlExpression whereClause = buildWhereClause(wheres);
 		
 		String sql = implode(" ", 
-				Arrays.asList("SELECT COUNT(DISTINCT ", implode(", ", idFieldNames), ") `total` FROM", table, "\n", 
+				Arrays.asList("SELECT COUNT(DISTINCT " + implode(", ", idFieldNames) + ")", 
+						"FROM", table, "\n", 
 						implode("\n ", joins), 
 						whereClause.getSql(), 
 						groupByClause));
 		
-		List<Map<String,Object>> rows = DB.queryRows(db, sql, whereClause.getParameters());
-		return (Integer)rows.get(0).get("total");
+		return new SqlExpression(sql, whereClause.getParameters());
+	}
+		
+	public int countTotal(DataSource db) {
+		SqlExpression stmt = buildCountStatement();
+		List<Map<String,Object>> rows = DB.queryRows(db, stmt);
+		return (Integer)rows.get(0).values().iterator().next();
 	}
 	
 }
