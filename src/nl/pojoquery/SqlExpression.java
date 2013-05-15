@@ -1,5 +1,6 @@
 package nl.pojoquery;
 
+import java.util.Arrays;
 import java.util.Collections;
 
 public class SqlExpression {
@@ -21,5 +22,9 @@ public class SqlExpression {
 
 	public Iterable<Object> getParameters() {
 		return parameters;
+	}
+	
+	public static SqlExpression sql(String sql, Object... parameters) {
+		return new SqlExpression(sql, Arrays.asList(parameters));
 	}
 }

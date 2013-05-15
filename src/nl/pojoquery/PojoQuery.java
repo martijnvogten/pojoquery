@@ -35,7 +35,6 @@ public class PojoQuery<T> {
 	private List<SqlExpression> wheres = new ArrayList<SqlExpression>();
 	private List<String> groupBy = new ArrayList<String>();
 	private List<String> orderBy = new ArrayList<String>();
-	private List<Object> parameters = new ArrayList<Object>();
 	private int offset = -1;
 	private int rowCount = -1;
 
@@ -85,26 +84,14 @@ public class PojoQuery<T> {
 	}
 
 	public String toSql() {
-		parameters.clear();
-		String groupByClause = "";
-		if (groupBy.size() > 0) {
-			groupByClause = "\nGROUP BY " + implode(", ", groupBy);
-		}
-		String orderByClause = "";
-		if (orderBy.size() > 0) {
-			orderByClause = "\nORDER BY " + implode(", ", orderBy);
-		}
-		String whereClause = "";
-		if (wheres.size() > 0) {
-			List<String> clauses = new ArrayList<String>();
-			for (SqlExpression exp : wheres) {
-				clauses.add(exp.getSql());
-				for (Object o : exp.getParameters()) {
-					parameters.add(o);
-				}
-			}
-			whereClause = "\nWHERE " + implode("\n AND ", clauses);
-		}
+		return buildQueryStatement().getSql();
+	}
+	
+	private SqlExpression buildQueryStatement() {
+		String groupByClause = buildClause("GROUP BY", groupBy);
+		String orderByClause = buildClause("ORDER BY", orderBy);
+		SqlExpression whereClause = buildWhereClause(wheres);
+		
 		String limitClause = "";
 		if (offset > -1 || rowCount > -1) {
 			if (rowCount < 0) {
@@ -117,17 +104,44 @@ public class PojoQuery<T> {
 				limitClause = "\nLIMIT " + rowCount;
 			}
 		}
+		
+		String sql = implode(" ", Arrays.asList("SELECT\n", implode(",\n ", fields), "\nFROM", table, "\n", implode("\n ", joins), whereClause.getSql(), groupByClause, orderByClause, limitClause));
+		return new SqlExpression(sql, whereClause.getParameters());
+	}
 
-		return implode(" ", Arrays.asList("SELECT\n", implode(",\n ", fields), "\nFROM", table, "\n", implode("\n ", joins), whereClause, groupByClause, orderByClause, limitClause));
+	private static SqlExpression buildWhereClause(List<SqlExpression> parts) {
+		List<Object> parameters = new ArrayList<Object>();
+		String whereClause = "";
+		if (parts.size() > 0) {
+			List<String> clauses = new ArrayList<String>();
+			for (SqlExpression exp : parts) {
+				clauses.add(exp.getSql());
+				for (Object o : exp.getParameters()) {
+					parameters.add(o);
+				}
+			}
+			whereClause = "\nWHERE " + implode("\n AND ", clauses);
+		}
+		return new SqlExpression(whereClause, parameters);
+	}
+
+	private static String buildClause(String which, List<String> parts) {
+		String groupByClause = "";
+		if (parts.size() > 0) {
+			groupByClause = "\n" + which + " " + implode(", ", parts);
+		}
+		return groupByClause;
 	}
 
 	public List<T> execute(DataSource db) {
-		List<Map<String, Object>> rows = DB.queryRows(db, toSql(), this.parameters.toArray());
+		SqlExpression combined = buildQueryStatement();
+		List<Map<String, Object>> rows = DB.queryRows(db, combined.getSql(), combined.getParameters());
 		return (List<T>) processRows(rows, resultClass);
 	}
 	
 	public List<T> execute(Connection connection) {
-		List<Map<String, Object>> rows = DB.queryRows(connection, toSql(), this.parameters.toArray());
+		SqlExpression combined = buildQueryStatement();
+		List<Map<String, Object>> rows = DB.queryRows(connection, combined.getSql(), combined.getParameters());
 		return (List<T>) processRows(rows, resultClass);
 	}
 
@@ -595,16 +609,20 @@ public class PojoQuery<T> {
 		return result;
 	}
 
-	public static <PK> PK insert(DataSource db, Object o) {
-		PK ids = DB.insert(db, determineTableName(o.getClass()), extractValues(o));
+	public static <PK> PK insert(DataSource db, Class<?> type, Object o) {
+		PK ids = DB.insert(db, determineTableName(type), extractValues(type, o));
 		if (ids != null) {
 			applyGeneratedId(o, ids);
 		}
 		return ids;
 	}
+	
+	public static <PK> PK insert(DataSource db, Object o) {
+		return insert(db, o.getClass(), o);
+	}
 
 	public static <PK> PK insert(Connection connection, Object o) {
-		PK ids = DB.insert(connection, determineTableName(o.getClass()), extractValues(o));
+		PK ids = DB.insert(connection, determineTableName(o.getClass()), extractValues(o.getClass(), o));
 		if (ids != null) {
 			applyGeneratedId(o, ids);
 		}
@@ -612,35 +630,35 @@ public class PojoQuery<T> {
 	}
 	
 	public static int update(DataSource db, Object object) {
-		Map<String, Object> values = extractValues(object);
+		Map<String, Object> values = extractValues(object.getClass(), object);
 		Map<String, Object> ids = splitIdFields(object, values);
 		return DB.update(db, determineTableName(object.getClass()), values, ids);
 	}
 
 	public static int update(Connection connection, Object object) {
-		Map<String, Object> values = extractValues(object);
+		Map<String, Object> values = extractValues(object.getClass(), object);
 		Map<String, Object> ids = splitIdFields(object, values);
 		return DB.update(connection, determineTableName(object.getClass()), values, ids);
 	}
 	
 	public static Long insertOrUpdate(DataSource db, Object o) {
-		return DB.insertOrUpdate(db, determineTableName(o.getClass()), extractValues(o));
+		return DB.insertOrUpdate(db, determineTableName(o.getClass()), extractValues(o.getClass(), o));
 	}
 	
 	public static Long insertOrUpdate(Connection connection, Object o) {
-		return DB.insertOrUpdate(connection, determineTableName(o.getClass()), extractValues(o));
+		return DB.insertOrUpdate(connection, determineTableName(o.getClass()), extractValues(o.getClass(), o));
 	}
 
-	private static Map<String, Object> extractValues(Object o) {
+	private static Map<String, Object> extractValues(Class<?> type, Object o) {
 		try {
 			Map<String, Object> values = new HashMap<String, Object>();
-			for (Field f : collectFieldsOfClass(o.getClass())) {
+			for (Field f : collectFieldsOfClass(type)) {
 				f.setAccessible(true);
 				
 				Object val = f.get(o);
 				if (f.getAnnotation(Embedded.class) != null) {
 					if (val != null) {
-						Map<String,Object> embeddedVals = extractValues(val);
+						Map<String,Object> embeddedVals = extractValues(f.getType(), val);
 						String prefix = determinePrefix(f);
 						for(String embeddedField : embeddedVals.keySet()) {
 							values.put(prefix + embeddedField, embeddedVals.get(embeddedField));
@@ -693,6 +711,31 @@ public class PojoQuery<T> {
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
+	}
+
+	public PojoQuery<T> addWhere(SqlExpression expression) {
+		wheres.add(expression);
+		return this;
+	}
+
+	public int countTotal(DataSource db) {
+		List<Field> idFields = determineIdFields(resultClass);
+		List<String> idFieldNames = new ArrayList<String>();
+		for(Field f : idFields) {
+			idFieldNames.add(f.getName());
+		}
+		
+		String groupByClause = buildClause("GROUP BY", groupBy);
+		SqlExpression whereClause = buildWhereClause(wheres);
+		
+		String sql = implode(" ", 
+				Arrays.asList("SELECT COUNT(DISTINCT ", implode(", ", idFieldNames), ") `total` FROM", table, "\n", 
+						implode("\n ", joins), 
+						whereClause.getSql(), 
+						groupByClause));
+		
+		List<Map<String,Object>> rows = DB.queryRows(db, sql, whereClause.getParameters());
+		return (Integer)rows.get(0).get("total");
 	}
 	
 }
