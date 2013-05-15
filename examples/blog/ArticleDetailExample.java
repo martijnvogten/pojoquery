@@ -1,4 +1,4 @@
-package examples.blog;
+package blog;
 
 import java.util.Date;
 

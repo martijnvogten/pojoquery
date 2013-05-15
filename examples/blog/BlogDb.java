@@ -1,15 +1,16 @@
-package examples.blog;
+package blog;
 
 import java.util.Date;
 
 import javax.sql.DataSource;
 
+import blog.ArticleDetailExample.Article;
+import blog.ArticleDetailExample.Comment;
+import blog.ArticleDetailExample.User;
+
 import nl.pojoquery.DB;
 import nl.pojoquery.PojoQuery;
 import nl.pojoquery.integrationtest.MysqlDatabases;
-import examples.blog.ArticleDetailExample.Article;
-import examples.blog.ArticleDetailExample.Comment;
-import examples.blog.ArticleDetailExample.User;
 
 public class BlogDb {
 
