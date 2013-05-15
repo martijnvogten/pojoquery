@@ -91,7 +91,7 @@ Although lazy loading has its obvious benefits (i.e. no need to specify which li
 the drawbacks are significant: 
 - entities can only be used [in the context of a session](https://www.google.nl/search?q=lazyinitializationexception)
 - we cannot serialize objects easily to JSON, XML, [GWT](https://developers.google.com/web-toolkit/articles/using_gwt_with_hibernate)
-- proxy classes kill `instanceof`, `getClass` and complicate debugging
+- proxy classes kill `instanceof` and `getClass`, complicate debugging and integration testing, and weigh heavily on application startup time
 
 ### ... instead: views!
 
