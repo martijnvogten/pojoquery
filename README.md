@@ -80,8 +80,8 @@ ORDER BY comments.submitdate
 ```
 
 Note that PojoQuery uses the POJO _fieldnames_ `comments` and `author` to guess the names of the linkfield `author_id`, 
-and to construct the table alias `comments.author` and field alias `comments.author.id` (you can use 
-annotations to override this behaviour where needed).
+and to construct the table alias `comments.author` and field alias `comments.author.id` (you can override 
+this behaviour using annotations).
 
 ### No lazy loading: no complexity...
 
