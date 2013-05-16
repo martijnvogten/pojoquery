@@ -25,6 +25,7 @@ import nl.pojoquery.annotations.Join;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Select;
 import nl.pojoquery.annotations.Table;
+import nl.pojoquery.util.Iterables;
 
 public class PojoQuery<T> {
 
@@ -84,14 +85,47 @@ public class PojoQuery<T> {
 	}
 
 	public String toSql() {
-		return buildQueryStatement().getSql();
+		return toStatement().getSql();
 	}
 	
-	private SqlExpression buildQueryStatement() {
+	private SqlExpression toStatement() {
+		return toStatement(new SqlExpression("SELECT\n " + implode(",\n ", fields)), table, joins, wheres, groupBy, orderBy, offset, rowCount);
+	}
+	
+	private static SqlExpression toStatement(
+			SqlExpression selectClause, 
+			String from,
+			List<String> joins,
+			List<SqlExpression> wheres,
+			List<String> groupBy,
+			List<String> orderBy,
+			int offset,
+			int rowCount
+			) {
+		
+		List<Object> params = new ArrayList<Object>();
+		Iterables.addAll(params, selectClause.getParameters());
+
+		SqlExpression whereClause = buildWhereClause(wheres);
+		Iterables.addAll(params, whereClause.getParameters());
+		
 		String groupByClause = buildClause("GROUP BY", groupBy);
 		String orderByClause = buildClause("ORDER BY", orderBy);
-		SqlExpression whereClause = buildWhereClause(wheres);
+		String limitClause = buildLimitClause(offset, rowCount);
 		
+		String sql = implode(" ", Arrays.asList(
+				selectClause.getSql(), 
+				"\nFROM", from, "\n", 
+				implode("\n ", joins), 
+				whereClause == null ? "" : whereClause.getSql(), 
+				groupByClause, 
+				orderByClause, 
+				limitClause));
+		
+		return new SqlExpression(sql, params);
+	}
+
+	private static String buildLimitClause(int offset, int rowCount) {
 		String limitClause = "";
 		if (offset > -1 || rowCount > -1) {
 			if (rowCount < 0) {
@@ -104,16 +138,7 @@ public class PojoQuery<T> {
 				limitClause = "\nLIMIT " + rowCount;
 			}
 		}
-		
-		String sql = implode(" ", Arrays.asList(
-				"SELECT\n", implode(",\n ", fields), 
-				"\nFROM", table, "\n", 
-				implode("\n ", joins), 
-				whereClause.getSql(), 
-				groupByClause, 
-				orderByClause, 
-				limitClause));
-		return new SqlExpression(sql, whereClause.getParameters());
+		return limitClause;
 	}
 
 	private static SqlExpression buildWhereClause(List<SqlExpression> parts) {
@@ -134,18 +159,18 @@ public class PojoQuery<T> {
 
 	private static String buildClause(String preamble, List<String> parts) {
 		String groupByClause = "";
-		if (parts.size() > 0) {
+		if (parts != null && parts.size() > 0) {
 			groupByClause = "\n" + preamble + " " + implode(", ", parts);
 		}
 		return groupByClause;
 	}
 
 	public List<T> execute(DataSource db) {
-		return processRows(DB.queryRows(db, buildQueryStatement()), resultClass);
+		return processRows(DB.queryRows(db, toStatement()), resultClass);
 	}
 	
 	public List<T> execute(Connection connection) {
-		return processRows(DB.queryRows(connection, buildQueryStatement()), resultClass);
+		return processRows(DB.queryRows(connection, toStatement()), resultClass);
 	}
 
 	public static <R> List<R> execute(DataSource db, Class<R> clz, String sql, Object... params) {
@@ -720,31 +745,70 @@ public class PojoQuery<T> {
 		return this;
 	}
 
+	SqlExpression buildListIdsStatement(List<Field> idFields) {
+		return toStatement(new SqlExpression("SELECT DISTINCT " + implode("\n , ", getFieldNames(idFields))), table, joins, wheres, null, orderBy, -1, -1);
+	}
+	
 	SqlExpression buildCountStatement() {
 		List<Field> idFields = determineIdFields(resultClass);
-		String tableAlias = determineTableName(resultClass);
-		List<String> idFieldNames = new ArrayList<String>();
-		for(Field f : idFields) {
-			idFieldNames.add(tableAlias + "." + f.getName());
+		String selectClause = "SELECT COUNT(DISTINCT " + implode(", ", getFieldNames(idFields)) + ") ";
+
+		return toStatement(new SqlExpression(selectClause), table, joins, wheres, null, null, -1, -1);
+	}
+
+	private List<String> getFieldNames(List<Field> fields) {
+		List<String> fieldNames = new ArrayList<String>();
+		for(Field f : fields) {
+			fieldNames.add(table + "." + f.getName());
 		}
-		
-		String groupByClause = buildClause("GROUP BY", groupBy);
-		SqlExpression whereClause = buildWhereClause(wheres);
-		
-		String sql = implode(" ", 
-				Arrays.asList("SELECT COUNT(DISTINCT " + implode(", ", idFieldNames) + ")", 
-						"FROM", table, "\n", 
-						implode("\n ", joins), 
-						whereClause.getSql(), 
-						groupByClause));
-		
-		return new SqlExpression(sql, whereClause.getParameters());
+		return fieldNames;
 	}
 		
 	public int countTotal(DataSource db) {
 		SqlExpression stmt = buildCountStatement();
 		List<Map<String,Object>> rows = DB.queryRows(db, stmt);
-		return (Integer)rows.get(0).values().iterator().next();
+		return ((Long)rows.get(0).values().iterator().next()).intValue();
+	}
+
+	@SuppressWarnings("unchecked")
+	public <PK> List<PK> listIds(DataSource db) {
+		List<Field> idFields = determineIdFields(resultClass);
+		SqlExpression stmt = buildListIdsStatement(idFields);
+		List<Map<String,Object>> rows = DB.queryRows(db, stmt);
+		if (idFields.size() > 1) {
+			return (List<PK>)rows;
+		}
+		List<PK> result = new ArrayList<PK>();
+		for(Map<String,Object> r : rows) {
+			result.add((PK) r.values().iterator().next());
+		}
+		return result;
+	}
+
+	public <PK> List<T> findByIdsList(DataSource db, List<PK> idsList) {
+		SqlExpression statement = buildFindByIdsListStatement(idsList);
+		return processRows(DB.queryRows(db, statement), resultClass);
+	}
+
+	@SuppressWarnings("unchecked")
+	private <PK> SqlExpression buildFindByIdsListStatement(List<PK> idsList) {
+		List<Field> idFields = determineIdFields(resultClass);
+		if (idFields.size() > 1) {
+			throw new RuntimeException("findByIdsList is not supported for tables with composite id's");
+		}
+		StringBuilder qmarks = new StringBuilder();
+		for(int i = 0; i < idsList.size(); i++) {
+			if (qmarks.length() > 0) {
+				qmarks.append(",");
+			}
+			qmarks.append("?");
+		}
+		
+		String idField = table + "." + idFields.get(0).getName();
+		SqlExpression whereCondition = new SqlExpression(idField + " IN (" + qmarks + ")", (Iterable<Object>)idsList);
+		
+		SqlExpression statement = toStatement(new SqlExpression("SELECT\n " + implode(",\n ", fields)), table, joins, Arrays.asList(whereCondition), groupBy, orderBy, offset, rowCount);
+		return statement;
 	}
 	
 }
