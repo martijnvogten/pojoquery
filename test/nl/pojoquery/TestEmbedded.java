@@ -42,8 +42,8 @@ public class TestEmbedded {
 				" `user`.home_city `home.city`" +
 				" FROM user", TestUtils.norm(PojoQuery.build(User.class).toSql()));
 		
-		List<Map<String, Object>> result = Collections.singletonList(TestUtils.map(
-				"user.id", (Object)1L, 
+		List<Map<String, Object>> result = Collections.singletonList(TestUtils.<String,Object>map(
+				"user.id", 1L, 
 				"home.address", "501, Broadway", 
 				"home.city", "New York D.C."));
 		
@@ -54,9 +54,9 @@ public class TestEmbedded {
 	@Test
 	public void testInJoinedEntity() {
 		List<Map<String, Object>> result = Collections.singletonList(TestUtils.<String,Object>map(
-				"article.id", new Long(1L), 
+				"article.id", 1L, 
 				"article.title", "The title", 
-				"author.id", (Object)1L, 
+				"author.id", 1L, 
 				"author.home.address", "501, Broadway", 
 				"author.home.city", "New York D.C."));
 		
