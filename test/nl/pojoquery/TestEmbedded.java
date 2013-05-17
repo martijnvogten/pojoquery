@@ -2,7 +2,7 @@ package nl.pojoquery;
 
 import static org.junit.Assert.assertEquals;
 
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -34,7 +34,6 @@ public class TestEmbedded {
 	}
 	
 	@Test
-	@SuppressWarnings("unchecked")
 	public void testBasics() {
 		assertEquals(
 				"SELECT" +
@@ -43,7 +42,7 @@ public class TestEmbedded {
 				" `user`.home_city `home.city`" +
 				" FROM user", TestUtils.norm(PojoQuery.build(User.class).toSql()));
 		
-		List<Map<String, Object>> result = Arrays.asList(TestUtils.map(
+		List<Map<String, Object>> result = Collections.singletonList(TestUtils.map(
 				"user.id", (Object)1L, 
 				"home.address", "501, Broadway", 
 				"home.city", "New York D.C."));
@@ -53,10 +52,9 @@ public class TestEmbedded {
 	}
 	
 	@Test
-	@SuppressWarnings("unchecked")
 	public void testInJoinedEntity() {
-		List<Map<String, Object>> result = Arrays.asList(TestUtils.map(
-				"article.id", (Object)1L, 
+		List<Map<String, Object>> result = Collections.singletonList(TestUtils.<String,Object>map(
+				"article.id", new Long(1L), 
 				"article.title", "The title", 
 				"author.id", (Object)1L, 
 				"author.home.address", "501, Broadway", 
