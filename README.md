@@ -26,7 +26,7 @@ class ArticleDetail extends Article {
 }
 
 @Table("article")
-class Article
+class Article {
 	Long id;
 	String title;
 	String content;
