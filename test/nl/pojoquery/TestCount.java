@@ -9,20 +9,20 @@ import org.junit.Test;
 public class TestCount {
 
 	@Table("article")
-	class Article {
+	static class Article {
 		@Id
 		Long id;
 		String title;
 	}
 	
 	@Table("comment")
-	class Comment {
+	static class Comment {
 		@Id
 		Long id;
 		String comment;
 	}
 	
-	class ArticleDetail extends Article {
+	static class ArticleDetail extends Article {
 		Comment[] comments;
 	}
 	

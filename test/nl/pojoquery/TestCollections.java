@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Table;
 
@@ -18,6 +19,7 @@ public class TestCollections {
 
 	@Table("user")
 	static class User {
+		@Id
 		Long id;
 		
 		@Link(linktable="user_roles", foreignvaluefield="element", resultClass=Role.class)

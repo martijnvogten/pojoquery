@@ -17,6 +17,14 @@ import java.util.Map;
 import javax.sql.DataSource;
 
 public class DB {
+	public static final class DatabaseException extends RuntimeException {
+
+		public DatabaseException(SQLException e) {
+			super(e);
+		}
+
+	}
+
 	public interface Transaction<T> {
 		public T run(Connection connection);
 	}
@@ -58,8 +66,8 @@ public class DB {
 					result.add(row);
 				}
 				return result;
-			} catch (Exception e) {
-				throw new RuntimeException(e);
+			} catch (SQLException e) {
+				throw new DatabaseException(e);
 			}
 		}
 	}
@@ -163,7 +171,7 @@ public class DB {
 			connection = db.getConnection();
 			return execute(connection, type, sql, params, processor);
 		} catch (SQLException e) {
-			throw new RuntimeException(e);
+			throw new DatabaseException(e);
 		} finally {
 			try {
 				if (connection != null) {
@@ -226,7 +234,7 @@ public class DB {
 			return null;
 		} catch (SQLException e) {
 			System.err.println(e.getMessage());
-			throw new RuntimeException(e);
+			throw new DatabaseException(e);
 		}
 	}
 
@@ -247,8 +255,8 @@ public class DB {
 			connection.commit();
 			success = true;
 			return result;
-		} catch (Exception e) {
-			throw new RuntimeException(e);
+		} catch (SQLException e) {
+			throw new DatabaseException(e);
 		} finally {
 			if (!success) {
 				try {
@@ -266,7 +274,7 @@ public class DB {
 			connection = dataSource.getConnection();
 			return runInTransaction(connection, transaction);
 		} catch (SQLException e) {
-			throw new RuntimeException(e);
+			throw new DatabaseException(e);
 		} finally {
 			try {
 				if (connection != null) {

@@ -6,7 +6,7 @@ import nl.pojoquery.annotations.Table;
 
 import org.junit.Test;
 
-public class TestDetermineTableName {
+public class TestDetermineTableMapping {
 
 	static class Article {
 	}
@@ -24,9 +24,9 @@ public class TestDetermineTableName {
 
 	@Test
 	public void testDetermineTableName() {
-		assertNull(PojoQuery.determineTableName(Article.class));
-		assertNull(PojoQuery.determineTableName(Long.class));
-		assertEquals("comment", PojoQuery.determineTableName(CommentDetail.class));
-		assertEquals("user", PojoQuery.determineTableName(UserDetail.class));
+		assertNull(PojoQuery.determineTableMapping(Article.class));
+		assertNull(PojoQuery.determineTableMapping(Long.class));
+		assertEquals("comment", PojoQuery.determineTableMapping(CommentDetail.class).tableName);
+		assertEquals("user", PojoQuery.determineTableMapping(UserDetail.class).tableName);
 	}
 }

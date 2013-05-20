@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
+import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Table;
 
@@ -16,6 +17,7 @@ public class TestEnums {
 
 	@Table("user")
 	static class User {
+		@Id
 		Long id;
 		
 		@Link(linktable="user_roles", foreignvaluefield="element")
