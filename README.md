@@ -112,7 +112,7 @@ class ArticleListView extends Article {
 
 ### Customization through annotations
 
-Because the generated SQL is completely predictable it is easy to extend. You can add clauses 
+Being able to predict the field and table aliases makes it easy to extend the query. You can add clauses 
 using the methods `.addJoin()`, `addGroupBy()`, etc. or you can define them beforehand on the POJO itself
 using annotations.
 Let's say we want to improve on `ArticleListView` by adding two fields: the number of comments and 
