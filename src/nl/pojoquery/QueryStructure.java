@@ -15,6 +15,7 @@ public class QueryStructure {
 		public final Field linkField;
 		public final Alias superAlias;
 		public List<Field> idFields = new ArrayList<Field>();
+		public Field otherField;
 		
 		public Alias(String linkName, Alias superClass, Class<?> resultClass) {
 			this.alias = combinedAlias(linkName, superClass);
@@ -52,12 +53,16 @@ public class QueryStructure {
 		}
 	}
 	
+	public Alias principalAlias = null;
 	public Map<String, Alias> aliases = new HashMap<String,Alias>();
 	public Map<String, Field> classFields = new HashMap<String,Field>();
 	public List<Alias> subClasses = new ArrayList<Alias>();
 	
 	public Alias createAlias(String linkName, Alias parent, Class<?> resultClass, Field linkField) {
 		Alias alias = new Alias(linkName, parent, resultClass, linkField);
+		if (parent == null) {
+			principalAlias = alias;
+		}
 		aliases.put(alias.alias, alias);
 		return alias;
 	}

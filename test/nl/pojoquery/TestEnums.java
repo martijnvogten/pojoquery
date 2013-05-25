@@ -61,6 +61,7 @@ public class TestEnums {
 			);
 		
 		List<User> users = PojoQuery.processRows(result, User.class);
+		
 		assertEquals(1, users.size());
 		assertEquals(Role.ADMIN, users.get(0).roles[0]);
 		assertEquals(Role.AGENT, users.get(0).roles[1]);
