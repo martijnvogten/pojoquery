@@ -190,20 +190,22 @@ public class PojoQuery<T> {
 		return returnSingleRow(execute(db));
 	}
 
-	public static int delete(DataSource db, Class<?> clz, Object id) {
-		List<SqlExpression> wheres = buildIdCondition(clz, id);
-		String tableName = determineTableMapping(clz).tableName;
-		
-		List<String> whereClauses = new ArrayList<String>();
-		List<Object> params = new ArrayList<Object>();
-		for(SqlExpression w : wheres) {
-			whereClauses.add(w.getSql());
-			for (Object o : w.getParameters()) {
-				params.add(o);
+	public static void delete(DataSource db, Class<?> clz, Object id) {
+
+		for(TableMapping table : determineTableMapping(clz)) {
+			List<SqlExpression> wheres = buildIdCondition(table.clazz, id);
+			String tableName = table.tableName;
+			List<String> whereClauses = new ArrayList<String>();
+			List<Object> params = new ArrayList<Object>();
+			for(SqlExpression w : wheres) {
+				whereClauses.add(w.getSql());
+				for (Object o : w.getParameters()) {
+					params.add(o);
+				}
 			}
+			
+			DB.update(db, new SqlExpression("DELETE FROM `" + tableName + "` WHERE " + implode(" AND ", whereClauses), Arrays.asList((Object)params)));
 		}
-		
-		return DB.update(db, new SqlExpression("DELETE FROM `" + tableName + "` WHERE " + implode(" AND ", whereClauses), Arrays.asList((Object)params)));
 	}
 
 	private T returnSingleRow(List<T> resultList) {
@@ -221,7 +223,7 @@ public class PojoQuery<T> {
 		if (idFields.size() == 0) {
 			throw new MappingException("No @Id annotations found on fields of class " + resultClass.getName());
 		}
-		String tableName = determineTableMapping(resultClass).tableName;
+		String tableName = determineTableMapping(resultClass).get(0).tableName;
 		if (idFields.size() == 1) {
 			return Arrays.asList(new SqlExpression("`" + tableName + "`." + idFields.get(0).getName() + "=?", Arrays.asList((Object)id)));
 		} else {
@@ -243,10 +245,10 @@ public class PojoQuery<T> {
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public static <R> List<R> processRows(List<Map<String, Object>> rows, Class<R> clz) {
 		try {
-			String table = determineTableMapping(clz).tableName;
+			String table = determineTableMapping(clz).get(0).tableName;
 
 			QueryStructure structure = new QueryStructure();
-			addFieldsToAlias(structure, structure.createAlias(table, null, clz, null), null);
+			addClassToStructure(structure, table, null, clz, null);
 
 			List<R> result = new ArrayList<R>(rows.size());
 
@@ -354,59 +356,59 @@ public class PojoQuery<T> {
 
 				for (String tableAlias : onThisRow.keySet()) {
 					Alias alias = structure.aliases.get(tableAlias);
-					if (!alias.isPrincipalAlias()) {
-						Field linkField = alias.linkField;
-						linkField.setAccessible(true);
-						Object parentEntity = onThisRow.get(alias.parent.alias);
-						if (parentEntity != null) {
-							Object entity = onThisRow.get(tableAlias);
-							if (List.class.isAssignableFrom(linkField.getType())) {
-								List<Object> coll = (List<Object>) linkField.get(parentEntity);
-								if (coll == null) {
-									coll = new ArrayList<Object>();
-									linkField.set(parentEntity, coll);
-								}
-								if (!coll.contains(entity) && entity != null) {
-									coll.add(entity);
-								}
-							} else if (Set.class.isAssignableFrom(linkField.getType())) {
-								Set<Object> coll = (Set<Object>) linkField.get(parentEntity);
-								if (coll == null) {
-									coll = new HashSet<Object>();
-									linkField.set(parentEntity, coll);
-								}
-								if (!coll.contains(entity) && entity != null) {
-									coll.add(entity);
-								}
-							} else if (linkField.getType().isArray()) {
-								Object arr = linkField.get(parentEntity);
-								if (arr == null) {
-									arr = Array.newInstance(linkField.getType().getComponentType(), 0);
-								}
-								boolean contains = false;
-								int arrlen = Array.getLength(arr);
-								for (int i = 0; i < arrlen; i++) {
-									if (Array.get(arr, i).equals(entity)) {
-										contains = true;
-										break;
-									}
-								}
-								if (!contains && entity != null) {
-									Object extended = Array.newInstance(linkField.getType().getComponentType(), arrlen + 1);
-									if (arrlen > 0) {
-										System.arraycopy(arr, 0, extended, 0, arrlen);
-									}
-									Array.set(extended, arrlen, entity);
-									arr = extended;
-								}
-								linkField.set(parentEntity, arr);
-							} else {
-								linkField.set(parentEntity, entity);
+					if (alias.isPrincipalAlias() || alias.linkField == null) {
+						continue;
+					}
+					Field linkField = alias.linkField;
+					linkField.setAccessible(true);
+					Object parentEntity = onThisRow.get(alias.parent.alias);
+					if (parentEntity != null) {
+						Object entity = onThisRow.get(tableAlias);
+						if (List.class.isAssignableFrom(linkField.getType())) {
+							List<Object> coll = (List<Object>) linkField.get(parentEntity);
+							if (coll == null) {
+								coll = new ArrayList<Object>();
+								linkField.set(parentEntity, coll);
 							}
+							if (!coll.contains(entity) && entity != null) {
+								coll.add(entity);
+							}
+						} else if (Set.class.isAssignableFrom(linkField.getType())) {
+							Set<Object> coll = (Set<Object>) linkField.get(parentEntity);
+							if (coll == null) {
+								coll = new HashSet<Object>();
+								linkField.set(parentEntity, coll);
+							}
+							if (!coll.contains(entity) && entity != null) {
+								coll.add(entity);
+							}
+						} else if (linkField.getType().isArray()) {
+							Object arr = linkField.get(parentEntity);
+							if (arr == null) {
+								arr = Array.newInstance(linkField.getType().getComponentType(), 0);
+							}
+							boolean contains = false;
+							int arrlen = Array.getLength(arr);
+							for (int i = 0; i < arrlen; i++) {
+								if (Array.get(arr, i).equals(entity)) {
+									contains = true;
+									break;
+								}
+							}
+							if (!contains && entity != null) {
+								Object extended = Array.newInstance(linkField.getType().getComponentType(), arrlen + 1);
+								if (arrlen > 0) {
+									System.arraycopy(arr, 0, extended, 0, arrlen);
+								}
+								Array.set(extended, arrlen, entity);
+								arr = extended;
+							}
+							linkField.set(parentEntity, arr);
+						} else {
+							linkField.set(parentEntity, entity);
 						}
 					}
 				}
-
 			}
 			return result;
 		} catch (Exception e) {
@@ -425,7 +427,7 @@ public class PojoQuery<T> {
 	public static <T> PojoQuery<T> build(Class<T> clz) {
 		if (clz == null) throw new NullPointerException("clz");
 		
-		String table = determineTableMapping(clz).tableName;
+		String table = determineTableMapping(clz).get(0).tableName;
 
 		PojoQuery<T> q = new PojoQuery<T>(table);
 		q.setResultClass(clz);
@@ -444,59 +446,81 @@ public class PojoQuery<T> {
 			}
 		}
 
-		addFields(q, table, clz, null, new ArrayList<Class<?>>(), false);
+		addClassToQuery(q, table, clz, new ArrayList<Class<?>>());
 
 		return q;
 	}
 	
-	public static TableMapping determineTableMapping(Class<?> clz) {
-		String name = null;
-		while (clz != null) {
-			Table tableAnn = clz.getAnnotation(Table.class);
-			if (tableAnn != null) {
-				name = tableAnn.value();
-				return new TableMapping(name, clz);
-			}
-			clz = clz.getSuperclass();
-		}
-		return null;
-	}
-	
-	private static <T> void addFields(PojoQuery<T> q, String tableAlias, Class<?> clz, Iterable<Field> fields, List<Class<?>> joinPath, boolean skipSubclasses) {
-		boolean isPrincipalAlias = joinPath.size() == 0;
+	private static <T> void addClassToQuery(PojoQuery<T> q, String tableAlias, Class<?> clz, List<Class<?>> joinPath) {
 		
-		List<TableMapping> tableHierarchy = determineTableHierarchy(clz);
-		if (tableHierarchy.size() > 1) {
-			// This is a subclass
-			// Throw in the super types but ignore other subclasses
-			TableMapping superType = tableHierarchy.get(tableHierarchy.size() - 2);
-			System.out.println(superType.tableName);
-			String foreignalias = combinedAlias(tableAlias, superType.tableName, isPrincipalAlias);
-			String idField = determineIdField(clz).getName();
-			String linkfield = "`" + foreignalias + "`." + idField;
-			String localidfield = "`" + tableAlias + "`." + idField;
-			q.addJoin("INNER JOIN " + superType.tableName + " `" + foreignalias + "` ON " + linkfield + "=" + localidfield);
-			addFields(q, foreignalias, superType.clazz, collectFieldsOfClass(superType.clazz), joinPath, true);
-			
-			q.addField("`" + tableAlias + "`." + idField + " `" + tableAlias +  "." + idField + "`");
-			fields = collectFieldsOfClass(clz, superType.clazz);
+		List<Class<?>> subclassesAdded = new ArrayList<Class<?>>();
+		
+		sanityCheck(clz);
+		
+		addClassToQueryIgnoringSubClasses(q, tableAlias, clz, joinPath, subclassesAdded);
+		
+		// Add classes subclass up
+		if (clz.getAnnotation(SubClasses.class) != null) {
+			// Joined subclasses
+			for(Class<?> subClass : clz.getAnnotation(SubClasses.class).value()) {
+				List<TableMapping> tableMappings = determineTableMapping(subClass);
+				TableMapping mapping = tableMappings.get(tableMappings.size() - 1);
+				String foreignalias = combinedAlias(tableAlias, subClass.getSimpleName().toLowerCase(), joinPath.size() == 0);
+				String idField = determineIdField(subClass).getName();
+				String linkfield = "`" + foreignalias + "`." + idField;
+				String localidfield = "`" + tableAlias + "`." + idField;
+				q.addJoin("LEFT JOIN " + mapping.tableName + " `" + foreignalias + "` ON " + linkfield + "=" + localidfield);
+				
+				q.addField("`" + foreignalias + "`." + idField + " `" + foreignalias +  "." + idField + "`");
+				addClassToQueryIgnoringSubClasses(q, foreignalias, subClass, joinPath, subclassesAdded);
+				
+			}
 		}
+		
+	}
+
+	private static <T> void addClassToQueryIgnoringSubClasses(PojoQuery<T> q, String tableAlias, Class<?> clz, List<Class<?>> joinPath, List<Class<?>> subclassesAdded) {
+		
+		List<TableMapping> tableMappings = determineTableMapping(clz);
+		if (tableMappings.size() == 0) {
+			throw new MappingException("Missing @Table annotation on class " + clz.getName() + " or any of its superclasses");
+		}
+		
+		// Throw in the super types, top type first
+		TableMapping superType = null;
+		for(TableMapping mapping : tableMappings) {
+			if (subclassesAdded.contains(mapping.clazz)) {
+				continue;
+			}
+			subclassesAdded.add(mapping.clazz);
+			if (superType == null) {
+				// this is the top type
+				addFieldsToQueryIgnoreSuperClasses(q, tableAlias, mapping.clazz, mapping.fields, joinPath, mapping.tableName);
+			} else {
+				// Some super class
+				String foreignalias = combinedAlias(tableAlias, mapping.tableName, joinPath.size() == 0);
+				String idField = determineIdField(mapping.clazz).getName();
+				String linkfield = "`" + foreignalias + "`." + idField;
+				String localidfield = "`" + tableAlias + "`." + idField;
+				q.addJoin("INNER JOIN " + mapping.tableName + " `" + foreignalias + "` ON " + linkfield + "=" + localidfield);
+				
+				q.addField("`" + foreignalias + "`." + idField + " `" + foreignalias +  "." + idField + "`");
+				addFieldsToQueryIgnoreSuperClasses(q, foreignalias, superType.clazz, mapping.fields, joinPath, mapping.tableName);
+				
+				tableAlias = foreignalias;
+			}
+			superType = mapping;
+		}
+	}
+
+	private static <T> void addFieldsToQueryIgnoreSuperClasses(PojoQuery<T> q, String tableAlias, Class<?> clz, Iterable<Field> fields, List<Class<?>> joinPath, String table) {
+		boolean isPrincipalAlias = joinPath.size() == 0;
 		
 		if (joinPath.contains(clz)) {
 			// Loop!
 			throw new MappingException("Reference loop detected processing " + q.resultClass + " at property " + tableAlias + " referencing " + clz.getSimpleName());
 		}
 		joinPath.add(clz);
-		
-		
-		TableMapping tableMapping = determineTableMapping(clz);
-		if (tableMapping == null) {
-			throw new MappingException("Missing @Table annotation on class " + clz.getName() + " or any of its superclasses");
-		}
-		if (clz.getEnclosingClass() != null && (clz.getModifiers() & Modifier.STATIC) == 0) {
-			throw new MappingException("Cannot map non-static inner class " + clz.getName());
-		}
-		String table = tableMapping.tableName;
 		
 		if (fields == null) {
 			fields = collectFieldsOfClass(clz);
@@ -539,7 +563,7 @@ public class PojoQuery<T> {
 						
 						q.addJoin("LEFT JOIN " + foreigntable + " " + foreignAlias + " ON " + foreignlinkfield + "=" + foreignidfield);
 						
-						addFields(q, foreignAlias, foreignClass, null, joinPath, false);
+						addClassToQuery(q, foreignAlias, foreignClass, joinPath);
 					}
 					
 				} else {
@@ -550,21 +574,26 @@ public class PojoQuery<T> {
 					String idfield = "`" + tableAlias + "`." + determineIdField(clz).getName();
 					q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + foreignlinkfield + "=" + idfield);
 
-					addFields(q, foreignalias, foreignClass, null, joinPath, false);
+					addClassToQuery(q, foreignalias, foreignClass, joinPath);
 				}
 				continue;
 			}
-			if (!f.getType().isPrimitive() && determineTableMapping(f.getType()) != null) {
-				String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
-				addManyToOneLink(q, tableAlias, foreignalias, f.getType(), f.getName());
-				addFields(q, foreignalias, f.getType(), null, joinPath, false);
-				continue;
-			}
 			if (f.getType().isArray()) {
-				String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
-				addOneToManyLink(q, tableAlias, table, foreignalias, f.getType().getComponentType(), f.getName());
-				addFields(q, foreignalias, f.getType().getComponentType(), null, joinPath, false);
+				List<TableMapping> linkedMapping = determineTableMapping(f.getType().getComponentType());
+				if (linkedMapping.size() > 0) {
+					String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
+					addOneToManyLink(q, tableAlias, table, foreignalias, linkedMapping.get(0).tableName, f.getName());
+					addClassToQuery(q, foreignalias, f.getType().getComponentType(), joinPath);
+				}
 				continue;
+			} else {
+				List<TableMapping> linkedMapping = determineTableMapping(f.getType());
+				if (!f.getType().isPrimitive() && linkedMapping.size() > 0) {
+					String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
+					addManyToOneLink(q, tableAlias, foreignalias, linkedMapping.get(0).tableName, f.getName());
+					addClassToQuery(q, foreignalias, f.getType(), joinPath);
+					continue;
+				}
 			}
 			if (f.getAnnotation(Select.class) != null) {
 				q.addField(f.getAnnotation(Select.class).value() + " `" + tableAlias + "." + f.getName() + "`");
@@ -583,21 +612,13 @@ public class PojoQuery<T> {
 			}
 		}
 		
-		if (clz.getAnnotation(SubClasses.class) != null && !skipSubclasses) {
-			
-			// Joined subclasses
-			String idField = determineIdField(clz).getName();
-			for(Class<?> subClass : clz.getAnnotation(SubClasses.class).value()) {
-				String subTable = determineTableMapping(subClass).tableName;
-				String foreignalias = combinedAlias(tableAlias, subTable, isPrincipalAlias);
-				q.addJoin("LEFT JOIN " + subTable + " `" + foreignalias + "` ON `" + foreignalias + "`." + idField + "=`" + tableAlias + "`." + idField);
-				// Also add the id field
-				q.addField("`" + foreignalias + "`." + idField + " `" + foreignalias +  "." + idField + "`");
-				addFields(q, foreignalias, subClass, collectFieldsOfClass(subClass, clz), joinPath, false);
-			}
-		}
-		
 		joinPath.remove(joinPath.size() - 1);
+	}
+
+	private static void sanityCheck(Class<?> clz) {
+		if (clz.getEnclosingClass() != null && (clz.getModifiers() & Modifier.STATIC) == 0) {
+			throw new MappingException("Cannot map non-static inner class " + clz.getName());
+		}
 	}
 
 	private static String determinePrefix(Field f) {
@@ -611,15 +632,13 @@ public class PojoQuery<T> {
 		return prefix;
 	}
 
-	private static <T> void addOneToManyLink(PojoQuery<T> q, String tableAlias, String localTable, String foreignalias, Class<?> linkedType, String fieldName) {
-		String foreigntable = determineTableMapping(linkedType).tableName;
+	private static <T> void addOneToManyLink(PojoQuery<T> q, String tableAlias, String localTable, String foreignalias, String foreigntable, String fieldName) {
 		String linkfield = "`" + foreignalias + "`." + localTable + "_id";
 		String idfield = "`" + tableAlias + "`.id";
 		q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + linkfield + "=" + idfield);
 	}
 
-	private static <T> void addManyToOneLink(PojoQuery<T> q, String tableAlias, String foreignalias, Class<?> linkedType, String fieldName) {
-		String foreigntable = determineTableMapping(linkedType).tableName;
+	private static <T> void addManyToOneLink(PojoQuery<T> q, String tableAlias, String foreignalias, String foreigntable, String fieldName) {
 		String linkfield = "`" + tableAlias + "`." + fieldName.toLowerCase() + "_id";
 		String idfield = "`" + foreignalias + "`.id";
 		q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + linkfield + "=" + idfield);
@@ -632,8 +651,47 @@ public class PojoQuery<T> {
 		return fieldName;
 	}
 
-	private static void addFieldsToAlias(QueryStructure structure, Alias alias, Iterable<Field> fields) {
+	private static void addClassToStructure(QueryStructure structure, String linkName, Alias parent, Class<?> resultClass, Field linkField) {
 		
+		List<Class<?>> subclassesAdded = new ArrayList<Class<?>>();
+		
+		Alias parentAlias = addClassToStructureIgnoringSubclasses(structure, linkName, parent, resultClass, linkField, subclassesAdded);
+		
+		SubClasses subClassesAnn = resultClass.getAnnotation(SubClasses.class);
+		if (subClassesAnn != null) {
+			for(Class<?> subClass : subClassesAnn.value()) {
+				List<TableMapping> mappings = determineTableMapping(subClass);
+				TableMapping mapping = mappings.get(mappings.size() - 1);
+				
+				Alias alias = structure.addSubClass(mapping.clazz.getSimpleName().toLowerCase(), parentAlias, subClass);
+				addFieldsToStructure(structure, alias, mapping.fields);
+			}
+		}
+	}
+
+	private static Alias addClassToStructureIgnoringSubclasses(QueryStructure structure, String linkName, Alias parent, Class<?> resultClass, Field linkField, List<Class<?>> subclassesAdded) {
+		// Check if this class inherits from a super class in another table
+		// If so, add them top type down
+		List<TableMapping> tableHierarchy = determineTableMapping(resultClass);
+		Alias parentAlias = parent;
+		for(TableMapping mapping : tableHierarchy) {
+			if (subclassesAdded.contains(mapping.clazz)) {
+				continue;
+			}
+			subclassesAdded.add(mapping.clazz);
+			if (parentAlias != parent) {
+				linkName = mapping.tableName;
+			}
+			Alias alias = structure.createAlias(linkName, parentAlias, resultClass, linkField);
+			addFieldsToStructure(structure, alias, mapping.fields);
+			subclassesAdded.add(mapping.clazz);
+			parentAlias = alias;
+			linkField = null;
+		}
+		return parentAlias;
+	}
+
+	private static void addFieldsToStructure(QueryStructure structure, Alias alias, Iterable<Field> fields) {
 		List<Field> nonLinkFields = new ArrayList<Field>();
 		
 		if (fields == null) {
@@ -654,17 +712,19 @@ public class PojoQuery<T> {
 				} else {
 					linkedClass = f.getAnnotation(Link.class).resultClass();
 				}
-				Alias linkedAlias = structure.createAlias(f.getName(), alias, linkedClass, f);
 
 				if (f.getAnnotation(Link.class).foreignvaluefield().equals(Link.NONE)) {
-					addFieldsToAlias(structure, linkedAlias, null);
+					addClassToStructure(structure, f.getName(), alias, linkedClass, f);
+				} else {
+					structure.createAlias(f.getName(), alias, linkedClass, f);
 				}
-			} else if (!f.getType().isPrimitive() && (f.getType().getAnnotation(Table.class) != null || f.getAnnotation(Embedded.class) != null)) {
-				Alias linkedAlias = structure.createAlias(f.getName(), alias, f.getType(), f);
-				addFieldsToAlias(structure, linkedAlias, null);
+			} else if (!f.getType().isPrimitive() && f.getType().getAnnotation(Table.class) != null) {
+				addClassToStructure(structure, f.getName(), alias, f.getType(), f);
+			} else if (!f.getType().isPrimitive() && f.getAnnotation(Embedded.class) != null) {
+				Alias embedded = structure.createAlias(f.getName(), alias, f.getType(), f);
+				addFieldsToStructure(structure, embedded, null);
 			} else if (f.getType().isArray()) {
-				Alias linkedAlias = structure.createAlias(f.getName(), alias, f.getType().getComponentType(), f);
-				addFieldsToAlias(structure, linkedAlias, null);
+				addClassToStructure(structure, f.getName(), alias, f.getType().getComponentType(), f);
 			} else {
 				nonLinkFields.add(f);
 			}
@@ -673,22 +733,13 @@ public class PojoQuery<T> {
 		if (alias.idFields.size() == 0) {
 			alias.idFields.addAll(nonLinkFields);
 		}
-		
-		SubClasses subClassesAnn = alias.resultClass.getAnnotation(SubClasses.class);
-		if (subClassesAnn != null) {
-			for(Class<?> subClass : subClassesAnn.value()) {
-				// Joined table inheritance
-				Alias subClassAlias = structure.addSubClass(determineTableMapping(subClass).tableName, alias, subClass);
-				addFieldsToAlias(structure, subClassAlias, collectFieldsOfClass(subClass, alias.resultClass));
-			}
-		}
 	}
 
 	private static Iterable<Field> collectFieldsOfClass(Class<?> type) {
 		return collectFieldsOfClass(type, null);
 	}
 
-	private static Iterable<Field> collectFieldsOfClass(Class<?> clz, Class<?> stopAtSuperClass) {
+	private static List<Field> collectFieldsOfClass(Class<?> clz, Class<?> stopAtSuperClass) {
 		List<Field> result = new ArrayList<Field>();
 		while (clz != null && !clz.equals(stopAtSuperClass)) {
 			result.addAll(0, filterFields(clz));
@@ -710,14 +761,14 @@ public class PojoQuery<T> {
 
 	private static <PK> PK insert(Connection conn, DataSource db, Class<?> type, Object o) {
 		// If the class hierarchy contains multiple tables, create separate inserts
-		List<TableMapping> tables = determineTableHierarchy(type);
+		List<TableMapping> tables = determineTableMapping(type);
 		
 		if (tables.size() == 1) {
 			PK ids;
 			if (conn != null) {
-				ids = DB.insert(conn, determineTableMapping(type).tableName, extractValues(type, o));
+				ids = DB.insert(conn, determineTableMapping(type).get(0).tableName, extractValues(type, o));
 			} else {
-				ids = DB.insert(db, determineTableMapping(type).tableName, extractValues(type, o));
+				ids = DB.insert(db, determineTableMapping(type).get(0).tableName, extractValues(type, o));
 			}
 			if (ids != null) {
 				applyGeneratedId(o, ids);
@@ -758,14 +809,21 @@ public class PojoQuery<T> {
 		
 	}
 
-	private static List<TableMapping> determineTableHierarchy(Class<?> type) {
+	static List<TableMapping> determineTableMapping(Class<?> clz) {
 		List<TableMapping> tables = new ArrayList<TableMapping>();
-		TableMapping tableMapping = determineTableMapping(type);
-		while (tableMapping != null) {
-			if (tables.size() == 0 || !tables.get(0).tableName.equals(tableMapping.tableName)) {
-				tables.add(0, tableMapping);
+		List<Field> fields = new ArrayList<Field>();
+		while(clz != null) {
+			Table tableAnn = clz.getAnnotation(Table.class);
+			fields.addAll(0, collectFieldsOfClass(clz, clz.getSuperclass()));
+			if (tableAnn != null) {
+				String name = tableAnn.value();
+				tables.add(0, new TableMapping(name, clz, new ArrayList<Field>(fields)));
+				fields.clear();
 			}
-			tableMapping = determineTableMapping(tableMapping.clazz.getSuperclass());
+			clz = clz.getSuperclass();
+		}
+		if (fields.size() > 0 && tables.size() > 0) {
+			tables.get(0).fields.addAll(0, fields);
 		}
 		return tables;
 	}
@@ -804,7 +862,7 @@ public class PojoQuery<T> {
 	
 	private static int update(Connection conn, DataSource db, Class<?> type, Object o) {
 		// If the class hierarchy contains multiple tables, create separate inserts
-		List<TableMapping> tables = determineTableHierarchy(type);
+		List<TableMapping> tables = determineTableMapping(type);
 		
 		if (tables.size() == 1) {
 			Map<String, Object> values = extractValues(type, o);
@@ -842,15 +900,6 @@ public class PojoQuery<T> {
 			return affectedRows;
 		}
 		
-	}
-
-	
-	public static Long insertOrUpdate(DataSource db, Object o) {
-		return DB.insertOrUpdate(db, determineTableMapping(o.getClass()).tableName, extractValues(o.getClass(), o));
-	}
-	
-	public static Long insertOrUpdate(Connection connection, Object o) {
-		return DB.insertOrUpdate(connection, determineTableMapping(o.getClass()).tableName, extractValues(o.getClass(), o));
 	}
 
 	private static Map<String, Object> extractValues(Class<?> type, Object o) {
@@ -1016,11 +1065,13 @@ public class PojoQuery<T> {
 
 	public static class TableMapping {
 		public final String tableName;
-		public final Class<?> clazz;
+		public final Class<?> clazz; // The class on which the @Table is declared
+		public final List<Field> fields;
 		
-		public TableMapping(String tableName, Class<?> clazz) {
+		public TableMapping(String tableName, Class<?> clazz, List<Field> fields) {
 			this.tableName = tableName;
 			this.clazz = clazz;
+			this.fields = fields;
 		}
 	}
 

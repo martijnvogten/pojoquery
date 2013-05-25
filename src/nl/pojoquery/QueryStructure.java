@@ -68,4 +68,5 @@ public class QueryStructure {
 		aliases.put(subClassAlias.alias, subClassAlias);
 		return subClassAlias;
 	}
+	
 }
