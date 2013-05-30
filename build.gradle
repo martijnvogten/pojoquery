@@ -27,4 +27,12 @@ sourceSets {
 		  srcDir 'test'
 	   }
 	}
+	examples {
+		java {
+			srcDir 'examples'
+		}
+		resources {
+			srcDir 'examples'
+		}
+	}
  }
