@@ -29,6 +29,7 @@ import nl.pojoquery.annotations.Other;
 import nl.pojoquery.annotations.Select;
 import nl.pojoquery.annotations.SubClasses;
 import nl.pojoquery.annotations.Table;
+import nl.pojoquery.annotations.Transient;
 import nl.pojoquery.util.Iterables;
 
 public class PojoQuery<T> {
@@ -175,22 +176,30 @@ public class PojoQuery<T> {
 		return returnSingleRow(execute(db));
 	}
 
-	public static void delete(DataSource db, Class<?> clz, Object id) {
-
+	public static void delete(DataSource db, Object entity) {
+		for (TableMapping table : determineTableMapping(entity.getClass())) {
+			executeDelete(db, table.tableName, buildIdConditionFromEntity(entity.getClass(), entity));
+		}
+	}
+	
+	public static void deleteById(DataSource db, Class<?> clz, Object id) {
 		for (TableMapping table : determineTableMapping(clz)) {
 			List<SqlExpression> wheres = buildIdCondition(table.clazz, id);
-			String tableName = table.tableName;
-			List<String> whereClauses = new ArrayList<String>();
-			List<Object> params = new ArrayList<Object>();
-			for (SqlExpression w : wheres) {
-				whereClauses.add(w.getSql());
-				for (Object o : w.getParameters()) {
-					params.add(o);
-				}
-			}
-
-			DB.update(db, new SqlExpression("DELETE FROM `" + tableName + "` WHERE " + implode(" AND ", whereClauses), Arrays.asList((Object) params)));
+			executeDelete(db, table.tableName, wheres);
 		}
+	}
+
+	private static void executeDelete(DataSource db, String tableName, List<SqlExpression> where) {
+		List<String> whereClauses = new ArrayList<String>();
+		List<Object> params = new ArrayList<Object>();
+		for (SqlExpression w : where) {
+			whereClauses.add(w.getSql());
+			for (Object o : w.getParameters()) {
+				params.add(o);
+			}
+		}
+
+		DB.update(db, new SqlExpression("DELETE FROM `" + tableName + "` WHERE " + implode(" AND ", whereClauses), Arrays.asList((Object) params)));
 	}
 
 	private T returnSingleRow(List<T> resultList) {
@@ -204,10 +213,7 @@ public class PojoQuery<T> {
 	}
 
 	private static List<SqlExpression> buildIdCondition(Class<?> resultClass, Object id) {
-		List<Field> idFields = determineIdFields(resultClass);
-		if (idFields.size() == 0) {
-			throw new MappingException("No @Id annotations found on fields of class " + resultClass.getName());
-		}
+		List<Field> idFields = assertIdFields(resultClass);
 		String tableName = determineTableMapping(resultClass).get(0).tableName;
 		if (idFields.size() == 1) {
 			return Arrays.asList(new SqlExpression("`" + tableName + "`." + idFields.get(0).getName() + "=?", Arrays.asList((Object) id)));
@@ -225,6 +231,34 @@ public class PojoQuery<T> {
 				throw new MappingException("Multiple @Id annotations on class " + resultClass.getName() + ": expecting a map id.");
 			}
 		}
+	}
+
+	private static List<SqlExpression> buildIdConditionFromEntity(Class<?> resultClass, Object entity) {
+		try {
+			List<Field> idFields = assertIdFields(resultClass);
+			String tableName = determineTableMapping(resultClass).get(0).tableName;
+			List<SqlExpression> result = new ArrayList<SqlExpression>();
+			for (Field field : idFields) {
+				Object idvalue = idFields.get(0).get(entity);
+				if (idvalue == null) {
+					throw new MappingException("Cannot create wherecondition for entity with null value in idfield " + field.getName());
+				}
+				result.add(new SqlExpression("`" + tableName + "`." + field + "=?", Arrays.asList(idvalue)));
+			}
+			return result;
+		} catch (IllegalArgumentException e) {
+			throw new MappingException(e);
+		} catch (IllegalAccessException e) {
+			throw new MappingException(e);
+		}
+	}
+	
+	private static List<Field> assertIdFields(Class<?> resultClass) {
+		List<Field> idFields = determineIdFields(resultClass);
+		if (idFields.size() == 0) {
+			throw new MappingException("No @Id annotations found on fields of class " + resultClass.getName());
+		}
+		return idFields;
 	}
 
 	public static <R> List<R> processRows(List<Map<String, Object>> rows, Class<R> clz) {
@@ -297,12 +331,19 @@ public class PojoQuery<T> {
 						}
 					} else {
 						if (alias.otherField != null) {
+							alias.otherField.setAccessible(true);
 							Map<String,Object> othersMap = (Map<String, Object>) alias.otherField.get(instance);
 							if (othersMap == null) {
 								othersMap = new HashMap<String,Object>();
 								alias.otherField.set(instance, othersMap);
 							}
-							othersMap.put(key.substring(key.lastIndexOf(".") + 1), row.get(key));
+							String fieldName = key.substring(key.lastIndexOf(".") + 1);
+							Other otherAnn = alias.otherField.getAnnotation(Other.class);
+							if (otherAnn != null && otherAnn.prefix().length() > 0) {
+								// Remove prefix.
+								fieldName = fieldName.substring(otherAnn.prefix().length());
+							}
+							othersMap.put(fieldName, row.get(key));
 						}
 					}
 				}
@@ -532,6 +573,7 @@ public class PojoQuery<T> {
 			if (f.getAnnotation(Other.class) != null) {
 				continue;
 			}
+
 			if (f.getAnnotation(Link.class) != null) {
 				String linktable = f.getAnnotation(Link.class).linktable();
 				if (!linktable.equals(Link.NONE)) {
@@ -763,6 +805,9 @@ public class PojoQuery<T> {
 			if ((f.getModifiers() & Modifier.STATIC) > 0) {
 				continue;
 			}
+			if (f.getAnnotation(Transient.class) != null) {
+				continue;
+			}
 			result.add(f);
 		}
 		return result;
@@ -818,7 +863,7 @@ public class PojoQuery<T> {
 
 	}
 
-	static List<TableMapping> determineTableMapping(Class<?> clz) {
+	public static List<TableMapping> determineTableMapping(Class<?> clz) {
 		List<TableMapping> tables = new ArrayList<TableMapping>();
 		List<Field> fields = new ArrayList<Field>();
 		while (clz != null) {
@@ -921,6 +966,18 @@ public class PojoQuery<T> {
 			Map<String, Object> values = new HashMap<String, Object>();
 			for (Field f : collectFieldsOfClass(type, stopAtSuperclass)) {
 				f.setAccessible(true);
+				
+				Other otherAnn = f.getAnnotation(Other.class);
+				if (otherAnn != null) {
+					@SuppressWarnings("unchecked")
+					Map<String,Object> otherMap = (Map<String, Object>) f.get(o);
+					if (otherMap != null) {
+						for(String fieldName : otherMap.keySet()) {
+							values.put(otherAnn.prefix() + fieldName, otherMap.get(fieldName));
+						}
+					}
+					continue;
+				}
 
 				Object val = f.get(o);
 				if (f.getAnnotation(Embedded.class) != null) {

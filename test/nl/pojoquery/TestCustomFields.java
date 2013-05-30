@@ -26,7 +26,9 @@ public class TestCustomFields {
 	
 	@Test
 	public void testBasics() {
-		PojoQuery<User> query = PojoQuery.build(User.class).addField("user.custom_linkedInUrl `user.linkedInUrl`");
+		PojoQuery<User> query = PojoQuery.build(User.class);
+		
+		query.addField("user.custom_linkedInUrl `user.linkedInUrl`");
 		
 		Assert.assertEquals("SELECT" +
 				" `user`.id `user.id`," +
