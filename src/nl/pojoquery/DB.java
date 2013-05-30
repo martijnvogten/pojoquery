@@ -74,20 +74,20 @@ public class DB {
 
 	public static int update(DataSource db, String tableName, Map<String, Object> values, Map<String, Object> ids) {
 		SqlExpression updateSql = buildUpdate(tableName, values, ids);
-		return execute(db, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
+		return (Integer)execute(db, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
 	}
 	
 	public static int update(Connection connection, String tableName, Map<String, Object> values, Map<String, Object> ids) {
 		SqlExpression updateSql = buildUpdate(tableName, values, ids);
-		return execute(connection, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
+		return (Integer)execute(connection, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
 	}
 	
 	public static int update(DataSource db, SqlExpression update) {
-		return execute(db, QueryType.UPDATE, update.getSql(), update.getParameters(), null);
+		return (Integer)execute(db, QueryType.UPDATE, update.getSql(), update.getParameters(), null);
 	}
 
 	public static int update(Connection conn, SqlExpression update) {
-		return execute(conn, QueryType.UPDATE, update.getSql(), update.getParameters(), null);
+		return (Integer)execute(conn, QueryType.UPDATE, update.getSql(), update.getParameters(), null);
 	}
 	
 	public static <PK> PK insert(DataSource db, String tableName, Map<String, ? extends Object> values) {
