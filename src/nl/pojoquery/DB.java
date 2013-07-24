@@ -18,6 +18,7 @@ import javax.sql.DataSource;
 
 public class DB {
 	public static final class DatabaseException extends RuntimeException {
+		private static final long serialVersionUID = 1L;
 
 		public DatabaseException(SQLException e) {
 			super(e);
