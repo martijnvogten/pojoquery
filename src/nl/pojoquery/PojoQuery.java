@@ -78,6 +78,10 @@ public class PojoQuery<T> {
 		return this;
 	}
 
+	public PojoQuery<T> setLimit(int rowCount) {
+		return setLimit(-1, rowCount);
+	}
+	
 	public PojoQuery<T> setLimit(int offset, int rowCount) {
 		this.offset = offset;
 		this.rowCount = rowCount;
@@ -1119,6 +1123,8 @@ public class PojoQuery<T> {
 	}
 
 	public static class MappingException extends RuntimeException {
+		private static final long serialVersionUID = 1L;
+
 		public MappingException(String message) {
 			super(message);
 		}

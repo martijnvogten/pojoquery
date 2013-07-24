@@ -9,14 +9,20 @@ import com.mysql.jdbc.jdbc2.optional.MysqlConnectionPoolDataSource;
 public class MysqlDatabases {
 
 	public static DataSource createDatabase(String host, String schema, String username, String password) {
-		DataSource db = getDataSource("jdbc:mysql://" + host, username, password);
+		DataSource db = getMysqlDataSource(host, null, username, password);
+
 		DB.executeDDL(db, "DROP DATABASE IF EXISTS " + schema);
 		DB.executeDDL(db, "CREATE DATABASE " + schema + " DEFAULT CHARSET utf8");
 
-		return getDataSource("jdbc:mysql://" + host + "/" + schema, username, password);
+		return getMysqlDataSource(host, schema, username, password);
 	}
 	
-	private static DataSource getDataSource(String jdbcUrl, String user, String pass) {
+	public static DataSource getMysqlDataSource(String host, String schema, String username, String password) {
+		String jdbcUrl = "jdbc:mysql://" + host + (schema != null ? "/" + schema : "");
+		return getDataSource(jdbcUrl, username, password);
+	}
+	
+	public static DataSource getDataSource(String jdbcUrl, String user, String pass) {
 		try {
 			MysqlConnectionPoolDataSource dataSource = new MysqlConnectionPoolDataSource();
 			dataSource.setUrl(jdbcUrl);
