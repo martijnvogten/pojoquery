@@ -474,7 +474,11 @@ public class PojoQuery<T> {
 		if (clz == null)
 			throw new NullPointerException("clz");
 
-		String table = determineTableMapping(clz).get(0).tableName;
+		List<TableMapping> tableMappings = determineTableMapping(clz);
+		if (tableMappings.size() == 0) {
+			throw new MappingException("Missing @Table annotation on class " + clz.getName() + " or any of its superclasses");
+		}
+		String table = tableMappings.get(0).tableName;
 
 		PojoQuery<T> q = new PojoQuery<T>(table);
 		q.setResultClass(clz);
