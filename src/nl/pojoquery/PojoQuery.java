@@ -524,7 +524,6 @@ public class PojoQuery<T> {
 
 				q.addField("`" + foreignalias + "`." + idField + " `" + foreignalias + "." + idField + "`");
 				addClassToQueryIgnoringSubClasses(q, foreignalias, subClass, joinPath, subclassesAdded);
-
 			}
 		}
 
@@ -1153,6 +1152,10 @@ public class PojoQuery<T> {
 			this.clazz = clazz;
 			this.fields = fields;
 		}
+	}
+	
+	public String getTable() {
+		return this.table;
 	}
 
 }
