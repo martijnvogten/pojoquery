@@ -2,6 +2,7 @@ package nl.pojoquery;
 
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
+import nl.pojoquery.pipeline.QueryBuilder;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -28,13 +29,13 @@ public class TestCount {
 	
 	@Test
 	public void testCount() {
-		SqlExpression countStatement = PojoQuery.build(Article.class).buildCountStatement();
+		SqlExpression countStatement = QueryBuilder.from(Article.class).buildCountStatement();
 		Assert.assertEquals(TestUtils.norm("SELECT COUNT(DISTINCT article.id) FROM article"), TestUtils.norm(countStatement.getSql()));
 	}
 	
 	@Test
 	public void testCountWithJoins() {
-		SqlExpression countStatement = PojoQuery.build(ArticleDetail.class).buildCountStatement();
-		Assert.assertEquals(TestUtils.norm("SELECT COUNT(DISTINCT article.id) FROM article LEFT JOIN comment `comments` ON `comments`.article_id=`article`.id"), TestUtils.norm(countStatement.getSql()));
+		SqlExpression countStatement = QueryBuilder.from(ArticleDetail.class).buildCountStatement();
+		Assert.assertEquals(TestUtils.norm("SELECT COUNT(DISTINCT article.id) FROM article LEFT JOIN comment AS `comments` ON `article`.id = `comments`.article_id"), TestUtils.norm(countStatement.getSql()));
 	}
 }

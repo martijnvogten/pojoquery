@@ -9,9 +9,12 @@ import java.util.Map;
 
 public class TestUtils {
 
+	/** normalize SQL into a nicely readable format */
 	public static String norm(String str) {
-		// replace any whitespace with single space
-		return str.replaceAll("\\s+", " ").trim();
+		return str.replaceAll("\\s+", " ").trim()
+				.replaceAll("(SELECT|,)", "$1\n")
+				.replaceAll(" (WHERE|FROM|HAVING|GROUP BY|ORDER BY)", "\n$1")
+				.replaceAll(" (LEFT JOIN|INNER JOIN)", "\n $1");
 	}
 	
 	public static <K,V> Map<K, V> map(K k1, V v1) {

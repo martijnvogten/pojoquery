@@ -1,7 +1,8 @@
 package nl.pojoquery;
 
-import nl.pojoquery.PojoQuery.MappingException;
 import nl.pojoquery.annotations.Table;
+import nl.pojoquery.internal.MappingException;
+import nl.pojoquery.pipeline.QueryBuilder;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -36,7 +37,7 @@ public class TestExceptions {
 	private void assertMappingException(Class<?> clz) {
 		boolean caught = true;
 		try {
-			PojoQuery.build(clz);
+			QueryBuilder.from(clz);
 		} catch (MappingException me) {
 			caught = true;
 		}

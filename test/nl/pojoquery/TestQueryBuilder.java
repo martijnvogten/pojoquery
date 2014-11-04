@@ -1,5 +1,6 @@
 package nl.pojoquery;
 
+import static nl.pojoquery.TestUtils.norm;
 import static org.junit.Assert.assertEquals;
 import nl.pojoquery.annotations.Table;
 
@@ -14,6 +15,6 @@ public class TestQueryBuilder {
 	
 	@Test
 	public void testBasicSql() {
-		assertEquals("SELECT `article`.id `article.id` FROM article", TestUtils.norm(PojoQuery.build(Article.class).toSql()));
+		assertEquals(norm("SELECT `article`.id `article.id` FROM article"), norm(PojoQuery.build(Article.class).toSql()));
 	}
 }

@@ -1,5 +1,6 @@
 package nl.pojoquery;
 
+import static nl.pojoquery.TestUtils.norm;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -7,10 +8,11 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import nl.pojoquery.PojoQuery.TableMapping;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.SubClasses;
 import nl.pojoquery.annotations.Table;
+import nl.pojoquery.internal.TableMapping;
+import nl.pojoquery.pipeline.QueryBuilder;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -44,8 +46,16 @@ public class TestInheritance {
 	
 	@Table("apartment")
 	static class Apartment {
+		@Id
 		Long id;
 		Room[] rooms;
+	}
+	
+	@Table("apartment")
+	static class ApartmentWithSpecificProperties {
+		@Id
+		Long id;
+		BedRoom[] bedrooms; // Implies an apartment_id in 
 	}
 	
 	@Test
@@ -68,22 +78,23 @@ public class TestInheritance {
 	
 	@Test
 	public void testSubClasses() {
-		String sql = PojoQuery.build(Room.class).toSql();
+		QueryBuilder<Room> b = QueryBuilder.from(Room.class);
+		String sql = b.toStatement().getSql();
 		
 		System.out.println(sql);
 		
 		assertEquals(
-				"SELECT" +
-				" `room`.id `room.id`," +
-				" `room`.area `room.area`," +
-				" `bedroom`.id `bedroom.id`," +
-				" `bedroom`.numberOfBeds `bedroom.numberOfBeds`," +
-				" `kitchen`.id `kitchen.id`," +
-				" `kitchen`.hasDishWasher `kitchen.hasDishWasher`" +
-				" FROM room" +
-				" LEFT JOIN bedroom `bedroom` ON `bedroom`.id=`room`.id" +
-				" LEFT JOIN kitchen `kitchen` ON `kitchen`.id=`room`.id",
-				TestUtils.norm(sql));
+				norm("SELECT\n" + 
+						" `room`.id AS `room.id`,\n" + 
+						" `room`.area AS `room.area`,\n" + 
+						" `room.bedroom`.id AS `room.bedroom.id`,\n" + 
+						" `room.bedroom`.numberOfBeds AS `room.bedroom.numberOfBeds`,\n" + 
+						" `room.kitchen`.id AS `room.kitchen.id`,\n" + 
+						" `room.kitchen`.hasDishWasher AS `room.kitchen.hasDishWasher`\n" + 
+						"FROM room\n" + 
+						" LEFT JOIN bedroom AS `room.bedroom` ON `room.bedroom`.id = `room`.id\n" + 
+						" LEFT JOIN kitchen AS `room.kitchen` ON `room.kitchen`.id = `room`.id"),
+				norm(sql));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
 					"room.id", "room.area", "bedroom.id", "bedroom.numberOfBeds", "kitchen.id", "kitchen.hasDishWasher" }, 
@@ -99,45 +110,61 @@ public class TestInheritance {
 	
 	@Test
 	public void testSuperclasses() {
-		PojoQuery<BedRoom> q = PojoQuery.build(BedRoom.class);
-		String sql = q.toSql();
+		QueryBuilder<BedRoom> q = QueryBuilder.from(BedRoom.class);
+		String sql = q.toStatement().getSql();
+		System.out.println(sql);
 		assertEquals(
-				"SELECT" +
-				" `room`.id `room.id`," +
-				" `room`.area `room.area`," +
-				" `bedroom`.id `bedroom.id`," +
-				" `bedroom`.numberOfBeds `bedroom.numberOfBeds`" +
-				" FROM room" +
-				" INNER JOIN bedroom `bedroom` ON `bedroom`.id=`room`.id",
-				TestUtils.norm(sql));
+				norm("SELECT\n" + 
+						" `bedroom.room`.id AS `bedroom.id`,\n" + 
+						" `bedroom.room`.area AS `bedroom.area`,\n" + 
+						" `bedroom`.numberOfBeds AS `bedroom.numberOfBeds`\n" + 
+						"FROM bedroom\n" + 
+						" INNER JOIN room AS `bedroom.room` ON `bedroom.room`.id = `bedroom`.id"),
+				norm(sql));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
-				"room.id", "room.area", "bedroom.id", "bedroom.numberOfBeds" }, 
-			     1L,        100.0,       1L,           1);
+				"bedroom.id", "bedroom.area", "bedroom.numberOfBeds" }, 
+			     1L,           100.0,          1);
 		
-		List<BedRoom> list = PojoQuery.processRows(result, BedRoom.class);
+		List<BedRoom> list = QueryBuilder.from(BedRoom.class).processRows(result);
+		Assert.assertEquals(1, list.size());
 		Assert.assertTrue(list.get(0) instanceof BedRoom);
-		
+		Assert.assertEquals(100.0F, list.get(0).area, 0.1F);
+	}
+	
+	@Test
+	public void testSuperClassOfLinked() {
+		String sql = QueryBuilder.from(ApartmentWithSpecificProperties.class).toStatement().getSql();
+		System.out.println(sql);
+		assertEquals(norm(
+				"SELECT\n" + 
+				" `apartment`.id AS `apartment.id`,\n" + 
+				" `bedrooms.room`.id AS `bedrooms.id`,\n" + 
+				" `bedrooms.room`.area AS `bedrooms.area`,\n" + 
+				" `bedrooms`.numberOfBeds AS `bedrooms.numberOfBeds`\n" + 
+				"FROM apartment \n" + 
+				" LEFT JOIN bedroom AS `bedrooms` ON `apartment`.id = `bedrooms`.apartment_id\n" + 
+				" INNER JOIN room AS `bedrooms.room` ON `bedrooms.room`.id = `bedrooms`.id\n" + 
+				""), norm(sql));
 	}
 	
 	@Test
 	public void testDeeper() {
-		String sql = PojoQuery.build(Apartment.class).toSql();
-		
+		String sql = QueryBuilder.from(Apartment.class).toStatement().getSql();
 		assertEquals(
-				"SELECT" +
-				" `apartment`.id `apartment.id`," +
-				" `rooms`.id `rooms.id`," +
-				" `rooms`.area `rooms.area`," +
-				" `rooms.bedroom`.id `rooms.bedroom.id`," +
-				" `rooms.bedroom`.numberOfBeds `rooms.bedroom.numberOfBeds`," +
-				" `rooms.kitchen`.id `rooms.kitchen.id`," +
-				" `rooms.kitchen`.hasDishWasher `rooms.kitchen.hasDishWasher`" +
-				" FROM apartment" +
-				" LEFT JOIN room `rooms` ON `rooms`.apartment_id=`apartment`.id" +
-				" LEFT JOIN bedroom `rooms.bedroom` ON `rooms.bedroom`.id=`rooms`.id" +
-				" LEFT JOIN kitchen `rooms.kitchen` ON `rooms.kitchen`.id=`rooms`.id",
-				TestUtils.norm(sql));
+				norm("SELECT\n" + 
+						" `apartment`.id AS `apartment.id`,\n" + 
+						" `rooms`.id AS `rooms.id`,\n" + 
+						" `rooms`.area AS `rooms.area`,\n" + 
+						" `rooms.bedroom`.id AS `rooms.bedroom.id`,\n" + 
+						" `rooms.bedroom`.numberOfBeds AS `rooms.bedroom.numberOfBeds`,\n" + 
+						" `rooms.kitchen`.id AS `rooms.kitchen.id`,\n" + 
+						" `rooms.kitchen`.hasDishWasher AS `rooms.kitchen.hasDishWasher`\n" + 
+						"FROM apartment\n" + 
+						" LEFT JOIN room AS `rooms` ON `apartment`.id = `rooms`.apartment_id\n" + 
+						" LEFT JOIN bedroom AS `rooms.bedroom` ON `rooms.bedroom`.id = `rooms`.id\n" + 
+						" LEFT JOIN kitchen AS `rooms.kitchen` ON `rooms.kitchen`.id = `rooms`.id"),
+				norm(sql));
 	}
 
 }

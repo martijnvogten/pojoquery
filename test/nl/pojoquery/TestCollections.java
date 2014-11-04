@@ -1,6 +1,7 @@
 package nl.pojoquery;
 
 import static nl.pojoquery.TestUtils.map;
+import static nl.pojoquery.TestUtils.norm;
 import static org.junit.Assert.assertEquals;
 
 import java.util.Arrays;
@@ -11,6 +12,7 @@ import java.util.Set;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Table;
+import nl.pojoquery.pipeline.QueryBuilder;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -22,7 +24,7 @@ public class TestCollections {
 		@Id
 		Long id;
 		
-		@Link(linktable="user_roles", foreignvaluefield="element", resultClass=Role.class)
+		@Link(linktable="user_roles", fetchColumn="element")
 		Set<Role> roles;
 	}
 	
@@ -33,15 +35,15 @@ public class TestCollections {
 	
 	@Test
 	public void testBasics() {
-		assertEquals(
-				"SELECT" +
-				" `user`.id `user.id`," +
-				" `user_roles`.element `roles.value`" +
-				" FROM user" +
-				" LEFT JOIN user_roles `user_roles` ON `user_roles`.user_id=user.id", 
-			TestUtils.norm(PojoQuery.build(User.class).toSql()));
 		
-		@SuppressWarnings("unchecked")
+		assertEquals(
+				norm("SELECT" +
+				" `user`.id AS `user.id`," +
+				" `roles`.element AS `roles.value`" +
+				" FROM user" +
+				" LEFT JOIN user_roles AS `roles` ON `user`.id = `roles`.user_id"), 
+			norm(QueryBuilder.from(User.class).toStatement().getSql()));
+		
 		List<Map<String, Object>> result = Arrays.asList(
 			map(
 				"user.id", (Object)1L,
@@ -52,7 +54,7 @@ public class TestCollections {
 				"roles.value", Role.AGENT.name())
 			);
 		
-		List<User> users = PojoQuery.processRows(result, User.class);
+		List<User> users = QueryBuilder.from(User.class).processRows(result);
 		assertEquals(1, users.size());
 		Assert.assertTrue(users.get(0).roles.contains(Role.ADMIN));
 	}

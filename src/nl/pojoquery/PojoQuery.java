@@ -5,7 +5,6 @@ import static nl.pojoquery.util.Strings.implode;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
 import java.sql.Connection;
 import java.util.ArrayList;
@@ -21,6 +20,7 @@ import javax.sql.DataSource;
 
 import nl.pojoquery.QueryStructure.Alias;
 import nl.pojoquery.annotations.Embedded;
+import nl.pojoquery.annotations.FieldName;
 import nl.pojoquery.annotations.GroupBy;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Join;
@@ -30,6 +30,8 @@ import nl.pojoquery.annotations.Select;
 import nl.pojoquery.annotations.SubClasses;
 import nl.pojoquery.annotations.Table;
 import nl.pojoquery.annotations.Transient;
+import nl.pojoquery.internal.MappingException;
+import nl.pojoquery.internal.TableMapping;
 import nl.pojoquery.util.Iterables;
 
 public class PojoQuery<T> {
@@ -462,12 +464,14 @@ public class PojoQuery<T> {
 		return structure;
 	}
 
-	private static Object createInstance(Class<?> valClass) throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
-		Object instance;
-		Constructor<?> constructor = valClass.getDeclaredConstructor();
-		constructor.setAccessible(true);
-		instance = constructor.newInstance();
-		return instance;
+	public static <T> T createInstance(Class<T> valClass) {
+		try {
+			Constructor<T> constructor = valClass.getDeclaredConstructor();
+			constructor.setAccessible(true);
+			return constructor.newInstance();
+		} catch (Exception e) {
+			throw new MappingException("Exception creating instance of class " + valClass, e);
+		}
 	}
 
 	public static <T> PojoQuery<T> build(Class<T> clz) {
@@ -580,11 +584,11 @@ public class PojoQuery<T> {
 			if (f.getAnnotation(Other.class) != null) {
 				continue;
 			}
-
+			
 			if (f.getAnnotation(Link.class) != null) {
 				String linktable = f.getAnnotation(Link.class).linktable();
 				if (!linktable.equals(Link.NONE)) {
-					String foreignvaluefield = f.getAnnotation(Link.class).foreignvaluefield();
+					String foreignvaluefield = f.getAnnotation(Link.class).fetchColumn();
 					if (!foreignvaluefield.equals(Link.NONE)) {
 						// A list of values
 						String idfield = tableAlias + "." + determineIdField(clz).getName();
@@ -636,7 +640,7 @@ public class PojoQuery<T> {
 				List<TableMapping> linkedMapping = determineTableMapping(f.getType().getComponentType());
 				if (linkedMapping.size() > 0) {
 					String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
-					addOneToManyLink(q, tableAlias, table, foreignalias, linkedMapping.get(0).tableName, f.getName());
+					addOneToManyLink(q, tableAlias, table, foreignalias, linkedMapping.get(0).tableName, determineIdField(clz).getName());
 					addClassToQuery(q, foreignalias, f.getType().getComponentType(), joinPath);
 				}
 				continue;
@@ -644,7 +648,11 @@ public class PojoQuery<T> {
 				List<TableMapping> linkedMapping = determineTableMapping(f.getType());
 				if (!f.getType().isPrimitive() && linkedMapping.size() > 0) {
 					String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
-					addManyToOneLink(q, tableAlias, foreignalias, linkedMapping.get(0).tableName, f.getName());
+					String fieldName = f.getName().toLowerCase() + "_id";
+					if (f.getAnnotation(FieldName.class) != null) {
+						fieldName = f.getAnnotation(FieldName.class).value();
+					}
+					addManyToOneLink(q, tableAlias, foreignalias, linkedMapping.get(0).tableName, fieldName, determineIdField(linkedMapping.get(0).clazz).getName());
 					addClassToQuery(q, foreignalias, f.getType(), joinPath);
 					continue;
 				}
@@ -661,8 +669,11 @@ public class PojoQuery<T> {
 					}
 					continue;
 				}
-
-				q.addField("`" + tableAlias + "`." + f.getName() + " `" + tableAlias + "." + f.getName() + "`");
+				String fieldName = f.getName();
+				if (f.getAnnotation(FieldName.class) != null) {
+					fieldName = f.getAnnotation(FieldName.class).value();
+				}
+				q.addField("`" + tableAlias + "`." + fieldName + " `" + tableAlias + "." + f.getName() + "`");
 			}
 		}
 
@@ -675,7 +686,7 @@ public class PojoQuery<T> {
 		}
 	}
 
-	private static String determinePrefix(Field f) {
+	public static String determinePrefix(Field f) {
 		String prefix = f.getAnnotation(Embedded.class).prefix();
 		if (prefix.equals(Embedded.DEFAULT)) {
 			prefix = f.getName();
@@ -686,16 +697,16 @@ public class PojoQuery<T> {
 		return prefix;
 	}
 
-	private static <T> void addOneToManyLink(PojoQuery<T> q, String tableAlias, String localTable, String foreignalias, String foreigntable, String fieldName) {
-		String linkfield = "`" + foreignalias + "`." + localTable + "_id";
-		String idfield = "`" + tableAlias + "`.id";
-		q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + linkfield + "=" + idfield);
+	private static <T> void addOneToManyLink(PojoQuery<T> q, String tableAlias, String localTable, String foreignalias, String foreigntable, String idfield) {
+		String linkfieldAndAlias = "`" + foreignalias + "`." + localTable + "_id";
+		String idfieldAndAlias = "`" + tableAlias + "`." + idfield;
+		q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + linkfieldAndAlias + "=" + idfieldAndAlias);
 	}
 
-	private static <T> void addManyToOneLink(PojoQuery<T> q, String tableAlias, String foreignalias, String foreigntable, String fieldName) {
-		String linkfield = "`" + tableAlias + "`." + fieldName.toLowerCase() + "_id";
-		String idfield = "`" + foreignalias + "`.id";
-		q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + linkfield + "=" + idfield);
+	private static <T> void addManyToOneLink(PojoQuery<T> q, String tableAlias, String foreignalias, String foreigntable, String linkfield, String idfield) {
+		String linkfieldAndAlias = "`" + tableAlias + "`." + linkfield;
+		String idfieldAndAlias = "`" + foreignalias + "`." + idfield;
+		q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + linkfieldAndAlias + "=" + idfieldAndAlias);
 	}
 
 	private static String combinedAlias(String tableAlias, String fieldName, boolean isPrincipalAlias) {
@@ -771,7 +782,7 @@ public class PojoQuery<T> {
 					linkedClass = f.getAnnotation(Link.class).resultClass();
 				}
 
-				if (f.getAnnotation(Link.class).foreignvaluefield().equals(Link.NONE)) {
+				if (f.getAnnotation(Link.class).fetchColumn().equals(Link.NONE)) {
 					addClassToStructure(structure, f.getName(), alias, linkedClass, f);
 				} else {
 					structure.createAlias(f.getName(), alias, linkedClass, f);
@@ -793,11 +804,11 @@ public class PojoQuery<T> {
 		}
 	}
 
-	private static Iterable<Field> collectFieldsOfClass(Class<?> type) {
+	public static Iterable<Field> collectFieldsOfClass(Class<?> type) {
 		return collectFieldsOfClass(type, null);
 	}
 
-	private static List<Field> collectFieldsOfClass(Class<?> clz, Class<?> stopAtSuperClass) {
+	public static List<Field> collectFieldsOfClass(Class<?> clz, Class<?> stopAtSuperClass) {
 		List<Field> result = new ArrayList<Field>();
 		while (clz != null && !clz.equals(stopAtSuperClass)) {
 			result.addAll(0, filterFields(clz));
@@ -810,6 +821,9 @@ public class PojoQuery<T> {
 		List<Field> result = new ArrayList<Field>();
 		for (Field f : clz.getDeclaredFields()) {
 			if ((f.getModifiers() & Modifier.STATIC) > 0) {
+				continue;
+			}
+			if ((f.getModifiers() & Modifier.TRANSIENT) > 0) {
 				continue;
 			}
 			if (f.getAnnotation(Transient.class) != null) {
@@ -871,15 +885,20 @@ public class PojoQuery<T> {
 	}
 
 	public static List<TableMapping> determineTableMapping(Class<?> clz) {
+		Class<?> mappedClz = clz;
 		List<TableMapping> tables = new ArrayList<TableMapping>();
 		List<Field> fields = new ArrayList<Field>();
 		while (clz != null) {
+			if (mappedClz == null) {
+				mappedClz = clz;
+			}
 			Table tableAnn = clz.getAnnotation(Table.class);
 			fields.addAll(0, collectFieldsOfClass(clz, clz.getSuperclass()));
 			if (tableAnn != null) {
 				String name = tableAnn.value();
-				tables.add(0, new TableMapping(name, clz, new ArrayList<Field>(fields)));
+				tables.add(0, new TableMapping(name, mappedClz, new ArrayList<Field>(fields)));
 				fields.clear();
+				mappedClz = null;
 			}
 			clz = clz.getSuperclass();
 		}
@@ -1020,7 +1039,7 @@ public class PojoQuery<T> {
 		return ids;
 	}
 
-	private static final List<Field> determineIdFields(Class<?> clz) {
+	public static final List<Field> determineIdFields(Class<?> clz) {
 		Iterable<Field> fields = collectFieldsOfClass(clz);
 		ArrayList<Field> result = new ArrayList<Field>();
 		for (Field f : fields) {
@@ -1031,7 +1050,7 @@ public class PojoQuery<T> {
 		return result;
 	}
 
-	private static Field determineIdField(Class<?> clz) {
+	public static Field determineIdField(Class<?> clz) {
 		List<Field> idFields = determineIdFields(clz);
 		if (idFields.size() != 1) {
 			throw new MappingException("Need single id field annotated with @Id on class " + clz);
@@ -1060,17 +1079,17 @@ public class PojoQuery<T> {
 	}
 
 	SqlExpression buildListIdsStatement(List<Field> idFields) {
-		return toStatement(new SqlExpression("SELECT DISTINCT " + implode("\n , ", getFieldNames(idFields))), table, joins, wheres, null, orderBy, -1, -1);
+		return toStatement(new SqlExpression("SELECT DISTINCT " + implode("\n , ", getFieldNames(table, idFields))), table, joins, wheres, null, orderBy, -1, -1);
 	}
 
 	SqlExpression buildCountStatement() {
 		List<Field> idFields = determineIdFields(resultClass);
-		String selectClause = "SELECT COUNT(DISTINCT " + implode(", ", getFieldNames(idFields)) + ") ";
+		String selectClause = "SELECT COUNT(DISTINCT " + implode(", ", getFieldNames(table, idFields)) + ") ";
 
 		return toStatement(new SqlExpression(selectClause), table, joins, wheres, null, null, -1, -1);
 	}
 
-	private List<String> getFieldNames(List<Field> fields) {
+	public static List<String> getFieldNames(String table, List<Field> fields) {
 		List<String> fieldNames = new ArrayList<String>();
 		for (Field f : fields) {
 			fieldNames.add(table + "." + f.getName());
@@ -1125,35 +1144,6 @@ public class PojoQuery<T> {
 		return statement;
 	}
 
-	public static class MappingException extends RuntimeException {
-		private static final long serialVersionUID = 1L;
-
-		public MappingException(String message) {
-			super(message);
-		}
-
-		public MappingException(String message, Throwable cause) {
-			super(message, cause);
-		}
-
-		public MappingException(Throwable cause) {
-			super(cause);
-		}
-	}
-
-	public static class TableMapping {
-		public final String tableName;
-		public final Class<?> clazz; // The class on which the @Table is
-										// declared
-		public final List<Field> fields;
-
-		public TableMapping(String tableName, Class<?> clazz, List<Field> fields) {
-			this.tableName = tableName;
-			this.clazz = clazz;
-			this.fields = fields;
-		}
-	}
-	
 	public String getTable() {
 		return this.table;
 	}
