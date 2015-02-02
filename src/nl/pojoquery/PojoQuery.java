@@ -24,6 +24,7 @@ import nl.pojoquery.annotations.Embedded;
 import nl.pojoquery.annotations.GroupBy;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Join;
+import nl.pojoquery.annotations.JoinCondition;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Other;
 import nl.pojoquery.annotations.Select;
@@ -635,8 +636,13 @@ public class PojoQuery<T> {
 			if (f.getType().isArray()) {
 				List<TableMapping> linkedMapping = determineTableMapping(f.getType().getComponentType());
 				if (linkedMapping.size() > 0) {
+					String joinCondition = null;
 					String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
-					addOneToManyLink(q, tableAlias, table, foreignalias, linkedMapping.get(0).tableName, f.getName());
+					JoinCondition conditionAnn = f.getAnnotation(JoinCondition.class);
+					if (conditionAnn != null) {
+						joinCondition = conditionAnn.value();
+					}
+					addOneToManyLink(q, tableAlias, table, foreignalias, linkedMapping.get(0).tableName, f.getName(), joinCondition);
 					addClassToQuery(q, foreignalias, f.getType().getComponentType(), joinPath);
 				}
 				continue;
@@ -686,10 +692,13 @@ public class PojoQuery<T> {
 		return prefix;
 	}
 
-	private static <T> void addOneToManyLink(PojoQuery<T> q, String tableAlias, String localTable, String foreignalias, String foreigntable, String fieldName) {
-		String linkfield = "`" + foreignalias + "`." + localTable + "_id";
-		String idfield = "`" + tableAlias + "`.id";
-		q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + linkfield + "=" + idfield);
+	private static <T> void addOneToManyLink(PojoQuery<T> q, String tableAlias, String localTable, String foreignalias, String foreigntable, String fieldName, String joinCondition) {
+		if (joinCondition == null) {
+			String linkfield = "`" + foreignalias + "`." + localTable + "_id";
+			String idfield = "`" + tableAlias + "`.id";
+			joinCondition = linkfield + "=" + idfield;
+		}
+		q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + joinCondition);
 	}
 
 	private static <T> void addManyToOneLink(PojoQuery<T> q, String tableAlias, String foreignalias, String foreigntable, String fieldName) {
