@@ -650,7 +650,12 @@ public class PojoQuery<T> {
 				List<TableMapping> linkedMapping = determineTableMapping(f.getType());
 				if (!f.getType().isPrimitive() && linkedMapping.size() > 0) {
 					String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
-					addManyToOneLink(q, tableAlias, foreignalias, linkedMapping.get(0).tableName, f.getName());
+					String joinCondition = null;
+					JoinCondition conditionAnn = f.getAnnotation(JoinCondition.class);
+					if (conditionAnn != null) {
+						joinCondition = conditionAnn.value();
+					}
+					addManyToOneLink(q, tableAlias, foreignalias, linkedMapping.get(0).tableName, f.getName(), joinCondition);
 					addClassToQuery(q, foreignalias, f.getType(), joinPath);
 					continue;
 				}
@@ -701,10 +706,13 @@ public class PojoQuery<T> {
 		q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + joinCondition);
 	}
 
-	private static <T> void addManyToOneLink(PojoQuery<T> q, String tableAlias, String foreignalias, String foreigntable, String fieldName) {
+	private static <T> void addManyToOneLink(PojoQuery<T> q, String tableAlias, String foreignalias, String foreigntable, String fieldName, String joinCondition) {
 		String linkfield = "`" + tableAlias + "`." + fieldName.toLowerCase() + "_id";
 		String idfield = "`" + foreignalias + "`.id";
-		q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + linkfield + "=" + idfield);
+		if (joinCondition == null) {
+			joinCondition = linkfield + "=" + idfield;
+		}
+		q.addJoin("LEFT JOIN " + foreigntable + " `" + foreignalias + "` ON " + joinCondition);
 	}
 
 	private static String combinedAlias(String tableAlias, String fieldName, boolean isPrincipalAlias) {
