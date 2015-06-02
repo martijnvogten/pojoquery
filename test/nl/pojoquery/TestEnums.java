@@ -36,7 +36,6 @@ public class TestEnums {
 		UNEMPLOYED
 	}
 		
-	@SuppressWarnings("unchecked")
 	@Test
 	public void testBasics() {
 		assertEquals(

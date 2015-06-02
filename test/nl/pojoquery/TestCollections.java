@@ -41,7 +41,6 @@ public class TestCollections {
 				" LEFT JOIN user_roles `user_roles` ON `user_roles`.user_id=user.id", 
 			TestUtils.norm(PojoQuery.build(User.class).toSql()));
 		
-		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> result = Arrays.asList(
 			map(
 				"user.id", (Object)1L,
