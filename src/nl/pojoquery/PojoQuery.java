@@ -332,6 +332,9 @@ public class PojoQuery<T> {
 							if (val instanceof String && f.getType().isEnum()) {
 								val = Enum.valueOf((Class<? extends Enum>) f.getType(), (String) val);
 							}
+							if (val instanceof Integer && (Boolean.class.isAssignableFrom(f.getType()) || Boolean.TYPE.equals(f.getType()))) {
+								val = ((Integer) val != 0);
+							}
 							f.set(instance, val);
 						}
 					} else {
@@ -1038,12 +1041,15 @@ public class PojoQuery<T> {
 	}
 
 	private static final List<Field> determineIdFields(Class<?> clz) {
-		Iterable<Field> fields = collectFieldsOfClass(clz);
 		ArrayList<Field> result = new ArrayList<Field>();
-		for (Field f : fields) {
-			if (f.getAnnotation(Id.class) != null) {
-				result.add(f);
+		while (clz != null && result.size() == 0) {
+			Iterable<Field> fields = collectFieldsOfClass(clz, clz.getSuperclass());
+			for (Field f : fields) {
+				if (f.getAnnotation(Id.class) != null) {
+					result.add(f);
+				}
 			}
+			clz = clz.getSuperclass();
 		}
 		return result;
 	}

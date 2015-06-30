@@ -30,7 +30,7 @@ public class DB {
 		public T run(Connection connection);
 	}
 
-	private enum QueryType {
+	public enum QueryType {
 		DDL, SELECT, UPDATE, INSERT
 	}
 
@@ -165,7 +165,7 @@ public class DB {
 	public static void executeDDL(Connection connection, String ddl) {
 		execute(connection, QueryType.DDL, ddl, null, null);
 	}
-
+	
 	public static <T> T execute(DataSource db, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
 		Connection connection = null;
 		try {
