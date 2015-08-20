@@ -606,15 +606,10 @@ public class PojoQuery<T> {
 
 						q.addJoin("LEFT JOIN " + linktable + " `" + linktableAlias + "` ON " + linkfield + "=" + idfield);
 
-						String foreigntable = null;
-						for (String t : linktable.split("_")) {
-							if (tableAlias.equalsIgnoreCase(t)) {
-								continue;
-							} else {
-								foreigntable = t;
-							}
-						}
 						Class<?> foreignClass = f.getAnnotation(Link.class).resultClass();
+						List<TableMapping> foreignMapping = determineTableMapping(foreignClass);
+						String foreigntable = foreignMapping.get(0).tableName;
+						
 						String foreignlinkfield = "`" + linktableAlias + "`." + foreigntable + "_id";
 						String foreignAlias = combinedAlias(linktableAlias, f.getName(), isPrincipalAlias);
 						String foreignidfield = "`" + foreignAlias + "`." + determineIdField(foreignClass).getName();
