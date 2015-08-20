@@ -36,7 +36,7 @@ public class TestQueryBuilder {
 	}
 	
 	static class PackageDetail extends Package {
-		@Link(linktable="shipping_package_order_item")
+		@Link(linktable="shipping_package_order_item", resultClass=Item.class)
 		List<Item> items;
 	}
 	
