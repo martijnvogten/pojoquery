@@ -5,6 +5,9 @@ repositories {
   mavenCentral()
 }
 
+sourceCompatibility='1.7'
+targetCompatibility='1.7'
+
 dependencies {
   testCompile 'junit:junit:4.11'
   testCompile 'mysql:mysql-connector-java:5.1.25'
