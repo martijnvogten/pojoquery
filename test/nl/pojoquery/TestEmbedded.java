@@ -32,6 +32,7 @@ public class TestEmbedded {
 	
 	@Table("article")
 	static class ArticleDetail {
+		@Id
 		Long id;
 		String title;
 		User author;
@@ -65,6 +66,7 @@ public class TestEmbedded {
 	@Test
 	public void testUsingPipeline() {
 		QueryBuilder<ArticleDetail> p = QueryBuilder.from(ArticleDetail.class);
+		System.out.println(p.getQuery().toStatement().getSql());
 		List<ArticleDetail> articles = p.processRows(RESULT_ARTICLE_DETAIL);
 		
 		assertEquals("501, Broadway", articles.get(0).author.home.address);

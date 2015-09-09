@@ -63,5 +63,11 @@ public class Alias {
 	public void setIsLinkedValue(boolean isLinkedValue) {
 		this.isLinkedValue = isLinkedValue;
 	}
+
+	@Override
+	public String toString() {
+		return "Alias [alias=" + alias + ", resultClass=" + resultClass + ", parentAlias=" + parentAlias
+				+ ", linkField=" + linkField + ", idFields=" + idFields + ", isLinkedValue=" + isLinkedValue + "]";
+	}
 	
 }

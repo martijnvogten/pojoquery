@@ -40,15 +40,16 @@ public class QueryBuilder<T> {
 	private LinkedHashMap<String,Alias> aliases = new LinkedHashMap<>();
 	private Map<String,FieldMapping> fieldMappings = new HashMap<>();
 	
-	private Class<T> resultClass;
-	private SqlQuery query;
+	private final Class<T> resultClass;
+	private final SqlQuery query;
+	private final String rootAlias;
 
 	private QueryBuilder(Class<T> clz) {
 		this.resultClass = clz;
 		query = new SqlQuery();
 		query.setTable(determineTableName(clz));
-		String alias = query.getTable();
-		addClass(clz, alias);
+		rootAlias = query.getTable();
+		addClass(clz, rootAlias, null, null);
 	}
 
 	public static <R> QueryBuilder<R> from(Class<R> clz) {
@@ -85,23 +86,21 @@ public class QueryBuilder<T> {
 		return tableMappings.get(tableMappings.size() - 1).tableName;
 	}
 	
-	private void addClass(Class<?> clz, String alias) {
+	private void addClass(Class<?> clz, String alias, String parentAlias, Field linkField) {
 		List<TableMapping> tableMappings = PojoQuery.determineTableMapping(clz);
 		for(int i = 0; i < tableMappings.size(); i++) {
 			TableMapping mapping = tableMappings.get(i);
 			TableMapping superMapping = i > 0 ? tableMappings.get(i - 1) : null;
 			
+			String combinedAlias = mapping.clazz.equals(clz) ? alias : alias + "." + mapping.tableName; 
 			if (superMapping != null) {
 				String linkAlias = alias + "." + superMapping.tableName;
-				String subAlias = mapping.clazz.equals(clz) ? alias : alias + "." + mapping.tableName;
 				String idField = PojoQuery.determineIdField(superMapping.clazz).getName();
-				query.addJoin(JoinType.INNER, superMapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + idField + " = {" + subAlias + "}." + idField));
+				query.addJoin(JoinType.INNER, superMapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + idField + " = {" + combinedAlias + "}." + idField));
 			}
 			
-			String combinedAlias = mapping.clazz.equals(clz) ? alias : alias + "." + mapping.tableName; 
-			
-			aliases.put(combinedAlias, new Alias(combinedAlias, mapping.clazz, null, null, PojoQuery.determineIdFields(mapping.clazz)));
-			addFields(combinedAlias, alias, mapping.clazz, superMapping != null ? superMapping.clazz : null, null, query);
+			aliases.put(combinedAlias, new Alias(combinedAlias, mapping.clazz, parentAlias, linkField, PojoQuery.determineIdFields(mapping.clazz)));
+			addFields(combinedAlias, alias, mapping.clazz, superMapping != null ? superMapping.clazz : null);
 		}
 		
 		SubClasses subClassesAnn = clz.getAnnotation(SubClasses.class);
@@ -117,18 +116,22 @@ public class QueryBuilder<T> {
 				String idField = PojoQuery.determineIdField(mapping.clazz).getName();
 				
 				query.addJoin(JoinType.LEFT, mapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + idField + " = {" + alias + "}." + idField));
-				aliases.put(linkAlias, new Alias(linkAlias, mapping.clazz, linkAlias, thisIdField, PojoQuery.determineIdFields(mapping.clazz)));
+				aliases.put(linkAlias, new Alias(linkAlias, mapping.clazz, alias, thisIdField, PojoQuery.determineIdFields(mapping.clazz)));
 				
 				// Also add the idfield of the linked alias, so we have at least one
-				addField(query, new SqlExpression("{" + linkAlias + "}." + idField), linkAlias + "." + idField, thisIdField);
+				addField(new SqlExpression("{" + linkAlias + "}." + idField), linkAlias + "." + idField, thisIdField);
 				
-				addFields(linkAlias, linkAlias, mapping.clazz, thisMapping.clazz, alias, query);
+				addFields(linkAlias, mapping.clazz, thisMapping.clazz);
 			}
 		}
 
 	}
 
-	private void addFields(String alias, String fieldAlias, Class<?> clz, Class<?> superClass, String parentAlias, SqlQuery result) {
+	private void addFields(String alias, Class<?> clz, Class<?> superClass) {
+		addFields(alias, alias, clz, superClass);
+	}
+	
+	private void addFields(String alias, String fieldsAlias, Class<?> clz, Class<?> superClass) {
 		
 		for(Field f : PojoQuery.collectFieldsOfClass(clz, superClass)) {
 			f.setAccessible(true);
@@ -140,32 +143,28 @@ public class QueryBuilder<T> {
 				Link linkAnn = f.getAnnotation(Link.class);
 				if (linkAnn != null) {
 					if (!Link.NONE.equals(linkAnn.fetchColumn())) {
-						String linkAlias = joinMany(result, alias, parentAlias, f.getName(), linkAnn.linktable(), PojoQuery.determineIdField(clz).getName(), linkFieldName(clz), null);
+						String linkAlias = joinMany(query, alias, f.getName(), linkAnn.linktable(), PojoQuery.determineIdField(clz).getName(), linkFieldName(clz), null);
 						Alias a = new Alias(linkAlias, componentType, alias, f, PojoQuery.determineIdFields(componentType));
 						a.setIsLinkedValue(true);
 						aliases.put(linkAlias, a);
-						addField(result, new SqlExpression("{" + linkAlias + "}." + linkAnn.fetchColumn()), linkAlias + ".value", f);
+						addField(new SqlExpression("{" + linkAlias + "}." + linkAnn.fetchColumn()), linkAlias + ".value", f);
 					}
 				} else if (PojoQuery.determineTableMapping(componentType).size() > 0) {
-					String linkAlias = joinMany(alias, parentAlias, result, f, componentType);
-					addClass(componentType, linkAlias);
-//					aliases.put(linkAlias, new Alias(linkAlias, componentType, alias, f, PojoQuery.determineIdFields(componentType)));
-//					addFields(linkAlias, linkAlias, componentType, null, alias, result);
+					String linkAlias = joinMany(alias, query, f, componentType);
+					addClass(componentType, linkAlias, alias, f);
 				}
 				
 			} else if (isLinkedClass(type)) {
-				String linkAlias = joinOne(alias, parentAlias, result, f, type);
-				addClass(type, linkAlias);
-//				aliases.put(linkAlias, new Alias(linkAlias, type, alias, f, PojoQuery.determineIdFields(type)));
-//				addFields(linkAlias, linkAlias, type, null, alias, result);
+				String linkAlias = joinOne(alias, query, f, type);
+				addClass(type, linkAlias, alias, f);
 			} else if (f.getAnnotation(Embedded.class) != null) {
 				String prefix = PojoQuery.determinePrefix(f);
 
-				String foreignAlias = parentAlias != null ? alias + "." + f.getName() : f.getName();
+				String foreignAlias = alias.equals(rootAlias) ? f.getName() : alias + "." + f.getName();
 				for (Field embeddedField : PojoQuery.collectFieldsOfClass(f.getType())) {
 					embeddedField.setAccessible(true);
 					String fieldName = embeddedField.getName();
-					addField(result, new SqlExpression("{" + alias + "}." + prefix + fieldName), foreignAlias + "." + fieldName, embeddedField);
+					addField(new SqlExpression("{" + alias + "}." + prefix + fieldName), foreignAlias + "." + fieldName, embeddedField);
 				}
 				aliases.put(foreignAlias, new Alias(foreignAlias, f.getType(), alias, f, PojoQuery.determineIdFields(f.getType())));
 			} else {
@@ -179,12 +178,12 @@ public class QueryBuilder<T> {
 					}
 					selectExpression = new SqlExpression("{" + alias + "}." + fieldName);
 				}
-				addField(result, selectExpression, fieldAlias + "." + f.getName(), f);
+				addField(selectExpression, fieldsAlias + "." + f.getName(), f);
 			}
 		}
 	}
 
-	private static String joinMany(String alias, String parentAlias, SqlQuery result, Field f, Class<?> componentType) {
+	private String joinMany(String alias, SqlQuery result, Field f, Class<?> componentType) {
 		String tableName = determineTableName(componentType);
 		String idField = PojoQuery.determineIdField(f.getDeclaringClass()).getName();
 		String linkField = linkFieldName(f.getDeclaringClass());
@@ -193,11 +192,11 @@ public class QueryBuilder<T> {
 			joinCondition = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias);
 		}
 		
-		return joinMany(result, alias, parentAlias, f.getName(), tableName, idField, linkField, joinCondition);
+		return joinMany(result, alias, f.getName(), tableName, idField, linkField, joinCondition);
 	}
 
-	private static String joinMany(SqlQuery result, String alias, String parentAlias, String fieldName, String tableName, String idField, String linkField, SqlExpression joinCondition) {
-		String linkAlias = parentAlias == null ? fieldName : (alias + "." + fieldName);
+	private String joinMany(SqlQuery result, String alias, String fieldName, String tableName, String idField, String linkField, SqlExpression joinCondition) {
+		String linkAlias = alias.equals(rootAlias) ? fieldName : (alias + "." + fieldName);
 		if (joinCondition == null) {
 			joinCondition = new SqlExpression("{" + alias + "}." + idField + " = {" + linkAlias + "}." + linkField);
 		}
@@ -205,9 +204,9 @@ public class QueryBuilder<T> {
 		return linkAlias;
 	}
 	
-	private static String joinOne(String alias, String parentAlias, SqlQuery result, Field f, Class<?> type) {
+	private String joinOne(String alias, SqlQuery result, Field f, Class<?> type) {
 		String tableName = determineTableName(type);
-		String linkAlias = parentAlias == null ? f.getName() : (alias + "." + f.getName());
+		String linkAlias = alias.equals(rootAlias) ? f.getName() : (alias + "." + f.getName());
 		
 		SqlExpression joinCondition = null;
 		if (f.getAnnotation(JoinCondition.class) != null) {
@@ -220,9 +219,9 @@ public class QueryBuilder<T> {
 		return linkAlias;
 	}
 	
-	private void addField(SqlQuery result, SqlExpression expression, String fieldAlias, Field f) {
+	private void addField(SqlExpression expression, String fieldAlias, Field f) {
 		fieldMappings.put(fieldAlias, new SimpleFieldMapping(f));
-		result.addField(expression, fieldAlias);
+		query.addField(expression, fieldAlias);
 	}
 
 	private static String linkFieldName(Class<?> clz) {
