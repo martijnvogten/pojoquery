@@ -589,12 +589,17 @@ public class PojoQuery<T> {
 				String linktable = f.getAnnotation(Link.class).linktable();
 				if (!linktable.equals(Link.NONE)) {
 					String foreignvaluefield = f.getAnnotation(Link.class).foreignvaluefield();
+					String foreignidfieldName = f.getAnnotation(Link.class).foreignidfield();
 					if (!foreignvaluefield.equals(Link.NONE)) {
 						// A list of values
 						String idfield = tableAlias + "." + determineIdField(clz).getName();
 						String linktableAlias = combinedAlias(tableAlias, linktable, isPrincipalAlias);
 						String linkfield = "`" + linktableAlias + "`." + table + "_id";
-
+						if (!foreignidfieldName.equals(Link.NONE)) {
+							linkfield = "`" + linktableAlias + "`." + foreignidfieldName;
+						} else {
+							linkfield = "`" + linktableAlias + "`." + table + "_id";
+						}
 						q.addJoin("LEFT JOIN " + linktable + " `" + linktableAlias + "` ON " + linkfield + "=" + idfield);
 
 						q.addField("`" + linktableAlias + "`." + foreignvaluefield + " `" + combinedAlias(tableAlias, f.getName(), isPrincipalAlias) + ".value`");
