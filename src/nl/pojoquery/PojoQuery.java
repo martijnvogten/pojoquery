@@ -7,6 +7,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -21,11 +22,13 @@ import javax.sql.DataSource;
 
 import nl.pojoquery.QueryStructure.Alias;
 import nl.pojoquery.annotations.Embedded;
+import nl.pojoquery.annotations.FieldName;
 import nl.pojoquery.annotations.GroupBy;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Join;
 import nl.pojoquery.annotations.JoinCondition;
 import nl.pojoquery.annotations.Link;
+import nl.pojoquery.annotations.Link.DEFAULT;
 import nl.pojoquery.annotations.Other;
 import nl.pojoquery.annotations.Select;
 import nl.pojoquery.annotations.SubClasses;
@@ -204,7 +207,7 @@ public class PojoQuery<T> {
 			}
 		}
 
-		DB.update(db, new SqlExpression("DELETE FROM `" + tableName + "` WHERE " + implode(" AND ", whereClauses), Arrays.asList((Object) params)));
+		DB.update(db, new SqlExpression("DELETE FROM `" + tableName + "` WHERE " + implode(" AND ", whereClauses), params));
 	}
 
 	private T returnSingleRow(List<T> resultList) {
@@ -244,11 +247,12 @@ public class PojoQuery<T> {
 			String tableName = determineTableMapping(resultClass).get(0).tableName;
 			List<SqlExpression> result = new ArrayList<SqlExpression>();
 			for (Field field : idFields) {
+				idFields.get(0).setAccessible(true);
 				Object idvalue = idFields.get(0).get(entity);
 				if (idvalue == null) {
 					throw new MappingException("Cannot create wherecondition for entity with null value in idfield " + field.getName());
 				}
-				result.add(new SqlExpression("`" + tableName + "`." + field + "=?", Arrays.asList(idvalue)));
+				result.add(new SqlExpression("`" + tableName + "`." + field.getName() + "=?", Arrays.asList(idvalue)));
 			}
 			return result;
 		} catch (IllegalArgumentException e) {
@@ -612,12 +616,20 @@ public class PojoQuery<T> {
 						q.addJoin("LEFT JOIN " + linktable + " `" + linktableAlias + "` ON " + linkfield + "=" + idfield);
 
 						Class<?> foreignClass = f.getAnnotation(Link.class).resultClass();
+						if (foreignClass == DEFAULT.class) {
+							foreignClass  = determineComponentType(f);
+						}
 						List<TableMapping> foreignMapping = determineTableMapping(foreignClass);
 						String foreigntable = foreignMapping.get(0).tableName;
+						String foreignAlias = combinedAlias(linktableAlias, f.getName(), isPrincipalAlias);
+						String foreignIdFieldName = determineIdField(foreignClass).getName();
+						String foreignidfield = "`" + foreignAlias + "`." + foreignIdFieldName;
 						
 						String foreignlinkfield = "`" + linktableAlias + "`." + foreigntable + "_id";
-						String foreignAlias = combinedAlias(linktableAlias, f.getName(), isPrincipalAlias);
-						String foreignidfield = "`" + foreignAlias + "`." + determineIdField(foreignClass).getName();
+						String foreignlinkfieldname = f.getAnnotation(Link.class).foreignlinkfield();
+						if (!Link.NONE.equals(foreignlinkfieldname)) {
+							foreignlinkfield = "`" + linktableAlias + "`." + foreignlinkfieldname;
+						}
 
 						q.addJoin("LEFT JOIN " + foreigntable + " " + foreignAlias + " ON " + foreignlinkfield + "=" + foreignidfield);
 
@@ -636,8 +648,9 @@ public class PojoQuery<T> {
 				}
 				continue;
 			}
-			if (f.getType().isArray()) {
-				List<TableMapping> linkedMapping = determineTableMapping(f.getType().getComponentType());
+			if (f.getType().isArray() || Collection.class.isAssignableFrom(f.getType())) {
+				Class<?> componentType = determineComponentType(f);
+				List<TableMapping> linkedMapping = determineTableMapping(componentType);
 				if (linkedMapping.size() > 0) {
 					String joinCondition = null;
 					String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
@@ -646,7 +659,7 @@ public class PojoQuery<T> {
 						joinCondition = conditionAnn.value();
 					}
 					addOneToManyLink(q, tableAlias, table, foreignalias, linkedMapping.get(0).tableName, f.getName(), joinCondition);
-					addClassToQuery(q, foreignalias, f.getType().getComponentType(), joinPath);
+					addClassToQuery(q, foreignalias, componentType, joinPath);
 				}
 				continue;
 			} else {
@@ -668,19 +681,38 @@ public class PojoQuery<T> {
 			} else {
 				if (f.getAnnotation(Embedded.class) != null) {
 					String prefix = determinePrefix(f);
-
+					
 					String foreignalias = combinedAlias(tableAlias, f.getName(), isPrincipalAlias);
 					for (Field embeddedField : collectFieldsOfClass(f.getType())) {
-						q.addField("`" + tableAlias + "`." + prefix + embeddedField.getName() + " `" + foreignalias + "." + embeddedField.getName() + "`");
+						q.addField("`" + tableAlias + "`." + prefix + determineSqlFieldName(embeddedField) + " `" + foreignalias + "." + embeddedField.getName() + "`");
 					}
 					continue;
 				}
 
-				q.addField("`" + tableAlias + "`." + f.getName() + " `" + tableAlias + "." + f.getName() + "`");
+				q.addField("`" + tableAlias + "`." + determineSqlFieldName(f) + " `" + tableAlias + "." + f.getName() + "`");
 			}
 		}
 
 		joinPath.remove(joinPath.size() - 1);
+	}
+
+	private static String determineSqlFieldName(Field f) {
+		if (f.getAnnotation(FieldName.class) != null) {
+			return f.getAnnotation(FieldName.class).value();
+		}
+		return f.getName(); 
+	}
+
+	private static Class<?> determineComponentType(Field f) {
+		if (f.getType().isArray()) {
+			return f.getType().getComponentType();
+		}
+		if (f.getGenericType() instanceof ParameterizedType) {
+			ParameterizedType parameterizedType = (ParameterizedType) f.getGenericType();
+			return (Class<?>) parameterizedType.getActualTypeArguments()[0];
+		} else {
+			throw new MappingException("Could not determine componentType for " + f);
+		}
 	}
 
 	private static void sanityCheck(Class<?> clz) {
@@ -785,8 +817,8 @@ public class PojoQuery<T> {
 			}
 			if (f.getAnnotation(Link.class) != null) {
 				Class<?> linkedClass;
-				if (f.getType().isArray()) {
-					linkedClass = f.getType().getComponentType();
+				if (f.getType().isArray() || Collection.class.isAssignableFrom(f.getType())) {
+					linkedClass = determineComponentType(f);
 				} else {
 					linkedClass = f.getAnnotation(Link.class).resultClass();
 				}
@@ -801,8 +833,9 @@ public class PojoQuery<T> {
 			} else if (!f.getType().isPrimitive() && f.getAnnotation(Embedded.class) != null) {
 				Alias embedded = structure.createAlias(f.getName(), alias, f.getType(), f);
 				addFieldsToStructure(structure, embedded, null);
-			} else if (f.getType().isArray()) {
-				addClassToStructure(structure, f.getName(), alias, f.getType().getComponentType(), f);
+			} else if (f.getType().isArray() || Collection.class.isAssignableFrom(f.getType())) {
+				Class<?> componentType = determineComponentType(f);
+				addClassToStructure(structure, f.getName(), alias, componentType, f);
 			} else {
 				nonLinkFields.add(f);
 			}
@@ -987,7 +1020,7 @@ public class PojoQuery<T> {
 	private static Map<String, Object> extractValues(Class<?> type, Object o) {
 		return extractValues(type, o, null);
 	}
-
+	
 	private static Map<String, Object> extractValues(Class<?> type, Object o, Class<?> stopAtSuperclass) {
 		try {
 			Map<String, Object> values = new HashMap<String, Object>();
@@ -1015,8 +1048,20 @@ public class PojoQuery<T> {
 							values.put(prefix + embeddedField, embeddedVals.get(embeddedField));
 						}
 					}
+				} else if (f.getAnnotation(Link.class) != null) {
+				} else if (f.getType().isArray() || Collection.class.isAssignableFrom(f.getType())) {
+				} else if (!f.getType().isPrimitive() && f.getType().getAnnotation(Table.class) != null) {
+					// Linked entity.
+					Field idField = determineIdField(f.getType());
+					if (val == null) {
+						values.put(f.getName() + "_id", null);
+					} else {
+						idField.setAccessible(true);
+						Object idValue = idField.get(val);
+						values.put(f.getName() + "_id", idValue);
+					}
 				} else {
-					values.put(f.getName(), val);
+					values.put(determineSqlFieldName(f), val);
 				}
 			}
 			return values;

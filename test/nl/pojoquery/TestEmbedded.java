@@ -6,16 +6,19 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import nl.pojoquery.annotations.Embedded;
-import nl.pojoquery.annotations.Table;
-
 import org.junit.Test;
+
+import nl.pojoquery.annotations.Embedded;
+import nl.pojoquery.annotations.FieldName;
+import nl.pojoquery.annotations.Table;
 
 public class TestEmbedded {
 
 	static class Address {
 		String address;
 		String city;
+		@FieldName("postal_code")
+		String postalCode;
 	}
 	
 	@Table("user")
@@ -39,7 +42,8 @@ public class TestEmbedded {
 				"SELECT" +
 				" `user`.id `user.id`," +
 				" `user`.home_address `home.address`," +
-				" `user`.home_city `home.city`" +
+				" `user`.home_city `home.city`," +
+				" `user`.home_postal_code `home.postalCode`" +
 				" FROM user", TestUtils.norm(PojoQuery.build(User.class).toSql()));
 		
 		List<Map<String, Object>> result = Collections.singletonList(TestUtils.<String,Object>map(

@@ -12,4 +12,5 @@ public @interface Link {
 	Class<?> resultClass() default DEFAULT.class;
 	String foreignvaluefield() default NONE;
 	String foreignidfield() default NONE;
+	String foreignlinkfield() default NONE;
 }
