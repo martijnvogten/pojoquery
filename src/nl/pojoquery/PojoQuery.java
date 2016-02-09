@@ -96,7 +96,7 @@ public class PojoQuery<T> {
 		return this;
 	}
 
-	public PojoQuery<T> addWhere(String where) {
+	public PojoQuery<T> addWhere(SqlExpression where) {
 		query.addWhere(where);
 		return this;
 	}
@@ -444,4 +444,26 @@ public class PojoQuery<T> {
 	public List<T> processRows(List<Map<String, Object>> rows) {
 		return queryBuilder.processRows(rows);
 	}
+
+	@SuppressWarnings("unchecked")
+	public <PK> List<PK> listIds(DataSource db) {
+		List<Field> idFields = QueryBuilder.determineIdFields(resultClass);
+		SqlExpression stmt = queryBuilder.buildListIdsStatement(idFields);
+		List<Map<String, Object>> rows = DB.queryRows(db, stmt);
+		if (idFields.size() > 1) {
+			return (List<PK>) rows;
+		}
+		List<PK> result = new ArrayList<PK>();
+		for (Map<String, Object> r : rows) {
+			result.add((PK) r.values().iterator().next());
+		}
+		return result;
+	}
+	
+	public int countTotal(DataSource db) {
+		SqlExpression stmt = queryBuilder.buildCountStatement();
+		List<Map<String, Object>> rows = DB.queryRows(db, stmt);
+		return ((Long) rows.get(0).values().iterator().next()).intValue();
+	}
+
 }

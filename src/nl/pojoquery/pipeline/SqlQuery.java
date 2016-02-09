@@ -118,8 +118,8 @@ public class SqlQuery {
 		return this;
 	}
 
-	public SqlQuery addWhere(String where) {
-		wheres.add(new SqlExpression(where));
+	public SqlQuery addWhere(SqlExpression where) {
+		wheres.add(where);
 		return this;
 	}
 
