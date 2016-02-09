@@ -4,6 +4,7 @@ import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +12,7 @@ import java.util.Map;
 import javax.sql.DataSource;
 
 import nl.pojoquery.annotations.Embedded;
+import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Other;
 import nl.pojoquery.internal.MappingException;
 import nl.pojoquery.internal.TableMapping;
@@ -295,10 +297,22 @@ public class PojoQuery<T> {
 						for (String embeddedField : embeddedVals.keySet()) {
 							values.put(prefix + embeddedField, embeddedVals.get(embeddedField));
 						}
+					} 
+				} else if (f.getAnnotation(Link.class) != null) {
+				} else if (f.getType().isArray() || Collection.class.isAssignableFrom(f.getType())) {
+				} else if (QueryBuilder.isLinkedClass(f.getType())) {
+					// Linked entity.
+					if (val == null) {
+						values.put(f.getName() + "_id", null);
+					} else {
+						Field idField = QueryBuilder.determineIdField(f.getType());
+						idField.setAccessible(true);
+						Object idValue = idField.get(val);
+						values.put(f.getName() + "_id", idValue);
 					}
-				} else {
-					values.put(f.getName(), val);
-				}
+                } else {
+                	values.put(QueryBuilder.determineSqlFieldName(f), val);
+                }
 			}
 			return values;
 		} catch (IllegalArgumentException e) {
@@ -404,11 +418,12 @@ public class PojoQuery<T> {
 			String tableName = QueryBuilder.determineTableMapping(resultClass).get(0).tableName;
 			List<SqlExpression> result = new ArrayList<SqlExpression>();
 			for (Field field : idFields) {
-				Object idvalue = idFields.get(0).get(entity);
+				field.setAccessible(true);
+				Object idvalue = field.get(entity);
 				if (idvalue == null) {
 					throw new MappingException("Cannot create wherecondition for entity with null value in idfield " + field.getName());
 				}
-				result.add(new SqlExpression("`" + tableName + "`." + field + "=?", Arrays.asList(idvalue)));
+				result.add(new SqlExpression("`" + tableName + "`." + field.getName() + "=?", Arrays.asList(idvalue)));
 			}
 			return result;
 		} catch (IllegalArgumentException e) {

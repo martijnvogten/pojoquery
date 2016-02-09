@@ -176,15 +176,20 @@ public class QueryBuilder<T> {
 				if (f.getAnnotation(Select.class) != null) {
 					selectExpression = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(Select.class).value()), alias);
 				} else {
-					String fieldName = f.getName();
-					if (f.getAnnotation(FieldName.class) != null) {
-						fieldName = f.getAnnotation(FieldName.class).value();
-					}
+					String fieldName = determineSqlFieldName(f);
 					selectExpression = new SqlExpression("{" + alias + "}." + fieldName);
 				}
 				addField(selectExpression, fieldsAlias + "." + f.getName(), f);
 			}
 		}
+	}
+
+	public static String determineSqlFieldName(Field f) {
+		String fieldName = f.getName();
+		if (f.getAnnotation(FieldName.class) != null) {
+			fieldName = f.getAnnotation(FieldName.class).value();
+		}
+		return fieldName;
 	}
 
 	private String joinMany(String alias, SqlQuery result, Field f, Class<?> componentType) {
@@ -243,7 +248,7 @@ public class QueryBuilder<T> {
 		return type.isArray() || Iterable.class.isAssignableFrom(type);
 	}
 
-	private static boolean isLinkedClass(Class<?> type) {
+	public static boolean isLinkedClass(Class<?> type) {
 		return !type.isPrimitive() && QueryBuilder.determineTableMapping(type).size() > 0;
 	}
 	
