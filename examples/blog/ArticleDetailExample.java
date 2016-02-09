@@ -4,9 +4,11 @@ import java.util.Date;
 
 import javax.sql.DataSource;
 
-import nl.pojoquery.PojoQuery;
+import nl.pojoquery.DB;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
+import nl.pojoquery.pipeline.QueryBuilder;
+import nl.pojoquery.pipeline.SqlQuery;
 
 public class ArticleDetailExample {
 	
@@ -54,13 +56,13 @@ public class ArticleDetailExample {
 	public static void main(String[] args) {
 		DataSource db = BlogDb.create("localhost", "pojoquery_blog", "root", "");
 		
-		PojoQuery<ArticleDetail> q = PojoQuery.build(ArticleDetail.class)
+		QueryBuilder<ArticleDetail> qb = QueryBuilder.from(ArticleDetail.class);
+		SqlQuery q = qb.getQuery()
 				.addWhere("article.id=?", 1L)
 				.addOrderBy("comments.submitdate DESC");
+		System.out.println(q.toStatement().getSql());
 		
-		System.out.println(q.toSql());
-		
-		for(ArticleDetail article : q.execute(db)) {
+		for(ArticleDetail article : qb.processRows(DB.queryRows(db, q.toStatement()))) {
 			if (article.comments != null) {
 				System.out.println("Article #" + article.id + " by " + article.author.getFullName() + " has " + article.comments.length + " comments");
 				for(CommentDetail comment : article.comments) {

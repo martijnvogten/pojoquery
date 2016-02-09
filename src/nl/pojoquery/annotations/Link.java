@@ -11,4 +11,6 @@ public @interface Link {
 	String linktable() default NONE;
 	Class<?> resultClass() default DEFAULT.class;
 	String fetchColumn() default NONE;
+	String foreignidfield() default NONE;
+	String foreignlinkfield() default NONE;
 }
