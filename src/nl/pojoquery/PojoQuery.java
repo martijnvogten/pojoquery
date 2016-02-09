@@ -440,4 +440,8 @@ public class PojoQuery<T> {
 		}
 		return idFields;
 	}
+
+	public List<T> processRows(List<Map<String, Object>> rows) {
+		return queryBuilder.processRows(rows);
+	}
 }
