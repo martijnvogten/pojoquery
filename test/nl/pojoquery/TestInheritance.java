@@ -78,10 +78,8 @@ public class TestInheritance {
 	
 	@Test
 	public void testSubClasses() {
-		QueryBuilder<Room> b = QueryBuilder.from(Room.class);
-		String sql = b.toStatement().getSql();
-		
-		System.out.println(sql);
+		PojoQuery<Room> b = PojoQuery.build(Room.class);
+		String sql = b.toSql();
 		
 		assertEquals(
 				norm("SELECT\n" + 
@@ -97,7 +95,7 @@ public class TestInheritance {
 				norm(sql));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
-					"room.id", "room.area", "bedroom.id", "bedroom.numberOfBeds", "kitchen.id", "kitchen.hasDishWasher" }, 
+					"room.id", "room.area", "room.bedroom.id", "room.bedroom.numberOfBeds", "room.kitchen.id", "room.kitchen.hasDishWasher" }, 
 				     1L,        100.0,       1L,           1,                      null,         null,
 				     2L,        40.0,        null,         null,                   2L,           true);
 		
@@ -115,9 +113,9 @@ public class TestInheritance {
 		System.out.println(sql);
 		assertEquals(
 				norm("SELECT\n" + 
+						" `bedroom`.numberOfBeds AS `bedroom.numberOfBeds`,\n" + 
 						" `bedroom.room`.id AS `bedroom.id`,\n" + 
-						" `bedroom.room`.area AS `bedroom.area`,\n" + 
-						" `bedroom`.numberOfBeds AS `bedroom.numberOfBeds`\n" + 
+						" `bedroom.room`.area AS `bedroom.area`\n" + 
 						"FROM bedroom\n" + 
 						" INNER JOIN room AS `bedroom.room` ON `bedroom.room`.id = `bedroom`.id"),
 				norm(sql));
@@ -136,16 +134,17 @@ public class TestInheritance {
 	public void testSuperClassOfLinked() {
 		String sql = QueryBuilder.from(ApartmentWithSpecificProperties.class).toStatement().getSql();
 		System.out.println(sql);
-		assertEquals(norm(
+		assertEquals(
+			norm(
 				"SELECT\n" + 
 				" `apartment`.id AS `apartment.id`,\n" + 
+				" `bedrooms`.numberOfBeds AS `bedrooms.numberOfBeds`,\n" + 
 				" `bedrooms.room`.id AS `bedrooms.id`,\n" + 
-				" `bedrooms.room`.area AS `bedrooms.area`,\n" + 
-				" `bedrooms`.numberOfBeds AS `bedrooms.numberOfBeds`\n" + 
-				"FROM apartment \n" + 
+				" `bedrooms.room`.area AS `bedrooms.area`\n" + 
+				"FROM apartment\n" + 
 				" LEFT JOIN bedroom AS `bedrooms` ON `apartment`.id = `bedrooms`.apartment_id\n" + 
-				" INNER JOIN room AS `bedrooms.room` ON `bedrooms.room`.id = `bedrooms`.id\n" + 
-				""), norm(sql));
+				" INNER JOIN room AS `bedrooms.room` ON `bedrooms.room`.id = `bedrooms`.id"), 
+			norm(sql));
 	}
 	
 	@Test

@@ -12,6 +12,7 @@ import java.util.Map;
 import javax.sql.DataSource;
 
 import nl.pojoquery.annotations.Embedded;
+import nl.pojoquery.annotations.Join;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Other;
 import nl.pojoquery.internal.MappingException;
@@ -31,6 +32,10 @@ public class PojoQuery<T> {
 		this.resultClass = clz;
 		this.queryBuilder = QueryBuilder.from(clz);
 		this.query = queryBuilder.getQuery();
+		Join joinAnn = clz.getAnnotation(Join.class);
+		if (joinAnn != null) {
+			query.addJoin(joinAnn.type(), joinAnn.tableName(), joinAnn.alias(), SqlExpression.sql(joinAnn.joinCondition()));
+		}
 	}
 
 	public static <T> PojoQuery<T> build(Class<T> clz) {
@@ -393,7 +398,8 @@ public class PojoQuery<T> {
 	}
 	private static List<SqlExpression> buildIdCondition(Class<?> resultClass, Object id) {
 		List<Field> idFields = assertIdFields(resultClass);
-		String tableName = QueryBuilder.determineTableMapping(resultClass).get(0).tableName;
+		List<TableMapping> tables = QueryBuilder.determineTableMapping(resultClass);
+		String tableName = tables.get(tables.size() - 1).tableName;
 		if (idFields.size() == 1) {
 			return Arrays.asList(new SqlExpression("`" + tableName + "`." + idFields.get(0).getName() + "=?", Arrays.asList((Object) id)));
 		} else {

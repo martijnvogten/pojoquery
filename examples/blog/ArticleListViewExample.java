@@ -11,11 +11,12 @@ import nl.pojoquery.PojoQuery;
 import nl.pojoquery.annotations.GroupBy;
 import nl.pojoquery.annotations.Join;
 import nl.pojoquery.annotations.Select;
+import nl.pojoquery.pipeline.SqlQuery.JoinType;
 
 
 public class ArticleListViewExample {
 	
-	@Join("LEFT JOIN comment ON comment.article_id = article.id")
+	@Join(type=JoinType.LEFT, tableName="comment", alias="comment", joinCondition="comment.article_id = article.id")
 	@GroupBy("article.id")
 	public static class ArticleListView extends Article {
 		public User author;

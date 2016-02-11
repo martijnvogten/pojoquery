@@ -178,7 +178,7 @@ public class SqlQuery {
 		return new SqlExpression(result.toString(), parameters);
 	}
 
-	public static SqlExpression toStatement(SqlExpression selectClause, String from, List<SqlJoin> joins, List<SqlExpression> wheres, List<String> groupBy,
+	public SqlExpression toStatement(SqlExpression selectClause, String from, List<SqlJoin> joins, List<SqlExpression> wheres, List<String> groupBy,
 			List<String> orderBy, int offset, int rowCount) {
 
 		List<Object> params = new ArrayList<Object>();
@@ -188,7 +188,7 @@ public class SqlQuery {
 		Iterables.addAll(params, whereClause.getParameters());
 
 		String groupByClause = buildClause("GROUP BY", groupBy);
-		String orderByClause = buildClause("ORDER BY", orderBy);
+		String orderByClause = resolveAliases(SqlExpression.sql(buildClause("ORDER BY", orderBy)), getTable()).getSql();
 		String limitClause = buildLimitClause(offset, rowCount);
 
 		ArrayList<SqlExpression> joinExpressions = new ArrayList<SqlExpression>();
@@ -227,13 +227,13 @@ public class SqlQuery {
 		return limitClause;
 	}
 
-	private static SqlExpression buildWhereClause(List<SqlExpression> parts) {
+	private SqlExpression buildWhereClause(List<SqlExpression> parts) {
 		List<Object> parameters = new ArrayList<Object>();
 		String whereClause = "";
 		if (parts.size() > 0) {
 			List<String> clauses = new ArrayList<String>();
 			for (SqlExpression exp : parts) {
-				clauses.add(exp.getSql());
+				clauses.add(resolveAliases(exp, getTable()).getSql());
 				for (Object o : exp.getParameters()) {
 					parameters.add(o);
 				}
@@ -273,6 +273,14 @@ public class SqlQuery {
 		public String getName() {
 			return name;
 		}
+	}
+
+	public int getOffset() {
+		return this.offset;
+	}
+
+	public int getRowCount() {
+		return this.rowCount;
 	}
 
 }

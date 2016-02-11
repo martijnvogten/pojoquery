@@ -36,7 +36,7 @@ public class TestCollections {
 		@Id
 		Long id;
 		
-		@Link(linktable="user_roles", fetchColumn="element", resultClass=Role.class)
+		@Link(linktable="user_roles", fetchColumn="element")
 		Set<Role> roles;
 	}
 	

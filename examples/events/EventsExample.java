@@ -18,13 +18,13 @@ import nl.pojoquery.integrationtest.MysqlDatabases;
 public class EventsExample {
 	
 	public static class EventWithPersons extends Event {
-		@Link(linktable="event_person", resultClass=Person.class)
+		@Link(linktable="event_person")
 		public List<Person> persons;
 
 	}
 	
 	public static class PersonWithEvents extends Person {
-		@Link(linktable="event_person", resultClass=Event.class)
+		@Link(linktable="event_person")
 		private List<Event> events;
 		
 		public List<Event> getEvents() {

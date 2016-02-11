@@ -9,8 +9,11 @@ public class Alias {
 	private Class<?> resultClass;
 	private String parentAlias;
 	private Field linkField;
+	private Field otherField = null;
 	private List<Field> idFields;
+	private List<String> subClassAliases;
 	private boolean isLinkedValue;
+	private boolean isASubClass;
 
 	public Alias(String alias, Class<?> resultClass, String parentAlias, Field linkField, List<Field> idFields) {
 		this.alias = alias;
@@ -68,6 +71,30 @@ public class Alias {
 	public String toString() {
 		return "Alias [alias=" + alias + ", resultClass=" + resultClass + ", parentAlias=" + parentAlias
 				+ ", linkField=" + linkField + ", idFields=" + idFields + ", isLinkedValue=" + isLinkedValue + "]";
+	}
+
+	public Field getOtherField() {
+		return otherField;
+	}
+
+	public void setOtherField(Field f) {
+		this.otherField = f;
+	}
+
+	public void setSubClassAliases(List<String> subClassAliases) {
+		this.subClassAliases = subClassAliases;
+	}
+
+	public List<String> getSubClassAliases() {
+		return subClassAliases;
+	}
+
+	public void setIsASubClass(boolean isASubClass) {
+		this.isASubClass = isASubClass;
+	}
+
+	public boolean getIsASubClass() {
+		return this.isASubClass;
 	}
 	
 }

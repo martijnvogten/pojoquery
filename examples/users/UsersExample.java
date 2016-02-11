@@ -37,6 +37,7 @@ public class UsersExample {
 	
 	@Table("user")
 	public static class UserRef {
+		@Id
 		public Long id;
 		public String firstName;
 		public String lastName;

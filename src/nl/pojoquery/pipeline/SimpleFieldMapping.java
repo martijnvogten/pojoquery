@@ -19,6 +19,7 @@ public class SimpleFieldMapping implements FieldMapping {
 			if (value instanceof String && f.getType().isEnum()) {
 				value = QueryBuilder.enumValueOf(f.getType(), (String)value);
 			}
+			f.setAccessible(true);
 			f.set(targetEntity, value);
 		} catch (IllegalArgumentException | IllegalAccessException e) {
 			throw new MappingException("Exception setting value of field " + f + " of entity " + targetEntity, e);

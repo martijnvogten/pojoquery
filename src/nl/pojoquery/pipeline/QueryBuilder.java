@@ -22,6 +22,7 @@ import nl.pojoquery.annotations.FieldName;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.JoinCondition;
 import nl.pojoquery.annotations.Link;
+import nl.pojoquery.annotations.Other;
 import nl.pojoquery.annotations.Select;
 import nl.pojoquery.annotations.SubClasses;
 import nl.pojoquery.annotations.Table;
@@ -41,6 +42,7 @@ public class QueryBuilder<T> {
 	public static class IdValue extends ArrayList<Object> {
 	}
 
+	private LinkedHashMap<String,Alias> subClasses = new LinkedHashMap<>();
 	private LinkedHashMap<String,Alias> aliases = new LinkedHashMap<>();
 	private Map<String,FieldMapping> fieldMappings = new HashMap<>();
 	
@@ -65,14 +67,14 @@ public class QueryBuilder<T> {
 	}
 	
 	public SqlExpression buildListIdsStatement(List<Field> idFields) {
-		return SqlQuery.toStatement(new SqlExpression("SELECT DISTINCT " + implode("\n , ", QueryBuilder.getFieldNames(query.getTable(), idFields))), query.getTable(), query.getJoins(), query.getWheres(), null, query.getOrderBy(), -1, -1);
+		return query.toStatement(new SqlExpression("SELECT DISTINCT " + implode("\n , ", QueryBuilder.getFieldNames(query.getTable(), idFields))), query.getTable(), query.getJoins(), query.getWheres(), null, query.getOrderBy(), query.getOffset(), query.getRowCount());
 	}
 
 	public SqlExpression buildCountStatement() {
 		List<Field> idFields = QueryBuilder.determineIdFields(resultClass);
 		String selectClause = "SELECT COUNT(DISTINCT " + implode(", ", QueryBuilder.getFieldNames(query.getTable(), idFields)) + ") ";
 
-		return SqlQuery.toStatement(new SqlExpression(selectClause), query.getTable(), query.getJoins(), query.getWheres(), null, null, -1, -1);
+		return query.toStatement(new SqlExpression(selectClause), query.getTable(), query.getJoins(), query.getWheres(), null, null, -1, -1);
 	}
 
 	public SqlQuery getQuery() {
@@ -92,7 +94,7 @@ public class QueryBuilder<T> {
 	
 	private void addClass(Class<?> clz, String alias, String parentAlias, Field linkField) {
 		List<TableMapping> tableMappings = QueryBuilder.determineTableMapping(clz);
-		for(int i = 0; i < tableMappings.size(); i++) {
+		for(int i = tableMappings.size() - 1; i >= 0; i--) {
 			TableMapping mapping = tableMappings.get(i);
 			TableMapping superMapping = i > 0 ? tableMappings.get(i - 1) : null;
 			
@@ -111,7 +113,7 @@ public class QueryBuilder<T> {
 		if (subClassesAnn != null) {
 			TableMapping thisMapping = tableMappings.get(tableMappings.size() - 1);
 			Field thisIdField = QueryBuilder.determineIdField(thisMapping.clazz);
-			
+			List<String> subClassesAdded = new ArrayList<String>();
 			for (Class<?> subClass : subClassesAnn.value()) {
 				List<TableMapping> mappings = QueryBuilder.determineTableMapping(subClass);
 				TableMapping mapping = mappings.get(mappings.size() - 1);
@@ -120,13 +122,19 @@ public class QueryBuilder<T> {
 				String idField = QueryBuilder.determineIdField(mapping.clazz).getName();
 				
 				query.addJoin(JoinType.LEFT, mapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + idField + " = {" + alias + "}." + idField));
-				aliases.put(linkAlias, new Alias(linkAlias, mapping.clazz, alias, thisIdField, QueryBuilder.determineIdFields(mapping.clazz)));
+				Alias subClassAlias = new Alias(linkAlias, mapping.clazz, alias, thisIdField, QueryBuilder.determineIdFields(mapping.clazz));
+				subClassAlias.setIsASubClass(true);
+				aliases.put(linkAlias, subClassAlias);
+				subClasses.put(linkAlias, subClassAlias);
 				
 				// Also add the idfield of the linked alias, so we have at least one
 				addField(new SqlExpression("{" + linkAlias + "}." + idField), linkAlias + "." + idField, thisIdField);
 				
 				addFields(linkAlias, mapping.clazz, thisMapping.clazz);
+				
+				subClassesAdded.add(linkAlias);
 			}
+			aliases.get(alias).setSubClassAliases(subClassesAdded);
 		}
 
 	}
@@ -156,7 +164,29 @@ public class QueryBuilder<T> {
 						a.setIsLinkedValue(true);
 						aliases.put(linkAlias, a);
 						addField(new SqlExpression("{" + linkAlias + "}." + linkAnn.fetchColumn()), linkAlias + ".value", f);
+					} else {
+						
+						// Many to many
+						String linkAlias = alias.equals(rootAlias) ? linkAnn.linktable() : (alias + "." + linkAnn.linktable());
+						String idField = QueryBuilder.determineIdField(clz).getName();
+						String linkfieldname = linkAnn.linkfield();
+						if (Link.NONE.equals(linkfieldname)) {
+							linkfieldname = linkFieldName(clz);
+						}
+						query.addJoin(JoinType.LEFT, linkAnn.linktable(), linkAlias, new SqlExpression("{" + alias + "}." + idField + " = {" + linkAlias + "}." + linkFieldName(clz)));
+						
+						String foreignLinkAlias = alias.equals(rootAlias) ? f.getName() : (alias + "." + f.getName());
+						String foreignIdField = QueryBuilder.determineIdField(componentType).getName();
+						String foreignlinkfieldname = linkAnn.foreignlinkfield();
+						if (Link.NONE.equals(foreignlinkfieldname)) {
+							foreignlinkfieldname = linkFieldName(componentType);
+						}
+						query.addJoin(JoinType.LEFT, determineTableMapping(componentType).get(0).tableName, foreignLinkAlias, new SqlExpression("{" + linkAlias + "}." + foreignlinkfieldname + " = {" + foreignLinkAlias + "}." + foreignIdField));
+						
+						addClass(componentType, foreignLinkAlias, alias, f);
 					}
+					
+					
 				} else if (QueryBuilder.determineTableMapping(componentType).size() > 0) {
 					String linkAlias = joinMany(alias, query, f, componentType);
 					addClass(componentType, linkAlias, alias, f);
@@ -175,6 +205,8 @@ public class QueryBuilder<T> {
 					addField(new SqlExpression("{" + alias + "}." + prefix + fieldName), foreignAlias + "." + fieldName, embeddedField);
 				}
 				aliases.put(foreignAlias, new Alias(foreignAlias, f.getType(), alias, f, QueryBuilder.determineIdFields(f.getType())));
+			} else if (f.getAnnotation(Other.class) != null) {
+				aliases.get(alias).setOtherField(f);
 			} else {
 				SqlExpression selectExpression;
 				if (f.getAnnotation(Select.class) != null) {
@@ -256,6 +288,7 @@ public class QueryBuilder<T> {
 		return !type.isPrimitive() && QueryBuilder.determineTableMapping(type).size() > 0;
 	}
 	
+	@SuppressWarnings("unchecked")
 	public List<T> processRows(List<Map<String, Object>> rows) {
 		try {
 			List<T> result = new ArrayList<T>(rows.size());
@@ -263,18 +296,39 @@ public class QueryBuilder<T> {
 			
 			for(Map<String,Object> row : rows) {
 				Map<String, Values> onThisRow = collectValuesByAlias(row);
+				
+				onThisRow = remapSubClasses(onThisRow);
+				
 				for(Alias a : aliases.values()) {
 					Values values = onThisRow.get(a.getAlias());
-					if (allNulls(values)) {
+					if (values == null || allNulls(values)) {
 						continue;
 					}
 					IdValue id = createId(a.getAlias(), values, a.getIdFields());
 					if (a.getParentAlias() == null) {
 						// Primary alias
 						if (!allEntities.containsKey(id)) {
-							T entity = buildEntity(resultClass, values);
+							// Merge subclass values into the values for this entity
+							Values merged = values;
+							Class<?> entityClass = resultClass;
+							if (a.getSubClassAliases() != null) {
+								for(String subClassAlias : a.getSubClassAliases()) {
+									Values subClassValues = onThisRow.get(subClassAlias); 
+									if (subClassValues == null || allNulls(subClassValues)) {
+										continue;
+									}
+									
+									merged.putAll(onThisRow.get(subClassAlias));
+									onThisRow.remove(subClassAlias);
+									
+									entityClass = aliases.get(subClassAlias).getResultClass();
+								}
+							}
+							System.out.println("On this row" + onThisRow);
+							Object entity = buildEntity(entityClass, merged, a.getOtherField());
+							System.out.println("Built entity " + entity);
 							allEntities.put(id, entity);
-							result.add(entity);
+							result.add((T) entity);
 						}
 					} else {
 						// Find the parent
@@ -293,12 +347,11 @@ public class QueryBuilder<T> {
 							// Linked entity
 							Object entity = allEntities.get(id);
 							if (entity == null) {
-								entity = buildEntity(a.getResultClass(), values);
+								entity = buildEntity(a.getResultClass(), values, a.getOtherField());
 								allEntities.put(id, entity);
 							}
 							putValueIntoField(parent, a.getLinkField(), entity);
 						}
-						
 					}
 				}
 			}
@@ -309,6 +362,39 @@ public class QueryBuilder<T> {
 		}
 	}
 	
+	public Map<String, Values> remapSubClasses(Map<String, Values> onThisRow) {
+		Map<String,Values> result = new LinkedHashMap<>();
+		System.out.println(onThisRow);
+		
+		for(String alias : onThisRow.keySet()) {
+			Values values = onThisRow.get(alias);
+			
+			Alias a = aliases.get(alias);
+			if (a.getIsASubClass()) {
+				if (values == null || allNulls(values)) {
+					continue;
+				}
+				System.out.println("Found subclass!" + a.getAlias());
+				a.getParentAlias();
+			} else {
+			}
+			result.put(alias, values);
+		}
+		System.out.println(result);
+		return result;
+		// Create entities for non-null subclasses, remove null subclasses from values
+		// Reassign subclass values to parent alias
+		// Add the subclass as an entity
+//		for(Alias subClass : subClasses.values()) {
+//			String idField = subClass.getIdFields().get(0).getName();
+//			if (onThisRow.get(subClass.getAlias() + "." + idField) == null) {
+//				continue;
+//			}
+//			onThisRow.put(subClass.getParentAlias(), createInstance(subClass.getResultClass()));
+//		}
+//		return null;
+	}
+
 	@SuppressWarnings("unchecked")
 	private void putValueIntoField(Object parentEntity, Field linkField, Object entity) {
 		try {
@@ -382,12 +468,20 @@ public class QueryBuilder<T> {
 		return result;
 	}
 
-	private <E> E buildEntity(Class<E> resultClass, Values values) {
+	private <E> E buildEntity(Class<E> resultClass, Values values, Field otherField) {
 		if (allNulls(values)) {
 			return null;
 		}
 		E entity = QueryBuilder.createInstance(resultClass);
-		applyValues(entity, values);
+		Values other = applyValues(entity, values);
+		if (otherField != null) {
+			otherField.setAccessible(true);
+			try {
+				otherField.set(entity, other);
+			} catch (IllegalArgumentException | IllegalAccessException e) {
+				throw new MappingException(e);
+			}
+		}
 		return entity;
 	}
 
@@ -396,13 +490,23 @@ public class QueryBuilder<T> {
 		return (E) Enum.valueOf((Class<? extends Enum>) enumClass, name);
 	}
 
-	private void applyValues(Object entity, Values aliasValues) {
+	private Values applyValues(Object entity, Values aliasValues) {
+		Values other = new Values();
 		for(String fieldAlias : aliasValues.keySet()) {
 			FieldMapping mapping = fieldMappings.get(fieldAlias);
 			if (mapping != null) {
 				mapping.apply(entity, aliasValues.get(fieldAlias));
+			} else {
+				String fieldName = fieldAlias.substring(fieldAlias.lastIndexOf(".") + 1);
+//				Other otherAnn = alias.otherField.getAnnotation(Other.class);
+//				if (otherAnn != null && otherAnn.prefix().length() > 0) {
+//					// Remove prefix.
+//					fieldName = fieldName.substring(otherAnn.prefix().length());
+//				}
+				other.put(fieldName, aliasValues.get(fieldAlias));
 			}
 		}
+		return other;
 	}
 
 	private static boolean allNulls(Map<String, Object> values) {
