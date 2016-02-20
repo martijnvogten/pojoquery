@@ -5,6 +5,7 @@ import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,7 @@ import java.util.Map;
 import javax.sql.DataSource;
 
 import nl.pojoquery.annotations.Embedded;
+import nl.pojoquery.annotations.GroupBy;
 import nl.pojoquery.annotations.Join;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Other;
@@ -35,6 +37,12 @@ public class PojoQuery<T> {
 		Join joinAnn = clz.getAnnotation(Join.class);
 		if (joinAnn != null) {
 			query.addJoin(joinAnn.type(), joinAnn.tableName(), joinAnn.alias(), SqlExpression.sql(joinAnn.joinCondition()));
+		}
+		GroupBy groupByAnn = clz.getAnnotation(GroupBy.class);
+		if (groupByAnn != null) {
+			for(String groupBy : groupByAnn.value()) {
+				query.addGroupBy(groupBy);
+			}
 		}
 	}
 
@@ -167,6 +175,9 @@ public class PojoQuery<T> {
 		// If the class hierarchy contains multiple tables, create separate
 		// inserts
 		List<TableMapping> tables = QueryBuilder.determineTableMapping(type);
+		if (tables.size() == 0) {
+			throw new MappingException("Missing @Table annotation on class " + type.getName() + " or any of its superclasses");
+		}
 
 		if (tables.size() == 1) {
 			PK ids;
@@ -304,7 +315,12 @@ public class PojoQuery<T> {
 						}
 					} 
 				} else if (f.getAnnotation(Link.class) != null) {
-				} else if (f.getType().isArray() || Collection.class.isAssignableFrom(f.getType())) {
+				} else if (f.getType().isArray()) {
+					if (f.getType().getComponentType().isPrimitive()) {
+						// Data like byte[] long[]
+						values.put(QueryBuilder.determineSqlFieldName(f), val);
+					}
+				} else if (Collection.class.isAssignableFrom(f.getType())) {
 				} else if (QueryBuilder.isLinkedClass(f.getType())) {
 					// Linked entity.
 					if (val == null) {
@@ -369,22 +385,56 @@ public class PojoQuery<T> {
 		return returnSingleRow(execute(db));
 	}
 
+	public static void delete(Connection conn, Object entity) {
+		delete(conn, null, entity);
+	}
+	
 	public static void delete(DataSource db, Object entity) {
-		for (TableMapping table : QueryBuilder.determineTableMapping(entity.getClass())) {
-			executeDelete(db, table.tableName, buildIdConditionFromEntity(entity.getClass(), entity));
+		delete(null, db, entity);
+	}
+	
+	private static void delete(Connection conn, DataSource db, Object entity) {
+		try {
+			List<TableMapping> mapping = QueryBuilder.determineTableMapping(entity.getClass());
+			List<Field> idFields = QueryBuilder.determineIdFields(entity.getClass());
+			Collections.reverse(mapping);
+			for (TableMapping table : mapping) {
+				List<SqlExpression> whereCondition = new ArrayList<>();
+				for (Field field : idFields) {
+					field.setAccessible(true);
+						Object idvalue;
+						idvalue = field.get(entity);
+					if (idvalue == null) {
+						throw new MappingException("Cannot create wherecondition for entity with null value in idfield " + field.getName());
+					}
+					whereCondition.add(new SqlExpression("`" + table.tableName + "`." + field.getName() + "=?", Arrays.asList(idvalue)));
+				}
+				if (db != null) {
+					executeDelete(null, db, table.tableName, whereCondition);
+				} else {
+					executeDelete(conn, null, table.tableName, whereCondition);
+				}
+			}
+		} catch (IllegalArgumentException | IllegalAccessException e) {
+			throw new MappingException(e);
 		}
 	}
 	
 	public static void deleteById(DataSource db, Class<?> clz, Object id) {
 		for (TableMapping table : QueryBuilder.determineTableMapping(clz)) {
 			List<SqlExpression> wheres = buildIdCondition(table.clazz, id);
-			executeDelete(db, table.tableName, wheres);
+			executeDelete(null, db, table.tableName, wheres);
 		}
 	}
 
-	private static void executeDelete(DataSource db, String tableName, List<SqlExpression> where) {
+	private static void executeDelete(Connection conn, DataSource db, String tableName, List<SqlExpression> where) {
 		SqlExpression wheres = SqlExpression.implode(" AND ", where);
-		DB.update(db, new SqlExpression("DELETE FROM `" + tableName + "` WHERE " + wheres.getSql(), wheres.getParameters()));
+		SqlExpression deleteStatement = new SqlExpression("DELETE FROM `" + tableName + "` WHERE " + wheres.getSql(), wheres.getParameters());
+		if (db != null) {
+			DB.update(db, deleteStatement);
+		} else {
+			DB.update(conn, deleteStatement);
+		}
 	}
 
 	private T returnSingleRow(List<T> resultList) {
@@ -418,27 +468,6 @@ public class PojoQuery<T> {
 		}
 	}
 
-	private static List<SqlExpression> buildIdConditionFromEntity(Class<?> resultClass, Object entity) {
-		try {
-			List<Field> idFields = assertIdFields(resultClass);
-			String tableName = QueryBuilder.determineTableMapping(resultClass).get(0).tableName;
-			List<SqlExpression> result = new ArrayList<SqlExpression>();
-			for (Field field : idFields) {
-				field.setAccessible(true);
-				Object idvalue = field.get(entity);
-				if (idvalue == null) {
-					throw new MappingException("Cannot create wherecondition for entity with null value in idfield " + field.getName());
-				}
-				result.add(new SqlExpression("`" + tableName + "`." + field.getName() + "=?", Arrays.asList(idvalue)));
-			}
-			return result;
-		} catch (IllegalArgumentException e) {
-			throw new MappingException(e);
-		} catch (IllegalAccessException e) {
-			throw new MappingException(e);
-		}
-	}
-	
 	private static List<Field> assertIdFields(Class<?> resultClass) {
 		List<Field> idFields = QueryBuilder.determineIdFields(resultClass);
 		if (idFields.size() == 0) {

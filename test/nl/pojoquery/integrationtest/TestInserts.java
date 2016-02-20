@@ -22,6 +22,13 @@ public class TestInserts {
 		Long id;
 	}
 	
+	@Table("file")
+	public static class File {
+		@Id
+		Long id;
+		byte[] data;
+	}
+	
 	@Test
 	public void testInserts() {
 		DataSource db = initDatabase();

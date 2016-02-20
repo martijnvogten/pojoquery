@@ -11,7 +11,7 @@ import nl.pojoquery.pipeline.QueryBuilder;
 
 import org.junit.Test;
 
-public class TestPipelineBasics {
+public class TestBasics {
 	
 	@Table("user")
 	public static class User {
