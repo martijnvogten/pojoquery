@@ -126,8 +126,10 @@ public class TestInheritance {
 		
 		List<BedRoom> list = QueryBuilder.from(BedRoom.class).processRows(result);
 		Assert.assertEquals(1, list.size());
-		Assert.assertTrue(list.get(0) instanceof BedRoom);
-		Assert.assertEquals(100.0F, list.get(0).area, 0.1F);
+		BedRoom bedroom = list.get(0);
+		Assert.assertTrue(bedroom instanceof BedRoom);
+		Assert.assertEquals(100.0F, bedroom.area, 0.1F);
+		Assert.assertEquals((Integer)1, bedroom.numberOfBeds);
 	}
 	
 	@Test

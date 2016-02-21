@@ -139,9 +139,11 @@ public class TestInheritanceWithJoins {
 		
 		List<BedRoom> list = QueryBuilder.from(BedRoom.class).processRows(result);
 		Assert.assertEquals(1, list.size());
-		Assert.assertTrue(list.get(0) instanceof BedRoom);
-		Assert.assertEquals(100.0F, list.get(0).area, 0.1F);
-		Assert.assertEquals("Unity Street 1", list.get(0).house.address);
+		BedRoom bedroom = list.get(0);
+		Assert.assertTrue(bedroom instanceof BedRoom);
+		Assert.assertEquals(100.0F, bedroom.area, 0.1F);
+		Assert.assertEquals((Integer)1, bedroom.numberOfBeds);
+		Assert.assertEquals("Unity Street 1", bedroom.house.address);
 	}
 	
 	@Test
@@ -166,7 +168,8 @@ public class TestInheritanceWithJoins {
 	
 	@Test
 	public void testDeeper() {
-		String sql = QueryBuilder.from(Apartment.class).toStatement().getSql();
+		QueryBuilder<Apartment> qb = QueryBuilder.from(Apartment.class);
+		String sql = qb.toStatement().getSql();
 		assertEquals(
 				norm("SELECT\n" + 
 						" `apartment`.id AS `apartment.id`,\n" + 
@@ -184,6 +187,18 @@ public class TestInheritanceWithJoins {
 						" LEFT JOIN bedroom AS `rooms.bedroom` ON `rooms.bedroom`.id = `rooms`.id\n" + 
 						" LEFT JOIN kitchen AS `rooms.kitchen` ON `rooms.kitchen`.id = `rooms`.id"),
 				norm(sql));
+		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
+				"apartment.id", "rooms.id", "rooms.area", "rooms.house.id", "rooms.house.address", "rooms.bedroom.id", "rooms.bedroom.numberOfBeds", "rooms.kitchen.id", "rooms.kitchen.hasDishWasher" } 
+			     ,1L            ,1L         ,100.0        ,1L               ,"Unity Street 1"      ,1L                 ,2                            ,null               ,null
+			     );
+		List<Apartment> list = qb.processRows(result);
+		
+		Room[] rooms = list.get(0).rooms;
+		Assert.assertEquals(1, rooms.length);
+		Assert.assertTrue(rooms[0] instanceof BedRoom);
+		BedRoom bedroom = (BedRoom) rooms[0];
+		Assert.assertEquals((Integer)2, bedroom.numberOfBeds);
+		
 	}
 	
 }

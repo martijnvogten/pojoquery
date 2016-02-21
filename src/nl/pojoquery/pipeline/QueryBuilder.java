@@ -385,6 +385,7 @@ public class QueryBuilder<T> {
 							Class<?> entityClass = a.getResultClass();
 							if (a.getSubClassAliases() != null) {
 								Values merged = new Values();
+								
 								for(String subClassAlias : a.getSubClassAliases()) {
 									Values subClassValues = onThisRow.get(subClassAlias); 
 									if (subClassValues == null || allNulls(subClassValues)) {
@@ -394,6 +395,7 @@ public class QueryBuilder<T> {
 									merged.putAll(onThisRow.get(subClassAlias));
 									id = createId(subClassAlias, merged, a.getIdFields());
 									entityClass = aliases.get(subClassAlias).getResultClass();
+									values = merged;
 								}
 							}
 							
