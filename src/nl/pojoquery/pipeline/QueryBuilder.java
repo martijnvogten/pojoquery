@@ -20,9 +20,12 @@ import nl.pojoquery.FieldMapping;
 import nl.pojoquery.SqlExpression;
 import nl.pojoquery.annotations.Embedded;
 import nl.pojoquery.annotations.FieldName;
+import nl.pojoquery.annotations.GroupBy;
 import nl.pojoquery.annotations.Id;
+import nl.pojoquery.annotations.Join;
 import nl.pojoquery.annotations.JoinCondition;
 import nl.pojoquery.annotations.Link;
+import nl.pojoquery.annotations.OrderBy;
 import nl.pojoquery.annotations.Other;
 import nl.pojoquery.annotations.Select;
 import nl.pojoquery.annotations.SubClasses;
@@ -59,6 +62,23 @@ public class QueryBuilder<T> {
 		this.resultClass = clz;
 		query = new SqlQuery();
 		query.setTable(determineTableName(clz));
+		Join joinAnn = clz.getAnnotation(Join.class);
+		if (joinAnn != null) {
+			query.addJoin(joinAnn.type(), joinAnn.tableName(), joinAnn.alias(), SqlExpression.sql(joinAnn.joinCondition()));
+		}
+		GroupBy groupByAnn = clz.getAnnotation(GroupBy.class);
+		if (groupByAnn != null) {
+			for(String groupBy : groupByAnn.value()) {
+				query.addGroupBy(groupBy);
+			}
+		}
+		OrderBy orderByAnn = clz.getAnnotation(OrderBy.class);
+		if (orderByAnn != null) {
+			for(String orderBy : orderByAnn.value()) {
+				query.addOrderBy(orderBy);
+			}
+		}
+
 		rootAlias = query.getTable();
 		addClass(clz, rootAlias, null, null);
 	}
@@ -385,7 +405,7 @@ public class QueryBuilder<T> {
 							Class<?> entityClass = a.getResultClass();
 							if (a.getSubClassAliases() != null) {
 								Values merged = new Values();
-								
+								merged.putAll(onThisRow.get(a.getAlias()));
 								for(String subClassAlias : a.getSubClassAliases()) {
 									Values subClassValues = onThisRow.get(subClassAlias); 
 									if (subClassValues == null || allNulls(subClassValues)) {
@@ -417,7 +437,7 @@ public class QueryBuilder<T> {
 			throw new MappingException(e);
 		}
 	}
-	
+
 	public Map<String, Values> remapSubClasses(Map<String, Values> onThisRow) {
 		Map<String,Values> result = new LinkedHashMap<>();
 		
@@ -584,6 +604,36 @@ public class QueryBuilder<T> {
 
     public Class<T> getResultClass() {
 		return resultClass;
+	}
+
+	public static List<Field> assertIdFields(Class<?> resultClass) {
+		List<Field> idFields = QueryBuilder.determineIdFields(resultClass);
+		if (idFields.size() == 0) {
+			throw new MappingException("No @Id annotations found on fields of class " + resultClass.getName());
+		}
+		return idFields;
+	}
+
+	public static List<SqlExpression> buildIdCondition(Class<?> resultClass, Object id) {
+		List<Field> idFields = assertIdFields(resultClass);
+		List<TableMapping> tables = QueryBuilder.determineTableMapping(resultClass);
+		String tableName = tables.get(tables.size() - 1).tableName;
+		if (idFields.size() == 1) {
+			return Arrays.asList(new SqlExpression("`" + tableName + "`." + idFields.get(0).getName() + "=?", Arrays.asList((Object) id)));
+		} else {
+			if (id instanceof Map) {
+				@SuppressWarnings("unchecked")
+				Map<String, Object> idvalues = (Map<String, Object>) id;
+	
+				List<SqlExpression> result = new ArrayList<SqlExpression>();
+				for (String field : idvalues.keySet()) {
+					result.add(new SqlExpression("`" + tableName + "`." + field + "=?", Arrays.asList((Object) idvalues.get(field))));
+				}
+				return result;
+			} else {
+				throw new MappingException("Multiple @Id annotations on class " + resultClass.getName() + ": expecting a map id.");
+			}
+		}
 	}
 
 	public static <T> T createInstance(Class<T> valClass) {

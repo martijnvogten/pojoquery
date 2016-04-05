@@ -13,8 +13,6 @@ import java.util.Map;
 import javax.sql.DataSource;
 
 import nl.pojoquery.annotations.Embedded;
-import nl.pojoquery.annotations.GroupBy;
-import nl.pojoquery.annotations.Join;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Other;
 import nl.pojoquery.internal.MappingException;
@@ -34,20 +32,15 @@ public class PojoQuery<T> {
 		this.resultClass = clz;
 		this.queryBuilder = QueryBuilder.from(clz);
 		this.query = queryBuilder.getQuery();
-		Join joinAnn = clz.getAnnotation(Join.class);
-		if (joinAnn != null) {
-			query.addJoin(joinAnn.type(), joinAnn.tableName(), joinAnn.alias(), SqlExpression.sql(joinAnn.joinCondition()));
-		}
-		GroupBy groupByAnn = clz.getAnnotation(GroupBy.class);
-		if (groupByAnn != null) {
-			for(String groupBy : groupByAnn.value()) {
-				query.addGroupBy(groupBy);
-			}
-		}
 	}
+	
 
 	public static <T> PojoQuery<T> build(Class<T> clz) {
 		return new PojoQuery<T>(clz);
+	}
+	
+	public SqlQuery getQuery() {
+		return query;
 	}
 
 	public List<SqlField> getFields() {
@@ -376,12 +369,12 @@ public class PojoQuery<T> {
 	}
 
 	public T findById(Connection connection, Object id) {
-		query.getWheres().addAll(buildIdCondition(resultClass, id));
+		query.getWheres().addAll(QueryBuilder.buildIdCondition(resultClass, id));
 		return returnSingleRow(execute(connection));
 	}
 
 	public T findById(DataSource db, Object id) {
-		query.getWheres().addAll(buildIdCondition(resultClass, id));
+		query.getWheres().addAll(QueryBuilder.buildIdCondition(resultClass, id));
 		return returnSingleRow(execute(db));
 	}
 
@@ -422,7 +415,7 @@ public class PojoQuery<T> {
 	
 	public static void deleteById(DataSource db, Class<?> clz, Object id) {
 		for (TableMapping table : QueryBuilder.determineTableMapping(clz)) {
-			List<SqlExpression> wheres = buildIdCondition(table.clazz, id);
+			List<SqlExpression> wheres = QueryBuilder.buildIdCondition(table.clazz, id);
 			executeDelete(null, db, table.tableName, wheres);
 		}
 	}
@@ -446,36 +439,7 @@ public class PojoQuery<T> {
 		}
 		return null;
 	}
-	private static List<SqlExpression> buildIdCondition(Class<?> resultClass, Object id) {
-		List<Field> idFields = assertIdFields(resultClass);
-		List<TableMapping> tables = QueryBuilder.determineTableMapping(resultClass);
-		String tableName = tables.get(tables.size() - 1).tableName;
-		if (idFields.size() == 1) {
-			return Arrays.asList(new SqlExpression("`" + tableName + "`." + idFields.get(0).getName() + "=?", Arrays.asList((Object) id)));
-		} else {
-			if (id instanceof Map) {
-				@SuppressWarnings("unchecked")
-				Map<String, Object> idvalues = (Map<String, Object>) id;
-
-				List<SqlExpression> result = new ArrayList<SqlExpression>();
-				for (String field : idvalues.keySet()) {
-					result.add(new SqlExpression("`" + tableName + "`." + field + "=?", Arrays.asList((Object) idvalues.get(field))));
-				}
-				return result;
-			} else {
-				throw new MappingException("Multiple @Id annotations on class " + resultClass.getName() + ": expecting a map id.");
-			}
-		}
-	}
-
-	private static List<Field> assertIdFields(Class<?> resultClass) {
-		List<Field> idFields = QueryBuilder.determineIdFields(resultClass);
-		if (idFields.size() == 0) {
-			throw new MappingException("No @Id annotations found on fields of class " + resultClass.getName());
-		}
-		return idFields;
-	}
-
+	
 	public List<T> processRows(List<Map<String, Object>> rows) {
 		return queryBuilder.processRows(rows);
 	}

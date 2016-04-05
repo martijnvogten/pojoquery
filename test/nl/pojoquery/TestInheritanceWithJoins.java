@@ -197,6 +197,7 @@ public class TestInheritanceWithJoins {
 		Assert.assertEquals(1, rooms.length);
 		Assert.assertTrue(rooms[0] instanceof BedRoom);
 		BedRoom bedroom = (BedRoom) rooms[0];
+		Assert.assertEquals((Double)100.0, bedroom.area);
 		Assert.assertEquals((Integer)2, bedroom.numberOfBeds);
 		
 	}

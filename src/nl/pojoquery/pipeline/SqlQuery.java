@@ -187,7 +187,7 @@ public class SqlQuery {
 		SqlExpression whereClause = buildWhereClause(wheres);
 		Iterables.addAll(params, whereClause.getParameters());
 
-		String groupByClause = buildClause("GROUP BY", groupBy);
+		String groupByClause = resolveAliases(SqlExpression.sql(buildClause("GROUP BY", groupBy)), getTable()).getSql();
 		String orderByClause = resolveAliases(SqlExpression.sql(buildClause("ORDER BY", orderBy)), getTable()).getSql();
 		String limitClause = buildLimitClause(offset, rowCount);
 
