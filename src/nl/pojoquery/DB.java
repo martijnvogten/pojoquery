@@ -54,6 +54,34 @@ public class DB {
 		return execute(db, QueryType.SELECT, sql, Arrays.asList(params), new RowProcessor() );
 	}
 	
+	public static Columns queryColumns(Connection conn, String sql, Object... params) {
+		return new Columns(execute(conn, QueryType.SELECT, sql, Arrays.asList(params), new ColumnProcessor()));
+	}
+	
+	public static Columns queryColumns(DataSource db, String sql, Object... params) {
+		return new Columns(execute(db, QueryType.SELECT, sql, Arrays.asList(params), new ColumnProcessor()));
+	}
+	
+	private static class ColumnProcessor implements ResultSetProcessor<List<List<Object>>> {
+		public List<List<Object>> process(ResultSet rs) {
+			List<List<Object>> result = new ArrayList<>();
+			try {
+				int columnCount = rs.getMetaData().getColumnCount();
+				for(int i = 0; i < columnCount; i++) {
+					result.add(new ArrayList<Object>());
+				}
+				while (rs.next()) {
+					for(int i = 0; i < columnCount; i++) {
+						result.get(i).add(rs.getObject(i + 1));
+					}
+				}
+				return result;
+			} catch (SQLException e) {
+				throw new DatabaseException(e);
+			}
+		}
+	}
+	
 	private static class RowProcessor implements ResultSetProcessor<List<Map<String, Object>>> {
 		public List<Map<String, Object>> process(ResultSet rs) {
 			List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
@@ -285,6 +313,21 @@ public class DB {
 				e.printStackTrace();
 			}
 		}
+	}
+
+	public static class Columns {
+
+		private List<List<Object>> data;
+
+		public Columns(List<List<Object>> data) {
+			this.data = data;
+		}
+		
+		@SuppressWarnings("unchecked")
+		public <T> List<T> get(int index) {
+			return (List<T>) data.get(index);
+		}
+
 	}
 
 }
