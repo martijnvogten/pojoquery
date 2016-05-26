@@ -14,6 +14,7 @@ import javax.sql.DataSource;
 
 import nl.pojoquery.annotations.Embedded;
 import nl.pojoquery.annotations.Link;
+import nl.pojoquery.annotations.NoUpdate;
 import nl.pojoquery.annotations.Other;
 import nl.pojoquery.internal.MappingException;
 import nl.pojoquery.internal.TableMapping;
@@ -306,7 +307,8 @@ public class PojoQuery<T> {
 						for (String embeddedField : embeddedVals.keySet()) {
 							values.put(prefix + embeddedField, embeddedVals.get(embeddedField));
 						}
-					} 
+					}
+				} else if (f.getAnnotation(NoUpdate.class) != null) {
 				} else if (f.getAnnotation(Link.class) != null) {
 				} else if (f.getType().isArray()) {
 					if (f.getType().getComponentType().isPrimitive()) {
