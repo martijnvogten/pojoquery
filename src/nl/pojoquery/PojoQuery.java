@@ -26,6 +26,7 @@ import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Join;
 import nl.pojoquery.annotations.JoinCondition;
 import nl.pojoquery.annotations.Link;
+import nl.pojoquery.annotations.NoUpdate;
 import nl.pojoquery.annotations.Other;
 import nl.pojoquery.annotations.Select;
 import nl.pojoquery.annotations.SubClasses;
@@ -1010,6 +1011,7 @@ public class PojoQuery<T> {
 							values.put(prefix + embeddedField, embeddedVals.get(embeddedField));
 						}
 					}
+				} else if (f.getAnnotation(NoUpdate.class) != null) {
 				} else {
 					values.put(f.getName(), val);
 				}
