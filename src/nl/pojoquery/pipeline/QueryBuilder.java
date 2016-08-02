@@ -135,6 +135,7 @@ public class QueryBuilder<T> {
 			Alias newAlias = new Alias(combinedAlias, mapping.clazz, parentAlias, linkField, QueryBuilder.determineIdFields(mapping.clazz));
 			if (previousAlias != null) {
 				newAlias.setSubClassAliases(Arrays.asList(previousAlias.getAlias()));
+				newAlias.setParentAlias(previousAlias.getAlias());
 			}
 			previousAlias = newAlias;
 			aliases.put(combinedAlias, newAlias);
@@ -272,6 +273,17 @@ public class QueryBuilder<T> {
 
 	private String joinMany(SqlQuery result, String alias, String fieldName, String tableName, String idField, String linkField, SqlExpression joinCondition) {
 		String linkAlias = alias.equals(rootAlias) ? fieldName : (alias + "." + fieldName);
+		Alias parentAlias = aliases.get(alias);
+		while (parentAlias.getSubClassAliases() != null && parentAlias.getSubClassAliases().size() == 1) {
+			String parentAliasStr = parentAlias.getParentAlias();
+			if (rootAlias.equals(parentAliasStr)) {
+				linkAlias = fieldName;
+				break;
+			}
+			linkAlias = parentAliasStr + "." + fieldName;
+			parentAlias = aliases.get(parentAliasStr);
+		}
+		
 		if (joinCondition == null) {
 			joinCondition = new SqlExpression("{" + alias + "}." + idField + " = {" + linkAlias + "}." + linkField);
 		}
@@ -282,6 +294,17 @@ public class QueryBuilder<T> {
 	private String joinOne(String alias, SqlQuery result, Field f, Class<?> type) {
 		String tableName = determineTableName(type);
 		String linkAlias = alias.equals(rootAlias) ? f.getName() : (alias + "." + f.getName());
+		
+		Alias parentAlias = aliases.get(alias);
+		while (parentAlias.getSubClassAliases() != null && parentAlias.getSubClassAliases().size() == 1) {
+			String parentAliasStr = parentAlias.getParentAlias();
+			if (rootAlias.equals(parentAliasStr)) {
+				linkAlias = f.getName();
+				break;
+			}
+			linkAlias = parentAliasStr + "." + f.getName();
+			parentAlias = aliases.get(parentAliasStr);
+		}
 		
 		SqlExpression joinCondition = null;
 		if (f.getAnnotation(JoinCondition.class) != null) {

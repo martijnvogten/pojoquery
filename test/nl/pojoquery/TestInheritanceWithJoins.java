@@ -126,16 +126,16 @@ public class TestInheritanceWithJoins {
 						" `bedroom`.numberOfBeds AS `bedroom.numberOfBeds`,\n" + 
 						" `bedroom.room`.id AS `bedroom.id`,\n" + 
 						" `bedroom.room`.area AS `bedroom.area`,\n" + 
-						" `bedroom.room.house`.id AS `bedroom.room.house.id`,\n" + 
-						" `bedroom.room.house`.address AS `bedroom.room.house.address`\n" + 
+						" `house`.id AS `house.id`,\n" + 
+						" `house`.address AS `house.address`\n" + 
 						"FROM bedroom\n" + 
 						" LEFT JOIN room AS `bedroom.room` ON `bedroom.room`.id = `bedroom`.id\n" + 
-						" LEFT JOIN house AS `bedroom.room.house` ON `bedroom.room`.house_id = `bedroom.room.house`.id"),
+						" LEFT JOIN house AS `house` ON `bedroom.room`.house_id = `house`.id"),
 				norm(sql));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
-				"bedroom.id", "bedroom.area", "bedroom.numberOfBeds", "bedroom.room.house.id", "bedroom.room.house.address" }, 
-			     1L,           100.0,          1                    ,  1L                    , "Unity Street 1");
+				"bedroom.id", "bedroom.area", "bedroom.numberOfBeds", "house.id", "house.address" }, 
+			     1L,           100.0,          1                    ,  1L       , "Unity Street 1");
 		
 		List<BedRoom> list = QueryBuilder.from(BedRoom.class).processRows(result);
 		Assert.assertEquals(1, list.size());
@@ -157,12 +157,12 @@ public class TestInheritanceWithJoins {
 				" `bedrooms`.numberOfBeds AS `bedrooms.numberOfBeds`,\n" + 
 				" `bedrooms.room`.id AS `bedrooms.id`,\n" + 
 				" `bedrooms.room`.area AS `bedrooms.area`,\n" + 
-				" `bedrooms.room.house`.id AS `bedrooms.room.house.id`,\n" + 
-				" `bedrooms.room.house`.address AS `bedrooms.room.house.address`\n" + 
+				" `bedrooms.house`.id AS `bedrooms.house.id`,\n" + 
+				" `bedrooms.house`.address AS `bedrooms.house.address`\n" + 
 				"FROM apartment\n" + 
 				" LEFT JOIN bedroom AS `bedrooms` ON `apartment`.id = `bedrooms`.apartment_id\n" + 
 				" LEFT JOIN room AS `bedrooms.room` ON `bedrooms.room`.id = `bedrooms`.id\n" + 
-				" LEFT JOIN house AS `bedrooms.room.house` ON `bedrooms.room`.house_id = `bedrooms.room.house`.id"), 
+				" LEFT JOIN house AS `bedrooms.house` ON `bedrooms.room`.house_id = `bedrooms.house`.id"), 
 			norm(sql));
 	}
 	
