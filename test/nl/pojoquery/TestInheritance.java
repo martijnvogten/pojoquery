@@ -114,10 +114,10 @@ public class TestInheritance {
 		assertEquals(
 				norm("SELECT\n" + 
 						" `bedroom`.numberOfBeds AS `bedroom.numberOfBeds`,\n" + 
-						" `bedroom.room`.id AS `bedroom.id`,\n" + 
-						" `bedroom.room`.area AS `bedroom.area`\n" + 
+						" `room`.id AS `bedroom.id`,\n" + 
+						" `room`.area AS `bedroom.area`\n" + 
 						"FROM bedroom\n" + 
-						" LEFT JOIN room AS `bedroom.room` ON `bedroom.room`.id = `bedroom`.id"),
+						" LEFT JOIN room AS `room` ON `room`.id = `bedroom`.id"),
 				norm(sql));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {

@@ -26,4 +26,7 @@ public class SimpleFieldMapping implements FieldMapping {
 		}
 	}
 
+	public Field getField() {
+		return f;
+	}
 }

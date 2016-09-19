@@ -52,7 +52,7 @@ public class QueryBuilder<T> {
 	
 	private LinkedHashMap<String,Alias> subClasses = new LinkedHashMap<>();
 	private LinkedHashMap<String,Alias> aliases = new LinkedHashMap<>();
-	private Map<String,FieldMapping> fieldMappings = new HashMap<>();
+	private Map<String,FieldMapping> fieldMappings = new LinkedHashMap<>();
 	
 	private final Class<T> resultClass;
 	private final SqlQuery query;
@@ -126,8 +126,15 @@ public class QueryBuilder<T> {
 			TableMapping superMapping = i > 0 ? tableMappings.get(i - 1) : null;
 			
 			String combinedAlias = mapping.clazz.equals(clz) ? alias : alias + "." + mapping.tableName; 
+			if (alias.equals(rootAlias)) {
+				combinedAlias = mapping.tableName;
+			}
+			
 			if (superMapping != null) {
 				String linkAlias = alias + "." + superMapping.tableName;
+				if (alias.equals(rootAlias)) {
+					linkAlias = superMapping.tableName;
+				}
 				String idField = QueryBuilder.determineIdField(superMapping.clazz).getName();
 				query.addJoin(JoinType.LEFT, superMapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + idField + " = {" + combinedAlias + "}." + idField));
 			}
@@ -238,6 +245,13 @@ public class QueryBuilder<T> {
 				aliases.put(foreignAlias, new Alias(foreignAlias, f.getType(), alias, f, QueryBuilder.determineIdFields(f.getType())));
 			} else if (f.getAnnotation(Other.class) != null) {
 				aliases.get(alias).setOtherField(f);
+				// Also add the otherfield to the subclasses
+				List<String> subClassAliases = aliases.get(alias).getSubClassAliases();
+				if (subClassAliases != null) {
+					for(String subClassAlias : subClassAliases) {
+						aliases.get(subClassAlias).setOtherField(f);
+					}
+				}
 			} else {
 				SqlExpression selectExpression;
 				if (f.getAnnotation(Select.class) != null) {
@@ -378,6 +392,7 @@ public class QueryBuilder<T> {
 									entityClass = aliases.get(subClassAlias).getResultClass();
 								}
 							}
+							
 							Object entity = buildEntity(entityClass, merged, a.getOtherField());
 							allEntities.put(id, entity);
 							allEntities.put(subClassId, entity);
@@ -760,6 +775,5 @@ public class QueryBuilder<T> {
 		}
 		return idFields.get(0);
 	}
-	
 	
 }
