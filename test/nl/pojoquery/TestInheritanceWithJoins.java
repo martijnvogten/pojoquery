@@ -129,7 +129,7 @@ public class TestInheritanceWithJoins {
 						" `house`.id AS `house.id`,\n" + 
 						" `house`.address AS `house.address`\n" + 
 						"FROM bedroom\n" + 
-						" LEFT JOIN room AS `room` ON `room`.id = `bedroom`.id\n" + 
+						" INNER JOIN room AS `room` ON `room`.id = `bedroom`.id\n" + 
 						" LEFT JOIN house AS `house` ON `room`.house_id = `house`.id"),
 				norm(sql));
 		

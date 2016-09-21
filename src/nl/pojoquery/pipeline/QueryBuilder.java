@@ -132,11 +132,13 @@ public class QueryBuilder<T> {
 			
 			if (superMapping != null) {
 				String linkAlias = alias + "." + superMapping.tableName;
+				JoinType joinType = JoinType.LEFT;
 				if (alias.equals(rootAlias)) {
 					linkAlias = superMapping.tableName;
+					joinType = JoinType.INNER;
 				}
 				String idField = QueryBuilder.determineIdField(superMapping.clazz).getName();
-				query.addJoin(JoinType.LEFT, superMapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + idField + " = {" + combinedAlias + "}." + idField));
+				query.addJoin(joinType, superMapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + idField + " = {" + combinedAlias + "}." + idField));
 			}
 			
 			Alias newAlias = new Alias(combinedAlias, mapping.clazz, parentAlias, linkField, QueryBuilder.determineIdFields(mapping.clazz));
