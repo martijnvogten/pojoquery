@@ -30,7 +30,7 @@ public class MysqlDatabases {
 			dataSource.setPassword(pass);
 			dataSource.setCharacterEncoding("utf8");
 			dataSource.setUseUnicode(true);
-			dataSource.setSessionVariables("storage_engine=InnoDB");
+//			dataSource.setSessionVariables("storage_engine=InnoDB");
 			return dataSource;
 		} catch (Exception e) {
 			throw new RuntimeException(e);
