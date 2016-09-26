@@ -1,6 +1,7 @@
 package nl.pojoquery.pipeline;
 
 import java.lang.reflect.Field;
+import java.math.BigDecimal;
 
 import nl.pojoquery.FieldMapping;
 import nl.pojoquery.internal.MappingException;
@@ -18,6 +19,12 @@ public class SimpleFieldMapping implements FieldMapping {
 		try {
 			if (value instanceof String && f.getType().isEnum()) {
 				value = QueryBuilder.enumValueOf(f.getType(), (String)value);
+			}
+			if (value instanceof BigDecimal && (f.getType().equals(Integer.class) || f.getType().equals(Integer.TYPE))) {
+				value = ((BigDecimal)value).intValue();
+			}
+			if (value instanceof BigDecimal && (f.getType().equals(Long.class) || f.getType().equals(Long.TYPE))) {
+				value = ((BigDecimal)value).longValue();
 			}
 			f.setAccessible(true);
 			f.set(targetEntity, value);
