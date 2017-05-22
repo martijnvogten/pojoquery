@@ -17,7 +17,7 @@ public class TestManyToMany {
 	@Table("person")
 	static class PersonRecord {
 		@Id
-		Long id;
+		Long personID;
 		int age;
 		String firstname;
 		String lastname;
@@ -38,13 +38,13 @@ public class TestManyToMany {
 	@Table("event")
 	static class Event {
 		@Id
-		Long id;
+		Long eventID;
 		String title;
 		Date date;
 	}
 	
 	public static class EventWithPersons extends Event {
-		@Link(linktable="event_person")
+		@Link(linktable="event_person", linkfield="events_id", foreignlinkfield="persons_id")
 		public List<Person> persons;
 
 	}
@@ -77,10 +77,10 @@ public class TestManyToMany {
 		Assert.assertEquals(
 			norm(
 				"SELECT\n" + 
-				" `event`.id AS `event.id`,\n" + 
+				" `event`.eventID AS `event.eventID`,\n" + 
 				" `event`.title AS `event.title`,\n" + 
 				" `event`.date AS `event.date`,\n" + 
-				" `persons`.id AS `persons.id`,\n" + 
+				" `persons`.personID AS `persons.personID`,\n" + 
 				" `persons`.age AS `persons.age`,\n" + 
 				" `persons`.firstname AS `persons.firstname`,\n" + 
 				" `persons`.lastname AS `persons.lastname`,\n" + 
@@ -88,9 +88,9 @@ public class TestManyToMany {
 				" `persons.emailAddresses`.email AS `persons.emailAddresses.email`,\n" + 
 				" `persons.emailAddresses`.name AS `persons.emailAddresses.name`\n" + 
 				"FROM event\n" + 
-				" LEFT JOIN event_person AS `event_person` ON `event`.id = `event_person`.event_id\n" + 
-				" LEFT JOIN person AS `persons` ON `event_person`.person_id = `persons`.id\n" + 
-				" LEFT JOIN emailaddress AS `persons.emailAddresses` ON `persons`.id = `persons.emailAddresses`.person_id\n" + 
+				" LEFT JOIN event_person AS `event_person` ON `event`.eventID = `event_person`.events_id\n" + 
+				" LEFT JOIN person AS `persons` ON `event_person`.persons_id = `persons`.personID\n" + 
+				" LEFT JOIN emailaddress AS `persons.emailAddresses` ON `persons`.personID = `persons.emailAddresses`.person_id\n" + 
 				"WHERE persons.firstname=?"), 
 			norm(q.toSql()));
 	}

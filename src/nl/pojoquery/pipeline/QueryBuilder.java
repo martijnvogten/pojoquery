@@ -215,7 +215,7 @@ public class QueryBuilder<T> {
 						if (Link.NONE.equals(linkfieldname)) {
 							linkfieldname = linkFieldName(clz);
 						}
-						query.addJoin(JoinType.LEFT, linkAnn.linktable(), linkAlias, new SqlExpression("{" + alias + "}." + idField + " = {" + linkAlias + "}." + linkFieldName(clz)));
+						query.addJoin(JoinType.LEFT, linkAnn.linktable(), linkAlias, new SqlExpression("{" + alias + "}." + idField + " = {" + linkAlias + "}." + linkfieldname));
 						
 						String foreignLinkAlias = alias.equals(rootAlias) ? f.getName() : (alias + "." + f.getName());
 						String foreignIdField = QueryBuilder.determineIdField(componentType).getName();
