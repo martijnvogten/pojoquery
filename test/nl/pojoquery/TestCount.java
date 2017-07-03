@@ -30,12 +30,12 @@ public class TestCount {
 	@Test
 	public void testCount() {
 		SqlExpression countStatement = QueryBuilder.from(Article.class).buildCountStatement();
-		Assert.assertEquals(TestUtils.norm("SELECT COUNT(DISTINCT article.id) FROM article"), TestUtils.norm(countStatement.getSql()));
+		Assert.assertEquals(TestUtils.norm("SELECT COUNT(DISTINCT article.id) FROM `article`"), TestUtils.norm(countStatement.getSql()));
 	}
 	
 	@Test
 	public void testCountWithJoins() {
 		SqlExpression countStatement = QueryBuilder.from(ArticleDetail.class).buildCountStatement();
-		Assert.assertEquals(TestUtils.norm("SELECT COUNT(DISTINCT article.id) FROM article LEFT JOIN comment AS `comments` ON `article`.id = `comments`.article_id"), TestUtils.norm(countStatement.getSql()));
+		Assert.assertEquals(TestUtils.norm("SELECT COUNT(DISTINCT article.id) FROM `article` LEFT JOIN `comment` AS `comments` ON `article`.id = `comments`.article_id"), TestUtils.norm(countStatement.getSql()));
 	}
 }

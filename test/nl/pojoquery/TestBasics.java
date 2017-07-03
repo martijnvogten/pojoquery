@@ -78,10 +78,10 @@ public class TestBasics {
 				" `comments.author`.firstName AS `comments.author.firstName`,\n" + 
 				" `comments.author`.lastName AS `comments.author.lastName`,\n" + 
 				" `comments.author`.email AS `comments.author.email` \n" + 
-				"FROM article \n" + 
-				" LEFT JOIN user AS `author` ON `article`.author_id = `author`.id\n" + 
-				" LEFT JOIN comment AS `comments` ON `article`.id = `comments`.article_id\n" + 
-				" LEFT JOIN user AS `comments.author` ON `comments`.author_id = `comments.author`.id "), norm(sql));
+				"FROM `article` \n" + 
+				" LEFT JOIN `user` AS `author` ON `article`.author_id = `author`.id\n" + 
+				" LEFT JOIN `comment` AS `comments` ON `article`.id = `comments`.article_id\n" + 
+				" LEFT JOIN `user` AS `comments.author` ON `comments`.author_id = `comments.author`.id "), norm(sql));
 		
 	}
 }

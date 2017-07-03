@@ -87,10 +87,10 @@ public class TestManyToMany {
 				" `persons.emailAddresses`.person_id AS `persons.emailAddresses.person_id`,\n" + 
 				" `persons.emailAddresses`.email AS `persons.emailAddresses.email`,\n" + 
 				" `persons.emailAddresses`.name AS `persons.emailAddresses.name`\n" + 
-				"FROM event\n" + 
-				" LEFT JOIN event_person AS `event_person` ON `event`.eventID = `event_person`.events_id\n" + 
-				" LEFT JOIN person AS `persons` ON `event_person`.persons_id = `persons`.personID\n" + 
-				" LEFT JOIN emailaddress AS `persons.emailAddresses` ON `persons`.personID = `persons.emailAddresses`.person_id\n" + 
+				"FROM `event`\n" + 
+				" LEFT JOIN `event_person` AS `event_person` ON `event`.eventID = `event_person`.events_id\n" + 
+				" LEFT JOIN `person` AS `persons` ON `event_person`.persons_id = `persons`.personID\n" + 
+				" LEFT JOIN `emailaddress` AS `persons.emailAddresses` ON `persons`.personID = `persons.emailAddresses`.person_id\n" + 
 				"WHERE persons.firstname=?"), 
 			norm(q.toSql()));
 	}

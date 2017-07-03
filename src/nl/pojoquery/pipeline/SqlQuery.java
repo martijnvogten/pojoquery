@@ -193,7 +193,7 @@ public class SqlQuery {
 
 		ArrayList<SqlExpression> joinExpressions = new ArrayList<SqlExpression>();
 		for(SqlJoin j : joins) {
-			String sql = j.joinType.name() + " JOIN " + j.table + " AS `" + j.alias + "`";
+			String sql = j.joinType.name() + " JOIN `" + j.table + "` AS `" + j.alias + "`";
 			SqlExpression resolved = resolveAliases(j.joinCondition, "");
 			if (j.joinCondition != null) {
 				sql += " ON " + resolved.getSql();
@@ -205,7 +205,7 @@ public class SqlQuery {
 		
 		Iterables.addAll(params, joinsClause.getParameters());
 
-		String sql = implode(" ", Arrays.asList(selectClause.getSql(), "\nFROM", from, "\n", joinsClause.getSql(), whereClause == null ? "" : whereClause.getSql(), groupByClause,
+		String sql = implode(" ", Arrays.asList(selectClause.getSql(), "\nFROM", "`" + from + "`", "\n", joinsClause.getSql(), whereClause == null ? "" : whereClause.getSql(), groupByClause,
 				orderByClause, limitClause));
 
 		return new SqlExpression(sql, params);

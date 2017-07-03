@@ -52,7 +52,7 @@ public class TestEmbedded {
 				" `user`.id AS `user.id`," +
 				" `user`.home_address AS `home.address`," +
 				" `user`.home_city AS `home.city`" +
-				" FROM user"), norm(QueryBuilder.from(User.class).getQuery().toStatement().getSql()));
+				" FROM `user`"), norm(QueryBuilder.from(User.class).getQuery().toStatement().getSql()));
 		
 		List<Map<String, Object>> result = Collections.singletonList(TestUtils.<String,Object>map(
 				"user.id", 1L, 
