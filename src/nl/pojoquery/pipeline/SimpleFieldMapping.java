@@ -2,6 +2,8 @@ package nl.pojoquery.pipeline;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
+import java.sql.Date;
+import java.time.LocalDate;
 
 import nl.pojoquery.FieldMapping;
 import nl.pojoquery.internal.MappingException;
@@ -25,6 +27,9 @@ public class SimpleFieldMapping implements FieldMapping {
 			}
 			if (value instanceof BigDecimal && (f.getType().equals(Long.class) || f.getType().equals(Long.TYPE))) {
 				value = ((BigDecimal)value).longValue();
+			}
+			if (value instanceof Date && (f.getType().equals(LocalDate.class))) {
+				value = ((Date)value).toLocalDate();
 			}
 			f.setAccessible(true);
 			f.set(targetEntity, value);
