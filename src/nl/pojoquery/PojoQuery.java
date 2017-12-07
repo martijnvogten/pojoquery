@@ -238,16 +238,34 @@ public class PojoQuery<T> {
 		// If the class hierarchy contains multiple tables, create separate
 		// inserts
 		List<TableMapping> tables = QueryBuilder.determineTableMapping(type);
-
+		
+		Long currentVersion = null;
+		if (o instanceof HasVersion) {
+			currentVersion = ((HasVersion) o).getVersion();
+			if (currentVersion == null) {
+				currentVersion = 0L;
+			}
+			((HasVersion) o).setVersion(currentVersion + 1);
+		}
+		
 		if (tables.size() == 1) {
 			Map<String, Object> values = extractValues(type, o);
 			Map<String, Object> ids = splitIdFields(o, values);
-
-			if (conn != null) {
-				return DB.update(conn, tables.get(0).tableName, values, ids);
-			} else {
-				return DB.update(db, tables.get(0).tableName, values, ids);
+			
+			if (o instanceof HasVersion) {
+				ids.put("version", currentVersion);
 			}
+
+			int affectedRows;
+			if (conn != null) {
+				affectedRows = DB.update(conn, tables.get(0).tableName, values, ids);
+			} else {
+				affectedRows = DB.update(db, tables.get(0).tableName, values, ids);
+			}
+			if (o instanceof HasVersion && affectedRows == 0) {
+				throw new StaleObjectException();
+			}
+			return affectedRows;
 		} else {
 
 			int affectedRows = 0;
@@ -255,11 +273,20 @@ public class PojoQuery<T> {
 			TableMapping topType = tables.remove(0);
 			Map<String, Object> values = extractValues(topType.clazz, o);
 			Map<String, Object> ids = splitIdFields(o, values);
+			Map<String, Object> topIds = new HashMap<>(ids);
+
+			if (o instanceof HasVersion) {
+				topIds.put("version", currentVersion);
+			}
 
 			if (conn != null) {
-				affectedRows = DB.update(conn, topType.tableName, values, ids);
+				affectedRows = DB.update(conn, topType.tableName, values, topIds);
 			} else {
-				affectedRows = DB.update(db, topType.tableName, values, ids);
+				affectedRows = DB.update(db, topType.tableName, values, topIds);
+			}
+			
+			if (affectedRows == 0) {
+				throw new StaleObjectException();
 			}
 
 			while (tables.size() > 0) {
