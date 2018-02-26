@@ -8,7 +8,7 @@ import nl.pojoquery.DB;
 import nl.pojoquery.PojoQuery;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
-import nl.pojoquery.integrationtest.MysqlDatabases;
+import nl.pojoquery.integrationtest.db.TestDatabase;
 
 
 public class UsersExample {
@@ -45,7 +45,7 @@ public class UsersExample {
 	}
 	
 	public static void main(String[] args) {
-		DataSource db = MysqlDatabases.createDatabase("localhost", "pojoquery_users", "root", "");
+		DataSource db = TestDatabase.dropAndRecreate();
 		createTables(db);
 		
 		User john = new User();

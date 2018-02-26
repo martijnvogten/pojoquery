@@ -336,7 +336,7 @@ public class PojoQuery<T> {
 						}
 					}
 				} else if (f.getAnnotation(NoUpdate.class) != null) {
-				} else if (f.getAnnotation(Link.class) != null) {
+				} else if (f.getAnnotation(Link.class) != null && !f.getAnnotation(Link.class).linktable().equals(Link.NONE)) {
 				} else if (f.getType().isArray()) {
 					if (f.getType().getComponentType().isPrimitive()) {
 						// Data like byte[] long[]
@@ -345,13 +345,19 @@ public class PojoQuery<T> {
 				} else if (Collection.class.isAssignableFrom(f.getType())) {
 				} else if (QueryBuilder.isLinkedClass(f.getType())) {
 					// Linked entity.
+					String linkfieldName = f.getName() + "_id";
+					if (f.getAnnotation(Link.class) != null) {
+						if (!Link.NONE.equals(f.getAnnotation(Link.class).linkfield())) {
+							linkfieldName = f.getAnnotation(Link.class).linkfield();
+						}
+					}
 					if (val == null) {
-						values.put(f.getName() + "_id", null);
+						values.put(linkfieldName, null);
 					} else {
 						Field idField = QueryBuilder.determineIdField(f.getType());
 						idField.setAccessible(true);
 						Object idValue = idField.get(val);
-						values.put(f.getName() + "_id", idValue);
+						values.put(linkfieldName, idValue);
 					}
                 } else {
                 	values.put(QueryBuilder.determineSqlFieldName(f), val);

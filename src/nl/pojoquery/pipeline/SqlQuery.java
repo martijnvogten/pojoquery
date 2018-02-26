@@ -159,6 +159,10 @@ public class SqlQuery {
 	}
 
 	public static SqlExpression resolveAliases(SqlExpression sql, String prefixAlias) {
+		return resolveAliases(sql, prefixAlias, prefixAlias, prefixAlias);
+	}
+	
+	public static SqlExpression resolveAliases(SqlExpression sql, String thisAlias, String prefixAlias, String linkTableAlias) {
 		StringBuffer result = new StringBuffer();
 		List<Object> parameters = new ArrayList<>();
 		Matcher m = Pattern.compile("\\{([a-zA-Z0-9_\\.]+)\\}\\.").matcher(sql.getSql());
@@ -166,7 +170,9 @@ public class SqlQuery {
 			String alias = m.group(1);
 			String combinedAlias;
 			if ("this".equals(alias)) {
-				combinedAlias = prefixAlias;
+				combinedAlias = thisAlias;
+			} else if ("linktable".equals(alias)) {
+				combinedAlias = linkTableAlias;
 			} else if (!prefixAlias.isEmpty()) {
 				combinedAlias = prefixAlias + "." + alias;
 			} else {

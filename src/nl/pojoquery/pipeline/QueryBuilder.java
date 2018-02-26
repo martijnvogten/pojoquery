@@ -191,6 +191,7 @@ public class QueryBuilder<T> {
 			f.setAccessible(true);
 			
 			Class<?> type = f.getType();
+			boolean isRoot = alias.equals(rootAlias);
 			if (isListOrArray(type)) {
 				Class<?> componentType = type.isArray() ? type.getComponentType() : Types.getComponentType(f.getGenericType());
 				
@@ -206,18 +207,26 @@ public class QueryBuilder<T> {
 						a.setIsLinkedValue(true);
 						aliases.put(linkAlias, a);
 						addField(new SqlExpression("{" + linkAlias + "}." + linkAnn.fetchColumn()), linkAlias + ".value", f);
+					} else if (linkAnn.linktable().equals(Link.NONE)) {
+						String linkAlias = joinMany(alias, query, f, componentType);
+						addClass(componentType, linkAlias, alias, f);
 					} else {
-						
 						// Many to many
-						String linkAlias = alias.equals(rootAlias) ? linkAnn.linktable() : (alias + "." + linkAnn.linktable());
+						String linkTableAlias = alias + "_" + f.getName();
+						String linkAlias = isRoot ? linkTableAlias : (alias + "." + linkTableAlias);
 						String idField = QueryBuilder.determineIdField(clz).getName();
 						String linkfieldname = linkAnn.linkfield();
 						if (Link.NONE.equals(linkfieldname)) {
 							linkfieldname = linkFieldName(clz);
 						}
-						query.addJoin(JoinType.LEFT, linkAnn.linktable(), linkAlias, new SqlExpression("{" + alias + "}." + idField + " = {" + linkAlias + "}." + linkfieldname));
 						
-						String foreignLinkAlias = alias.equals(rootAlias) ? f.getName() : (alias + "." + f.getName());
+						SqlExpression joinCondition = new SqlExpression("{" + alias + "}." + idField + " = {" + linkAlias + "}." + linkfieldname);
+						if (f.getAnnotation(JoinCondition.class) != null) {
+							joinCondition = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias, isRoot ? "" : alias, linkAlias);
+						}
+						query.addJoin(JoinType.LEFT, linkAnn.linktable(), linkAlias, joinCondition);
+						
+						String foreignLinkAlias = isRoot ? f.getName() : (alias + "." + f.getName());
 						String foreignIdField = QueryBuilder.determineIdField(componentType).getName();
 						String foreignlinkfieldname = linkAnn.foreignlinkfield();
 						if (Link.NONE.equals(foreignlinkfieldname)) {
@@ -238,7 +247,7 @@ public class QueryBuilder<T> {
 			} else if (f.getAnnotation(Embedded.class) != null) {
 				String prefix = QueryBuilder.determinePrefix(f);
 
-				String foreignAlias = alias.equals(rootAlias) ? f.getName() : alias + "." + f.getName();
+				String foreignAlias = isRoot ? f.getName() : alias + "." + f.getName();
 				for (Field embeddedField : QueryBuilder.collectFieldsOfClass(f.getType())) {
 					embeddedField.setAccessible(true);
 					String fieldName = determineSqlFieldName(embeddedField);
@@ -278,7 +287,12 @@ public class QueryBuilder<T> {
 	private String joinMany(String alias, SqlQuery result, Field f, Class<?> componentType) {
 		String tableName = determineTableName(componentType);
 		String idField = determineIdField(f.getDeclaringClass()).getName();
+		
 		String linkField = linkFieldName(f.getDeclaringClass());
+		Link linkAnn = f.getAnnotation(Link.class);
+		if (linkAnn != null && !Link.NONE.equals(linkAnn.foreignlinkfield())) {
+			linkField = linkAnn.foreignlinkfield();
+		}
 		SqlExpression joinCondition = null;
 		if (f.getAnnotation(JoinCondition.class) != null) {
 			joinCondition = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias);

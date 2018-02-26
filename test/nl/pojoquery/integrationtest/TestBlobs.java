@@ -9,6 +9,7 @@ import nl.pojoquery.DB;
 import nl.pojoquery.PojoQuery;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
+import nl.pojoquery.integrationtest.db.TestDatabase;
 
 public class TestBlobs {
 
@@ -34,7 +35,7 @@ public class TestBlobs {
 	}
 	
 	private static DataSource initDatabase() {
-		DataSource db = MysqlDatabases.createDatabase("localhost", "pojoquery_integrationtest", "root", "");
+		DataSource db = TestDatabase.dropAndRecreate();
 		DB.executeDDL(db, "CREATE TABLE file (id BIGINT NOT NULL AUTO_INCREMENT, data BLOB, PRIMARY KEY (id))");
 		return db;
 	}

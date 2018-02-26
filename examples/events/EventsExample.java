@@ -12,7 +12,7 @@ import nl.pojoquery.PojoQuery;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Table;
-import nl.pojoquery.integrationtest.MysqlDatabases;
+import nl.pojoquery.integrationtest.db.TestDatabase;
 
 
 public class EventsExample {
@@ -51,7 +51,7 @@ public class EventsExample {
 	}
 	
 	public static void main(String[] args) {
-		DataSource db = MysqlDatabases.createDatabase("localhost", "pojoquery_events", "root", "");
+		DataSource db = TestDatabase.dropAndRecreate();
 		createTables(db);
 		insertData(db);
 

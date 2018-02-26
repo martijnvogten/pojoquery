@@ -13,6 +13,7 @@ import nl.pojoquery.TestUtils;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Table;
+import nl.pojoquery.integrationtest.db.TestDatabase;
 
 public class TestForeignValueFields {
 	
@@ -28,7 +29,7 @@ public class TestForeignValueFields {
 
 	@Test
 	public void testUpdates() {
-		DataSource db = MysqlDatabases.createDatabase("localhost", "pojoquery_integrationtest", "root", "");
+		DataSource db = TestDatabase.dropAndRecreate();
 		DB.executeDDL(db, "CREATE TABLE poule (id BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY (id));");
 		DB.executeDDL(db, "CREATE TABLE poule_weightclass (poule_id BIGINT NOT NULL, weightClass INT, PRIMARY KEY (poule_id, weightClass));");
 

@@ -14,6 +14,7 @@ import nl.pojoquery.TestUtils;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Table;
+import nl.pojoquery.integrationtest.db.TestDatabase;
 
 public class TestUpdates {
 	
@@ -44,7 +45,7 @@ public class TestUpdates {
 
 	@Test
 	public void testUpdates() {
-		DataSource db = MysqlDatabases.createDatabase("localhost", "pojoquery_integrationtest", "root", "");
+		DataSource db = TestDatabase.dropAndRecreate();
 		DB.executeDDL(db, "CREATE TABLE user (id BIGINT NOT NULL AUTO_INCREMENT, username VARCHAR(255), PRIMARY KEY (id));");
 
 		User u = new User();
@@ -60,7 +61,7 @@ public class TestUpdates {
 	
 	@Test
 	public void testInsertWithAuthor() {
-		DataSource db = MysqlDatabases.createDatabase("localhost", "pojoquery_integrationtest", "root", "");
+		DataSource db = TestDatabase.dropAndRecreate();
 		DB.executeDDL(db, "CREATE TABLE user (id BIGINT NOT NULL AUTO_INCREMENT, username VARCHAR(255), PRIMARY KEY (id));");
 		DB.executeDDL(db, "CREATE TABLE article (id BIGINT NOT NULL AUTO_INCREMENT, author_id BIGINT NOT NULL, title VARCHAR(255), PRIMARY KEY (id));");
 		
@@ -80,7 +81,7 @@ public class TestUpdates {
 	
 	@Test
 	public void testInsertWithRoles() {
-		DataSource db = MysqlDatabases.createDatabase("localhost", "pojoquery_integrationtest", "root", "");
+		DataSource db = TestDatabase.dropAndRecreate();
 		DB.executeDDL(db, "CREATE TABLE user (id BIGINT NOT NULL AUTO_INCREMENT, username VARCHAR(255), PRIMARY KEY (id));");
 		DB.executeDDL(db, "CREATE TABLE user_roles (user_id BIGINT NOT NULL, role VARCHAR(255), PRIMARY KEY (user_id, role));");
 		

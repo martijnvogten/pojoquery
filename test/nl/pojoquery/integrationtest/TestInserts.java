@@ -5,14 +5,15 @@ import java.util.List;
 
 import javax.sql.DataSource;
 
+import org.junit.Assert;
+import org.junit.Test;
+
 import nl.pojoquery.DB;
 import nl.pojoquery.DB.Transaction;
 import nl.pojoquery.PojoQuery;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
-
-import org.junit.Assert;
-import org.junit.Test;
+import nl.pojoquery.integrationtest.db.TestDatabase;
 
 public class TestInserts {
 
@@ -60,7 +61,7 @@ public class TestInserts {
 	}
 
 	private static DataSource initDatabase() {
-		DataSource db = MysqlDatabases.createDatabase("localhost", "pojoquery_integrationtest", "root", "");
+		DataSource db = TestDatabase.dropAndRecreate();
 		DB.executeDDL(db, "CREATE TABLE user (id BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY (id))");
 		return db;
 	}

@@ -10,7 +10,7 @@ import nl.pojoquery.PojoQuery;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.SubClasses;
 import nl.pojoquery.annotations.Table;
-import nl.pojoquery.integrationtest.MysqlDatabases;
+import nl.pojoquery.integrationtest.db.TestDatabase;
 
 public class InheritanceExample {
 	
@@ -33,7 +33,7 @@ public class InheritanceExample {
 	}
 
 	public static void main(String[] args) {
-		DataSource db = MysqlDatabases.createDatabase("localhost", "pojoquery_inheritance", "root", "");
+		DataSource db = TestDatabase.dropAndRecreate();
 		createTables(db);
 		insertData(db);
 

@@ -7,15 +7,14 @@ import javax.sql.DataSource;
 import blog.ArticleDetailExample.Article;
 import blog.ArticleDetailExample.Comment;
 import blog.ArticleDetailExample.User;
-
 import nl.pojoquery.DB;
 import nl.pojoquery.PojoQuery;
-import nl.pojoquery.integrationtest.MysqlDatabases;
+import nl.pojoquery.integrationtest.db.TestDatabase;
 
 public class BlogDb {
 
 	public static DataSource create(String host, String schemaname, String username, String password) {
-		DataSource db = MysqlDatabases.createDatabase(host, schemaname, username, password);
+		DataSource db = TestDatabase.dropAndRecreate();
 		createTables(db);
 		insertData(db);
 		return db;
@@ -53,12 +52,12 @@ public class BlogDb {
 		ilikeit.submitdate = new Date();
 		ilikeit.id = PojoQuery.insert(db, ilikeit);
 		
-		Comment imagindation = new Comment();
-		imagindation.author_id = albert.id;
-		imagindation.article_id = article.id;
-		imagindation.comment = "Imagination is more important than knowledge.";
-		imagindation.submitdate = new Date();
-		imagindation.id = PojoQuery.insert(db, imagindation);
+		Comment imagination = new Comment();
+		imagination.author_id = albert.id;
+		imagination.article_id = article.id;
+		imagination.comment = "Imagination is more important than knowledge.";
+		imagination.submitdate = new Date();
+		imagination.id = PojoQuery.insert(db, imagination);
 	}
 
 

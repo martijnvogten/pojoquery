@@ -14,6 +14,7 @@ import nl.pojoquery.SqlExpression;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Other;
 import nl.pojoquery.annotations.Table;
+import nl.pojoquery.integrationtest.db.TestDatabase;
 
 public class TestOther {
 
@@ -70,7 +71,7 @@ public class TestOther {
 	
 
 	private static DataSource initDatabase() {
-		DataSource db = MysqlDatabases.createDatabase("localhost", "pojoquery_integrationtest", "root", "");
+		DataSource db = TestDatabase.dropAndRecreate();
 		DB.executeDDL(db, "CREATE TABLE room (id BIGINT NOT NULL AUTO_INCREMENT, area INT, PRIMARY KEY (id))");
 		DB.executeDDL(db, "CREATE TABLE bedroom (id BIGINT NOT NULL AUTO_INCREMENT, numberOfBeds INT, PRIMARY KEY (id))");
 		return db;
