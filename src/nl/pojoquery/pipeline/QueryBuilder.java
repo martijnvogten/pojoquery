@@ -202,7 +202,15 @@ public class QueryBuilder<T> {
 						if (Link.NONE.equals(foreignlinkfieldname)) {
 							foreignlinkfieldname = linkFieldName(clz);
 						}
-						String linkAlias = joinMany(query, alias, f.getName(), linkAnn.linktable(), QueryBuilder.determineIdField(clz).getName(), foreignlinkfieldname, null);
+						
+						String idField = QueryBuilder.determineIdField(clz).getName();
+						String linkAlias = alias.equals(rootAlias) ? f.getName() : (alias + "." + f.getName());
+						SqlExpression joinCondition = null;
+						if (f.getAnnotation(JoinCondition.class) != null) {
+							joinCondition = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias, isRoot ? "" : alias, linkAlias);
+						}
+						
+						joinMany(query, alias, f.getName(), linkAnn.linktable(), idField, foreignlinkfieldname, joinCondition);
 						Alias a = new Alias(linkAlias, componentType, alias, f, QueryBuilder.determineIdFields(componentType));
 						a.setIsLinkedValue(true);
 						aliases.put(linkAlias, a);
