@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import javax.sql.DataSource;
 
@@ -52,6 +53,43 @@ public class DB {
 	
 	public static List<Map<String, Object>> queryRows(DataSource db, String sql, Object... params) {
 		return execute(db, QueryType.SELECT, sql, Arrays.asList(params), new RowProcessor() );
+	}
+	
+	public static void queryRowsStreaming(Connection conn, SqlExpression queryStatement, Consumer<Map<String,Object>> rowCallback) {
+		try (PreparedStatement stmt = conn.prepareStatement(queryStatement.getSql());) {
+			applyParameters(queryStatement.getParameters(), stmt);
+			stmt.setFetchSize(Integer.MIN_VALUE);
+			try (ResultSet rs = stmt.executeQuery()) {
+				List<String> fieldNames = extractResultSetFieldNames(rs);
+				while (rs.next()) {
+					Map<String, Object> row = new HashMap<String, Object>(fieldNames.size());
+					for (String fieldName : fieldNames) {
+						row.put(fieldName, rs.getObject(fieldName));
+					}
+					rowCallback.accept(row);
+				}
+			}
+		} catch (SQLException e) {
+			throw new DatabaseException(e);
+		}
+	}
+	
+	public static void queryRowsStreaming(DataSource db, SqlExpression queryStatement, Consumer<Map<String,Object>> rowCallback) {
+		Connection connection = null;
+		try {
+			connection = db.getConnection();
+			queryRowsStreaming(connection, queryStatement, rowCallback);
+		} catch (SQLException e) {
+			throw new DatabaseException(e);
+		} finally {
+			try {
+				if (connection != null) {
+					connection.close();
+				}
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
 	}
 	
 	public static Columns queryColumns(Connection conn, String sql, Object... params) {
@@ -100,7 +138,7 @@ public class DB {
 			}
 		}
 	}
-
+	
 	public static int update(DataSource db, String tableName, Map<String, Object> values, Map<String, Object> ids) {
 		SqlExpression updateSql = buildUpdate(tableName, values, ids);
 		return (Integer)execute(db, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
@@ -217,14 +255,7 @@ public class DB {
 		try {
 			PreparedStatement stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
 			if (params != null) {
-				int index = 1;
-				for (Object val : params) {
-					if (val != null && val.getClass().isEnum()) {
-						stmt.setObject(index++, ((Enum<?>)val).name());
-					} else {
-						stmt.setObject(index++, val);
-					}
-				}
+				applyParameters(params, stmt);
 			}
 			boolean success = false;
 			try {
@@ -264,6 +295,17 @@ public class DB {
 		} catch (SQLException e) {
 			System.err.println(e.getMessage());
 			throw new DatabaseException(e);
+		}
+	}
+
+	private static void applyParameters(Iterable<Object> params, PreparedStatement stmt) throws SQLException {
+		int index = 1;
+		for (Object val : params) {
+			if (val != null && val.getClass().isEnum()) {
+				stmt.setObject(index++, ((Enum<?>)val).name());
+			} else {
+				stmt.setObject(index++, val);
+			}
 		}
 	}
 

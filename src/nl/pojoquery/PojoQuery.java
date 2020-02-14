@@ -148,6 +148,15 @@ public class PojoQuery<T> {
 	public List<T> execute(Connection connection) {
 		return queryBuilder.processRows(DB.queryRows(connection, query.toStatement()));
 	}
+	
+	public List<T> executeStreaming(DataSource db) {
+		List<T> result = new ArrayList<>();
+		Map<Object, Object> allEntities = new HashMap<>();
+		DB.queryRowsStreaming(db, query.toStatement(), row -> {
+			queryBuilder.processRow(result, allEntities, row);
+		});
+		return result;
+	}
 
 	public static <PK> PK insert(Connection conn, Class<?> type, Object o) {
 		return insert(conn, null, type, o);
@@ -410,7 +419,7 @@ public class PojoQuery<T> {
 
 	public T findById(DataSource db, Object id) {
 		query.getWheres().addAll(QueryBuilder.buildIdCondition(resultClass, id));
-		return returnSingleRow(execute(db));
+		return returnSingleRow(executeStreaming(db));
 	}
 
 	public static void delete(Connection conn, Object entity) {
