@@ -61,6 +61,36 @@ public class TestJoinConditions {
 		List<EventWithVisitorsAndOrganizers> events;
 	}
 	
+	@Table("employee")
+	static class Employee {
+		@Id
+		Long id;
+		
+		@JoinCondition("{this}.department_id = {department}.id")
+		Department department;
+	}
+	
+	@Table("department")
+	static class Department {
+		@Id
+		Long id;
+		
+		String name;
+	}
+	
+	@Test
+	public void testSimpleDepartmentEmployeeJoinCondition() {
+		PojoQuery<Employee> q = PojoQuery.build(Employee.class);
+		String sql = q.toSql();
+		Assert.assertEquals("SELECT\n" + 
+				" `employee`.id AS `employee.id`,\n" + 
+				" `department`.id AS `department.id`,\n" + 
+				" `department`.name AS `department.name` \n" + 
+				"FROM `employee` \n" + 
+				" LEFT JOIN `department` AS `department` ON `employee`.department_id = `department`.id", sql.trim());
+	}
+	
+	
 	@Test
 	public void testBasic() {
 		DataSource db = initDatabase();

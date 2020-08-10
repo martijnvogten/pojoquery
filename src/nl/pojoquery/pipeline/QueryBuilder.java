@@ -347,7 +347,7 @@ public class QueryBuilder<T> {
 		
 		SqlExpression joinCondition = null;
 		if (f.getAnnotation(JoinCondition.class) != null) {
-			joinCondition = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias);
+			joinCondition = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(JoinCondition.class).value()), parentAlias.getAlias(), alias.equals(rootAlias) ? "" : alias, alias.equals(rootAlias) ? "" : alias);
 		} else {
 			Field idField = QueryBuilder.determineIdField(type);
 			joinCondition = new SqlExpression("{" + alias + "}." + linkFieldName(f) + " = {" + linkAlias + "}." + idField.getName());
