@@ -1,12 +1,11 @@
-package blog;
+package examples.blog;
 
 import java.util.Date;
 
 import javax.sql.DataSource;
 
-import blog.ArticleDetailExample.Article;
-import blog.ArticleDetailExample.User;
-
+import examples.blog.ArticleDetailExample.Article;
+import examples.blog.ArticleDetailExample.User;
 import nl.pojoquery.PojoQuery;
 import nl.pojoquery.annotations.GroupBy;
 import nl.pojoquery.annotations.Join;

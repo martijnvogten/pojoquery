@@ -1,4 +1,4 @@
-package events;
+package examples.events;
 
 import nl.pojoquery.annotations.Table;
 

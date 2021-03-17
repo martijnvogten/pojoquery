@@ -1,4 +1,4 @@
-package users;
+package examples.users;
 
 import java.util.Date;
 
