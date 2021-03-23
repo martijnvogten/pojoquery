@@ -177,6 +177,11 @@ public class DB {
 		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 	
+	public static <PK> PK insert(Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values) {
+		SqlExpression insertSql = buildInsertOrUpdate(schemaName, tableName, values, false);
+		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
+	}
+	
 	public static <PK> PK insert(Connection connection, String tableName, Map<String, ? extends Object> values) {
 		SqlExpression insertSql = buildInsertOrUpdate(null, tableName, values, false);
 		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
