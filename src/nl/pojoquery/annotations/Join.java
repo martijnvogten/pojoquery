@@ -8,6 +8,7 @@ import nl.pojoquery.pipeline.SqlQuery.JoinType;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Join {
 	JoinType type();
+	String schemaName() default "";
 	String tableName();
 	String alias();
 	String joinCondition();

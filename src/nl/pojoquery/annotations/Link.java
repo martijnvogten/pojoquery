@@ -9,6 +9,7 @@ public @interface Link {
 	public static final class DEFAULT {}
 	
 	String linktable() default NONE;
+	String linkschema() default "";
 	String fetchColumn() default NONE;
 	String foreignlinkfield() default NONE;
 	String linkfield() default NONE;
