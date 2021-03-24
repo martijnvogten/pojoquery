@@ -1,6 +1,8 @@
 package nl.pojoquery.pipeline;
 
-import static nl.pojoquery.util.Strings.implode;
+import nl.pojoquery.DB;
+import nl.pojoquery.SqlExpression;
+import nl.pojoquery.util.Iterables;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -8,12 +10,12 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import nl.pojoquery.SqlExpression;
-import nl.pojoquery.util.Iterables;
+import static nl.pojoquery.util.Strings.implode;
 
 public class SqlQuery {
 	private int offset = -1;
 	private int rowCount = -1;
+	private String schema;
 	private String table;
 	private List<SqlField> fields = new ArrayList<SqlField>();
 	private List<SqlJoin> joins = new ArrayList<SqlJoin>();
@@ -43,12 +45,14 @@ public class SqlQuery {
 	
 	public static class SqlJoin {
 		public final JoinType joinType;
+		public final String schema;
 		public final String table;
 		public final String alias;
 		public final SqlExpression joinCondition;
-		
-		public SqlJoin(JoinType type, String tableName, String alias, SqlExpression joinCondition) {
+
+		public SqlJoin(JoinType type, String schemaName, String tableName, String alias, SqlExpression joinCondition) {
 			this.joinType = type;
+			this.schema = "".equals(schemaName) ? null : schemaName;
 			this.table = tableName;
 			this.alias = alias;
 			this.joinCondition = joinCondition;
@@ -155,7 +159,7 @@ public class SqlQuery {
 			}
 		}
 		SqlExpression fieldsExp = SqlExpression.implode(",\n ", fieldExpressions);
-		return toStatement(new SqlExpression("SELECT\n " + fieldsExp.getSql(), fieldsExp.getParameters()), table, joins, wheres, groupBy, orderBy, offset, rowCount);
+		return toStatement(new SqlExpression("SELECT\n " + fieldsExp.getSql(), fieldsExp.getParameters()), schema, table, joins, wheres, groupBy, orderBy, offset, rowCount);
 	}
 
 	public static SqlExpression resolveAliases(SqlExpression sql, String prefixAlias) {
@@ -183,7 +187,7 @@ public class SqlQuery {
 		return new SqlExpression(result.toString(), sql.getParameters());
 	}
 
-	public SqlExpression toStatement(SqlExpression selectClause, String from, List<SqlJoin> joins, List<SqlExpression> wheres, List<String> groupBy,
+	public SqlExpression toStatement(SqlExpression selectClause, String schema, String from, List<SqlJoin> joins, List<SqlExpression> wheres, List<String> groupBy,
 			List<String> orderBy, int offset, int rowCount) {
 
 		List<Object> params = new ArrayList<Object>();
@@ -198,7 +202,7 @@ public class SqlQuery {
 
 		ArrayList<SqlExpression> joinExpressions = new ArrayList<SqlExpression>();
 		for(SqlJoin j : joins) {
-			String sql = j.joinType.name() + " JOIN `" + j.table + "` AS `" + j.alias + "`";
+			String sql = j.joinType.name() + " JOIN " + DB.prefixAndQuoteTableName(j.schema, j.table) + " AS `" + j.alias + "`";
 			SqlExpression resolved = resolveAliases(j.joinCondition, "");
 			if (j.joinCondition != null) {
 				sql += " ON " + resolved.getSql();
@@ -210,7 +214,7 @@ public class SqlQuery {
 		
 		Iterables.addAll(params, joinsClause.getParameters());
 
-		String sql = implode(" ", Arrays.asList(selectClause.getSql(), "\nFROM", "`" + from + "`", "\n", joinsClause.getSql(), whereClause == null ? "" : whereClause.getSql(), groupByClause,
+		String sql = implode(" ", Arrays.asList(selectClause.getSql(), "\nFROM", DB.prefixAndQuoteTableName(schema, from), "\n", joinsClause.getSql(), whereClause == null ? "" : whereClause.getSql(), groupByClause,
 				orderByClause, limitClause));
 
 		return new SqlExpression(sql, params);
@@ -257,13 +261,22 @@ public class SqlQuery {
 	}
 
 	public void addJoin(JoinType type, String tableName, String alias, SqlExpression joinCondition) {
-		joins.add(new SqlJoin(type, tableName, alias, joinCondition));
+		addJoin(type, null, tableName, alias, joinCondition);
 	}
 
-	public void setTable(String table) {
-		this.table = table;
+	public void addJoin(JoinType type, String schemaName, String tableName, String alias, SqlExpression joinCondition) {
+		joins.add(new SqlJoin(type, schemaName, tableName, alias, joinCondition));
 	}
-	
+
+	public void setTable(String schemaName, String tableName) {
+		this.schema = schemaName;
+		this.table = tableName;
+	}
+
+	public String getSchema() {
+		return this.schema;
+	}
+
 	public String getTable() {
 		return this.table;
 	}

@@ -62,10 +62,11 @@ public class QueryBuilder<T> {
 	private QueryBuilder(Class<T> clz) {
 		this.resultClass = clz;
 		query = new SqlQuery();
-		query.setTable(determineTableName(clz));
+		final TableMapping tableMapping = lookupTableMapping(clz);
+		query.setTable(tableMapping.schemaName, tableMapping.tableName);
 		Join joinAnn = clz.getAnnotation(Join.class);
 		if (joinAnn != null) {
-			query.addJoin(joinAnn.type(), joinAnn.tableName(), joinAnn.alias(), SqlExpression.sql(joinAnn.joinCondition()));
+			query.addJoin(joinAnn.type(), joinAnn.schemaName(), joinAnn.tableName(), joinAnn.alias(), SqlExpression.sql(joinAnn.joinCondition()));
 		}
 		GroupBy groupByAnn = clz.getAnnotation(GroupBy.class);
 		if (groupByAnn != null) {
@@ -93,21 +94,21 @@ public class QueryBuilder<T> {
 	}
 	
 	public SqlExpression buildListIdsStatement(List<Field> idFields) {
-		return query.toStatement(new SqlExpression("SELECT DISTINCT " + implode("\n , ", QueryBuilder.getFieldNames(query.getTable(), idFields))), query.getTable(), query.getJoins(), query.getWheres(), null, query.getOrderBy(), query.getOffset(), query.getRowCount());
+		return query.toStatement(new SqlExpression("SELECT DISTINCT " + implode("\n , ", QueryBuilder.getFieldNames(query.getTable(), idFields))), query.getSchema(), query.getTable(), query.getJoins(), query.getWheres(), null, query.getOrderBy(), query.getOffset(), query.getRowCount());
 	}
 
 	public SqlExpression buildCountStatement() {
 		List<Field> idFields = QueryBuilder.determineIdFields(resultClass);
 		String selectClause = "SELECT COUNT(DISTINCT " + implode(", ", QueryBuilder.getFieldNames(query.getTable(), idFields)) + ") ";
 
-		return query.toStatement(new SqlExpression(selectClause), query.getTable(), query.getJoins(), query.getWheres(), null, null, -1, -1);
+		return query.toStatement(new SqlExpression(selectClause), query.getSchema(), query.getTable(), query.getJoins(), query.getWheres(), null, null, -1, -1);
 	}
 
 	public SqlQuery getQuery() {
 		return query;
 	}
 
-	private static String determineTableName(Class<?> clz) {
+	private static TableMapping lookupTableMapping(Class<?> clz) {
 		if (clz == null)
 			throw new NullPointerException("clz");
 
@@ -115,7 +116,7 @@ public class QueryBuilder<T> {
 		if (tableMappings.size() == 0) {
 			throw new MappingException("Missing @Table annotation on class " + clz.getName() + " or any of its superclasses");
 		}
-		return tableMappings.get(tableMappings.size() - 1).tableName;
+		return tableMappings.get(tableMappings.size() - 1);
 	}
 	
 	private void addClass(Class<?> clz, String alias, String parentAlias, Field linkField) {
@@ -139,7 +140,7 @@ public class QueryBuilder<T> {
 					joinType = JoinType.INNER;
 				}
 				String idField = QueryBuilder.determineIdField(superMapping.clazz).getName();
-				query.addJoin(joinType, superMapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + idField + " = {" + combinedAlias + "}." + idField));
+				query.addJoin(joinType, superMapping.schemaName, superMapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + idField + " = {" + combinedAlias + "}." + idField));
 			}
 			
 			Alias newAlias = new Alias(combinedAlias, mapping.clazz, parentAlias, linkField, QueryBuilder.determineIdFields(mapping.clazz));
@@ -165,7 +166,7 @@ public class QueryBuilder<T> {
 				String linkAlias = alias + "." + mapping.tableName;
 				String idField = QueryBuilder.determineIdField(mapping.clazz).getName();
 				
-				query.addJoin(JoinType.LEFT, mapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + idField + " = {" + alias + "}." + idField));
+				query.addJoin(JoinType.LEFT, mapping.schemaName, mapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + idField + " = {" + alias + "}." + idField));
 				Alias subClassAlias = new Alias(linkAlias, mapping.clazz, alias, thisIdField, QueryBuilder.determineIdFields(mapping.clazz));
 				subClassAlias.setIsASubClass(true);
 				aliases.put(linkAlias, subClassAlias);
@@ -213,7 +214,7 @@ public class QueryBuilder<T> {
 							idField = QueryBuilder.determineIdField(clz).getName();
 						}
 						
-						joinMany(query, alias, f.getName(), linkAnn.linktable(), idField, foreignlinkfieldname, joinCondition);
+						joinMany(query, alias, f.getName(), linkAnn.linkschema(), linkAnn.linktable(), idField, foreignlinkfieldname, joinCondition);
 						
 						Alias a = new Alias(linkAlias, componentType, alias, f, QueryBuilder.determineIdFields(componentType));
 						a.setIsLinkedValue(true);
@@ -236,7 +237,7 @@ public class QueryBuilder<T> {
 						if (f.getAnnotation(JoinCondition.class) != null) {
 							joinCondition = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias, isRoot ? "" : alias, linkAlias);
 						}
-						query.addJoin(JoinType.LEFT, linkAnn.linktable(), linkAlias, joinCondition);
+						query.addJoin(JoinType.LEFT, linkAnn.linkschema(), linkAnn.linktable(), linkAlias, joinCondition);
 						
 						String foreignLinkAlias = isRoot ? f.getName() : (alias + "." + f.getName());
 						String foreignIdField = QueryBuilder.determineIdField(componentType).getName();
@@ -244,7 +245,7 @@ public class QueryBuilder<T> {
 						if (Link.NONE.equals(foreignlinkfieldname)) {
 							foreignlinkfieldname = linkFieldName(componentType);
 						}
-						query.addJoin(JoinType.LEFT, determineTableMapping(componentType).get(0).tableName, foreignLinkAlias, new SqlExpression("{" + linkAlias + "}." + foreignlinkfieldname + " = {" + foreignLinkAlias + "}." + foreignIdField));
+						query.addJoin(JoinType.LEFT, determineTableMapping(componentType).get(0).schemaName, determineTableMapping(componentType).get(0).tableName, foreignLinkAlias, new SqlExpression("{" + linkAlias + "}." + foreignlinkfieldname + " = {" + foreignLinkAlias + "}." + foreignIdField));
 						
 						addClass(componentType, foreignLinkAlias, alias, f);
 					}
@@ -297,7 +298,7 @@ public class QueryBuilder<T> {
 	}
 
 	private String joinMany(String alias, SqlQuery result, Field f, Class<?> componentType) {
-		String tableName = determineTableName(componentType);
+		TableMapping tableMapping = lookupTableMapping(componentType);
 		String idField = determineIdField(f.getDeclaringClass()).getName();
 		
 		String linkField = linkFieldName(f.getDeclaringClass());
@@ -310,10 +311,10 @@ public class QueryBuilder<T> {
 			joinCondition = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias);
 		}
 		
-		return joinMany(result, alias, f.getName(), tableName, idField, linkField, joinCondition);
+		return joinMany(result, alias, f.getName(), tableMapping.schemaName, tableMapping.tableName, idField, linkField, joinCondition);
 	}
 
-	private String joinMany(SqlQuery result, String alias, String fieldName, String tableName, String idField, String linkField, SqlExpression joinCondition) {
+	private String joinMany(SqlQuery result, String alias, String fieldName, String schemaName, String tableName, String idField, String linkField, SqlExpression joinCondition) {
 		String linkAlias = alias.equals(rootAlias) ? fieldName : (alias + "." + fieldName);
 		Alias parentAlias = aliases.get(alias);
 		while (parentAlias.getSubClassAliases() != null && parentAlias.getSubClassAliases().size() == 1) {
@@ -329,12 +330,12 @@ public class QueryBuilder<T> {
 		if (joinCondition == null) {
 			joinCondition = new SqlExpression("{" + alias + "}." + idField + " = {" + linkAlias + "}." + linkField);
 		}
-		result.addJoin(JoinType.LEFT, tableName, linkAlias, joinCondition);
+		result.addJoin(JoinType.LEFT, schemaName, tableName, linkAlias, joinCondition);
 		return linkAlias;
 	}
 	
 	private String joinOne(String alias, SqlQuery result, Field f, Class<?> type) {
-		String tableName = determineTableName(type);
+		TableMapping table = lookupTableMapping(type);
 		String linkAlias = alias.equals(rootAlias) ? f.getName() : (alias + "." + f.getName());
 		
 		Alias parentAlias = aliases.get(alias);
@@ -355,7 +356,7 @@ public class QueryBuilder<T> {
 			Field idField = QueryBuilder.determineIdField(type);
 			joinCondition = new SqlExpression("{" + alias + "}." + linkFieldName(f) + " = {" + linkAlias + "}." + idField.getName());
 		}
-		result.addJoin(JoinType.LEFT, tableName, linkAlias, joinCondition);
+		result.addJoin(JoinType.LEFT, table.schemaName, table.tableName, linkAlias, joinCondition);
 		return linkAlias;
 	}
 	
@@ -365,7 +366,7 @@ public class QueryBuilder<T> {
 	}
 
 	private static String linkFieldName(Class<?> clz) {
-		return determineTableName(clz) + "_id";
+		return lookupTableMapping(clz).tableName + "_id";
 	}
 	
 	private static String linkFieldName(Field f) {
@@ -745,7 +746,7 @@ public class QueryBuilder<T> {
 			fields.addAll(0, QueryBuilder.collectFieldsOfClass(clz, clz.getSuperclass()));
 			if (tableAnn != null) {
 				String name = tableAnn.value();
-				tables.add(0, new TableMapping(name, mappedClz, new ArrayList<Field>(fields)));
+				tables.add(0, new TableMapping(tableAnn.schema(), name, mappedClz, new ArrayList<Field>(fields)));
 				fields.clear();
 				mappedClz = null;
 			}

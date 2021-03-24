@@ -8,4 +8,6 @@ public @interface Table {
 
 	String value();
 
+	String schema() default "";
+
 }
