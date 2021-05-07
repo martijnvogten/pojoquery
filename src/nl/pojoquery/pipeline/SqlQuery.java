@@ -154,7 +154,7 @@ public class SqlQuery {
 				fieldExpressions.add(field.expression);
 			} else {
 				SqlExpression resolved = resolveAliases(field.expression, "");
-				String sql = resolved.getSql() + " AS `" + field.alias + "`";
+				String sql = resolved.getSql() + " AS " + DB.quoteObjectNames(field.alias);
 				fieldExpressions.add(new SqlExpression(sql, resolved.getParameters()));
 			}
 		}
@@ -165,7 +165,7 @@ public class SqlQuery {
 	public static SqlExpression resolveAliases(SqlExpression sql, String prefixAlias) {
 		return resolveAliases(sql, prefixAlias, prefixAlias, prefixAlias);
 	}
-	
+
 	public static SqlExpression resolveAliases(SqlExpression sql, String thisAlias, String prefixAlias, String linkTableAlias) {
 		StringBuffer result = new StringBuffer();
 		Matcher m = Pattern.compile("\\{([a-zA-Z0-9_\\.]+)\\}\\.").matcher(sql.getSql());
@@ -181,7 +181,8 @@ public class SqlQuery {
 			} else {
 				combinedAlias = alias;
 			}
-			m.appendReplacement(result, "`" + combinedAlias + "`.");
+			m.appendReplacement(result, DB.quoteObjectNames(combinedAlias));
+			result.append(".");
 		}
 		m.appendTail(result);
 		return new SqlExpression(result.toString(), sql.getParameters());
@@ -202,7 +203,7 @@ public class SqlQuery {
 
 		ArrayList<SqlExpression> joinExpressions = new ArrayList<SqlExpression>();
 		for(SqlJoin j : joins) {
-			String sql = j.joinType.name() + " JOIN " + DB.prefixAndQuoteTableName(j.schema, j.table) + " AS `" + j.alias + "`";
+			String sql = j.joinType.name() + " JOIN " + DB.prefixAndQuoteTableName(j.schema, j.table) + " AS " + DB.quoteObjectNames(j.alias);
 			SqlExpression resolved = resolveAliases(j.joinCondition, "");
 			if (j.joinCondition != null) {
 				sql += " ON " + resolved.getSql();

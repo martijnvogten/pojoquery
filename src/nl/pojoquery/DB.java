@@ -18,6 +18,27 @@ import java.util.function.Consumer;
 import javax.sql.DataSource;
 
 public class DB {
+	public enum QuoteStyle {
+		ANSI('"'),
+		MYSQL('`');
+
+		private final char quote;
+
+		QuoteStyle(char quote) {
+			this.quote = quote;
+		}
+
+		public String quote(String name) {
+			return quote + name + quote;
+		}
+	}
+
+	// For backwards compatibility. Note that if you're using MySQL
+	// you can pass `?sessionVariables=sql_mode=ANSI_QUOTES` as a JDBC
+	// URL parameter and set this to ANSI, which is the preferred
+	// style.
+	public static QuoteStyle quoteStyle = QuoteStyle.MYSQL;
+
 	public static final class DatabaseException extends RuntimeException {
 		private static final long serialVersionUID = 1L;
 
@@ -214,8 +235,9 @@ public class DB {
 		List<String> updateList = new ArrayList<String>();
 
 		for (String f : values.keySet()) {
+			final String quotedField = quoteObjectNames(f);
+
 			qmarks.add("?");
-			String quotedField = "`" + f + "`";
 			quotedFields.add(quotedField);
 			params.add(values.get(f));
 			updateList.add(quotedField + "=?");
@@ -232,8 +254,23 @@ public class DB {
 		return new SqlExpression(sql, params);
 	}
 
+	public static String quoteObjectNames(String... names) {
+		String ret = "";
+		for (int i = 0, nl = names.length; i < nl; i++) {
+			String name = names[i];
+			if (i > 0) {
+				ret += ".";
+			}
+			ret += quoteStyle.quote(name);
+		}
+		return ret;
+	}
+
 	public static String prefixAndQuoteTableName(String schemaName, String tableName) {
-		return "`" + (schemaName != null ? schemaName + "`.`" : "") + tableName + "`";
+		if (schemaName == null) {
+			return quoteObjectNames(tableName);
+		}
+		return quoteObjectNames(schemaName, tableName);
 	}
 
 	private static SqlExpression buildUpdate(String schemaName, String tableName, Map<String, ? extends Object> values, Map<String, ? extends Object> ids) {
@@ -244,13 +281,13 @@ public class DB {
 
 		for (String f : values.keySet()) {
 			qmarks.add("?");
-			assignments.add("`" + f + "`=?");
+			assignments.add(String.format("%s=?", quoteObjectNames(f)));
 			params.add(values.get(f));
 		}
 		
 		for (String idField : ids.keySet()) {
 			qmarks.add("?");
-			wheres.add("`" + idField + "`=?");
+			wheres.add(String.format("%s=?", quoteObjectNames(idField)));
 			params.add(ids.get(idField));
 		}
 		
