@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
+import nl.pojoquery.DB;
 import nl.pojoquery.FieldMapping;
 import nl.pojoquery.SqlExpression;
 import nl.pojoquery.annotations.Embedded;
@@ -696,7 +697,7 @@ public class QueryBuilder<T> {
 		List<TableMapping> tables = QueryBuilder.determineTableMapping(resultClass);
 		String tableName = tables.get(tables.size() - 1).tableName;
 		if (idFields.size() == 1) {
-			return Arrays.asList(new SqlExpression("`" + tableName + "`." + idFields.get(0).getName() + "=?", Arrays.asList((Object) id)));
+			return Arrays.asList(new SqlExpression(DB.quoteObjectNames(tableName, idFields.get(0).getName()) + "=?", Arrays.asList((Object) id)));
 		} else {
 			if (id instanceof Map) {
 				@SuppressWarnings("unchecked")
@@ -704,7 +705,7 @@ public class QueryBuilder<T> {
 	
 				List<SqlExpression> result = new ArrayList<SqlExpression>();
 				for (String field : idvalues.keySet()) {
-					result.add(new SqlExpression("`" + tableName + "`." + field + "=?", Arrays.asList((Object) idvalues.get(field))));
+					result.add(new SqlExpression(DB.quoteObjectNames(tableName, field) + "=?", Arrays.asList((Object) idvalues.get(field))));
 				}
 				return result;
 			} else {

@@ -444,7 +444,7 @@ public class PojoQuery<T> {
 					if (idvalue == null) {
 						throw new MappingException("Cannot create wherecondition for entity with null value in idfield " + field.getName());
 					}
-					whereCondition.add(new SqlExpression("`" + table.tableName + "`." + field.getName() + "=?", Arrays.asList(idvalue)));
+					whereCondition.add(new SqlExpression(DB.quoteObjectNames(table.tableName, field.getName()) + "=?", Arrays.asList(idvalue)));
 				}
 				if (db != null) {
 					executeDelete(null, db, table.tableName, whereCondition);
@@ -466,7 +466,7 @@ public class PojoQuery<T> {
 
 	private static void executeDelete(Connection conn, DataSource db, String tableName, List<SqlExpression> where) {
 		SqlExpression wheres = SqlExpression.implode(" AND ", where);
-		SqlExpression deleteStatement = new SqlExpression("DELETE FROM `" + tableName + "` WHERE " + wheres.getSql(), wheres.getParameters());
+		SqlExpression deleteStatement = new SqlExpression("DELETE FROM " + DB.quoteObjectNames(tableName) + " WHERE " + wheres.getSql(), wheres.getParameters());
 		if (db != null) {
 			DB.update(db, deleteStatement);
 		} else {
