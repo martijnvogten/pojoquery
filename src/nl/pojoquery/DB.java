@@ -324,7 +324,12 @@ public class DB {
 	@SuppressWarnings("unchecked")
 	private static <T> T execute(Connection connection, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
 		try {
-			PreparedStatement stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+			PreparedStatement stmt = connection.prepareStatement(
+				sql,
+				type == QueryType.INSERT
+					? Statement.RETURN_GENERATED_KEYS
+					: Statement.NO_GENERATED_KEYS
+			);
 			if (params != null) {
 				applyParameters(params, stmt);
 			}
