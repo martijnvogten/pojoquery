@@ -8,8 +8,10 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -323,13 +325,12 @@ public class DB {
 
 	@SuppressWarnings("unchecked")
 	private static <T> T execute(Connection connection, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
-		try {
-			PreparedStatement stmt = connection.prepareStatement(
+		try (PreparedStatement stmt = connection.prepareStatement(
 				sql,
 				type == QueryType.INSERT
 					? Statement.RETURN_GENERATED_KEYS
 					: Statement.NO_GENERATED_KEYS
-			);
+			)) {
 			if (params != null) {
 				applyParameters(params, stmt);
 			}
@@ -341,20 +342,19 @@ public class DB {
 					success = true;
 					break;
 				case SELECT:
-					ResultSet resultSet = stmt.executeQuery();
-					success = true;
-					if (processor != null) {
+					try (ResultSet resultSet = stmt.executeQuery()) {
+						success = true;
 						return processor.process(resultSet);
 					}
-					return (T) resultSet;
 				case INSERT:
 					stmt.executeUpdate();
 					success = true;
-					ResultSet keysResult = stmt.getGeneratedKeys();
-					if (keysResult != null && keysResult.next()) {
-						return (T) keysResult.getObject(1);
-					} else {
-						return null;
+					try (ResultSet keysResult = stmt.getGeneratedKeys()) {
+						if (keysResult != null && keysResult.next()) {
+							return (T) keysResult.getObject(1);
+						} else {
+							return null;
+						}
 					}
 				case UPDATE:
 					Integer affectedRows = stmt.executeUpdate();
@@ -362,7 +362,6 @@ public class DB {
 					return (T) affectedRows;
 				}
 			} finally {
-				stmt.close();
 				if (!success) {
 					System.err.println("QUERY FAILED: " + sql);
 				}
@@ -377,7 +376,11 @@ public class DB {
 	private static void applyParameters(Iterable<Object> params, PreparedStatement stmt) throws SQLException {
 		int index = 1;
 		for (Object val : params) {
-			if (val != null && val.getClass().isEnum()) {
+			if (val != null && val instanceof LocalDate) {
+				LocalDate localDate = (LocalDate)val;
+				String dateAsString = localDate.getYear() + "-" + localDate.getMonthValue() + "-" + localDate.getDayOfMonth();
+				stmt.setObject(index++, dateAsString);
+			} else if (val != null && val.getClass().isEnum()) {
 				stmt.setObject(index++, ((Enum<?>)val).name());
 			} else {
 				stmt.setObject(index++, val);

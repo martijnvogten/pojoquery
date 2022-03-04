@@ -246,7 +246,8 @@ public class QueryBuilder<T> {
 						if (Link.NONE.equals(foreignlinkfieldname)) {
 							foreignlinkfieldname = linkFieldName(componentType);
 						}
-						query.addJoin(JoinType.LEFT, determineTableMapping(componentType).get(0).schemaName, determineTableMapping(componentType).get(0).tableName, foreignLinkAlias, new SqlExpression("{" + linkAlias + "}." + foreignlinkfieldname + " = {" + foreignLinkAlias + "}." + foreignIdField));
+						SqlExpression foreignJoinCondition = new SqlExpression("{" + linkAlias + "}." + foreignlinkfieldname + " = {" + foreignLinkAlias + "}." + foreignIdField);
+						query.addJoin(JoinType.LEFT, determineTableMapping(componentType).get(0).schemaName, determineTableMapping(componentType).get(0).tableName, foreignLinkAlias, foreignJoinCondition);
 						
 						addClass(componentType, foreignLinkAlias, alias, f);
 					}
