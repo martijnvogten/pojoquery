@@ -53,7 +53,7 @@ public class DB {
 		public T run(Connection connection);
 	}
 
-	private enum QueryType {
+	public enum QueryType {
 		DDL, SELECT, UPDATE, INSERT
 	}
 
@@ -323,7 +323,7 @@ public class DB {
 	}
 
 	@SuppressWarnings("unchecked")
-	private static <T> T execute(Connection connection, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
+	public static <T> T execute(Connection connection, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
 		try (PreparedStatement stmt = connection.prepareStatement(
 				sql,
 				type == QueryType.INSERT
