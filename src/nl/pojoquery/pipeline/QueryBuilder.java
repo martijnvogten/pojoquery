@@ -194,7 +194,7 @@ public class QueryBuilder<T> {
 			f.setAccessible(true);
 			
 			Class<?> type = f.getType();
-			boolean isRoot = alias.equals(rootAlias);
+			boolean isRoot = isRootOrSuperClassOfRoot(alias);
 			if (isListOrArray(type)) {
 				Class<?> componentType = type.isArray() ? type.getComponentType() : Types.getComponentType(f.getGenericType());
 				
@@ -310,10 +310,18 @@ public class QueryBuilder<T> {
 		}
 		SqlExpression joinCondition = null;
 		if (f.getAnnotation(JoinCondition.class) != null) {
-			joinCondition = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias, alias.equals(rootAlias) ? "" : alias, null);
+			joinCondition = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias, isRootOrSuperClassOfRoot(alias) ? "" : alias, null);
 		}
 		
 		return joinMany(result, alias, f.getName(), tableMapping.schemaName, tableMapping.tableName, idField, linkField, joinCondition);
+	}
+
+	private boolean isRootOrSuperClassOfRoot(String alias) {
+		if (alias.equals(rootAlias)) {
+			return true;
+		}
+		List<String> subs = aliases.get(alias).getSubClassAliases();
+		return subs != null && subs.contains(rootAlias);
 	}
 
 	private String joinMany(SqlQuery result, String alias, String fieldName, String schemaName, String tableName, String idField, String linkField, SqlExpression joinCondition) {
