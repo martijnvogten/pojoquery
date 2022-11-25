@@ -41,7 +41,7 @@ public class TestSchemaPrefixes {
 						" `article`.title AS `article.title`, " + 
 						" `authors`.name AS `authors.name` " + 
 						"FROM `schema1`.`article`" +
-						" LEFT JOIN `schema2`.`person` AS `authors` ON `article`.authorName=`article.authors`.name"),
+						" LEFT JOIN `schema2`.`person` AS `authors` ON `article`.authorName=`authors`.name"),
 				norm(QueryBuilder.from(Article.class).getQuery().toStatement().getSql()));
 	}
 	

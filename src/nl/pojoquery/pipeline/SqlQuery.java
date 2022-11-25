@@ -1,8 +1,6 @@
 package nl.pojoquery.pipeline;
 
-import nl.pojoquery.DB;
-import nl.pojoquery.SqlExpression;
-import nl.pojoquery.util.Iterables;
+import static nl.pojoquery.util.Strings.implode;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -10,7 +8,9 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static nl.pojoquery.util.Strings.implode;
+import nl.pojoquery.DB;
+import nl.pojoquery.SqlExpression;
+import nl.pojoquery.util.Iterables;
 
 public class SqlQuery {
 	private int offset = -1;
@@ -153,17 +153,13 @@ public class SqlQuery {
 			if (field.alias == null) {
 				fieldExpressions.add(field.expression);
 			} else {
-				SqlExpression resolved = resolveAliases(field.expression, "");
+				SqlExpression resolved = resolveAliases(field.expression, "", "", null);
 				String sql = resolved.getSql() + " AS " + DB.quoteObjectNames(field.alias);
 				fieldExpressions.add(new SqlExpression(sql, resolved.getParameters()));
 			}
 		}
 		SqlExpression fieldsExp = SqlExpression.implode(",\n ", fieldExpressions);
 		return toStatement(new SqlExpression("SELECT\n " + fieldsExp.getSql(), fieldsExp.getParameters()), schema, table, joins, wheres, groupBy, orderBy, offset, rowCount);
-	}
-
-	public static SqlExpression resolveAliases(SqlExpression sql, String prefixAlias) {
-		return resolveAliases(sql, prefixAlias, prefixAlias, prefixAlias);
 	}
 
 	public static SqlExpression resolveAliases(SqlExpression sql, String thisAlias, String prefixAlias, String linkTableAlias) {
@@ -197,14 +193,14 @@ public class SqlQuery {
 		SqlExpression whereClause = buildWhereClause(wheres);
 		Iterables.addAll(params, whereClause.getParameters());
 
-		String groupByClause = resolveAliases(SqlExpression.sql(buildClause("GROUP BY", groupBy)), getTable()).getSql();
-		String orderByClause = resolveAliases(SqlExpression.sql(buildClause("ORDER BY", orderBy)), getTable()).getSql();
+		String groupByClause = resolveAliases(SqlExpression.sql(buildClause("GROUP BY", groupBy)), getTable(), getTable(), null).getSql();
+		String orderByClause = resolveAliases(SqlExpression.sql(buildClause("ORDER BY", orderBy)), getTable(), getTable(), null).getSql();
 		String limitClause = buildLimitClause(offset, rowCount);
 
 		ArrayList<SqlExpression> joinExpressions = new ArrayList<SqlExpression>();
 		for(SqlJoin j : joins) {
 			String sql = j.joinType.name() + " JOIN " + DB.prefixAndQuoteTableName(j.schema, j.table) + " AS " + DB.quoteObjectNames(j.alias);
-			SqlExpression resolved = resolveAliases(j.joinCondition, "");
+			SqlExpression resolved = resolveAliases(j.joinCondition, "", "", null);
 			if (j.joinCondition != null) {
 				sql += " ON " + resolved.getSql();
 			}
@@ -243,7 +239,7 @@ public class SqlQuery {
 		if (parts.size() > 0) {
 			List<String> clauses = new ArrayList<String>();
 			for (SqlExpression exp : parts) {
-				clauses.add(resolveAliases(exp, getTable()).getSql());
+				clauses.add(resolveAliases(exp, getTable(), getTable(), null).getSql());
 				for (Object o : exp.getParameters()) {
 					parameters.add(o);
 				}

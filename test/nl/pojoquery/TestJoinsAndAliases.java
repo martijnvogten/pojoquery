@@ -42,7 +42,7 @@ public class TestJoinsAndAliases {
 						" `article`.title AS `article.title`, " + 
 						" `authors`.name AS `authors.name` " + 
 						"FROM `article`" + 
-						" LEFT JOIN `person` AS `authors` ON `article`.authorName=`article.authors`.name"), 
+						" LEFT JOIN `person` AS `authors` ON `article`.authorName=`authors`.name"), 
 				norm(QueryBuilder.from(Article.class).getQuery().toStatement().getSql()));
 	}
 	

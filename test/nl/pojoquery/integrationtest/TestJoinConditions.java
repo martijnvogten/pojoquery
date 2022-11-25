@@ -61,6 +61,15 @@ public class TestJoinConditions {
 		List<EventWithVisitorsAndOrganizers> events;
 	}
 	
+	@Table("festival")
+	static class FestivalWithJoinConditionOnEvents {
+		@Id
+		Long festivalId;
+		String name;
+		@JoinCondition("{events}.festivalId = {this}.festivalId")
+		List<Event> events;
+	}
+	
 	@Table("employee")
 	static class Employee {
 		@Id
@@ -107,6 +116,12 @@ public class TestJoinConditions {
 		
 		Assert.assertEquals(1, eventList.get(0).organizers.size());
 		Assert.assertEquals("Stella", eventList.get(0).organizers.get(0).firstname);
+	}
+	
+	@Test
+	public void FestivalWithJoinConditionOnEvents() {
+		DataSource db = initDatabase();
+		PojoQuery.build(FestivalWithJoinConditionOnEvents.class).execute(db);
 	}
 
 	private void insertTestData(DataSource db) {

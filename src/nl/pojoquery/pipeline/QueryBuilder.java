@@ -281,7 +281,7 @@ public class QueryBuilder<T> {
 			} else {
 				SqlExpression selectExpression;
 				if (f.getAnnotation(Select.class) != null) {
-					selectExpression = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(Select.class).value()), alias);
+					selectExpression = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(Select.class).value()), alias, alias.equals(rootAlias) ? "" : alias, null);
 				} else {
 					String fieldName = determineSqlFieldName(f);
 					selectExpression = new SqlExpression("{" + alias + "}." + fieldName);
@@ -310,7 +310,7 @@ public class QueryBuilder<T> {
 		}
 		SqlExpression joinCondition = null;
 		if (f.getAnnotation(JoinCondition.class) != null) {
-			joinCondition = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias);
+			joinCondition = SqlQuery.resolveAliases(new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias, alias.equals(rootAlias) ? "" : alias, null);
 		}
 		
 		return joinMany(result, alias, f.getName(), tableMapping.schemaName, tableMapping.tableName, idField, linkField, joinCondition);
