@@ -26,6 +26,7 @@ import nl.pojoquery.annotations.GroupBy;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Join;
 import nl.pojoquery.annotations.JoinCondition;
+import nl.pojoquery.annotations.Joins;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.OrderBy;
 import nl.pojoquery.annotations.Other;
@@ -54,6 +55,7 @@ public class QueryBuilder<T> {
 	
 	private LinkedHashMap<String,Alias> subClasses = new LinkedHashMap<>();
 	private LinkedHashMap<String,Alias> aliases = new LinkedHashMap<>();
+	private Map<String, List<String>> keysByAlias = new HashMap<String, List<String>>();
 	private Map<String,FieldMapping> fieldMappings = new LinkedHashMap<>();
 	
 	private final Class<T> resultClass;
@@ -65,8 +67,8 @@ public class QueryBuilder<T> {
 		query = new SqlQuery();
 		final TableMapping tableMapping = lookupTableMapping(clz);
 		query.setTable(tableMapping.schemaName, tableMapping.tableName);
-		Join joinAnn = clz.getAnnotation(Join.class);
-		if (joinAnn != null) {
+		List<Join> joinAnns = getJoinAnnotations(clz);
+		for (Join joinAnn : joinAnns) {
 			query.addJoin(joinAnn.type(), joinAnn.schemaName(), joinAnn.tableName(), joinAnn.alias(), SqlExpression.sql(joinAnn.joinCondition()));
 		}
 		GroupBy groupByAnn = clz.getAnnotation(GroupBy.class);
@@ -84,6 +86,18 @@ public class QueryBuilder<T> {
 
 		rootAlias = query.getTable();
 		addClass(clz, rootAlias, null, null);
+	}
+
+	private List<Join> getJoinAnnotations(Class<T> clz) {
+		Joins multipleJoins = clz.getAnnotation(Joins.class);
+		if (multipleJoins != null) {
+			return Arrays.asList(multipleJoins.value());
+		}
+		Join singleJoin = clz.getAnnotation(Join.class);
+		if (singleJoin != null) {
+			return List.of(singleJoin);
+		}
+		return List.of();
 	}
 
 	public static <R> QueryBuilder<R> from(Class<R> clz) {
@@ -403,6 +417,10 @@ public class QueryBuilder<T> {
 		try {
 			List<T> result = new ArrayList<T>(rows.size());
 			Map<Object, Object> allEntities = new HashMap<Object, Object>();
+			if (rows.size() > 0) {
+				Set<String> allKeys = rows.get(0).keySet();
+				keysByAlias = groupKeysByAlias(allKeys);
+			}
 			
 			for(Map<String,Object> row : rows) {
 				processRow(result, allEntities, row);
@@ -414,10 +432,28 @@ public class QueryBuilder<T> {
 		}
 	}
 
+	public static Map<String, List<String>> groupKeysByAlias(Set<String> allKeys) {
+		Map<String, List<String>> keysByAlias = new HashMap<String, List<String>>();
+		
+		for (String key : allKeys) {
+			int dotPos = key.lastIndexOf(".");
+			String alias = key.substring(0, dotPos);
+			if (!keysByAlias.containsKey(alias)) {
+				keysByAlias.put(alias, new ArrayList<>());
+			}
+			keysByAlias.get(alias).add(key);
+		}
+		
+		return keysByAlias;
+	}
+
 	
 	@SuppressWarnings("unchecked")
 	public void processRow(List<T> result, Map<Object, Object> allEntities, Map<String, Object> row) {
-		Map<String, Values> onThisRow = collectValuesByAlias(row);
+		if (keysByAlias.size() == 0) {
+			keysByAlias = groupKeysByAlias(row.keySet());
+		}
+		Map<String, Values> onThisRow = collectValuesByAlias(row, keysByAlias);
 		
 		onThisRow = remapSubClasses(onThisRow);
 		
@@ -610,12 +646,15 @@ public class QueryBuilder<T> {
 		return result;
 	}
 
-	private Map<String,Values> collectValuesByAlias(Map<String, Object> row) {
+	private Map<String,Values> collectValuesByAlias(Map<String, Object> row, Map<String, List<String>> keysByAlias) {
 		Map<String,Values> result = new HashMap<>();
 		for(Alias a : aliases.values()) {
 			String alias = a.getAlias();
-			Values values = getAliasValues(row, alias);
-			result.put(alias, values);
+			List<String> fieldList = keysByAlias.get(alias);
+			if (fieldList != null) {
+				Values values = getAliasValues(row, fieldList);
+				result.put(alias, values);
+			}
 		}
 		return result;
 	}
@@ -670,13 +709,10 @@ public class QueryBuilder<T> {
 		return true;
 	}
 
-	private static Values getAliasValues(Map<String, Object> row, String alias) {
+	private static Values getAliasValues(Map<String, Object> row, List<String> fieldList) {
 		Values result = new Values();
-		for(String key : row.keySet()) {
-			int dotPos = key.lastIndexOf(".");
-			if (alias.equals(key.substring(0, dotPos))) {
-				result.put(key, row.get(key));
-			}
+		for(String key : fieldList) {
+			result.put(key, row.get(key));
 		}
 		return result;
 	}

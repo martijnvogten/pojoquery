@@ -153,7 +153,7 @@ public class SqlQuery {
 			if (field.alias == null) {
 				fieldExpressions.add(field.expression);
 			} else {
-				SqlExpression resolved = resolveAliases(field.expression, "", "", null);
+				SqlExpression resolved = resolveAliases(field.expression, table, "", null);
 				String sql = resolved.getSql() + " AS " + DB.quoteObjectNames(field.alias);
 				fieldExpressions.add(new SqlExpression(sql, resolved.getParameters()));
 			}
@@ -200,7 +200,7 @@ public class SqlQuery {
 		ArrayList<SqlExpression> joinExpressions = new ArrayList<SqlExpression>();
 		for(SqlJoin j : joins) {
 			String sql = j.joinType.name() + " JOIN " + DB.prefixAndQuoteTableName(j.schema, j.table) + " AS " + DB.quoteObjectNames(j.alias);
-			SqlExpression resolved = resolveAliases(j.joinCondition, "", "", null);
+			SqlExpression resolved = resolveAliases(j.joinCondition, table, "", null);
 			if (j.joinCondition != null) {
 				sql += " ON " + resolved.getSql();
 			}

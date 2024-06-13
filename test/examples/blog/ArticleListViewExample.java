@@ -15,13 +15,17 @@ import nl.pojoquery.pipeline.SqlQuery.JoinType;
 
 public class ArticleListViewExample {
 	
-	@Join(type=JoinType.LEFT, tableName="comment", alias="comment", joinCondition="comment.article_id = article.id")
+	@Join(type=JoinType.LEFT, tableName="comment", alias="comment", joinCondition="{comment}.article_id = {this}.id")
+	@Join(type=JoinType.LEFT, tableName="views", alias="views", joinCondition="{views}.article_id = {this}.id")
 	@GroupBy("article.id")
 	public static class ArticleListView extends Article {
 		public User author;
 		
 		@Select("COUNT(comment.id)")
 		public Long commentCount;
+		
+		@Select("COUNT(views.id)")
+		public Long viewCount;
 		
 		@Select("MAX(comment.submitdate)")
 		public Date lastCommentDate;

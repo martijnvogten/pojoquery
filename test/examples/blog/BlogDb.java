@@ -24,6 +24,7 @@ public class BlogDb {
 		DB.executeDDL(db, "CREATE TABLE article (id BIGINT NOT NULL AUTO_INCREMENT, title TEXT, content LONGTEXT, author_id BIGINT, PRIMARY KEY(id))");
 		DB.executeDDL(db, "CREATE TABLE user    (id BIGINT NOT NULL AUTO_INCREMENT, email VARCHAR(255), firstName VARCHAR(255), lastName VARCHAR(255), PRIMARY KEY(id))");
 		DB.executeDDL(db, "CREATE TABLE comment (id BIGINT NOT NULL AUTO_INCREMENT, article_id BIGINT NOT NULL, comment LONGTEXT, submitdate DATETIME, author_id BIGINT, PRIMARY KEY(id))");
+		DB.executeDDL(db, "CREATE TABLE views   (id BIGINT NOT NULL AUTO_INCREMENT, article_id BIGINT NOT NULL, viewedAt DATETIME, PRIMARY KEY(id))");
 	}
 	
 	private static void insertData(DataSource db) {
