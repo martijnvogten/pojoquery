@@ -12,25 +12,17 @@ dependencies {
 
 sourceSets {
 	main {
-	   java {
-		  srcDir 'src'
-	   }
-	   resources {
-		  srcDir 'src'
-	   }
+		java {
+			srcDir 'src'
+		}
 	}
 	test {
-	   java {
-		  srcDir 'test'
-	   }
-	   resources {
-		  srcDir 'test'
-	   }
+		java {
+			srcDir 'test'
+		}
 	}
- }
-
-task sourcesJar(type: Jar, dependsOn: classes) {
-	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    classifier = 'sources'
-    from sourceSets.main.allSource
+}
+ 
+java {
+	withSourcesJar()
 }
