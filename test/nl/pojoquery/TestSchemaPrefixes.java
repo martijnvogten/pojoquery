@@ -40,7 +40,7 @@ public class TestSchemaPrefixes {
 						" `article`.id AS `article.id`, " + 
 						" `article`.title AS `article.title`, " + 
 						" `authors`.name AS `authors.name` " + 
-						"FROM `schema1`.`article`" +
+						"FROM `schema1`.`article` AS `article`" +
 						" LEFT JOIN `schema2`.`person` AS `authors` ON `article`.authorName=`authors`.name"),
 				norm(QueryBuilder.from(Article.class).getQuery().toStatement().getSql()));
 	}
@@ -53,9 +53,27 @@ public class TestSchemaPrefixes {
 						" `articles`.id AS `articles.id`,\n" + 
 						" `articles`.title AS `articles.title`,\n" + 
 						" `articles.authors`.name AS `articles.authors.name`\n" + 
-						"FROM `schema3`.`book`\n" +
+						"FROM `schema3`.`book` AS `book`\n" +
 						" LEFT JOIN `schema1`.`article` AS `articles` ON `book`.id = `articles`.book_id\n" +
 						" LEFT JOIN `schema2`.`person` AS `articles.authors` ON `articles`.authorName=`articles.authors`.name"),
 				norm(QueryBuilder.from(Book.class).getQuery().toStatement().getSql()));
+	}
+	
+	@Test
+	public void testAliasesWithAnExtraJoinWithoutObjectQuoting() {
+		
+		DbContext context = new DbContext.DefaultDbContext();
+		context.setQuoteObjectNames(false);
+		
+		assertEquals(
+				norm("SELECT\n" + 
+						" `book`.id AS `book.id`,\n" + 
+						" `articles`.id AS `articles.id`,\n" + 
+						" `articles`.title AS `articles.title`,\n" + 
+						" `articles.authors`.name AS `articles.authors.name`\n" + 
+						"FROM schema3.book AS `book`\n" +
+						" LEFT JOIN schema1.article AS `articles` ON `book`.id = `articles`.book_id\n" +
+						" LEFT JOIN schema2.person AS `articles.authors` ON `articles`.authorName=`articles.authors`.name"),
+				norm(QueryBuilder.from(context, Book.class).getQuery().toStatement().getSql()));
 	}
 }

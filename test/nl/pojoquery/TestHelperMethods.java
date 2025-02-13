@@ -1,43 +1,47 @@
 package nl.pojoquery;
 
-import nl.pojoquery.DB.QuoteStyle;
-import org.junit.BeforeClass;
 import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
+
+import nl.pojoquery.DbContext.QuoteStyle;
 
 public class TestHelperMethods {
 	private static QuoteStyle restoreQuoteStyle;
 
 	@BeforeClass
 	public static void saveQuoteStyle() {
-		restoreQuoteStyle = DB.quoteStyle;
+		restoreQuoteStyle = DbContext.getDefault().getQuoteStyle();
 	}
 
 	@AfterClass
 	public static void restoreQuoteStyle() {
-		DB.quoteStyle = restoreQuoteStyle;
+		DbContext.getDefault().setQuoteStyle(restoreQuoteStyle);
 	}
 
 	@Test
 	public void testPrefixAndQuoteTableName() {
-		DB.quoteStyle = QuoteStyle.ANSI;
-		Assert.assertEquals("\"foo\"", DB.prefixAndQuoteTableName(null, "foo"));
-		Assert.assertEquals("\"bar\".\"foo\"", DB.prefixAndQuoteTableName("bar", "foo"));
-		DB.quoteStyle = QuoteStyle.MYSQL;
-		Assert.assertEquals("`foo`", DB.prefixAndQuoteTableName(null, "foo"));
-		Assert.assertEquals("`bar`.`foo`", DB.prefixAndQuoteTableName("bar", "foo"));
+		DbContext db = DbContext.getDefault();
+		db.setQuoteStyle(QuoteStyle.ANSI);
+		Assert.assertEquals("\"foo\"", DB.prefixAndQuoteTableName(db, null, "foo"));
+		Assert.assertEquals("\"bar\".\"foo\"", DB.prefixAndQuoteTableName(db, "bar", "foo"));
+		db.setQuoteStyle(QuoteStyle.MYSQL);
+		Assert.assertEquals("`foo`", DB.prefixAndQuoteTableName(db, null, "foo"));
+		Assert.assertEquals("`bar`.`foo`", DB.prefixAndQuoteTableName(db, "bar", "foo"));
 	}
 
 	@Test
 	public void testQuoteObjectNames() {
-		DB.quoteStyle = QuoteStyle.ANSI;
-		Assert.assertEquals("", DB.quoteObjectNames());
-		Assert.assertEquals("\"foo\"", DB.quoteObjectNames("foo"));
-		Assert.assertEquals("\"foo\".\"bar\".\"baz\"", DB.quoteObjectNames("foo", "bar", "baz"));
+		DbContext db = DbContext.getDefault();
+		
+		db.setQuoteStyle(QuoteStyle.ANSI);
+		Assert.assertEquals("", db.quoteObjectNames());
+		Assert.assertEquals("\"foo\"", db.quoteObjectNames("foo"));
+		Assert.assertEquals("\"foo\".\"bar\".\"baz\"", db.quoteObjectNames("foo", "bar", "baz"));
 
-		DB.quoteStyle = QuoteStyle.MYSQL;
-		Assert.assertEquals("`foo`", DB.quoteObjectNames("foo"));
-		Assert.assertEquals("`foo`.`bar`.`baz`", DB.quoteObjectNames("foo", "bar", "baz"));
+		db.setQuoteStyle(QuoteStyle.MYSQL);
+		Assert.assertEquals("`foo`", db.quoteObjectNames("foo"));
+		Assert.assertEquals("`foo`.`bar`.`baz`", db.quoteObjectNames("foo", "bar", "baz"));
 	}
 }

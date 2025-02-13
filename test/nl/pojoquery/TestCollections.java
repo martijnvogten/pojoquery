@@ -60,7 +60,7 @@ public class TestCollections {
 			TestUtils.norm("SELECT\n" + 
 				" `user`.id AS `user.id`,\n" + 
 				" `roles`.element AS `roles.value`\n" + 
-				"FROM `user`\n" + 
+				"FROM `user` AS `user`\n" + 
 				" LEFT JOIN `user_roles` AS `roles` ON `user`.id = `roles`.user_id"), 
 			TestUtils.norm(pq.toSql()));
 		
@@ -88,7 +88,7 @@ public class TestCollections {
 					" `roles`.element AS `roles.value`,\n" + 
 					" `articles`.id AS `articles.id`,\n" + 
 					" `articles`.title AS `articles.title`\n" + 
-					"FROM `user`\n" + 
+					"FROM `user` AS `user`\n" + 
 					" LEFT JOIN `user_roles` AS `roles` ON `user`.id = `roles`.user_id\n" + 
 					" LEFT JOIN `article` AS `articles` ON `user`.id = `articles`.user_id"), 
 			TestUtils.norm(pq.toSql()));
@@ -120,7 +120,7 @@ public class TestCollections {
 					" `roles`.element AS `roles.value`,\n" + 
 					" `tasks`.id AS `tasks.id`,\n" + 
 					" `tasks`.title AS `tasks.title`\n" + 
-					"FROM `user`\n" + 
+					"FROM `user` AS `user`\n" + 
 					" LEFT JOIN `user_roles` AS `roles` ON `user`.id = `roles`.user_id\n" + 
 					" LEFT JOIN `task` AS `tasks` ON `user`.id = `tasks`.user_id"), 
 			TestUtils.norm(pq.toSql()));

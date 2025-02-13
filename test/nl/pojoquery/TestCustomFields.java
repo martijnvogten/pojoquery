@@ -50,7 +50,7 @@ public class TestCustomFields {
 				" `user`.id AS `user.id`," +
 				" `user`.email AS `user.email`," +
 				" `user`.custom_linkedInUrl AS `user.linkedInUrl` " +
-				"FROM `user`"), norm(p.getQuery().toStatement().getSql()));
+				"FROM `user` AS `user`"), norm(p.getQuery().toStatement().getSql()));
 		
 		List<Map<String,Object>> resultSet = TestUtils.resultSet(new String[] 
 				{"user.id", "user.email",     "user.linkedInUrl"}, 

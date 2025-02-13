@@ -15,6 +15,6 @@ public class TestQueryBuilder {
 	
 	@Test
 	public void testBasicSql() {
-		assertEquals(norm("SELECT `article`.id AS `article.id` FROM `article`"), norm(PojoQuery.build(Article.class).toSql()));
+		assertEquals(norm("SELECT `article`.id AS `article.id` FROM `article` AS `article`"), norm(PojoQuery.build(Article.class).toSql()));
 	}
 }

@@ -97,7 +97,7 @@ public class TestInheritanceWithJoins {
 						" `room.bedroom`.numberOfBeds AS `room.bedroom.numberOfBeds`,\n" + 
 						" `room.kitchen`.id AS `room.kitchen.id`,\n" + 
 						" `room.kitchen`.hasDishWasher AS `room.kitchen.hasDishWasher`\n" + 
-						"FROM `room`\n" + 
+						"FROM `room` AS `room`\n" + 
 						" LEFT JOIN `house` AS `house` ON `room`.house_id = `house`.id\n" + 
 						" LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.id = `room`.id\n" + 
 						" LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.id = `room`.id"),
@@ -128,7 +128,7 @@ public class TestInheritanceWithJoins {
 						" `room`.area AS `bedroom.area`,\n" + 
 						" `house`.id AS `house.id`,\n" + 
 						" `house`.address AS `house.address`\n" + 
-						"FROM `bedroom`\n" + 
+						"FROM `bedroom` AS `bedroom`\n" + 
 						" INNER JOIN `room` AS `room` ON `room`.id = `bedroom`.id\n" + 
 						" LEFT JOIN `house` AS `house` ON `room`.house_id = `house`.id"),
 				norm(sql));
@@ -159,7 +159,7 @@ public class TestInheritanceWithJoins {
 				" `bedrooms.room`.area AS `bedrooms.area`,\n" + 
 				" `bedrooms.house`.id AS `bedrooms.house.id`,\n" + 
 				" `bedrooms.house`.address AS `bedrooms.house.address`\n" + 
-				"FROM `apartment`\n" + 
+				"FROM `apartment` AS `apartment`\n" + 
 				" LEFT JOIN `bedroom` AS `bedrooms` ON `apartment`.id = `bedrooms`.apartment_id\n" + 
 				" LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms.room`.id = `bedrooms`.id\n" + 
 				" LEFT JOIN `house` AS `bedrooms.house` ON `bedrooms.room`.house_id = `bedrooms.house`.id"), 
@@ -181,7 +181,7 @@ public class TestInheritanceWithJoins {
 						" `rooms.bedroom`.numberOfBeds AS `rooms.bedroom.numberOfBeds`,\n" + 
 						" `rooms.kitchen`.id AS `rooms.kitchen.id`,\n" + 
 						" `rooms.kitchen`.hasDishWasher AS `rooms.kitchen.hasDishWasher`\n" + 
-						"FROM `apartment`\n" + 
+						"FROM `apartment` AS `apartment`\n" + 
 						" LEFT JOIN `room` AS `rooms` ON `apartment`.id = `rooms`.apartment_id\n" + 
 						" LEFT JOIN `house` AS `rooms.house` ON `rooms`.house_id = `rooms.house`.id\n" + 
 						" LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.id = `rooms`.id\n" + 

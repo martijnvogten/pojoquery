@@ -7,7 +7,7 @@ repositories {
 
 dependencies {
   testImplementation 'junit:junit:4.11'
-  testImplementation 'mysql:mysql-connector-java:5.1.25'
+  testImplementation 'com.mysql:mysql-connector-j:9.2.0'
 }
 
 sourceSets {

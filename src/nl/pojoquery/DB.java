@@ -18,28 +18,7 @@ import java.util.function.Consumer;
 
 import javax.sql.DataSource;
 
-public class DB {
-	public enum QuoteStyle {
-		ANSI('"'),
-		MYSQL('`');
-
-		private final char quote;
-
-		QuoteStyle(char quote) {
-			this.quote = quote;
-		}
-
-		public String quote(String name) {
-			return quote + name + quote;
-		}
-	}
-
-	// For backwards compatibility. Note that if you're using MySQL
-	// you can pass `?sessionVariables=sql_mode=ANSI_QUOTES` as a JDBC
-	// URL parameter and set this to ANSI, which is the preferred
-	// style.
-	public static QuoteStyle quoteStyle = QuoteStyle.MYSQL;
-
+public interface DB {
 	public static final class DatabaseException extends RuntimeException {
 		private static final long serialVersionUID = 1L;
 
@@ -122,7 +101,7 @@ public class DB {
 		return new Columns(execute(db, QueryType.SELECT, sql, Arrays.asList(params), new ColumnProcessor()));
 	}
 	
-	private static class ColumnProcessor implements ResultSetProcessor<List<List<Object>>> {
+	public static class ColumnProcessor implements ResultSetProcessor<List<List<Object>>> {
 		public List<List<Object>> process(ResultSet rs) {
 			List<List<Object>> result = new ArrayList<>();
 			try {
@@ -142,7 +121,7 @@ public class DB {
 		}
 	}
 	
-	private static class RowProcessor implements ResultSetProcessor<List<Map<String, Object>>> {
+	public static class RowProcessor implements ResultSetProcessor<List<Map<String, Object>>> {
 		public List<Map<String, Object>> process(ResultSet rs) {
 			List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
 			try {
@@ -162,22 +141,22 @@ public class DB {
 	}
 
 	public static int update(DataSource db, String schemaName, String tableName, Map<String, Object> values, Map<String, Object> ids) {
-		SqlExpression updateSql = buildUpdate(schemaName, tableName, values, ids);
+		SqlExpression updateSql = buildUpdate(DbContext.getDefault(), schemaName, tableName, values, ids);
 		return (Integer)execute(db, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
 	}
 
 	public static int update(DataSource db, String tableName, Map<String, Object> values, Map<String, Object> ids) {
-		SqlExpression updateSql = buildUpdate(null, tableName, values, ids);
+		SqlExpression updateSql = buildUpdate(DbContext.getDefault(), null, tableName, values, ids);
 		return (Integer)execute(db, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
 	}
 	
 	public static int update(Connection connection, String tableName, Map<String, Object> values, Map<String, Object> ids) {
-		SqlExpression updateSql = buildUpdate(null, tableName, values, ids);
+		SqlExpression updateSql = buildUpdate(DbContext.getDefault(), null, tableName, values, ids);
 		return (Integer)execute(connection, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
 	}
 	
 	public static int update(Connection connection, String schemaName, String tableName, Map<String, Object> values, Map<String, Object> ids) {
-		SqlExpression updateSql = buildUpdate(schemaName, tableName, values, ids);
+		SqlExpression updateSql = buildUpdate(DbContext.getDefault(), schemaName, tableName, values, ids);
 		return (Integer)execute(connection, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
 	}
 
@@ -190,53 +169,53 @@ public class DB {
 	}
 
 	public static <PK> PK insert(DataSource db, String schemaName, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsertOrUpdate(schemaName, tableName, values, false);
+		SqlExpression insertSql = buildInsertOrUpdate(DbContext.getDefault(), schemaName, tableName, values, false);
 		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 
 	public static <PK> PK insert(DataSource db, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsertOrUpdate(null, tableName, values, false);
+		SqlExpression insertSql = buildInsertOrUpdate(DbContext.getDefault(), null, tableName, values, false);
 		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 	
 	public static <PK> PK insert(Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsertOrUpdate(schemaName, tableName, values, false);
+		SqlExpression insertSql = buildInsertOrUpdate(DbContext.getDefault(), schemaName, tableName, values, false);
 		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 	
 	public static <PK> PK insert(Connection connection, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsertOrUpdate(null, tableName, values, false);
+		SqlExpression insertSql = buildInsertOrUpdate(DbContext.getDefault(), null, tableName, values, false);
 		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 	
 	public static <PK> PK insertOrUpdate(DataSource db, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsertOrUpdate(null, tableName, values, true);
+		SqlExpression insertSql = buildInsertOrUpdate(DbContext.getDefault(), null, tableName, values, true);
 		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 	
 	public static <PK> PK insertOrUpdate(DataSource db, String schemaName, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsertOrUpdate(schemaName, tableName, values, true);
+		SqlExpression insertSql = buildInsertOrUpdate(DbContext.getDefault(), schemaName, tableName, values, true);
 		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 
 	public static <PK> PK insertOrUpdate(Connection connection, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsertOrUpdate(null, tableName, values, true);
+		SqlExpression insertSql = buildInsertOrUpdate(DbContext.getDefault(), null, tableName, values, true);
 		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 
 	public static <PK> PK insertOrUpdate(Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsertOrUpdate(schemaName, tableName, values, true);
+		SqlExpression insertSql = buildInsertOrUpdate(DbContext.getDefault(), schemaName, tableName, values, true);
 		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 
-	private static SqlExpression buildInsertOrUpdate(String schemaName, String tableName, Map<String, ? extends Object> values, boolean addOnDuplicateKeyClause) {
+	private static SqlExpression buildInsertOrUpdate(DbContext context, String schemaName, String tableName, Map<String, ? extends Object> values, boolean addOnDuplicateKeyClause) {
 		List<String> qmarks = new ArrayList<String>();
 		List<String> quotedFields = new ArrayList<String>();
 		List<Object> params = new ArrayList<Object>();
 		List<String> updateList = new ArrayList<String>();
 
 		for (String f : values.keySet()) {
-			final String quotedField = quoteObjectNames(f);
+			final String quotedField = context.quoteObjectNames(f);
 
 			qmarks.add("?");
 			quotedFields.add(quotedField);
@@ -246,7 +225,7 @@ public class DB {
 		if (addOnDuplicateKeyClause) {
 			params.addAll(new ArrayList<Object>(params));
 		}
-		String sql = "INSERT INTO " + prefixAndQuoteTableName(schemaName, tableName) + " (" + implode(",", quotedFields) + ")" + " VALUES (" + implode(",", qmarks) + ")";
+		String sql = "INSERT INTO " + prefixAndQuoteTableName(context, schemaName, tableName) + " (" + implode(",", quotedFields) + ")" + " VALUES (" + implode(",", qmarks) + ")";
 		
 		if (addOnDuplicateKeyClause) {
 			sql += " ON DUPLICATE KEY UPDATE " + implode(",", updateList);
@@ -255,26 +234,14 @@ public class DB {
 		return new SqlExpression(sql, params);
 	}
 
-	public static String quoteObjectNames(String... names) {
-		String ret = "";
-		for (int i = 0, nl = names.length; i < nl; i++) {
-			String name = names[i];
-			if (i > 0) {
-				ret += ".";
-			}
-			ret += quoteStyle.quote(name);
-		}
-		return ret;
-	}
-
-	public static String prefixAndQuoteTableName(String schemaName, String tableName) {
+	public static String prefixAndQuoteTableName(DbContext context, String schemaName, String tableName) {
 		if (schemaName == null) {
-			return quoteObjectNames(tableName);
+			return context.quoteObjectNames(tableName);
 		}
-		return quoteObjectNames(schemaName, tableName);
+		return context.quoteObjectNames(schemaName, tableName);
 	}
 
-	private static SqlExpression buildUpdate(String schemaName, String tableName, Map<String, ? extends Object> values, Map<String, ? extends Object> ids) {
+	private static SqlExpression buildUpdate(DbContext context, String schemaName, String tableName, Map<String, ? extends Object> values, Map<String, ? extends Object> ids) {
 		List<String> qmarks = new ArrayList<String>();
 		List<String> assignments = new ArrayList<String>();
 		List<Object> params = new ArrayList<Object>();
@@ -282,17 +249,17 @@ public class DB {
 
 		for (String f : values.keySet()) {
 			qmarks.add("?");
-			assignments.add(String.format("%s=?", quoteObjectNames(f)));
+			assignments.add(String.format("%s=?", context.quoteObjectNames(f)));
 			params.add(values.get(f));
 		}
 		
 		for (String idField : ids.keySet()) {
 			qmarks.add("?");
-			wheres.add(String.format("%s=?", quoteObjectNames(idField)));
+			wheres.add(String.format("%s=?", context.quoteObjectNames(idField)));
 			params.add(ids.get(idField));
 		}
 		
-		String sql = "UPDATE " + prefixAndQuoteTableName(schemaName, tableName) + " SET " + implode(", ", assignments) + " WHERE " + implode(" AND ", wheres);
+		String sql = "UPDATE " + prefixAndQuoteTableName(context, schemaName, tableName) + " SET " + implode(", ", assignments) + " WHERE " + implode(" AND ", wheres);
 		return new SqlExpression(sql, params);
 	}
 

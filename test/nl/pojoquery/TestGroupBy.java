@@ -27,7 +27,7 @@ public class TestGroupBy {
 		Assert.assertEquals(TestUtils.norm("SELECT\n" + 
 				" `wordindex`.word AS `wordindex.word`,\n" + 
 				" COUNT(*) AS `wordindex.wordCount`\n" + 
-				"FROM `wordindex`\n" + 
+				"FROM `wordindex` AS `wordindex`\n" + 
 				"GROUP BY wordindex.word"), TestUtils.norm(q.toStatement().getSql()));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {

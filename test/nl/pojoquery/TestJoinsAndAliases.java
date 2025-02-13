@@ -41,7 +41,7 @@ public class TestJoinsAndAliases {
 						" `article`.id AS `article.id`, " + 
 						" `article`.title AS `article.title`, " + 
 						" `authors`.name AS `authors.name` " + 
-						"FROM `article`" + 
+						"FROM `article` AS `article`" + 
 						" LEFT JOIN `person` AS `authors` ON `article`.authorName=`authors`.name"), 
 				norm(QueryBuilder.from(Article.class).getQuery().toStatement().getSql()));
 	}
@@ -54,7 +54,7 @@ public class TestJoinsAndAliases {
 						" `articles`.id AS `articles.id`,\n" + 
 						" `articles`.title AS `articles.title`,\n" + 
 						" `articles.authors`.name AS `articles.authors.name`\n" + 
-						"FROM `book`\n" + 
+						"FROM `book` AS `book`\n" + 
 						" LEFT JOIN `article` AS `articles` ON `book`.id = `articles`.book_id\n" + 
 						" LEFT JOIN `person` AS `articles.authors` ON `articles`.authorName=`articles.authors`.name"), 
 				norm(QueryBuilder.from(Book.class).getQuery().toStatement().getSql()));

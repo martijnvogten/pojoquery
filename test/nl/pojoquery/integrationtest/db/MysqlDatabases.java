@@ -2,7 +2,7 @@ package nl.pojoquery.integrationtest.db;
 
 import javax.sql.DataSource;
 
-import com.mysql.jdbc.jdbc2.optional.MysqlConnectionPoolDataSource;
+import com.mysql.cj.jdbc.MysqlConnectionPoolDataSource;
 
 public class MysqlDatabases {
 
@@ -13,12 +13,13 @@ public class MysqlDatabases {
 	
 	static DataSource getDataSource(String jdbcUrl, String user, String pass) {
 		try {
+			
 			MysqlConnectionPoolDataSource dataSource = new MysqlConnectionPoolDataSource();
 			dataSource.setUrl(jdbcUrl);
 			dataSource.setUser(user);
 			dataSource.setPassword(pass);
 			dataSource.setCharacterEncoding("utf8");
-			dataSource.setUseUnicode(true);
+//			dataSource.setUseUnicode(true);
 //			dataSource.setSessionVariables("storage_engine=InnoDB");
 			return dataSource;
 		} catch (Exception e) {

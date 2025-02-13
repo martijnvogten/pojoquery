@@ -1,6 +1,7 @@
 package nl.pojoquery;
 
 import java.lang.reflect.Field;
+import java.math.BigInteger;
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,8 +29,10 @@ public class PojoQuery<T> {
 	private final QueryBuilder<T> queryBuilder; 
 	private final SqlQuery query;
 	private Class<T> resultClass;
+	private DbContext dbContext;
 
-	private PojoQuery(Class<T> clz) {
+	private PojoQuery(DbContext context, Class<T> clz) {
+		this.dbContext = context;
 		this.resultClass = clz;
 		this.queryBuilder = QueryBuilder.from(clz);
 		this.query = queryBuilder.getQuery();
@@ -37,7 +40,11 @@ public class PojoQuery<T> {
 	
 
 	public static <T> PojoQuery<T> build(Class<T> clz) {
-		return new PojoQuery<T>(clz);
+		return build(DbContext.getDefault(), clz);
+	}
+	
+	public static <T> PojoQuery<T> build(DbContext context, Class<T> clz) {
+		return new PojoQuery<T>(context, clz);
 	}
 	
 	public SqlQuery getQuery() {
@@ -386,7 +393,13 @@ public class PojoQuery<T> {
 			Field idField = idFields.get(0);
 			idField.setAccessible(true);
 			try {
-				idField.set(o, ids);
+				if (ids instanceof BigInteger && idField.getType().isAssignableFrom(Long.class)) {
+					// See https://bugs.mysql.com/bug.php?id=101823
+					// generated keys are always biginteger so we must convert if idField is Long
+					idField.set(o, ((BigInteger)ids).longValue());
+				} else {
+					idField.set(o, ids);
+				}
 			} catch (IllegalArgumentException e) {
 				throw new MappingException("Could not set Id field value " + idField, e);
 			} catch (IllegalAccessException e) {
@@ -413,24 +426,32 @@ public class PojoQuery<T> {
 	}
 
 	public T findById(Connection connection, Object id) {
-		query.getWheres().addAll(QueryBuilder.buildIdCondition(resultClass, id));
+		query.getWheres().addAll(QueryBuilder.buildIdCondition(dbContext, resultClass, id));
 		return returnSingleRow(execute(connection));
 	}
 
 	public T findById(DataSource db, Object id) {
-		query.getWheres().addAll(QueryBuilder.buildIdCondition(resultClass, id));
+		query.getWheres().addAll(QueryBuilder.buildIdCondition(dbContext, resultClass, id));
 		return returnSingleRow(executeStreaming(db));
 	}
 
 	public static void delete(Connection conn, Object entity) {
-		delete(conn, null, entity);
+		delete(DbContext.getDefault(), conn, null, entity);
+	}
+	
+	public static void delete(DbContext context, Connection conn, Object entity) {
+		delete(context, conn, null, entity);
 	}
 	
 	public static void delete(DataSource db, Object entity) {
-		delete(null, db, entity);
+		delete(DbContext.getDefault(), db, entity);
 	}
 	
-	private static void delete(Connection conn, DataSource db, Object entity) {
+	public static void delete(DbContext context, DataSource db, Object entity) {
+		delete(context, null, db, entity);
+	}
+	
+	private static void delete(DbContext context, Connection conn, DataSource db, Object entity) {
 		try {
 			List<TableMapping> mapping = QueryBuilder.determineTableMapping(entity.getClass());
 			List<Field> idFields = QueryBuilder.determineIdFields(entity.getClass());
@@ -444,12 +465,12 @@ public class PojoQuery<T> {
 					if (idvalue == null) {
 						throw new MappingException("Cannot create wherecondition for entity with null value in idfield " + field.getName());
 					}
-					whereCondition.add(new SqlExpression(DB.quoteObjectNames(table.tableName, field.getName()) + "=?", Arrays.asList(idvalue)));
+					whereCondition.add(new SqlExpression(context.quoteObjectNames(table.tableName, field.getName()) + "=?", Arrays.asList(idvalue)));
 				}
 				if (db != null) {
-					executeDelete(null, db, table.tableName, whereCondition);
+					executeDelete(context, null, db, table.tableName, whereCondition);
 				} else {
-					executeDelete(conn, null, table.tableName, whereCondition);
+					executeDelete(context, conn, null, table.tableName, whereCondition);
 				}
 			}
 		} catch (IllegalArgumentException | IllegalAccessException e) {
@@ -457,16 +478,16 @@ public class PojoQuery<T> {
 		}
 	}
 	
-	public static void deleteById(DataSource db, Class<?> clz, Object id) {
+	public static void deleteById(DbContext context, DataSource db, Class<?> clz, Object id) {
 		for (TableMapping table : QueryBuilder.determineTableMapping(clz)) {
-			List<SqlExpression> wheres = QueryBuilder.buildIdCondition(table.clazz, id);
-			executeDelete(null, db, table.tableName, wheres);
+			List<SqlExpression> wheres = QueryBuilder.buildIdCondition(context, table.clazz, id);
+			executeDelete(context, null, db, table.tableName, wheres);
 		}
 	}
 
-	private static void executeDelete(Connection conn, DataSource db, String tableName, List<SqlExpression> where) {
+	private static void executeDelete(DbContext context, Connection conn, DataSource db, String tableName, List<SqlExpression> where) {
 		SqlExpression wheres = SqlExpression.implode(" AND ", where);
-		SqlExpression deleteStatement = new SqlExpression("DELETE FROM " + DB.quoteObjectNames(tableName) + " WHERE " + wheres.getSql(), wheres.getParameters());
+		SqlExpression deleteStatement = new SqlExpression("DELETE FROM " + context.quoteObjectNames(tableName) + " WHERE " + wheres.getSql(), wheres.getParameters());
 		if (db != null) {
 			DB.update(db, deleteStatement);
 		} else {

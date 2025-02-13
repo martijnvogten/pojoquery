@@ -95,7 +95,7 @@ public class TestJoinConditions {
 				" `employee`.id AS `employee.id`,\n" + 
 				" `department`.id AS `department.id`,\n" + 
 				" `department`.name AS `department.name` \n" + 
-				"FROM `employee` \n" + 
+				"FROM `employee` AS `employee`\n" + 
 				" LEFT JOIN `department` AS `department` ON `employee`.department_id = `department`.id", sql.trim());
 	}
 	

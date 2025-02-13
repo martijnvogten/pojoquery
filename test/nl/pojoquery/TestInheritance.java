@@ -89,7 +89,7 @@ public class TestInheritance {
 						" `room.bedroom`.numberOfBeds AS `room.bedroom.numberOfBeds`,\n" + 
 						" `room.kitchen`.id AS `room.kitchen.id`,\n" + 
 						" `room.kitchen`.hasDishWasher AS `room.kitchen.hasDishWasher`\n" + 
-						"FROM `room`\n" + 
+						"FROM `room` AS `room`\n" + 
 						" LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.id = `room`.id\n" + 
 						" LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.id = `room`.id"),
 				norm(sql));
@@ -116,7 +116,7 @@ public class TestInheritance {
 						" `bedroom`.numberOfBeds AS `bedroom.numberOfBeds`,\n" + 
 						" `room`.id AS `bedroom.id`,\n" + 
 						" `room`.area AS `bedroom.area`\n" + 
-						"FROM `bedroom`\n" + 
+						"FROM `bedroom` AS `bedroom`\n" + 
 						" INNER JOIN `room` AS `room` ON `room`.id = `bedroom`.id"),
 				norm(sql));
 		
@@ -143,7 +143,7 @@ public class TestInheritance {
 				" `bedrooms`.numberOfBeds AS `bedrooms.numberOfBeds`,\n" + 
 				" `bedrooms.room`.id AS `bedrooms.id`,\n" + 
 				" `bedrooms.room`.area AS `bedrooms.area`\n" + 
-				"FROM `apartment`\n" + 
+				"FROM `apartment` AS `apartment`\n" + 
 				" LEFT JOIN `bedroom` AS `bedrooms` ON `apartment`.id = `bedrooms`.apartment_id\n" + 
 				" LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms.room`.id = `bedrooms`.id"), 
 			norm(sql));
@@ -161,7 +161,7 @@ public class TestInheritance {
 						" `rooms.bedroom`.numberOfBeds AS `rooms.bedroom.numberOfBeds`,\n" + 
 						" `rooms.kitchen`.id AS `rooms.kitchen.id`,\n" + 
 						" `rooms.kitchen`.hasDishWasher AS `rooms.kitchen.hasDishWasher`\n" + 
-						"FROM `apartment`\n" + 
+						"FROM `apartment` AS `apartment`\n" + 
 						" LEFT JOIN `room` AS `rooms` ON `apartment`.id = `rooms`.apartment_id\n" + 
 						" LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.id = `rooms`.id\n" + 
 						" LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.id = `rooms`.id"),
