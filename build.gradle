@@ -1,5 +1,8 @@
 apply plugin:'java'
 apply plugin:'eclipse'
+apply plugin:'maven-publish'
+
+sourceCompatibility = 17
 
 repositories {
   mavenCentral()
