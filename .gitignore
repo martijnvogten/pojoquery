@@ -4,9 +4,6 @@
 .settings
 
 # Package Files #
-*.war
-*.ear
-*.jar
 /build
 /.gradle
 /bin
