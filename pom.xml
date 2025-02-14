@@ -8,7 +8,31 @@
   <version>2.7.0</version>
 
   <name>pojoquery</name>
+  <description>Model-driven ORM library for Java</description>
   <url>https://github.com/martijnvogten/pojoquery</url>
+
+  <developers>
+    <developer>
+      <id>martijn_vogten</id>
+      <name>Martijn Vogten</name>
+      <organization>MVBV B.V.</organization>
+      <organizationUrl>https://martijnvogten.github.io</organizationUrl>
+      <timezone>CEST</timezone>
+    </developer>
+  </developers>
+
+  <licenses>
+    <license>
+      <name>MIT</name>
+      <url>http://www.opensource.org/licenses/mit-license.php</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <scm>
+    <developerConnection>scm:git:https://github.com/martijnvogten/pojoquery</developerConnection>
+    <url>https://github.com/martijnvogten/pojoquery</url>
+  </scm>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -73,6 +97,32 @@
           </execution>
         </executions>
       </plugin>
+      <plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <version>0.7.0</version>
+        <extensions>true</extensions>
+        <configuration>
+          <publishingServerId>central</publishingServerId>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-gpg-plugin</artifactId>
+        <version>3.2.7</version>
+        <executions>
+          <execution>
+            <id>sign-artifacts</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>sign</goal>
+            </goals>
+            <configuration>
+              <keyname>3D6E993B3208EE41</keyname>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
 
     <pluginManagement>      <!-- lock down plugins versions to avoid using Maven
@@ -122,14 +172,13 @@
         </plugin>
       </plugins>
     </pluginManagement>
+  
   </build>
-
   <distributionManagement>
     <repository>
-      <id>ossrh</id>
-      <name>Central Repository OSSRH</name>
-      <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+      <id>github</id>
+      <name>GitHub Packages</name>
+      <url>https://maven.pkg.github.com/martijnvogten/pojoquery</url>
     </repository>
   </distributionManagement>
-
 </project>
