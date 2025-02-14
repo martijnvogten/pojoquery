@@ -13,7 +13,7 @@ import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
 import nl.pojoquery.integrationtest.db.TestDatabase;
 
-public class TestLocalDate {
+public class LocalDateIT {
 
 	@Table("user")
 	public static class User {

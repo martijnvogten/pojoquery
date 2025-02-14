@@ -13,7 +13,7 @@ import javax.sql.DataSource;
 import java.util.List;
 import java.util.Map;
 
-public class TestSchemaPrefixes {
+public class SchemaPrefixesIT {
 	private static String[] schemas = new String[]{
 		"pojoquery_integrationtest_schema1",
 		"pojoquery_integrationtest_schema2",

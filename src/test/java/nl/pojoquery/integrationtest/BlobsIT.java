@@ -12,7 +12,7 @@ import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
 import nl.pojoquery.integrationtest.db.TestDatabase;
 
-public class TestBlobs {
+public class BlobsIT {
 
 	@Table("file")
 	public static class File {

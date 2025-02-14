@@ -16,7 +16,7 @@ import nl.pojoquery.annotations.Other;
 import nl.pojoquery.annotations.Table;
 import nl.pojoquery.integrationtest.db.TestDatabase;
 
-public class TestOther {
+public class OtherIT {
 
 	@Table("room")
 	public static class Room {
