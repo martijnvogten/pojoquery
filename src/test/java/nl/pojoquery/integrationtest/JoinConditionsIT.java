@@ -18,7 +18,7 @@ import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Table;
 import nl.pojoquery.integrationtest.db.TestDatabase;
 
-public class TestJoinConditions {
+public class JoinConditionsIT {
 
 	@Table("person")
 	static class Person {

@@ -16,7 +16,7 @@ import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Table;
 import nl.pojoquery.integrationtest.db.TestDatabase;
 
-public class TestForeignValueFields {
+public class ForeignValueFieldsIT {
 	
 	@Table("poule")
 	static class Poule {

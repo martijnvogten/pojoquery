@@ -15,7 +15,7 @@ import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
 import nl.pojoquery.integrationtest.db.TestDatabase;
 
-public class TestFieldAliasesInWhere {
+public class FieldAliasesInWhereIT {
 
 	@Table("room")
 	public static class Room {
