@@ -7,18 +7,39 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.Test;
+
 import nl.pojoquery.annotations.Embedded;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
 import nl.pojoquery.pipeline.QueryBuilder;
 
-import org.junit.Test;
-
 public class TestEmbedded {
-
+	
+	@Table("country")
+	static class Country {
+		@Id
+		Long id;
+		String name;
+	}
+	
 	static class Address {
 		String address;
 		String city;
+	}
+	
+	static class AddressWithCountry extends Address {
+		Country country;
+	}
+	
+	
+	@Table("user")
+	static class UserWithCountry {
+		@Id
+		Long id;
+		
+		@Embedded
+		AddressWithCountry home;
 	}
 	
 	@Table("user")
@@ -71,4 +92,37 @@ public class TestEmbedded {
 		
 		assertEquals("501, Broadway", articles.get(0).author.home.address);
 	}
+	
+	@Test
+	public void testEmbeddedLinkField() {
+		assertEquals(
+				norm("""
+				SELECT
+				 `user`.id AS `user.id`,
+				 `user`.home_address AS `home.address`,
+				 `user`.home_city AS `home.city`,
+				 `home.country`.id AS `home.country.id`,
+				 `home.country`.name AS `home.country.name`
+				FROM `user` AS `user`
+				 LEFT JOIN `country` AS `home.country` ON `user`.home_country_id = `home.country`.id
+				"""), 
+				norm(QueryBuilder.from(UserWithCountry.class).getQuery().toStatement().getSql()));
+	}
+	
+	private List<Map<String, Object>> RESULT_USER_WITH_COUNTRY = Collections.singletonList(TestUtils.<String,Object>map(
+			"user.id", 1L, 
+			"home.address", "501, Broadway", 
+			"home.city", "New York D.C.",
+			"home.country.id", 1L,
+			"home.country.name", "United States of America" 
+			));
+	
+	@Test
+	public void testEmbeddedLinkFieldUsingPipeline() {
+		QueryBuilder<UserWithCountry> p = QueryBuilder.from(UserWithCountry.class);
+		List<UserWithCountry> users = p.processRows(RESULT_USER_WITH_COUNTRY);
+		
+		assertEquals("United States of America", users.get(0).home.country.name);
+	}
+
 }

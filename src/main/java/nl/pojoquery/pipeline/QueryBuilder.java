@@ -9,6 +9,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
 
 import nl.pojoquery.DbContext;
 import nl.pojoquery.FieldMapping;
@@ -141,6 +143,10 @@ public class QueryBuilder<T> {
 	}
 	
 	private void addClass(Class<?> clz, String alias, String parentAlias, Field linkField) {
+		if (parentAlias != null) {
+			checkForCyclicMapping(clz, parentAlias);
+		}
+		
 		List<TableMapping> tableMappings = QueryBuilder.determineTableMapping(clz);
 		
 		Alias previousAlias = null;
@@ -172,7 +178,7 @@ public class QueryBuilder<T> {
 			previousAlias = newAlias;
 			aliases.put(combinedAlias, newAlias);
 			
-			addFields(combinedAlias, alias, mapping.clazz, superMapping != null ? superMapping.clazz : null);
+			addFields(combinedAlias, alias, mapping.clazz, superMapping != null ? superMapping.clazz : null, null);
 		}
 		
 		SubClasses subClassesAnn = clz.getAnnotation(SubClasses.class);
@@ -205,11 +211,27 @@ public class QueryBuilder<T> {
 
 	}
 
-	private void addFields(String alias, Class<?> clz, Class<?> superClass) {
-		addFields(alias, alias, clz, superClass);
+	private void checkForCyclicMapping(Class<?> clz, final String parentAlias) {
+		Alias alias;
+		String parent = parentAlias;
+		List<Class<?>> parentClasses = new ArrayList<>();
+		while ((alias = aliases.get(parent)) != null) {
+			parentClasses.add(alias.getResultClass());
+			if (alias.getResultClass().equals(clz)) {
+				String message = parentClasses.stream()
+						.map(it -> it.getSimpleName())
+						.collect(Collectors.joining(" -> "));
+				throw new MappingException("Mapping cycle detected: " + message);
+			}
+			parent = alias.getParentAlias();
+		}
 	}
 	
-	private void addFields(String alias, String fieldsAlias, Class<?> clz, Class<?> superClass) {
+	private void addFields(String alias, Class<?> clz, Class<?> superClass) {
+		addFields(alias, alias, clz, superClass, null);
+	}
+	
+	private void addFields(String alias, String fieldsAlias, Class<?> clz, Class<?> superClass, String fieldNamePrefix) {
 		for(Field f : QueryBuilder.collectFieldsOfClass(clz, superClass)) {
 			f.setAccessible(true);
 			
@@ -277,18 +299,15 @@ public class QueryBuilder<T> {
 				}
 				
 			} else if (isLinkedClass(type)) {
-				String linkAlias = joinOne(alias, query, f, type);
-				addClass(type, linkAlias, alias, f);
+				String parent = fieldNamePrefix == null ? alias : fieldsAlias;
+				String linkAlias = joinOne(parent, query, f, type, fieldNamePrefix);
+				addClass(type, linkAlias, parent, f);
 			} else if (f.getAnnotation(Embedded.class) != null) {
 				String prefix = QueryBuilder.determinePrefix(f);
-
-				String foreignAlias = isRoot ? f.getName() : alias + "." + f.getName();
-				for (Field embeddedField : QueryBuilder.collectFieldsOfClass(f.getType())) {
-					embeddedField.setAccessible(true);
-					String fieldName = determineSqlFieldName(embeddedField);
-					addField(new SqlExpression("{" + alias + "}." + prefix + fieldName), foreignAlias + "." + fieldName, embeddedField);
-				}
-				aliases.put(foreignAlias, new Alias(foreignAlias, f.getType(), alias, f, QueryBuilder.determineIdFields(f.getType())));
+				String foreignAlias = isRoot && fieldNamePrefix == null ? f.getName() : alias + "." + f.getName();
+				Alias newAlias = new Alias(foreignAlias, f.getType(), alias, f, Collections.emptyList());
+				aliases.put(foreignAlias, newAlias);
+				addFields(alias, foreignAlias, f.getType(), null, prefix);
 			} else if (f.getAnnotation(Other.class) != null) {
 				aliases.get(alias).setOtherField(f);
 				// Also add the otherfield to the subclasses
@@ -304,7 +323,7 @@ public class QueryBuilder<T> {
 					selectExpression = SqlQuery.resolveAliases(dbContext, new SqlExpression(f.getAnnotation(Select.class).value()), alias, alias.equals(rootAlias) ? "" : alias, null);
 				} else {
 					String fieldName = determineSqlFieldName(f);
-					selectExpression = new SqlExpression("{" + alias + "}." + fieldName);
+					selectExpression = new SqlExpression("{" + alias + "}." + (fieldNamePrefix == null ? "" : fieldNamePrefix) + fieldName);
 				}
 				addField(selectExpression, fieldsAlias + "." + f.getName(), f);
 			}
@@ -364,8 +383,9 @@ public class QueryBuilder<T> {
 		return linkAlias;
 	}
 	
-	private String joinOne(String alias, SqlQuery result, Field f, Class<?> type) {
+	private String joinOne(String alias, SqlQuery result, Field f, Class<?> type, String linkFieldPrefix) {
 		TableMapping table = lookupTableMapping(type);
+		boolean isEmbeddedLinkfield = linkFieldPrefix != null;
 		String linkAlias = alias.equals(rootAlias) ? f.getName() : (alias + "." + f.getName());
 		
 		Alias parentAlias = aliases.get(alias);
@@ -384,7 +404,10 @@ public class QueryBuilder<T> {
 			joinCondition = SqlQuery.resolveAliases(dbContext, new SqlExpression(f.getAnnotation(JoinCondition.class).value()), parentAlias.getAlias(), alias.equals(rootAlias) ? "" : alias, alias.equals(rootAlias) ? "" : alias);
 		} else {
 			Field idField = QueryBuilder.determineIdField(type);
-			joinCondition = new SqlExpression("{" + alias + "}." + linkFieldName(f) + " = {" + linkAlias + "}." + idField.getName());
+			String linkField = (isEmbeddedLinkfield ? linkFieldPrefix : "") + linkFieldName(f);
+			String linkFieldAlias = isEmbeddedLinkfield ? parentAlias.getParentAlias() : alias;
+			
+			joinCondition = new SqlExpression("{" + linkFieldAlias + "}." + linkField + " = {" + linkAlias + "}." + idField.getName());
 		}
 		result.addJoin(JoinType.LEFT, table.schemaName, table.tableName, linkAlias, joinCondition);
 		return linkAlias;
