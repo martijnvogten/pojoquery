@@ -3,7 +3,10 @@ package nl.pojoquery.pipeline;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 import nl.pojoquery.FieldMapping;
 import nl.pojoquery.internal.MappingException;
@@ -30,6 +33,9 @@ public class SimpleFieldMapping implements FieldMapping {
 			}
 			if (value instanceof Date && (f.getType().equals(LocalDate.class))) {
 				value = ((Date)value).toLocalDate();
+			}
+			if (value instanceof LocalDateTime && (f.getType().equals(Instant.class))) {
+				value = ((LocalDateTime)value).atZone(ZoneOffset.UTC).toInstant();
 			}
 			f.setAccessible(true);
 			f.set(targetEntity, value);

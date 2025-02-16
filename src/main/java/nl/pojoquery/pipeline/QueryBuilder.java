@@ -215,6 +215,7 @@ public class QueryBuilder<T> {
 		Alias alias;
 		String parent = parentAlias;
 		List<Class<?>> parentClasses = new ArrayList<>();
+		parentClasses.add(clz);
 		while ((alias = aliases.get(parent)) != null) {
 			parentClasses.add(alias.getResultClass());
 			if (alias.getResultClass().equals(clz)) {
@@ -303,11 +304,15 @@ public class QueryBuilder<T> {
 				String linkAlias = joinOne(parent, query, f, type, fieldNamePrefix);
 				addClass(type, linkAlias, parent, f);
 			} else if (f.getAnnotation(Embedded.class) != null) {
+				
 				String prefix = QueryBuilder.determinePrefix(f);
-				String foreignAlias = isRoot && fieldNamePrefix == null ? f.getName() : alias + "." + f.getName();
-				Alias newAlias = new Alias(foreignAlias, f.getType(), alias, f, Collections.emptyList());
-				aliases.put(foreignAlias, newAlias);
-				addFields(alias, foreignAlias, f.getType(), null, prefix);
+				String embedAlias = (isRoot && fieldNamePrefix == null) ? f.getName() : fieldsAlias + "." + f.getName();
+				Alias newAlias = new Alias(embedAlias, f.getType(), fieldsAlias, f, Collections.emptyList());
+				newAlias.setIsEmbedded(true);
+				
+				aliases.put(embedAlias, newAlias);
+				addFields(alias, embedAlias, f.getType(), null, (fieldNamePrefix == null ? "" : fieldNamePrefix) + prefix);
+				
 			} else if (f.getAnnotation(Other.class) != null) {
 				aliases.get(alias).setOtherField(f);
 				// Also add the otherfield to the subclasses
@@ -405,6 +410,11 @@ public class QueryBuilder<T> {
 		} else {
 			Field idField = QueryBuilder.determineIdField(type);
 			String linkField = (isEmbeddedLinkfield ? linkFieldPrefix : "") + linkFieldName(f);
+			
+			while (parentAlias.getParentAlias() != null && aliases.get(parentAlias.getParentAlias()).getIsEmbedded()) {
+				parentAlias = aliases.get(parentAlias.getParentAlias());
+			}
+			
 			String linkFieldAlias = isEmbeddedLinkfield ? parentAlias.getParentAlias() : alias;
 			
 			joinCondition = new SqlExpression("{" + linkFieldAlias + "}." + linkField + " = {" + linkAlias + "}." + idField.getName());
@@ -425,6 +435,9 @@ public class QueryBuilder<T> {
 	private static String linkFieldName(Field f) {
 		if (f.getAnnotation(FieldName.class) != null) {
 			return f.getAnnotation(FieldName.class).value();
+		}
+		if (f.getAnnotation(Link.class) != null) {
+			return f.getAnnotation(Link.class).linkfield();
 		}
 		return f.getName() + "_id";
 	}

@@ -13,7 +13,8 @@ public class Alias {
 	private List<Field> idFields;
 	private List<String> subClassAliases;
 	private boolean isLinkedValue;
-	private boolean isASubClass;
+	private boolean isASubClass = false;
+	private boolean isEmbedded = false;
 
 	public Alias(String alias, Class<?> resultClass, String parentAlias, Field linkField, List<Field> idFields) {
 		this.alias = alias;
@@ -95,6 +96,14 @@ public class Alias {
 
 	public boolean getIsASubClass() {
 		return this.isASubClass;
+	}
+
+	public boolean getIsEmbedded() {
+		return isEmbedded;
+	}
+
+	public void setIsEmbedded(boolean isEmbedded) {
+		this.isEmbedded = isEmbedded;
 	}
 	
 }
