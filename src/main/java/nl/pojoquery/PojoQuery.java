@@ -320,7 +320,7 @@ public class PojoQuery<T> {
 
 	}
 
-	private static Map<String, Object> extractValues(Class<?> type, Object o) {
+	public static Map<String, Object> extractValues(Class<?> type, Object o) {
 		return extractValues(type, o, null);
 	}
 
