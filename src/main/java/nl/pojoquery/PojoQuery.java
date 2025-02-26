@@ -19,6 +19,7 @@ import nl.pojoquery.annotations.NoUpdate;
 import nl.pojoquery.annotations.Other;
 import nl.pojoquery.internal.MappingException;
 import nl.pojoquery.internal.TableMapping;
+import nl.pojoquery.pipeline.CustomQueryBuilder.DefaultSqlQuery;
 import nl.pojoquery.pipeline.QueryBuilder;
 import nl.pojoquery.pipeline.SqlQuery;
 import nl.pojoquery.pipeline.SqlQuery.JoinType;
@@ -27,7 +28,7 @@ import nl.pojoquery.pipeline.SqlQuery.SqlJoin;
 
 public class PojoQuery<T> {
 	private final QueryBuilder<T> queryBuilder; 
-	private final SqlQuery query;
+	private final SqlQuery<DefaultSqlQuery> query;
 	private Class<T> resultClass;
 	private DbContext dbContext;
 
@@ -47,7 +48,7 @@ public class PojoQuery<T> {
 		return new PojoQuery<T>(context, clz);
 	}
 	
-	public SqlQuery getQuery() {
+	public SqlQuery<DefaultSqlQuery> getQuery() {
 		return query;
 	}
 

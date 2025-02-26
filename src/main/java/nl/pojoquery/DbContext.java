@@ -1,5 +1,9 @@
 package nl.pojoquery;
 
+import java.lang.reflect.Field;
+
+import nl.pojoquery.pipeline.SimpleFieldMapping;
+
 public interface DbContext {
 	
 	public enum QuoteStyle {
@@ -29,6 +33,8 @@ public interface DbContext {
 	
 	public String quoteAlias(String alias);
 
+	public FieldMapping getFieldMapping(Field f);
+	
 	public class DefaultDbContext implements DbContext {
 		private QuoteStyle quoteStyle = QuoteStyle.MYSQL;
 		private boolean quoteObjects = true;
@@ -65,6 +71,11 @@ public interface DbContext {
 		@Override
 		public void setQuoteObjectNames(boolean addQuotes) {
 			this.quoteObjects = addQuotes;
+		}
+
+		@Override
+		public FieldMapping getFieldMapping(Field f) {
+			return new SimpleFieldMapping(f);
 		}
 	}
 

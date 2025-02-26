@@ -7,8 +7,8 @@ import javax.sql.DataSource;
 import nl.pojoquery.DB;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
+import nl.pojoquery.pipeline.CustomQueryBuilder.DefaultSqlQuery;
 import nl.pojoquery.pipeline.QueryBuilder;
-import nl.pojoquery.pipeline.SqlQuery;
 
 public class ArticleDetailExample {
 	
@@ -57,7 +57,7 @@ public class ArticleDetailExample {
 		DataSource db = BlogDb.create("localhost", "pojoquery_blog", "root", "");
 		
 		QueryBuilder<ArticleDetail> qb = QueryBuilder.from(ArticleDetail.class);
-		SqlQuery q = qb.getQuery()
+		DefaultSqlQuery q = qb.getQuery()
 				.addWhere("article.id=?", 1L)
 				.addOrderBy("comments.submitdate DESC");
 		System.out.println(q.toStatement().getSql());

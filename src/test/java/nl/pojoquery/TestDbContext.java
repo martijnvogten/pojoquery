@@ -23,7 +23,7 @@ public class TestDbContext {
 	@Test
 	public void testQuoting() {
 		{
-			SqlQuery query = QueryBuilder.from(Article.class).getQuery();
+			SqlQuery<?> query = QueryBuilder.from(Article.class).getQuery();
 			
 			assertEquals(
 					norm("""
@@ -38,7 +38,7 @@ public class TestDbContext {
 		{
 			DefaultDbContext dbContext = new DbContext.DefaultDbContext();
 			dbContext.setQuoteObjectNames(false);
-			SqlQuery query = QueryBuilder.from(dbContext, Article.class).getQuery();
+			SqlQuery<?> query = QueryBuilder.from(dbContext, Article.class).getQuery();
 			
 			assertEquals(
 					norm("""

@@ -13,7 +13,8 @@ import nl.pojoquery.DbContext;
 import nl.pojoquery.SqlExpression;
 import nl.pojoquery.util.Iterables;
 
-public class SqlQuery {
+@SuppressWarnings("unchecked")
+public abstract class SqlQuery<S extends SqlQuery<?>> {
 	private int offset = -1;
 	private int rowCount = -1;
 	private String schema;
@@ -106,49 +107,49 @@ public class SqlQuery {
 		return orderBy;
 	}
 
-	public SqlQuery setOrderBy(List<String> orderBy) {
+	public S setOrderBy(List<String> orderBy) {
 		this.orderBy = orderBy;
-		return this;
+		return (S) this;
 	}
 
-	public SqlQuery addField(SqlExpression expression) {
+	public S addField(SqlExpression expression) {
 		fields.add(new SqlField(expression));
-		return this;
+		return (S)this;
 	}
 	
-	public SqlQuery addField(SqlExpression expression, String alias) {
+	public S addField(SqlExpression expression, String alias) {
 		fields.add(new SqlField(expression, alias));
-		return this;
+		return (S)this;
 	}
 
-	public SqlQuery addGroupBy(String group) {
+	public S addGroupBy(String group) {
 		groupBy.add(group);
-		return this;
+		return (S)this;
 	}
 
-	public SqlQuery addWhere(SqlExpression where) {
+	public S addWhere(SqlExpression where) {
 		wheres.add(where);
-		return this;
+		return (S)this;
 	}
 
-	public SqlQuery addWhere(String sql, Object... params) {
+	public S addWhere(String sql, Object... params) {
 		wheres.add(new SqlExpression(sql, Arrays.asList(params)));
-		return this;
+		return (S)this;
 	}
 
-	public SqlQuery addOrderBy(String order) {
+	public S addOrderBy(String order) {
 		orderBy.add(order);
-		return this;
+		return (S)this;
 	}
 
-	public SqlQuery setLimit(int rowCount) {
+	public S setLimit(int rowCount) {
 		return setLimit(-1, rowCount);
 	}
 
-	public SqlQuery setLimit(int offset, int rowCount) {
+	public S setLimit(int offset, int rowCount) {
 		this.offset = offset;
 		this.rowCount = rowCount;
-		return this;
+		return (S)this;
 	}
 
 	public SqlExpression toStatement() {
@@ -307,6 +308,10 @@ public class SqlQuery {
 
 	public int getRowCount() {
 		return this.rowCount;
+	}
+
+	public DbContext getDbContext() {
+		return this.dbContext;
 	}
 
 }
