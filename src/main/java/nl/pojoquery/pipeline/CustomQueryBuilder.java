@@ -39,6 +39,7 @@ import nl.pojoquery.annotations.Transient;
 import nl.pojoquery.internal.MappingException;
 import nl.pojoquery.internal.TableMapping;
 import nl.pojoquery.pipeline.SqlQuery.JoinType;
+import nl.pojoquery.util.CurlyMarkers;
 import nl.pojoquery.util.Types;
 
 public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
@@ -250,10 +251,10 @@ public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
 						}
 						
 						String linkAlias = alias.equals(rootAlias) ? f.getName() : (alias + "." + f.getName());
-						SqlExpression joinCondition = null;
+						String joinCondition = null;
 						String idField = null;
 						if (f.getAnnotation(JoinCondition.class) != null) {
-							joinCondition = SqlQuery.resolveAliases(dbContext, new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias, isRoot ? "" : alias, linkAlias);
+							joinCondition = f.getAnnotation(JoinCondition.class).value();
 						} else {
 							idField = QueryBuilder.determineIdField(clz).getName();
 						}
@@ -279,7 +280,7 @@ public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
 						
 						SqlExpression joinCondition = new SqlExpression("{" + alias + "}." + idField + " = {" + linkAlias + "}." + linkfieldname);
 						if (f.getAnnotation(JoinCondition.class) != null) {
-							joinCondition = SqlQuery.resolveAliases(dbContext, new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias, isRoot ? "" : alias, linkAlias);
+							joinCondition = new SqlExpression(resolveJoinConditionAliases(f.getAnnotation(JoinCondition.class).value(), alias, linkAlias, linkAlias));
 						}
 						query.addJoin(JoinType.LEFT, linkAnn.linkschema(), linkAnn.linktable(), linkAlias, joinCondition);
 						
@@ -325,7 +326,8 @@ public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
 			} else {
 				SqlExpression selectExpression;
 				if (f.getAnnotation(Select.class) != null) {
-					selectExpression = SqlQuery.resolveAliases(dbContext, new SqlExpression(f.getAnnotation(Select.class).value()), alias, alias.equals(rootAlias) ? "" : alias, null);
+//					selectExpression = SqlQuery.resolveAliases(dbContext, new SqlExpression(f.getAnnotation(Select.class).value()), alias, alias.equals(rootAlias) ? "" : alias, null);
+					selectExpression = new SqlExpression(f.getAnnotation(Select.class).value());
 				} else {
 					String fieldName = determineSqlFieldName(f);
 					selectExpression = new SqlExpression("{" + alias + "}." + (fieldNamePrefix == null ? "" : fieldNamePrefix) + fieldName);
@@ -352,9 +354,9 @@ public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
 		if (linkAnn != null && !Link.NONE.equals(linkAnn.foreignlinkfield())) {
 			linkField = linkAnn.foreignlinkfield();
 		}
-		SqlExpression joinCondition = null;
+		String joinCondition = null;
 		if (f.getAnnotation(JoinCondition.class) != null) {
-			joinCondition = SqlQuery.resolveAliases(dbContext, new SqlExpression(f.getAnnotation(JoinCondition.class).value()), alias, isRootOrSuperClassOfRoot(alias) ? "" : alias, null);
+			joinCondition = f.getAnnotation(JoinCondition.class).value();
 		}
 		
 		return joinMany(result, alias, f.getName(), tableMapping.schemaName, tableMapping.tableName, idField, linkField, joinCondition);
@@ -364,11 +366,12 @@ public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
 		if (alias.equals(rootAlias)) {
 			return true;
 		}
+//			System.out.println("no such alias: " + alias);
 		List<String> subs = aliases.get(alias).getSubClassAliases();
 		return subs != null && subs.contains(rootAlias);
 	}
 
-	private String joinMany(SqlQuery<?> result, String alias, String fieldName, String schemaName, String tableName, String idField, String linkField, SqlExpression joinCondition) {
+	private String joinMany(SqlQuery<?> result, String alias, String fieldName, String schemaName, String tableName, String idField, String linkField, String joinCondition) {
 		String linkAlias = alias.equals(rootAlias) ? fieldName : (alias + "." + fieldName);
 		Alias parentAlias = aliases.get(alias);
 		while (parentAlias.getSubClassAliases() != null && parentAlias.getSubClassAliases().size() == 1) {
@@ -382,9 +385,11 @@ public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
 		}
 		
 		if (joinCondition == null) {
-			joinCondition = new SqlExpression("{" + alias + "}." + idField + " = {" + linkAlias + "}." + linkField);
+			joinCondition = "{" + alias + "}." + idField + " = {" + linkAlias + "}." + linkField;
+		} else {
+			joinCondition = resolveJoinConditionAliases(joinCondition, alias, linkAlias, linkAlias);
 		}
-		result.addJoin(JoinType.LEFT, schemaName, tableName, linkAlias, joinCondition);
+		result.addJoin(JoinType.LEFT, schemaName, tableName, linkAlias, new SqlExpression(joinCondition));
 		return linkAlias;
 	}
 	
@@ -404,25 +409,54 @@ public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
 			parentAlias = aliases.get(parentAliasStr);
 		}
 		
+		String linkField = (isEmbeddedLinkfield ? linkFieldPrefix : "") + linkFieldName(f);
+		
+		while (parentAlias.getParentAlias() != null && aliases.get(parentAlias.getParentAlias()).getIsEmbedded()) {
+			parentAlias = aliases.get(parentAlias.getParentAlias());
+		}
+		
+		String linkFieldAlias = isEmbeddedLinkfield ? parentAlias.getParentAlias() : alias;
+		
 		SqlExpression joinCondition = null;
 		if (f.getAnnotation(JoinCondition.class) != null) {
-			joinCondition = SqlQuery.resolveAliases(dbContext, new SqlExpression(f.getAnnotation(JoinCondition.class).value()), parentAlias.getAlias(), alias.equals(rootAlias) ? "" : alias, alias.equals(rootAlias) ? "" : alias);
+			joinCondition = new SqlExpression(resolveJoinConditionAliases(f.getAnnotation(JoinCondition.class).value(), linkFieldAlias, linkAlias, null));
 		} else {
 			Field idField = QueryBuilder.determineIdField(type);
-			String linkField = (isEmbeddedLinkfield ? linkFieldPrefix : "") + linkFieldName(f);
-			
-			while (parentAlias.getParentAlias() != null && aliases.get(parentAlias.getParentAlias()).getIsEmbedded()) {
-				parentAlias = aliases.get(parentAlias.getParentAlias());
-			}
-			
-			String linkFieldAlias = isEmbeddedLinkfield ? parentAlias.getParentAlias() : alias;
-			
 			joinCondition = new SqlExpression("{" + linkFieldAlias + "}." + linkField + " = {" + linkAlias + "}." + idField.getName());
 		}
 		result.addJoin(JoinType.LEFT, table.schemaName, table.tableName, linkAlias, joinCondition);
 		return linkAlias;
 	}
 	
+	private String resolveJoinConditionAliases(String expression, String alias, String linkAlias, String linkTableAlias) {
+		return CurlyMarkers.processMarkers(expression, marker -> {
+			if ("linktable".equals(marker)) {
+				return "{" + linkTableAlias + "}";
+			} else if ("this".equals(marker)) {
+				return "{" + alias + "}";
+			} else if (marker.startsWith("this.")) {
+				String rest = marker.substring("this.".length());
+				return isRootOrSuperClassOfRoot(alias) ? "{" + rest + "}" : "{" + alias + "." + rest + "}" ; 
+			} else {
+				return isRootOrSuperClassOfRoot(alias) ? "{" + marker + "}" : "{" + alias + "." + marker + "}" ; 
+			}
+		});
+//		if (linkTableAlias != null) {
+//			expression = resolveAlias(expression, "linktable", linkTableAlias);
+//		}
+//		expression = expression
+//				.replaceAll("\\{this\\}", "{}")
+//				.replaceAll("\\{this\\.", "{.").replaceAll("\\{\\.", "{this.").replaceAll("\\{\\}", "{this}");
+//		String result = resolveAlias(expression, "this", alias);
+//		return result;
+//	}
+//	
+//	private String resolveAlias(String expression, String placeholder, String alias) {
+//		return expression
+//			.replaceAll("\\{" + placeholder + "\\}", "{" + alias + "}")
+//			.replaceAll("\\{" + placeholder + "\\.", alias.equals(rootAlias) ? "{" : ("{" + alias + "."));
+	}
+
 	private void addField(SqlExpression expression, String fieldAlias, Field f) {
 		fieldMappings.put(fieldAlias, dbContext.getFieldMapping(f));
 		query.addField(expression, fieldAlias);

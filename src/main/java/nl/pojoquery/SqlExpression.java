@@ -42,4 +42,9 @@ public class SqlExpression {
 		}
 		return new SqlExpression(Strings.implode(glue, sqlParts), params);
 	}
+
+	@Override
+	public String toString() {
+		return "SqlExpression [sql=" + sql + ", parameters=" + parameters + "]";
+	}
 }

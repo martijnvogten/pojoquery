@@ -5,12 +5,11 @@ import static nl.pojoquery.util.Strings.implode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import nl.pojoquery.DB;
 import nl.pojoquery.DbContext;
 import nl.pojoquery.SqlExpression;
+import nl.pojoquery.util.CurlyMarkers;
 import nl.pojoquery.util.Iterables;
 
 @SuppressWarnings("unchecked")
@@ -37,6 +36,11 @@ public abstract class SqlQuery<S extends SqlQuery<?>> {
 		public SqlField(SqlExpression expression, String alias) {
 			this.expression = expression;
 			this.alias = alias;
+		}
+
+		@Override
+		public String toString() {
+			return "SqlField [alias=" + alias + ", expression=" + expression + "]";
 		}
 	}
 
@@ -158,7 +162,7 @@ public abstract class SqlQuery<S extends SqlQuery<?>> {
 			if (field.alias == null) {
 				fieldExpressions.add(field.expression);
 			} else {
-				SqlExpression resolved = resolveAliases(dbContext, field.expression, table, "", null);
+				SqlExpression resolved = resolveAliases(dbContext, field.expression, table);
 				String sql = resolved.getSql() + " AS " + dbContext.quoteAlias(field.alias);
 				fieldExpressions.add(new SqlExpression(sql, resolved.getParameters()));
 			}
@@ -167,26 +171,18 @@ public abstract class SqlQuery<S extends SqlQuery<?>> {
 		return toStatement(new SqlExpression("SELECT\n " + fieldsExp.getSql(), fieldsExp.getParameters()), schema, table, joins, wheres, groupBy, orderBy, offset, rowCount);
 	}
 
-	public static SqlExpression resolveAliases(DbContext context, SqlExpression sql, String thisAlias, String prefixAlias, String linkTableAlias) {
-		StringBuffer result = new StringBuffer();
-		Matcher m = Pattern.compile("\\{([a-zA-Z0-9_\\.]+)\\}\\.").matcher(sql.getSql());
-		while(m.find()) {
-			String alias = m.group(1);
-			String combinedAlias;
+	private SqlExpression resolveAliases(DbContext context, SqlExpression sql, String thisAlias) {
+		return new SqlExpression(CurlyMarkers.processMarkers(sql.getSql(), alias -> {
 			if ("this".equals(alias)) {
-				combinedAlias = thisAlias;
-			} else if ("linktable".equals(alias)) {
-				combinedAlias = linkTableAlias;
-			} else if (!prefixAlias.isEmpty()) {
-				combinedAlias = prefixAlias + "." + alias;
-			} else {
-				combinedAlias = alias;
+				return context.quoteAlias(thisAlias);
 			}
-			m.appendReplacement(result, context.quoteAlias(combinedAlias));
-			result.append(".");
-		}
-		m.appendTail(result);
-		return new SqlExpression(result.toString(), sql.getParameters());
+			for (SqlField field : fields) {
+				if (alias.equals(field.alias)) {
+					return "(" + resolveAliases(dbContext, field.expression, thisAlias).getSql() + ")";
+				}
+			}
+			return context.quoteAlias(alias);
+		}), sql.getParameters());
 	}
 
 	public SqlExpression toStatement(SqlExpression selectClause, String schema, String from, List<SqlJoin> joins, List<SqlExpression> wheres, List<String> groupBy,
@@ -198,14 +194,14 @@ public abstract class SqlQuery<S extends SqlQuery<?>> {
 		SqlExpression whereClause = buildWhereClause(wheres);
 		Iterables.addAll(params, whereClause.getParameters());
 
-		String groupByClause = resolveAliases(dbContext, SqlExpression.sql(buildClause("GROUP BY", groupBy)), getTable(), getTable(), null).getSql();
-		String orderByClause = resolveAliases(dbContext, SqlExpression.sql(buildClause("ORDER BY", orderBy)), getTable(), getTable(), null).getSql();
+		String groupByClause = resolveAliases(dbContext, SqlExpression.sql(buildClause("GROUP BY", groupBy)), getTable()).getSql();
+		String orderByClause = resolveAliases(dbContext, SqlExpression.sql(buildClause("ORDER BY", orderBy)), getTable()).getSql();
 		String limitClause = buildLimitClause(offset, rowCount);
 
 		ArrayList<SqlExpression> joinExpressions = new ArrayList<SqlExpression>();
 		for(SqlJoin j : joins) {
 			String sql = j.joinType.name() + " JOIN " + DB.prefixAndQuoteTableName(dbContext, j.schema, j.table) + " AS " + dbContext.quoteAlias(j.alias);
-			SqlExpression resolved = resolveAliases(dbContext, j.joinCondition, table, "", null);
+			SqlExpression resolved = resolveAliases(dbContext, j.joinCondition, table);
 			if (j.joinCondition != null) {
 				sql += " ON " + resolved.getSql();
 			}
@@ -251,7 +247,7 @@ public abstract class SqlQuery<S extends SqlQuery<?>> {
 		if (parts.size() > 0) {
 			List<String> clauses = new ArrayList<String>();
 			for (SqlExpression exp : parts) {
-				clauses.add(resolveAliases(dbContext, exp, getTable(), "", null).getSql());
+				clauses.add(resolveAliases(dbContext, exp, getTable()).getSql());
 				for (Object o : exp.getParameters()) {
 					parameters.add(o);
 				}

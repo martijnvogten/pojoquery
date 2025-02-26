@@ -13,8 +13,8 @@ public class Strings {
 		return result.toString();
 	}
 
-	public static boolean isNullOrEmpty(String tableName) {
-		return tableName == null || tableName.isEmpty();
+	public static boolean isNullOrEmpty(String str) {
+		return str == null || str.isEmpty();
 	}
 
 }
