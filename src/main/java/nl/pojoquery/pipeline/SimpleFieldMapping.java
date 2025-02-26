@@ -3,6 +3,7 @@ package nl.pojoquery.pipeline;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -36,6 +37,9 @@ public class SimpleFieldMapping implements FieldMapping {
 			}
 			if (value instanceof LocalDateTime && (f.getType().equals(Instant.class))) {
 				value = ((LocalDateTime)value).atZone(ZoneOffset.UTC).toInstant();
+			}
+			if (value instanceof Timestamp && (f.getType().equals(Instant.class))) {
+				value = ((Timestamp)value).toInstant();
 			}
 			f.setAccessible(true);
 			f.set(targetEntity, value);
