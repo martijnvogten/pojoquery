@@ -784,7 +784,7 @@ public class QueryBuilder<T> {
 		List<TableMapping> tables = QueryBuilder.determineTableMapping(resultClass);
 		String tableName = tables.get(tables.size() - 1).tableName;
 		if (idFields.size() == 1) {
-			return Arrays.asList(new SqlExpression(context.quoteObjectNames(tableName, idFields.get(0).getName()) + "=?", Arrays.asList((Object) id)));
+			return Arrays.asList(new SqlExpression((context.quoteAlias(tableName) + "." + context.quoteObjectNames(idFields.get(0).getName())) + "=?", Arrays.asList((Object) id)));
 		} else {
 			if (id instanceof Map) {
 				@SuppressWarnings("unchecked")

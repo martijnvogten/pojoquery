@@ -250,7 +250,7 @@ public class SqlQuery {
 		if (parts.size() > 0) {
 			List<String> clauses = new ArrayList<String>();
 			for (SqlExpression exp : parts) {
-				clauses.add(resolveAliases(dbContext, exp, getTable(), getTable(), null).getSql());
+				clauses.add(resolveAliases(dbContext, exp, getTable(), "", null).getSql());
 				for (Object o : exp.getParameters()) {
 					parameters.add(o);
 				}
