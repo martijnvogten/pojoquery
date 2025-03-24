@@ -1,6 +1,7 @@
 package nl.pojoquery.integrationtest;
 
 import java.util.List;
+import java.util.Map;
 
 import javax.sql.DataSource;
 
@@ -9,7 +10,6 @@ import org.junit.Test;
 
 import nl.pojoquery.DB;
 import nl.pojoquery.PojoQuery;
-import nl.pojoquery.TestUtils;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.JoinCondition;
 import nl.pojoquery.annotations.Link;
@@ -72,9 +72,9 @@ public class ForeignValueFieldsIT {
 		PojoQuery.insert(db, p);
 		Assert.assertEquals((Long)1L, p.id);
 		
-		DB.insert(db, "poule_weightclass", TestUtils.map("poule_id", 1, "weightClass", -30));
-		DB.insert(db, "poule_weightclass", TestUtils.map("poule_id", 1, "weightClass", -32));
-		DB.insert(db, "poule_weightclass", TestUtils.map("poule_id", 1, "weightClass", -34));
+		DB.insert(db, "poule_weightclass", Map.of("poule_id", 1, "weightClass", -30));
+		DB.insert(db, "poule_weightclass", Map.of("poule_id", 1, "weightClass", -32));
+		DB.insert(db, "poule_weightclass", Map.of("poule_id", 1, "weightClass", -34));
 	}
 	
 }

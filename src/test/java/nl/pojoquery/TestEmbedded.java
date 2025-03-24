@@ -3,7 +3,6 @@ package nl.pojoquery;
 import static nl.pojoquery.TestUtils.norm;
 import static org.junit.Assert.assertEquals;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -59,7 +58,7 @@ public class TestEmbedded {
 		User author;
 	}
 	
-	private List<Map<String, Object>> RESULT_ARTICLE_DETAIL = Collections.singletonList(TestUtils.<String,Object>map(
+	private static final List<Map<String, Object>> RESULT_ARTICLE_DETAIL = List.of(Map.of(
 			"article.id", 1L, 
 			"article.title", "The title", 
 			"author.id", 1L, 
@@ -69,13 +68,15 @@ public class TestEmbedded {
 	@Test
 	public void testBasics() {
 		assertEquals(
-				norm("SELECT" +
-				" `user`.id AS `user.id`," +
-				" `user`.home_address AS `home.address`," +
-				" `user`.home_city AS `home.city`" +
-				" FROM `user` AS `user`"), norm(QueryBuilder.from(User.class).getQuery().toStatement().getSql()));
+				norm("""
+					SELECT
+					 `user`.id AS `user.id`,
+					 `user`.home_address AS `home.address`,
+					 `user`.home_city AS `home.city`
+					 FROM `user` AS `user`
+					"""), norm(QueryBuilder.from(User.class).getQuery().toStatement().getSql()));
 		
-		List<Map<String, Object>> result = Collections.singletonList(TestUtils.<String,Object>map(
+		List<Map<String, Object>> result = List.of(Map.of(
 				"user.id", 1L, 
 				"home.address", "501, Broadway", 
 				"home.city", "New York D.C."));
@@ -109,7 +110,7 @@ public class TestEmbedded {
 				norm(QueryBuilder.from(UserWithCountry.class).getQuery().toStatement().getSql()));
 	}
 	
-	private List<Map<String, Object>> RESULT_USER_WITH_COUNTRY = Collections.singletonList(TestUtils.<String,Object>map(
+	private static final List<Map<String, Object>> RESULT_USER_WITH_COUNTRY = List.of(Map.of(
 			"user.id", 1L, 
 			"home.address", "501, Broadway", 
 			"home.city", "New York D.C.",

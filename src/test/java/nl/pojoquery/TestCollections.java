@@ -1,9 +1,7 @@
 package nl.pojoquery;
 
-import static nl.pojoquery.TestUtils.map;
 import static org.junit.Assert.assertEquals;
 
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -57,19 +55,21 @@ public class TestCollections {
 	public void testBasics() {
 		PojoQuery<User> pq = PojoQuery.build(User.class);
 		assertEquals(
-			TestUtils.norm("SELECT\n" + 
-				" `user`.id AS `user.id`,\n" + 
-				" `roles`.element AS `roles.value`\n" + 
-				"FROM `user` AS `user`\n" + 
-				" LEFT JOIN `user_roles` AS `roles` ON `user`.id = `roles`.user_id"), 
+			TestUtils.norm("""
+				SELECT
+				 `user`.id AS `user.id`,
+				 `roles`.element AS `roles.value`
+				FROM `user` AS `user`
+				 LEFT JOIN `user_roles` AS `roles` ON `user`.id = `roles`.user_id
+				"""), 
 			TestUtils.norm(pq.toSql()));
 		
-		List<Map<String, Object>> result = Arrays.asList(
-			map(
+		List<Map<String, Object>> result = List.of(
+			Map.of(
 				"user.id", (Object)1L,
 				"roles.value", Role.ADMIN.name()
 			),
-			map(
+			Map.of(
 				"user.id", (Object)1L, 
 				"roles.value", Role.AGENT.name())
 			);
@@ -83,24 +83,26 @@ public class TestCollections {
 	public void testCollections() {
 		PojoQuery<UserDetail> pq = PojoQuery.build(UserDetail.class);
 		assertEquals(
-			TestUtils.norm("SELECT\n" + 
-					" `user`.id AS `user.id`,\n" + 
-					" `roles`.element AS `roles.value`,\n" + 
-					" `articles`.id AS `articles.id`,\n" + 
-					" `articles`.title AS `articles.title`\n" + 
-					"FROM `user` AS `user`\n" + 
-					" LEFT JOIN `user_roles` AS `roles` ON `user`.id = `roles`.user_id\n" + 
-					" LEFT JOIN `article` AS `articles` ON `user`.id = `articles`.user_id"), 
+			TestUtils.norm("""
+				SELECT
+				 `user`.id AS `user.id`,
+				 `roles`.element AS `roles.value`,
+				 `articles`.id AS `articles.id`,
+				 `articles`.title AS `articles.title`
+				FROM `user` AS `user`
+				 LEFT JOIN `user_roles` AS `roles` ON `user`.id = `roles`.user_id
+				 LEFT JOIN `article` AS `articles` ON `user`.id = `articles`.user_id
+				"""), 
 			TestUtils.norm(pq.toSql()));
 		
-		List<Map<String, Object>> result = Arrays.asList(
-				map(
+		List<Map<String, Object>> result = List.of(
+				Map.of(
 					"user.id", (Object)1L,
 					"roles.value", Role.ADMIN.name(),
 					"articles.id", 1L,
 					"articles.title", "title"
 				),
-				map(
+				Map.of(
 					"user.id", (Object)1L, 
 					"roles.value", Role.AGENT.name(),
 					"articles.id", 1L,
@@ -115,24 +117,26 @@ public class TestCollections {
 	public void testSets() {
 		PojoQuery<UserWithTasks> pq = PojoQuery.build(UserWithTasks.class);
 		assertEquals(
-			TestUtils.norm("SELECT\n" + 
-					" `user`.id AS `user.id`,\n" + 
-					" `roles`.element AS `roles.value`,\n" + 
-					" `tasks`.id AS `tasks.id`,\n" + 
-					" `tasks`.title AS `tasks.title`\n" + 
-					"FROM `user` AS `user`\n" + 
-					" LEFT JOIN `user_roles` AS `roles` ON `user`.id = `roles`.user_id\n" + 
-					" LEFT JOIN `task` AS `tasks` ON `user`.id = `tasks`.user_id"), 
+			TestUtils.norm("""
+				SELECT
+				 `user`.id AS `user.id`,
+				 `roles`.element AS `roles.value`,
+				 `tasks`.id AS `tasks.id`,
+				 `tasks`.title AS `tasks.title`
+				FROM `user` AS `user`
+				 LEFT JOIN `user_roles` AS `roles` ON `user`.id = `roles`.user_id
+				 LEFT JOIN `task` AS `tasks` ON `user`.id = `tasks`.user_id
+				"""), 
 			TestUtils.norm(pq.toSql()));
 		
-		List<Map<String, Object>> result = Arrays.asList(
-				map(
+		List<Map<String, Object>> result = List.of(
+				Map.of(
 					"user.id", (Object)1L,
 					"roles.value", Role.ADMIN.name(),
 					"tasks.id", 1L,
 					"tasks.title", "title"
 				),
-				map(
+				Map.of(
 					"user.id", (Object)1L, 
 					"roles.value", Role.AGENT.name(),
 					"tasks.id", 1L,

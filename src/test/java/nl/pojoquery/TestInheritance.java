@@ -82,16 +82,18 @@ public class TestInheritance {
 		String sql = b.toSql();
 		
 		assertEquals(
-				norm("SELECT\n" + 
-						" `room`.id AS `room.id`,\n" + 
-						" `room`.area AS `room.area`,\n" + 
-						" `room.bedroom`.id AS `room.bedroom.id`,\n" + 
-						" `room.bedroom`.numberOfBeds AS `room.bedroom.numberOfBeds`,\n" + 
-						" `room.kitchen`.id AS `room.kitchen.id`,\n" + 
-						" `room.kitchen`.hasDishWasher AS `room.kitchen.hasDishWasher`\n" + 
-						"FROM `room` AS `room`\n" + 
-						" LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.id = `room`.id\n" + 
-						" LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.id = `room`.id"),
+				norm("""
+					SELECT
+					 `room`.id AS `room.id`,
+					 `room`.area AS `room.area`,
+					 `room.bedroom`.id AS `room.bedroom.id`,
+					 `room.bedroom`.numberOfBeds AS `room.bedroom.numberOfBeds`,
+					 `room.kitchen`.id AS `room.kitchen.id`,
+					 `room.kitchen`.hasDishWasher AS `room.kitchen.hasDishWasher`
+					FROM `room` AS `room`
+					 LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.id = `room`.id
+					 LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.id = `room`.id
+					"""),
 				norm(sql));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
@@ -112,12 +114,14 @@ public class TestInheritance {
 		String sql = q.toStatement().getSql();
 		System.out.println(sql);
 		assertEquals(
-				norm("SELECT\n" + 
-						" `bedroom`.numberOfBeds AS `bedroom.numberOfBeds`,\n" + 
-						" `room`.id AS `bedroom.id`,\n" + 
-						" `room`.area AS `bedroom.area`\n" + 
-						"FROM `bedroom` AS `bedroom`\n" + 
-						" INNER JOIN `room` AS `room` ON `room`.id = `bedroom`.id"),
+				norm("""
+					SELECT
+					 `bedroom`.numberOfBeds AS `bedroom.numberOfBeds`,
+					 `room`.id AS `bedroom.id`,
+					 `room`.area AS `bedroom.area`
+					FROM `bedroom` AS `bedroom`
+					 INNER JOIN `room` AS `room` ON `room`.id = `bedroom`.id
+					"""),
 				norm(sql));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
@@ -137,15 +141,16 @@ public class TestInheritance {
 		String sql = QueryBuilder.from(ApartmentWithSpecificProperties.class).toStatement().getSql();
 		System.out.println(sql);
 		assertEquals(
-			norm(
-				"SELECT\n" + 
-				" `apartment`.id AS `apartment.id`,\n" + 
-				" `bedrooms`.numberOfBeds AS `bedrooms.numberOfBeds`,\n" + 
-				" `bedrooms.room`.id AS `bedrooms.id`,\n" + 
-				" `bedrooms.room`.area AS `bedrooms.area`\n" + 
-				"FROM `apartment` AS `apartment`\n" + 
-				" LEFT JOIN `bedroom` AS `bedrooms` ON `apartment`.id = `bedrooms`.apartment_id\n" + 
-				" LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms.room`.id = `bedrooms`.id"), 
+			norm("""
+				SELECT
+				 `apartment`.id AS `apartment.id`,
+				 `bedrooms`.numberOfBeds AS `bedrooms.numberOfBeds`,
+				 `bedrooms.room`.id AS `bedrooms.id`,
+				 `bedrooms.room`.area AS `bedrooms.area`
+				FROM `apartment` AS `apartment`
+				 LEFT JOIN `bedroom` AS `bedrooms` ON `apartment`.id = `bedrooms`.apartment_id
+				 LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms.room`.id = `bedrooms`.id
+				"""), 
 			norm(sql));
 	}
 	
@@ -153,18 +158,20 @@ public class TestInheritance {
 	public void testDeeper() {
 		String sql = QueryBuilder.from(Apartment.class).toStatement().getSql();
 		assertEquals(
-				norm("SELECT\n" + 
-						" `apartment`.id AS `apartment.id`,\n" + 
-						" `rooms`.id AS `rooms.id`,\n" + 
-						" `rooms`.area AS `rooms.area`,\n" + 
-						" `rooms.bedroom`.id AS `rooms.bedroom.id`,\n" + 
-						" `rooms.bedroom`.numberOfBeds AS `rooms.bedroom.numberOfBeds`,\n" + 
-						" `rooms.kitchen`.id AS `rooms.kitchen.id`,\n" + 
-						" `rooms.kitchen`.hasDishWasher AS `rooms.kitchen.hasDishWasher`\n" + 
-						"FROM `apartment` AS `apartment`\n" + 
-						" LEFT JOIN `room` AS `rooms` ON `apartment`.id = `rooms`.apartment_id\n" + 
-						" LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.id = `rooms`.id\n" + 
-						" LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.id = `rooms`.id"),
+				norm("""
+					SELECT
+					 `apartment`.id AS `apartment.id`,
+					 `rooms`.id AS `rooms.id`,
+					 `rooms`.area AS `rooms.area`,
+					 `rooms.bedroom`.id AS `rooms.bedroom.id`,
+					 `rooms.bedroom`.numberOfBeds AS `rooms.bedroom.numberOfBeds`,
+					 `rooms.kitchen`.id AS `rooms.kitchen.id`,
+					 `rooms.kitchen`.hasDishWasher AS `rooms.kitchen.hasDishWasher`
+					FROM `apartment` AS `apartment`
+					 LEFT JOIN `room` AS `rooms` ON `apartment`.id = `rooms`.apartment_id
+					 LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.id = `rooms`.id
+					 LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.id = `rooms`.id
+					"""),
 				norm(sql));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {

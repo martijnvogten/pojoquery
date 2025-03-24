@@ -13,7 +13,7 @@ import nl.pojoquery.util.CurlyMarkers;
 import nl.pojoquery.util.Iterables;
 
 @SuppressWarnings("unchecked")
-public abstract class SqlQuery<S extends SqlQuery<?>> {
+public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 	private int offset = -1;
 	private int rowCount = -1;
 	private String schema;
@@ -111,49 +111,49 @@ public abstract class SqlQuery<S extends SqlQuery<?>> {
 		return orderBy;
 	}
 
-	public S setOrderBy(List<String> orderBy) {
+	public SQ setOrderBy(List<String> orderBy) {
 		this.orderBy = orderBy;
-		return (S) this;
+		return (SQ) this;
 	}
 
-	public S addField(SqlExpression expression) {
+	public SQ addField(SqlExpression expression) {
 		fields.add(new SqlField(expression));
-		return (S)this;
+		return (SQ)this;
 	}
 	
-	public S addField(SqlExpression expression, String alias) {
+	public SQ addField(SqlExpression expression, String alias) {
 		fields.add(new SqlField(expression, alias));
-		return (S)this;
+		return (SQ)this;
 	}
 
-	public S addGroupBy(String group) {
+	public SQ addGroupBy(String group) {
 		groupBy.add(group);
-		return (S)this;
+		return (SQ)this;
 	}
 
-	public S addWhere(SqlExpression where) {
+	public SQ addWhere(SqlExpression where) {
 		wheres.add(where);
-		return (S)this;
+		return (SQ)this;
 	}
 
-	public S addWhere(String sql, Object... params) {
+	public SQ addWhere(String sql, Object... params) {
 		wheres.add(new SqlExpression(sql, Arrays.asList(params)));
-		return (S)this;
+		return (SQ)this;
 	}
 
-	public S addOrderBy(String order) {
+	public SQ addOrderBy(String order) {
 		orderBy.add(order);
-		return (S)this;
+		return (SQ)this;
 	}
 
-	public S setLimit(int rowCount) {
+	public SQ setLimit(int rowCount) {
 		return setLimit(-1, rowCount);
 	}
 
-	public S setLimit(int offset, int rowCount) {
+	public SQ setLimit(int offset, int rowCount) {
 		this.offset = offset;
 		this.rowCount = rowCount;
-		return (S)this;
+		return (SQ)this;
 	}
 
 	public SqlExpression toStatement() {
@@ -178,7 +178,7 @@ public abstract class SqlQuery<S extends SqlQuery<?>> {
 			}
 			for (SqlField field : fields) {
 				if (alias.equals(field.alias)) {
-					return "(" + resolveAliases(dbContext, field.expression, thisAlias).getSql() + ")";
+					return resolveAliases(dbContext, field.expression, thisAlias).getSql();
 				}
 			}
 			return context.quoteAlias(alias);

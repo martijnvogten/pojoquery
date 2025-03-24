@@ -42,7 +42,7 @@ import nl.pojoquery.pipeline.SqlQuery.JoinType;
 import nl.pojoquery.util.CurlyMarkers;
 import nl.pojoquery.util.Types;
 
-public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
+public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	
 	@SuppressWarnings("serial")
 	public static class Values extends HashMap<String,Object> {
@@ -69,11 +69,11 @@ public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
 	private Map<String,FieldMapping> fieldMappings = new LinkedHashMap<>();
 	
 	private final Class<T> resultClass;
-	private final SqlQuery<S> query;
+	private final SqlQuery<SQ> query;
 	private final String rootAlias;
 	private final DbContext dbContext;
 
-	protected CustomQueryBuilder(SqlQuery<S> query, Class<T> clz) {
+	protected CustomizableQueryBuilder(SqlQuery<SQ> query, Class<T> clz) {
 		this.dbContext = query.getDbContext();
 		this.resultClass = clz;
 		this.query = query;
@@ -128,8 +128,8 @@ public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
 	}
 
 	@SuppressWarnings("unchecked")
-	public S getQuery() {
-		return (S)query;
+	public SQ getQuery() {
+		return (SQ)query;
 	}
 
 	private static TableMapping lookupTableMapping(Class<?> clz) {
@@ -326,8 +326,7 @@ public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
 			} else {
 				SqlExpression selectExpression;
 				if (f.getAnnotation(Select.class) != null) {
-//					selectExpression = SqlQuery.resolveAliases(dbContext, new SqlExpression(f.getAnnotation(Select.class).value()), alias, alias.equals(rootAlias) ? "" : alias, null);
-					selectExpression = new SqlExpression(f.getAnnotation(Select.class).value());
+					selectExpression = new SqlExpression(resolveJoinConditionAliases(f.getAnnotation(Select.class).value(), alias, null, null));
 				} else {
 					String fieldName = determineSqlFieldName(f);
 					selectExpression = new SqlExpression("{" + alias + "}." + (fieldNamePrefix == null ? "" : fieldNamePrefix) + fieldName);
@@ -366,7 +365,6 @@ public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
 		if (alias.equals(rootAlias)) {
 			return true;
 		}
-//			System.out.println("no such alias: " + alias);
 		List<String> subs = aliases.get(alias).getSubClassAliases();
 		return subs != null && subs.contains(rootAlias);
 	}
@@ -441,20 +439,6 @@ public class CustomQueryBuilder<S extends SqlQuery<?>,T> {
 				return isRootOrSuperClassOfRoot(alias) ? "{" + marker + "}" : "{" + alias + "." + marker + "}" ; 
 			}
 		});
-//		if (linkTableAlias != null) {
-//			expression = resolveAlias(expression, "linktable", linkTableAlias);
-//		}
-//		expression = expression
-//				.replaceAll("\\{this\\}", "{}")
-//				.replaceAll("\\{this\\.", "{.").replaceAll("\\{\\.", "{this.").replaceAll("\\{\\}", "{this}");
-//		String result = resolveAlias(expression, "this", alias);
-//		return result;
-//	}
-//	
-//	private String resolveAlias(String expression, String placeholder, String alias) {
-//		return expression
-//			.replaceAll("\\{" + placeholder + "\\}", "{" + alias + "}")
-//			.replaceAll("\\{" + placeholder + "\\.", alias.equals(rootAlias) ? "{" : ("{" + alias + "."));
 	}
 
 	private void addField(SqlExpression expression, String fieldAlias, Field f) {

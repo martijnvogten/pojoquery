@@ -24,11 +24,13 @@ public class TestGroupBy {
 	@Test
 	public void testSql() {
 		PojoQuery<WordCount> q = PojoQuery.build(WordCount.class);
-		Assert.assertEquals(TestUtils.norm("SELECT\n" + 
-				" `wordindex`.word AS `wordindex.word`,\n" + 
-				" COUNT(*) AS `wordindex.wordCount`\n" + 
-				"FROM `wordindex` AS `wordindex`\n" + 
-				"GROUP BY wordindex.word"), TestUtils.norm(q.toStatement().getSql()));
+		Assert.assertEquals(TestUtils.norm("""
+			SELECT
+			 `wordindex`.word AS `wordindex.word`,
+			 COUNT(*) AS `wordindex.wordCount`
+			FROM `wordindex` AS `wordindex`
+			GROUP BY wordindex.word
+			"""), TestUtils.norm(q.toStatement().getSql()));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
 			"wordindex.word", "wordindex.wordCount" } 

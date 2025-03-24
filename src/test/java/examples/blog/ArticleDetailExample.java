@@ -7,7 +7,7 @@ import javax.sql.DataSource;
 import nl.pojoquery.DB;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Table;
-import nl.pojoquery.pipeline.CustomQueryBuilder.DefaultSqlQuery;
+import nl.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
 import nl.pojoquery.pipeline.QueryBuilder;
 
 public class ArticleDetailExample {

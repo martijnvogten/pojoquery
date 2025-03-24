@@ -1,19 +1,17 @@
 package nl.pojoquery;
 
-import static nl.pojoquery.TestUtils.map;
 import static nl.pojoquery.TestUtils.norm;
 import static org.junit.Assert.assertEquals;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+
+import org.junit.Test;
 
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Table;
 import nl.pojoquery.pipeline.QueryBuilder;
-
-import org.junit.Test;
 
 public class TestEnums {
 
@@ -41,21 +39,23 @@ public class TestEnums {
 	@Test
 	public void testBasics() {
 		assertEquals(
-				norm("SELECT" +
-				" `user`.id AS `user.id`," +
-				" `roles`.element AS `roles.value`," +
-				" `user`.state AS `user.state`" +
-				" FROM `user` AS `user`" +
-				" LEFT JOIN `user_roles` AS `roles` ON `user`.id = `roles`.user_id"), 
+			norm("""
+				SELECT
+				 `user`.id AS `user.id`,
+				 `roles`.element AS `roles.value`,
+				 `user`.state AS `user.state`
+				 FROM `user` AS `user`
+				 LEFT JOIN `user_roles` AS `roles` ON `user`.id = `roles`.user_id
+				"""), 
 			norm(QueryBuilder.from(User.class).toStatement().getSql()));
 		
-		List<Map<String, Object>> result = Arrays.asList(
-			map(
+		List<Map<String, Object>> result = List.of(
+			Map.of(
 				"user.id", (Object)1L,
 				"user.state", State.EMPLOYED.name(),
 				"roles.value", Role.ADMIN.name()
 			),
-			map(
+			Map.of(
 				"user.id", (Object)1L, 
 				"user.state", State.EMPLOYED.name(), 
 				"roles.value", Role.AGENT.name())

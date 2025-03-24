@@ -20,7 +20,7 @@ public class TestDatabase {
 		return getDataSource(host, schema, username, password);
 	}
 
-	private static DataSource getDataSource(String host, String schema, String username, String password) {
+	public static DataSource getDataSource(String host, String schema, String username, String password) {
 		return MysqlDatabases.getMysqlDataSource(host, schema, username, password);
 	}
 }

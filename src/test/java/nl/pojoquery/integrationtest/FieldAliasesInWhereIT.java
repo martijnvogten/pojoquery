@@ -66,11 +66,21 @@ public class FieldAliasesInWhereIT {
 		Room loaded = PojoQuery.build(Room.class).findById(db, room.id);
 		Assert.assertNotNull(loaded.house);
 		
-		List<Room> results = PojoQuery.build(Room.class)
-			.addWhere(SqlExpression.sql("`house.owner`.name = ?", "John Lennon"))
-			.execute(db);
+		{
+			List<Room> results = PojoQuery.build(Room.class)
+				.addWhere(SqlExpression.sql("`house.owner`.name = ?", "John Lennon"))
+				.execute(db);
+			
+			Assert.assertEquals(1, results.size());
+		}
 		
-		Assert.assertEquals(1, results.size());
+		{
+			List<Room> results = PojoQuery.build(Room.class)
+					.addWhere(SqlExpression.sql("{house.owner.name} = ?", "John Lennon"))
+					.execute(db);
+			
+			Assert.assertEquals(1, results.size());
+		}
 	}
 	
 

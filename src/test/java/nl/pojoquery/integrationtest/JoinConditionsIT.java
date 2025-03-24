@@ -1,8 +1,11 @@
 package nl.pojoquery.integrationtest;
 
+import static nl.pojoquery.TestUtils.norm;
+
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.List;
+import java.util.Map;
 
 import javax.sql.DataSource;
 
@@ -91,12 +94,14 @@ public class JoinConditionsIT {
 	public void testSimpleDepartmentEmployeeJoinCondition() {
 		PojoQuery<Employee> q = PojoQuery.build(Employee.class);
 		String sql = q.toSql();
-		Assert.assertEquals("SELECT\n" + 
-				" `employee`.id AS `employee.id`,\n" + 
-				" `department`.id AS `department.id`,\n" + 
-				" `department`.name AS `department.name` \n" + 
-				"FROM `employee` AS `employee`\n" + 
-				" LEFT JOIN `department` AS `department` ON `employee`.department_id = `department`.id", sql.trim());
+		Assert.assertEquals(TestUtils.norm("""
+			SELECT
+			 `employee`.id AS `employee.id`,
+			 `department`.id AS `department.id`,
+			 `department`.name AS `department.name`\s
+			FROM `employee` AS `employee`
+			 LEFT JOIN `department` AS `department` ON `employee`.department_id = `department`.id
+			"""), norm(sql.trim()));
 	}
 	
 	
@@ -147,8 +152,8 @@ public class JoinConditionsIT {
 		PojoQuery.insert(db, conference);
 		
 		// Jane is a visitor, Stella is the organizer
-		DB.insert(db, "event_person", TestUtils.map("eventID", conference.eventID, "personID", jane.personID, "role", "visitor"));
-		DB.insert(db, "event_person", TestUtils.map("eventID", conference.eventID, "personID", stella.personID, "role", "organizer"));
+		DB.insert(db, "event_person", Map.of("eventID", conference.eventID, "personID", jane.personID, "role", "visitor"));
+		DB.insert(db, "event_person", Map.of("eventID", conference.eventID, "personID", stella.personID, "role", "organizer"));
 	}
 	
 	@Test

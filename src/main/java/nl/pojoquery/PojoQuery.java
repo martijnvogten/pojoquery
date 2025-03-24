@@ -19,7 +19,7 @@ import nl.pojoquery.annotations.NoUpdate;
 import nl.pojoquery.annotations.Other;
 import nl.pojoquery.internal.MappingException;
 import nl.pojoquery.internal.TableMapping;
-import nl.pojoquery.pipeline.CustomQueryBuilder.DefaultSqlQuery;
+import nl.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
 import nl.pojoquery.pipeline.QueryBuilder;
 import nl.pojoquery.pipeline.SqlQuery;
 import nl.pojoquery.pipeline.SqlQuery.JoinType;

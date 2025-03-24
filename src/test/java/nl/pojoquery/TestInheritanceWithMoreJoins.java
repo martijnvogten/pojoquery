@@ -65,20 +65,22 @@ public class TestInheritanceWithMoreJoins {
 		QueryBuilder<BedRoom> qb = QueryBuilder.from(BedRoom.class);
 		String sql = qb.toStatement().getSql();
 		assertEquals(
-				norm("SELECT\n"
-						+ " `beds`.id AS `beds.id`,\n"
-						+ " `beds`.width AS `beds.width`,\n"
-						+ " `room`.id AS `bedroom.id`,\n"
-						+ " `room`.area AS `bedroom.area`,\n"
-						+ " `house`.id AS `house.id`,\n"
-						+ " `house`.address AS `house.address`,\n"
-						+ " `windows`.id AS `windows.id`,\n"
-						+ " `windows`.width AS `windows.width`\n"
-						+ "FROM `bedroom` AS `bedroom`\n"
-						+ " INNER JOIN `room` AS `room` ON `room`.id = `bedroom`.id\n"
-						+ " LEFT JOIN `bed` AS `beds` ON `bedroom`.id = `beds`.bedroom_id\n"
-						+ " LEFT JOIN `house` AS `house` ON `room`.house_id = `house`.id\n"
-						+ " LEFT JOIN `window` AS `windows` ON `room`.id = `windows`.room_id"),
+				norm("""
+					SELECT
+					 `beds`.id AS `beds.id`,
+					 `beds`.width AS `beds.width`,
+					 `room`.id AS `bedroom.id`,
+					 `room`.area AS `bedroom.area`,
+					 `house`.id AS `house.id`,
+					 `house`.address AS `house.address`,
+					 `windows`.id AS `windows.id`,
+					 `windows`.width AS `windows.width`
+					FROM `bedroom` AS `bedroom`
+					 INNER JOIN `room` AS `room` ON `room`.id = `bedroom`.id
+					 LEFT JOIN `bed` AS `beds` ON `bedroom`.id = `beds`.bedroom_id
+					 LEFT JOIN `house` AS `house` ON `room`.house_id = `house`.id
+					 LEFT JOIN `window` AS `windows` ON `room`.id = `windows`.room_id
+					"""),
 				norm(sql));
 	}
 	
@@ -87,26 +89,28 @@ public class TestInheritanceWithMoreJoins {
 		QueryBuilder<Apartment> qb = QueryBuilder.from(Apartment.class);
 		String sql = qb.toStatement().getSql();
 		assertEquals(
-				norm("SELECT\n"
-						+ " `apartment`.id AS `apartment.id`,\n"
-						+ " `rooms`.id AS `rooms.id`,\n"
-						+ " `rooms`.area AS `rooms.area`,\n"
-						+ " `rooms.house`.id AS `rooms.house.id`,\n"
-						+ " `rooms.house`.address AS `rooms.house.address`,\n"
-						+ " `rooms.windows`.id AS `rooms.windows.id`,\n"
-						+ " `rooms.windows`.width AS `rooms.windows.width`,\n"
-						+ " `rooms.bedroom`.id AS `rooms.bedroom.id`,\n"
-						+ " `rooms.bedroom.beds`.id AS `rooms.bedroom.beds.id`,\n"
-						+ " `rooms.bedroom.beds`.width AS `rooms.bedroom.beds.width`,\n"
-						+ " `rooms.kitchen`.id AS `rooms.kitchen.id`,\n"
-						+ " `rooms.kitchen`.hasDishWasher AS `rooms.kitchen.hasDishWasher`\n"
-						+ "FROM `apartment` AS `apartment`\n"
-						+ " LEFT JOIN `room` AS `rooms` ON `apartment`.id = `rooms`.apartment_id\n"
-						+ " LEFT JOIN `house` AS `rooms.house` ON `rooms`.house_id = `rooms.house`.id\n"
-						+ " LEFT JOIN `window` AS `rooms.windows` ON `rooms`.id = `rooms.windows`.room_id\n"
-						+ " LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.id = `rooms`.id\n"
-						+ " LEFT JOIN `bed` AS `rooms.bedroom.beds` ON `rooms.bedroom`.id = `rooms.bedroom.beds`.bedroom_id\n"
-						+ " LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.id = `rooms`.id"),
+				norm("""
+					SELECT
+					 `apartment`.id AS `apartment.id`,
+					 `rooms`.id AS `rooms.id`,
+					 `rooms`.area AS `rooms.area`,
+					 `rooms.house`.id AS `rooms.house.id`,
+					 `rooms.house`.address AS `rooms.house.address`,
+					 `rooms.windows`.id AS `rooms.windows.id`,
+					 `rooms.windows`.width AS `rooms.windows.width`,
+					 `rooms.bedroom`.id AS `rooms.bedroom.id`,
+					 `rooms.bedroom.beds`.id AS `rooms.bedroom.beds.id`,
+					 `rooms.bedroom.beds`.width AS `rooms.bedroom.beds.width`,
+					 `rooms.kitchen`.id AS `rooms.kitchen.id`,
+					 `rooms.kitchen`.hasDishWasher AS `rooms.kitchen.hasDishWasher`
+					FROM `apartment` AS `apartment`
+					 LEFT JOIN `room` AS `rooms` ON `apartment`.id = `rooms`.apartment_id
+					 LEFT JOIN `house` AS `rooms.house` ON `rooms`.house_id = `rooms.house`.id
+					 LEFT JOIN `window` AS `rooms.windows` ON `rooms`.id = `rooms.windows`.room_id
+					 LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.id = `rooms`.id
+					 LEFT JOIN `bed` AS `rooms.bedroom.beds` ON `rooms.bedroom`.id = `rooms.bedroom.beds`.bedroom_id
+					 LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.id = `rooms`.id
+					"""),
 				norm(sql));
 	}
 	

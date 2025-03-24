@@ -67,17 +67,19 @@ public class UsersExample {
 	}
 
 	private static void createTables(DataSource db) {
-		DB.executeDDL(db, "CREATE TABLE `user` (\n" + 
-				"  `id` bigint(20) NOT NULL AUTO_INCREMENT,\n" + 
-				"  `modifiedBy_id` bigint(20) DEFAULT NULL,\n" + 
-				"  `createdBy_id` bigint(20) DEFAULT NULL,\n" + 
-				"  `firstName` varchar(255) DEFAULT NULL,\n" + 
-				"  `lastName` varchar(255) DEFAULT NULL,\n" + 
-				"  `password` varchar(255) DEFAULT NULL,\n" + 
-				"  `email` varchar(255) DEFAULT NULL,\n" + 
-				"  `modificationDate` datetime DEFAULT NULL,\n" + 
-				"  `creationDate` datetime DEFAULT NULL,\n" + 
-				"  PRIMARY KEY (`id`)\n" + 
-				")");
+		DB.executeDDL(db, """
+			CREATE TABLE `user` (
+			  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+			  `modifiedBy_id` bigint(20) DEFAULT NULL,
+			  `createdBy_id` bigint(20) DEFAULT NULL,
+			  `firstName` varchar(255) DEFAULT NULL,
+			  `lastName` varchar(255) DEFAULT NULL,
+			  `password` varchar(255) DEFAULT NULL,
+			  `email` varchar(255) DEFAULT NULL,
+			  `modificationDate` datetime DEFAULT NULL,
+			  `creationDate` datetime DEFAULT NULL,
+			  PRIMARY KEY (`id`)
+			)
+			""");
 	}
 }

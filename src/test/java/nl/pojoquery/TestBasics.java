@@ -60,28 +60,30 @@ public class TestBasics {
 		
 		System.out.println(sql);
 		
-		assertEquals(norm("SELECT\n" + 
-				" `article`.id AS `article.id`,\n" + 
-				" `article`.title AS `article.title`,\n" + 
-				" `article`.content AS `article.content`,\n" + 
-				" `article`.author_id AS `article.author_id`,\n" + 
-				" `author`.id AS `author.id`,\n" + 
-				" `author`.firstName AS `author.firstName`,\n" + 
-				" `author`.lastName AS `author.lastName`,\n" + 
-				" `author`.email AS `author.email`,\n" + 
-				" `comments`.id AS `comments.id`,\n" + 
-				" `comments`.article_id AS `comments.article_id`,\n" + 
-				" `comments`.comment AS `comments.comment`,\n" + 
-				" `comments`.submitdate AS `comments.submitdate`,\n" + 
-				" `comments`.author_id AS `comments.author_id`,\n" + 
-				" `comments.author`.id AS `comments.author.id`,\n" + 
-				" `comments.author`.firstName AS `comments.author.firstName`,\n" + 
-				" `comments.author`.lastName AS `comments.author.lastName`,\n" + 
-				" `comments.author`.email AS `comments.author.email` \n" + 
-				"FROM `article` AS `article`\n" + 
-				" LEFT JOIN `user` AS `author` ON `article`.author_id = `author`.id\n" + 
-				" LEFT JOIN `comment` AS `comments` ON `article`.id = `comments`.article_id\n" + 
-				" LEFT JOIN `user` AS `comments.author` ON `comments`.author_id = `comments.author`.id "), norm(sql));
+		assertEquals(norm("""
+			SELECT
+			 `article`.id AS `article.id`,
+			 `article`.title AS `article.title`,
+			 `article`.content AS `article.content`,
+			 `article`.author_id AS `article.author_id`,
+			 `author`.id AS `author.id`,
+			 `author`.firstName AS `author.firstName`,
+			 `author`.lastName AS `author.lastName`,
+			 `author`.email AS `author.email`,
+			 `comments`.id AS `comments.id`,
+			 `comments`.article_id AS `comments.article_id`,
+			 `comments`.comment AS `comments.comment`,
+			 `comments`.submitdate AS `comments.submitdate`,
+			 `comments`.author_id AS `comments.author_id`,
+			 `comments.author`.id AS `comments.author.id`,
+			 `comments.author`.firstName AS `comments.author.firstName`,
+			 `comments.author`.lastName AS `comments.author.lastName`,
+			 `comments.author`.email AS `comments.author.email`\s
+			FROM `article` AS `article`
+			 LEFT JOIN `user` AS `author` ON `article`.author_id = `author`.id
+			 LEFT JOIN `comment` AS `comments` ON `article`.id = `comments`.article_id
+			 LEFT JOIN `user` AS `comments.author` ON `comments`.author_id = `comments.author`.id
+			"""), norm(sql));
 		
 	}
 }

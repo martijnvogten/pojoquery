@@ -1,6 +1,7 @@
 package nl.pojoquery.integrationtest;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import javax.sql.DataSource;
@@ -10,7 +11,6 @@ import org.junit.Test;
 
 import nl.pojoquery.DB;
 import nl.pojoquery.PojoQuery;
-import nl.pojoquery.TestUtils;
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.Link;
 import nl.pojoquery.annotations.Table;
@@ -95,7 +95,7 @@ public class UpdatesIT {
 		Assert.assertEquals(0, read.roles.size()); // Correct, pojoquery does not update collections
 		
 		// Now insert the role
-		DB.insert(db, "user_roles", TestUtils.map("user_id", u.id, "role", Role.EDITOR));
+		DB.insert(db, "user_roles", Map.of("user_id", u.id, "role", Role.EDITOR));
 		
 		UserDetail read1 = PojoQuery.build(UserDetail.class).findById(db, 1L);
 		Assert.assertEquals(1, read1.roles.size());
