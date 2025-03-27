@@ -1,0 +1,293 @@
+= Query Building
+:page-partial:
+:page-layout: base
+
+PojoQuery provides a fluent API for building and customizing queries. This page covers the various ways to build and modify queries.
+
+== Basic Query Building
+
+=== Creating a Query
+
+The basic way to create a query is using `PojoQuery.build()`:
+
+[source,java]
+----
+// Simple query
+List<User> users = PojoQuery.build(User.class)
+    .execute(dataSource);
+
+// Query with conditions
+Article article = PojoQuery.build(Article.class)
+    .addWhere("article.id=?", articleId)
+    .execute(dataSource)
+    .get(0);
+----
+
+=== Adding Conditions
+
+Use `addWhere()` to add conditions to your query:
+
+[source,java]
+----
+List<Article> articles = PojoQuery.build(Article.class)
+    .addWhere("article.status = ?", "PUBLISHED")
+    .addWhere("article.publishDate > ?", startDate)
+    .execute(dataSource);
+----
+
+=== Ordering Results
+
+Use `addOrderBy()` to sort results:
+
+[source,java]
+----
+List<Article> articles = PojoQuery.build(Article.class)
+    .addOrderBy("article.publishDate DESC")
+    .addOrderBy("article.title ASC")
+    .execute(dataSource);
+----
+
+=== Limiting Results
+
+Use `setLimit()` to restrict the number of results:
+
+[source,java]
+----
+// Get first 10 results
+List<Article> articles = PojoQuery.build(Article.class)
+    .setLimit(10)
+    .execute(dataSource);
+
+// Get results 11-20 (pagination)
+List<Article> articles = PojoQuery.build(Article.class)
+    .setLimit(10, 20)
+    .execute(dataSource);
+----
+
+== Advanced Query Building
+
+=== Custom Joins
+
+Add custom joins using `addJoin()`:
+
+[source,java]
+----
+List<Article> articles = PojoQuery.build(Article.class)
+    .addJoin(JoinType.LEFT, "category", "cat", 
+        "article.category_id=cat.id")
+    .addWhere("cat.name = ?", categoryName)
+    .execute(dataSource);
+----
+
+=== Group By
+
+Add grouping using `addGroupBy()`:
+
+[source,java]
+----
+class ArticleSummary {
+    @Id
+    Long id;
+    String title;
+    
+    @Select("COUNT(*)")
+    Integer commentCount;
+}
+
+List<ArticleSummary> summaries = PojoQuery.build(ArticleSummary.class)
+    .addGroupBy("article.id")
+    .execute(dataSource);
+----
+
+=== Custom Fields
+
+Add custom fields using `addField()`:
+
+[source,java]
+----
+List<Article> articles = PojoQuery.build(Article.class)
+    .addField(SqlExpression.sql("CONCAT(author.firstName, ' ', author.lastName)"), "authorName")
+    .execute(dataSource);
+----
+
+=== Subqueries
+
+Create subqueries using `SqlExpression`:
+
+[source,java]
+----
+List<Article> articles = PojoQuery.build(Article.class)
+    .addWhere(SqlExpression.sql(
+        "article.id IN (SELECT article_id FROM comment WHERE author_id = ?)",
+        authorId))
+    .execute(dataSource);
+----
+
+== Query Execution
+
+=== Basic Execution
+
+Execute queries using `execute()`:
+
+[source,java]
+----
+// Using DataSource
+List<User> users = PojoQuery.build(User.class)
+    .execute(dataSource);
+
+// Using Connection
+List<User> users = PojoQuery.build(User.class)
+    .execute(connection);
+----
+
+=== Streaming Results
+
+For large result sets, use `executeStreaming()`:
+
+[source,java]
+----
+PojoQuery.build(Article.class)
+    .executeStreaming(dataSource)
+    .forEach(article -> {
+        // Process each article
+    });
+----
+
+=== Finding by ID
+
+Use `findById()` for primary key lookups:
+
+[source,java]
+----
+Article article = PojoQuery.build(Article.class)
+    .findById(dataSource, articleId);
+----
+
+== Query Customization
+
+=== Custom DbContext
+
+Use a custom `DbContext` for database-specific settings:
+
+[source,java]
+----
+DbContext context = new DbContext() {
+    @Override
+    public QuoteStyle getQuoteStyle() {
+        return QuoteStyle.ANSI;
+    }
+};
+
+List<User> users = PojoQuery.build(context, User.class)
+    .execute(dataSource);
+----
+
+=== Custom Field Mappings
+
+Define custom field mappings:
+
+[source,java]
+----
+class CustomDbContext extends DbContext.DefaultDbContext {
+    @Override
+    public FieldMapping getFieldMapping(Field f) {
+        if (f.getName().equals("fullName")) {
+            return new CustomFieldMapping(f);
+        }
+        return super.getFieldMapping(f);
+    }
+}
+----
+
+== Best Practices
+
+=== Query Building
+
+* Use parameterized queries to prevent SQL injection
+* Chain methods for readability
+* Use appropriate join types
+* Consider query performance
+* Use streaming for large result sets
+
+=== Error Handling
+
+* Check for null results
+* Handle database exceptions
+* Use transactions when needed
+* Validate input parameters
+
+=== Performance
+
+* Use appropriate indexes
+* Limit result sets
+* Use streaming for large datasets
+* Consider query complexity
+
+== Examples
+
+=== Complex Query Example
+
+[source,java]
+----
+class ArticleSearch {
+    @Id
+    Long id;
+    String title;
+    User author;
+    Category category;
+    
+    @Select("COUNT(DISTINCT comment.id)")
+    Integer commentCount;
+    
+    @Select("MAX(comment.createdAt)")
+    Date lastCommentDate;
+}
+
+List<ArticleSearch> results = PojoQuery.build(ArticleSearch.class)
+    .addJoin(JoinType.LEFT, "comment", "comment", 
+        "article.id=comment.article_id")
+    .addWhere("article.status = ?", "PUBLISHED")
+    .addWhere("article.publishDate BETWEEN ? AND ?", 
+        startDate, endDate)
+    .addWhere("category.name IN (?, ?)", 
+        "Technology", "Science")
+    .addGroupBy("article.id")
+    .addOrderBy("commentCount DESC")
+    .setLimit(20)
+    .execute(dataSource);
+----
+
+=== Pagination Example
+
+[source,java]
+----
+class PaginatedQuery<T> {
+    private final int pageSize;
+    private final int currentPage;
+    
+    public PaginatedQuery(int pageSize, int currentPage) {
+        this.pageSize = pageSize;
+        this.currentPage = currentPage;
+    }
+    
+    public List<T> execute(PojoQuery<T> query) {
+        int offset = (currentPage - 1) * pageSize;
+        return query
+            .setLimit(offset, pageSize)
+            .execute(dataSource);
+    }
+    
+    public int getTotalCount(PojoQuery<T> query) {
+        return query.buildCountStatement()
+            .execute(dataSource);
+    }
+}
+
+// Usage
+PaginatedQuery<Article> pagination = 
+    new PaginatedQuery<>(10, 1);
+List<Article> articles = pagination.execute(
+    PojoQuery.build(Article.class));
+int total = pagination.getTotalCount(
+    PojoQuery.build(Article.class));
+---- 

@@ -1,0 +1,438 @@
+= Advanced Topics
+:page-partial:
+:page-layout: base
+
+This page covers advanced topics and techniques for using PojoQuery effectively.
+
+== Inheritance and Polymorphism
+
+=== Table-Per-Class Inheritance
+
+Handle inheritance hierarchies where each class maps to its own table:
+
+[source,java]
+----
+@Table("person")
+public class Person {
+    @Id
+    Long id;
+    String name;
+    String type; // discriminator
+}
+
+@Table("employee")
+public class Employee extends Person {
+    String department;
+    Double salary;
+}
+
+@Table("customer")
+public class Customer extends Person {
+    String company;
+    String contactPerson;
+}
+
+// Usage
+@SubClasses({
+    @SubClass(value=Employee.class, discriminator="type", value="EMP"),
+    @SubClass(value=Customer.class, discriminator="type", value="CUST")
+})
+List<Person> people = PojoQuery.build(Person.class)
+    .execute(dataSource);
+----
+
+=== Joined Inheritance
+
+Handle inheritance where subclasses share the same table:
+
+[source,java]
+----
+@Table("person")
+public class Person {
+    @Id
+    Long id;
+    String name;
+    String type;
+}
+
+@Table("person")
+public class Employee extends Person {
+    String department;
+    Double salary;
+}
+
+// The fields from Employee will be mapped to the person table
+// using the type discriminator
+----
+
+== Custom Field Types
+
+=== Custom Type Converters
+
+Create custom type converters for special field types:
+
+[source,java]
+----
+public class JsonTypeConverter implements FieldMapping {
+    private final Field field;
+    
+    public JsonTypeConverter(Field field) {
+        this.field = field;
+    }
+    
+    @Override
+    public void apply(Object target, Object value) {
+        if (value instanceof String) {
+            try {
+                Object jsonValue = new ObjectMapper()
+                    .readValue((String)value, field.getType());
+                field.setAccessible(true);
+                field.set(target, jsonValue);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+}
+
+// Usage
+class CustomDbContext extends DbContext.DefaultDbContext {
+    @Override
+    public FieldMapping getFieldMapping(Field f) {
+        if (f.isAnnotationPresent(JsonField.class)) {
+            return new JsonTypeConverter(f);
+        }
+        return super.getFieldMapping(f);
+    }
+}
+----
+
+=== Enum Handling
+
+Handle enum types with custom mappings:
+
+[source,java]
+----
+public enum UserStatus {
+    ACTIVE("A"),
+    INACTIVE("I"),
+    PENDING("P");
+    
+    private final String code;
+    
+    UserStatus(String code) {
+        this.code = code;
+    }
+    
+    public String getCode() {
+        return code;
+    }
+    
+    public static UserStatus fromCode(String code) {
+        for (UserStatus status : values()) {
+            if (status.code.equals(code)) {
+                return status;
+            }
+        }
+        throw new IllegalArgumentException(code);
+    }
+}
+
+@Table("user")
+public class User {
+    @Id
+    Long id;
+    
+    @FieldName("status_code")
+    UserStatus status;
+}
+----
+
+== Complex Joins and Relationships
+
+=== Many-to-Many Relationships
+
+Handle many-to-many relationships:
+
+[source,java]
+----
+@Table("article")
+public class Article {
+    @Id
+    Long id;
+    String title;
+    
+    @Link
+    List<Tag> tags;
+}
+
+@Table("tag")
+public class Tag {
+    @Id
+    Long id;
+    String name;
+}
+
+@Table("article_tag")
+public class ArticleTag {
+    @Id
+    Long articleId;
+    @Id
+    Long tagId;
+}
+
+// Usage
+class ArticleDetail extends Article {
+    @Join("LEFT JOIN article_tag ON article.id=article_tag.article_id")
+    @Join("LEFT JOIN tag ON article_tag.tag_id=tag.id")
+    List<Tag> tags;
+}
+----
+
+=== Self-Referential Relationships
+
+Handle self-referential relationships:
+
+[source,java]
+----
+@Table("category")
+public class Category {
+    @Id
+    Long id;
+    String name;
+    
+    @Link
+    Category parent;
+    
+    @Link
+    List<Category> children;
+}
+
+// Usage
+class CategoryTree extends Category {
+    @Join("LEFT JOIN category parent ON category.parent_id=parent.id")
+    Category parent;
+    
+    @Join("LEFT JOIN category child ON category.id=child.parent_id")
+    List<Category> children;
+}
+----
+
+== Query Optimization
+
+=== Batch Loading
+
+Implement batch loading for better performance:
+
+[source,java]
+----
+public class BatchLoader<T> {
+    private final DataSource dataSource;
+    private final int batchSize;
+    
+    public BatchLoader(DataSource dataSource, int batchSize) {
+        this.dataSource = dataSource;
+        this.batchSize = batchSize;
+    }
+    
+    public List<T> loadBatch(PojoQuery<T> query, List<Long> ids) {
+        List<T> results = new ArrayList<>();
+        for (int i = 0; i < ids.size(); i += batchSize) {
+            int end = Math.min(i + batchSize, ids.size());
+            List<Long> batch = ids.subList(i, end);
+            
+            String placeholders = String.join(",", 
+                Collections.nCopies(batch.size(), "?"));
+            query.addWhere("id IN (" + placeholders + ")", 
+                batch.toArray());
+            
+            results.addAll(query.execute(dataSource));
+        }
+        return results;
+    }
+}
+
+// Usage
+BatchLoader<Article> loader = new BatchLoader<>(dataSource, 100);
+List<Article> articles = loader.loadBatch(
+    PojoQuery.build(Article.class), articleIds);
+----
+
+=== Query Caching
+
+Implement query result caching:
+
+[source,java]
+----
+public class CachedQuery<T> {
+    private final Cache<String, List<T>> cache;
+    
+    public CachedQuery(Cache<String, List<T>> cache) {
+        this.cache = cache;
+    }
+    
+    public List<T> execute(PojoQuery<T> query) {
+        String cacheKey = generateCacheKey(query);
+        return cache.get(cacheKey, () -> query.execute(dataSource));
+    }
+    
+    private String generateCacheKey(PojoQuery<T> query) {
+        return query.toSql() + ":" + 
+            Arrays.toString(query.getParameters());
+    }
+}
+
+// Usage
+Cache<String, List<Article>> cache = CacheBuilder.newBuilder()
+    .expireAfterWrite(1, TimeUnit.HOURS)
+    .build();
+
+CachedQuery<Article> cachedQuery = new CachedQuery<>(cache);
+List<Article> articles = cachedQuery.execute(
+    PojoQuery.build(Article.class));
+----
+
+== Error Handling and Recovery
+
+=== Custom Exception Handling
+
+Implement custom exception handling:
+
+[source,java]
+----
+public class PojoQueryException extends RuntimeException {
+    private final String sql;
+    private final Object[] parameters;
+    
+    public PojoQueryException(String message, String sql, 
+        Object[] parameters, Throwable cause) {
+        super(message, cause);
+        this.sql = sql;
+        this.parameters = parameters;
+    }
+    
+    public String getSql() {
+        return sql;
+    }
+    
+    public Object[] getParameters() {
+        return parameters;
+    }
+}
+
+// Usage
+try {
+    List<User> users = PojoQuery.build(User.class)
+        .execute(dataSource);
+} catch (PojoQueryException e) {
+    logger.error("Query failed: {}", e.getSql());
+    logger.error("Parameters: {}", Arrays.toString(e.getParameters()));
+    throw e;
+}
+----
+
+=== Retry Logic
+
+Implement retry logic for transient failures:
+
+[source,java]
+----
+public class RetryingQuery<T> {
+    private final int maxRetries;
+    private final long delayMs;
+    
+    public RetryingQuery(int maxRetries, long delayMs) {
+        this.maxRetries = maxRetries;
+        this.delayMs = delayMs;
+    }
+    
+    public List<T> execute(PojoQuery<T> query) {
+        int attempts = 0;
+        while (attempts < maxRetries) {
+            try {
+                return query.execute(dataSource);
+            } catch (PojoQueryException e) {
+                attempts++;
+                if (attempts == maxRetries) {
+                    throw e;
+                }
+                try {
+                    Thread.sleep(delayMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(ie);
+                }
+            }
+        }
+        throw new RuntimeException("Max retries exceeded");
+    }
+}
+
+// Usage
+RetryingQuery<Article> retryingQuery = 
+    new RetryingQuery<>(3, 1000);
+List<Article> articles = retryingQuery.execute(
+    PojoQuery.build(Article.class));
+----
+
+== Testing
+
+=== Mock DataSource
+
+Create a mock DataSource for testing:
+
+[source,java]
+----
+public class MockDataSource implements DataSource {
+    private final List<Map<String, Object>> results;
+    
+    public MockDataSource(List<Map<String, Object>> results) {
+        this.results = results;
+    }
+    
+    @Override
+    public Connection getConnection() {
+        return new MockConnection(results);
+    }
+    
+    // Implement other DataSource methods...
+}
+
+// Usage in tests
+List<Map<String, Object>> mockResults = Arrays.asList(
+    new HashMap<String, Object>() {{
+        put("id", 1L);
+        put("name", "Test User");
+    }}
+);
+
+DataSource mockDataSource = new MockDataSource(mockResults);
+List<User> users = PojoQuery.build(User.class)
+    .execute(mockDataSource);
+----
+
+=== Query Verification
+
+Verify generated SQL queries:
+
+[source,java]
+----
+public class QueryVerifier {
+    public static void verifyQuery(PojoQuery<?> query, 
+        String expectedSql) {
+        String actualSql = query.toSql();
+        if (!actualSql.equals(expectedSql)) {
+            throw new AssertionError(
+                "Expected SQL: " + expectedSql + "\n" +
+                "Actual SQL: " + actualSql);
+        }
+    }
+}
+
+// Usage in tests
+PojoQuery<User> query = PojoQuery.build(User.class)
+    .addWhere("name LIKE ?", "%test%");
+    
+QueryVerifier.verifyQuery(query,
+    "SELECT * FROM user WHERE name LIKE ?");
+---- 

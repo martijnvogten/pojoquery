@@ -1,0 +1,410 @@
+= Examples
+:page-partial:
+:page-layout: base
+
+This page provides real-world examples and use cases for PojoQuery.
+
+== Blog System
+
+=== Article Management
+
+A blog system with articles, authors, comments, and categories:
+
+[source,java]
+----
+@Table("article")
+public class Article {
+    @Id
+    Long id;
+    String title;
+    String content;
+    Date publishDate;
+    String status;
+    
+    @Link
+    User author;
+    
+    @Link
+    Category category;
+}
+
+@Table("user")
+public class User {
+    @Id
+    Long id;
+    String firstName;
+    String lastName;
+    String email;
+    String role;
+}
+
+@Table("category")
+public class Category {
+    @Id
+    Long id;
+    String name;
+    String description;
+}
+
+@Table("comment")
+public class Comment {
+    @Id
+    Long id;
+    String content;
+    Date submitDate;
+    
+    @Link
+    User author;
+    
+    @Link
+    Article article;
+}
+
+// Article detail view with comments
+class ArticleDetail extends Article {
+    @Link
+    List<Comment> comments;
+}
+
+// Article list view with author
+class ArticleListView extends Article {
+    @Select("COUNT(DISTINCT comment.id)")
+    Integer commentCount;
+    
+    @Select("MAX(comment.submitDate)")
+    Date lastCommentDate;
+}
+
+// Usage examples
+public class ArticleService {
+    private final DataSource dataSource;
+    
+    public ArticleService(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+    
+    // Get article with comments
+    public ArticleDetail getArticle(Long articleId) {
+        return PojoQuery.build(ArticleDetail.class)
+            .addWhere("article.id=?", articleId)
+            .addOrderBy("comments.submitDate")
+            .execute(dataSource)
+            .get(0);
+    }
+    
+    // Get articles by category
+    public List<ArticleListView> getArticlesByCategory(Long categoryId) {
+        return PojoQuery.build(ArticleListView.class)
+            .addJoin(JoinType.LEFT, "comment", "comment", 
+                "article.id=comment.article_id")
+            .addWhere("article.category_id=?", categoryId)
+            .addWhere("article.status=?", "PUBLISHED")
+            .addGroupBy("article.id")
+            .addOrderBy("article.publishDate DESC")
+            .execute(dataSource);
+    }
+    
+    // Get recent articles with comment counts
+    public List<ArticleListView> getRecentArticles(int limit) {
+        return PojoQuery.build(ArticleListView.class)
+            .addJoin(JoinType.LEFT, "comment", "comment", 
+                "article.id=comment.article_id")
+            .addWhere("article.status=?", "PUBLISHED")
+            .addGroupBy("article.id")
+            .addOrderBy("article.publishDate DESC")
+            .setLimit(limit)
+            .execute(dataSource);
+    }
+}
+----
+
+== E-commerce System
+
+=== Product Catalog
+
+An e-commerce system with products, categories, and inventory:
+
+[source,java]
+----
+@Table("product")
+public class Product {
+    @Id
+    Long id;
+    String name;
+    String description;
+    BigDecimal price;
+    Integer stock;
+    String status;
+    
+    @Link
+    Category category;
+    
+    @Link
+    List<Tag> tags;
+}
+
+@Table("category")
+public class Category {
+    @Id
+    Long id;
+    String name;
+    String description;
+    
+    @Link
+    Category parent;
+}
+
+@Table("tag")
+public class Tag {
+    @Id
+    Long id;
+    String name;
+}
+
+@Table("product_tag")
+public class ProductTag {
+    @Id
+    Long productId;
+    @Id
+    Long tagId;
+}
+
+// Product detail view
+class ProductDetail extends Product {
+    @Select("COUNT(DISTINCT review.id)")
+    Integer reviewCount;
+    
+    @Select("AVG(review.rating)")
+    Double averageRating;
+    
+    @Link
+    List<Review> reviews;
+}
+
+// Product search view
+class ProductSearch extends Product {
+    @Select("MATCH(name, description) AGAINST (? IN BOOLEAN MODE)")
+    Double relevance;
+}
+
+// Usage examples
+public class ProductService {
+    private final DataSource dataSource;
+    
+    public ProductService(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+    
+    // Get product with reviews
+    public ProductDetail getProduct(Long productId) {
+        return PojoQuery.build(ProductDetail.class)
+            .addJoin(JoinType.LEFT, "review", "review", 
+                "product.id=review.product_id")
+            .addWhere("product.id=?", productId)
+            .addGroupBy("product.id")
+            .execute(dataSource)
+            .get(0);
+    }
+    
+    // Search products
+    public List<ProductSearch> searchProducts(String query) {
+        return PojoQuery.build(ProductSearch.class)
+            .addWhere("product.status=?", "ACTIVE")
+            .addWhere("MATCH(name, description) AGAINST (? IN BOOLEAN MODE)", 
+                query)
+            .addOrderBy("relevance DESC")
+            .execute(dataSource);
+    }
+    
+    // Get products by category
+    public List<Product> getProductsByCategory(Long categoryId) {
+        return PojoQuery.build(Product.class)
+            .addWhere("product.category_id=?", categoryId)
+            .addWhere("product.status=?", "ACTIVE")
+            .addOrderBy("product.name")
+            .execute(dataSource);
+    }
+}
+----
+
+== Content Management System
+
+=== Page Management
+
+A CMS with pages, sections, and content blocks:
+
+[source,java]
+----
+@Table("page")
+public class Page {
+    @Id
+    Long id;
+    String title;
+    String slug;
+    String status;
+    Date publishDate;
+    
+    @Link
+    User author;
+    
+    @Link
+    List<Section> sections;
+}
+
+@Table("section")
+public class Section {
+    @Id
+    Long id;
+    String title;
+    String content;
+    Integer order;
+    
+    @Link
+    Page page;
+}
+
+@Table("content_block")
+public class ContentBlock {
+    @Id
+    Long id;
+    String type;
+    String content;
+    Integer order;
+    
+    @Link
+    Section section;
+}
+
+// Page detail view
+class PageDetail extends Page {
+    @Select("COUNT(DISTINCT view.id)")
+    Integer viewCount;
+    
+    @Link
+    List<Section> sections;
+}
+
+// Section detail view
+class SectionDetail extends Section {
+    @Link
+    List<ContentBlock> blocks;
+}
+
+// Usage examples
+public class PageService {
+    private final DataSource dataSource;
+    
+    public PageService(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+    
+    // Get page with sections and blocks
+    public PageDetail getPage(String slug) {
+        return PojoQuery.build(PageDetail.class)
+            .addJoin(JoinType.LEFT, "view", "view", 
+                "page.id=view.page_id")
+            .addWhere("page.slug=?", slug)
+            .addWhere("page.status=?", "PUBLISHED")
+            .addGroupBy("page.id")
+            .execute(dataSource)
+            .get(0);
+    }
+    
+    // Get recent pages
+    public List<Page> getRecentPages(int limit) {
+        return PojoQuery.build(Page.class)
+            .addWhere("page.status=?", "PUBLISHED")
+            .addOrderBy("page.publishDate DESC")
+            .setLimit(limit)
+            .execute(dataSource);
+    }
+    
+    // Get pages by author
+    public List<Page> getPagesByAuthor(Long authorId) {
+        return PojoQuery.build(Page.class)
+            .addWhere("page.author_id=?", authorId)
+            .addOrderBy("page.publishDate DESC")
+            .execute(dataSource);
+    }
+}
+----
+
+== Reporting System
+
+=== Analytics and Reports
+
+A reporting system with metrics and analytics:
+
+[source,java]
+----
+@Table("metric")
+public class Metric {
+    @Id
+    Long id;
+    String name;
+    String type;
+    Date timestamp;
+    Double value;
+    
+    @Link
+    Dimension dimension;
+}
+
+@Table("dimension")
+public class Dimension {
+    @Id
+    Long id;
+    String name;
+    String value;
+}
+
+// Daily summary view
+class DailySummary {
+    @Id
+    Date date;
+    
+    @Select("COUNT(DISTINCT metric.id)")
+    Integer metricCount;
+    
+    @Select("SUM(metric.value)")
+    Double totalValue;
+    
+    @Select("AVG(metric.value)")
+    Double averageValue;
+}
+
+// Usage examples
+public class AnalyticsService {
+    private final DataSource dataSource;
+    
+    public AnalyticsService(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+    
+    // Get daily summary
+    public List<DailySummary> getDailySummary(Date startDate, Date endDate) {
+        return PojoQuery.build(DailySummary.class)
+            .addWhere("metric.timestamp BETWEEN ? AND ?", 
+                startDate, endDate)
+            .addGroupBy("DATE(metric.timestamp)")
+            .addOrderBy("date DESC")
+            .execute(dataSource);
+    }
+    
+    // Get metrics by dimension
+    public List<Metric> getMetricsByDimension(Long dimensionId) {
+        return PojoQuery.build(Metric.class)
+            .addWhere("metric.dimension_id=?", dimensionId)
+            .addOrderBy("metric.timestamp DESC")
+            .execute(dataSource);
+    }
+    
+    // Get latest metrics
+    public List<Metric> getLatestMetrics(int limit) {
+        return PojoQuery.build(Metric.class)
+            .addOrderBy("metric.timestamp DESC")
+            .setLimit(limit)
+            .execute(dataSource);
+    }
+}
+---- 

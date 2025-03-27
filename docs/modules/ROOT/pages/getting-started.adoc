@@ -1,0 +1,197 @@
+= Getting Started
+:page-partial:
+:page-layout: base
+
+== Prerequisites
+
+* Java 8 or higher
+* A relational database (MySQL, PostgreSQL, etc.)
+* Maven or Gradle for dependency management
+
+== Adding PojoQuery to Your Project
+
+=== Maven
+
+Add the following dependency to your `pom.xml`:
+
+[source,xml]
+----
+<dependency>
+    <groupId>nl.pojoquery</groupId>
+    <artifactId>pojoquery</artifactId>
+    <version>1.0.0</version>
+</dependency>
+----
+
+=== Gradle
+
+Add the following to your `build.gradle`:
+
+[source,groovy]
+----
+dependencies {
+    implementation 'nl.pojoquery:pojoquery:1.0.0'
+}
+----
+
+== Basic Usage
+
+=== 1. Create Your POJOs
+
+First, create your POJO classes with the appropriate annotations:
+
+[source,java]
+----
+@Table("user")
+public class User {
+    @Id
+    Long id;
+    String firstName;
+    String lastName;
+    String email;
+}
+
+@Table("article")
+public class Article {
+    @Id
+    Long id;
+    String title;
+    String content;
+    Date publishDate;
+    
+    @Link
+    User author;
+}
+----
+
+=== 2. Set Up Your Database Connection
+
+Create a DataSource for your database:
+
+[source,java]
+----
+DataSource dataSource = // Your database connection setup
+----
+
+=== 3. Create and Execute Queries
+
+Use PojoQuery to build and execute queries:
+
+[source,java]
+----
+// Simple query
+List<User> users = PojoQuery.build(User.class)
+    .execute(dataSource);
+
+// Query with conditions
+Article article = PojoQuery.build(Article.class)
+    .addWhere("article.id=?", articleId)
+    .execute(dataSource)
+    .get(0);
+
+// Query with joins
+class ArticleDetail extends Article {
+    User author;
+    List<Comment> comments;
+}
+
+ArticleDetail article = PojoQuery.build(ArticleDetail.class)
+    .addWhere("article.id=?", articleId)
+    .execute(dataSource)
+    .get(0);
+----
+
+== Common Use Cases
+
+=== Fetching a Single Record
+
+[source,java]
+----
+User user = PojoQuery.build(User.class)
+    .addWhere("user.id=?", userId)
+    .execute(dataSource)
+    .get(0);
+----
+
+=== Fetching with Joins
+
+[source,java]
+----
+class OrderDetail extends Order {
+    Customer customer;
+    List<OrderItem> items;
+}
+
+OrderDetail order = PojoQuery.build(OrderDetail.class)
+    .addWhere("order.id=?", orderId)
+    .execute(dataSource)
+    .get(0);
+----
+
+=== Adding Conditions
+
+[source,java]
+----
+List<Article> articles = PojoQuery.build(Article.class)
+    .addWhere("article.publishDate > ?", startDate)
+    .addWhere("article.status = ?", "PUBLISHED")
+    .addOrderBy("article.publishDate DESC")
+    .execute(dataSource);
+----
+
+=== Using Transactions
+
+[source,java]
+----
+DB.runInTransaction(dataSource, connection -> {
+    // Create new article
+    Article article = new Article();
+    article.setTitle("New Article");
+    article.setContent("Content here");
+    article.setAuthorId(authorId);
+    
+    // Insert article
+    Long articleId = PojoQuery.insert(connection, article);
+    
+    // Create comment
+    Comment comment = new Comment();
+    comment.setArticleId(articleId);
+    comment.setContent("First comment");
+    comment.setAuthorId(commentAuthorId);
+    
+    // Insert comment
+    PojoQuery.insert(connection, comment);
+    
+    return articleId;
+});
+----
+
+== Best Practices
+
+=== POJO Design
+
+* Use meaningful field names that match your database columns
+* Add appropriate annotations (`@Table`, `@Id`, `@Link`, etc.)
+* Keep POJOs simple and focused
+* Use inheritance for different views of the same data
+
+=== Query Building
+
+* Use parameterized queries to prevent SQL injection
+* Leverage the fluent API for readability
+* Use appropriate join types (LEFT, INNER) based on your needs
+* Consider using streaming for large result sets
+
+=== Error Handling
+
+* Always check for null results when using `get(0)`
+* Use try-with-resources for database connections
+* Handle database exceptions appropriately
+* Validate input parameters
+
+== Next Steps
+
+* Read the xref:annotations.adoc[Annotations] documentation to learn about available annotations
+* Check out the xref:query-building.adoc[Query Building] guide for advanced query features
+* Look at xref:examples.adoc[Examples] for real-world use cases
+* Explore xref:advanced-topics.adoc[Advanced Topics] for more complex scenarios 

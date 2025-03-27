@@ -1,0 +1,100 @@
+= PojoQuery Documentation
+:description: A lightweight Java library for working with relational databases using POJOs
+:keywords: java, database, orm, pojo, sql
+:page-partial:
+:page-layout: base
+
+PojoQuery is a lightweight utility for working with relational databases in Java. Instead of writing SQL queries in plain text, PojoQuery leverages Plain Old Java Objects (POJOs) to define the set of fields and tables (joins) to fetch.
+
+== Key Features
+
+* Type-safe database queries using POJOs
+* Automatic SQL generation from POJO structure
+* Support for complex joins and relationships
+* No lazy loading - predictable query behavior
+* Customizable through annotations
+* Support for different database quote styles
+
+== Why PojoQuery?
+
+Traditional ORM frameworks like JPA and Hibernate often introduce complexity with features like lazy loading, which can lead to:
+
+* LazyInitializationException issues
+* Serialization problems with JSON/XML
+* Proxy class complications
+* Complex debugging and testing
+
+PojoQuery takes a different approach by treating your POJOs as database views, making it:
+
+* Simple to understand and use
+* Predictable in behavior
+* Easy to debug and test
+* Straightforward to serialize
+
+== Quick Example
+
+[source,java]
+----
+class ArticleDetail extends Article {
+    User author;
+    CommentDetail[] comments;
+}
+
+@Table("article")
+class Article {
+    Long id;
+    String title;
+    String content;
+    Date publishdate;
+}
+
+// Usage
+ArticleDetail article = PojoQuery.build(ArticleDetail.class)
+    .addWhere("article.id=?", articleId)
+    .addOrderBy("comments.submitdate")
+    .execute(database).get(0);
+----
+
+This generates a clean, predictable SQL query:
+
+[source,sql]
+----
+SELECT
+ `article`.id `article.id`,
+ `article`.title `article.title`,
+ `article`.content `article.content`,
+ `author`.id `author.id`,
+ `author`.firstName `author.firstName`,
+ `author`.lastName `author.lastName`,
+ `author`.email `author.email`,
+ `comments`.id `comments.id`,
+ `comments`.comment `comments.comment`,
+ `comments`.submitdate `comments.submitdate`,
+ `comments.author`.id `comments.author.id`,
+ `comments.author`.firstName `comments.author.firstName`,
+ `comments.author`.lastName `comments.author.lastName`,
+ `comments.author`.email `comments.author.email` 
+FROM article 
+ LEFT JOIN user `author` ON `article`.author_id=`author`.id
+ LEFT JOIN comment `comments` ON `comments`.article_id=`article`.id
+ LEFT JOIN user `comments.author` ON `comments`.author_id=`comments.author`.id 
+WHERE article.id=?  
+ORDER BY comments.submitdate
+----
+
+== Getting Started
+
+To get started with PojoQuery, check out our xref:getting-started.adoc[Getting Started] guide. You'll learn how to:
+
+* Set up PojoQuery in your project
+* Create your first POJO-based queries
+* Work with relationships and joins
+* Use annotations for customization
+
+== Documentation Structure
+
+* xref:features.adoc[Features] - Detailed overview of PojoQuery features
+* xref:annotations.adoc[Annotations] - Available annotations and their usage
+* xref:query-building.adoc[Query Building] - How to build and customize queries
+* xref:advanced-topics.adoc[Advanced Topics] - Advanced usage patterns and techniques
+* xref:examples.adoc[Examples] - Real-world examples and use cases 

@@ -1,0 +1,180 @@
+= Features
+:page-partial:
+:page-layout: base
+
+== Core Features
+
+=== Type-Safe Database Queries
+
+PojoQuery uses Plain Old Java Objects (POJOs) to define your database queries. Each field in your POJO corresponds to a column in your database, providing type safety and compile-time checking.
+
+[source,java]
+----
+@Table("user")
+class User {
+    Long id;
+    String firstName;
+    String lastName;
+    String email;
+}
+----
+
+=== Automatic SQL Generation
+
+The library automatically generates clean, predictable SQL queries based on your POJO structure. No need to write complex SQL strings or worry about SQL injection.
+
+[source,java]
+----
+// The POJO structure
+class ArticleDetail extends Article {
+    User author;
+    CommentDetail[] comments;
+}
+
+// Generates a clean SQL query automatically
+ArticleDetail article = PojoQuery.build(ArticleDetail.class)
+    .addWhere("article.id=?", articleId)
+    .execute(database).get(0);
+----
+
+=== Relationship Support
+
+Easily define relationships between entities using standard Java field types. PojoQuery automatically handles the joins and field mapping.
+
+* One-to-One relationships
+* One-to-Many relationships
+* Many-to-Many relationships
+* Nested relationships
+
+=== No Lazy Loading
+
+Unlike traditional ORMs, PojoQuery doesn't use lazy loading. This means:
+
+* No LazyInitializationException issues
+* Easy serialization to JSON/XML
+* Predictable behavior
+* Simpler debugging and testing
+
+=== Customizable Through Annotations
+
+Fine-tune your queries using annotations:
+
+* `@Table` - Define table names
+* `@Join` - Specify join conditions
+* `@FieldName` - Customize field mappings
+* `@GroupBy` - Add grouping
+* `@OrderBy` - Define sorting
+* And more...
+
+=== Database Compatibility
+
+PojoQuery supports different database quote styles and naming conventions:
+
+* MySQL (backticks)
+* ANSI SQL (double quotes)
+* Customizable quote styles
+
+=== Query Building API
+
+Flexible API for building queries:
+
+* Add WHERE clauses
+* Specify ORDER BY
+* Set LIMIT and OFFSET
+* Add custom joins
+* Group results
+* And more...
+
+=== Transaction Support
+
+Built-in support for database transactions:
+
+[source,java]
+----
+DB.runInTransaction(dataSource, connection -> {
+    // Your transaction code here
+    return result;
+});
+----
+
+=== Streaming Support
+
+For large result sets, PojoQuery provides streaming capabilities to process results efficiently:
+
+[source,java]
+----
+PojoQuery.build(ArticleDetail.class)
+    .executeStreaming(database)
+    .forEach(article -> {
+        // Process each article
+    });
+----
+
+=== Error Handling
+
+Clear error messages and exceptions for common issues:
+
+* Missing annotations
+* Invalid field mappings
+* Database errors
+* Transaction failures
+
+== Advanced Features
+
+=== Custom Field Mappings
+
+Define custom field mappings for special cases:
+
+[source,java]
+----
+@FieldName("user_name")
+String name;
+----
+
+=== Embedded Objects
+
+Support for embedded objects to organize related fields:
+
+[source,java]
+----
+class User {
+    @Embedded
+    Address address;
+}
+
+class Address {
+    String street;
+    String city;
+    String country;
+}
+----
+
+=== Subclass Support
+
+Handle inheritance hierarchies with multiple tables:
+
+[source,java]
+----
+@Table("person")
+class Person {
+    Long id;
+    String name;
+}
+
+@Table("employee")
+class Employee extends Person {
+    String department;
+    Double salary;
+}
+----
+
+=== Custom SQL Expressions
+
+Add custom SQL expressions when needed:
+
+[source,java]
+----
+PojoQuery.build(User.class)
+    .addField(SqlExpression.sql("CONCAT(firstName, ' ', lastName)"), "fullName")
+    .execute(database);
+---- 

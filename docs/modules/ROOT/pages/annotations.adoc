@@ -1,0 +1,359 @@
+= Annotations
+:page-partial:
+:page-layout: base
+
+PojoQuery provides a set of annotations to customize your POJOs and queries. This page documents all available annotations and their usage.
+
+== Core Annotations
+
+=== @Table
+
+Maps a POJO class to a database table.
+
+[source,java]
+----
+@Table("user")
+public class User {
+    Long id;
+    String name;
+}
+----
+
+Parameters:
+* `value` - The name of the database table
+* `schema` - (Optional) The database schema name
+
+=== @Id
+
+Marks a field as the primary key of the table.
+
+[source,java]
+----
+@Table("user")
+public class User {
+    @Id
+    Long id;
+    String name;
+}
+----
+
+=== @Link
+
+Indicates a relationship between entities. Used for joins.
+
+[source,java]
+----
+@Table("article")
+public class Article {
+    @Id
+    Long id;
+    String title;
+    
+    @Link
+    User author;
+}
+----
+
+Parameters:
+* `field` - (Optional) The database column name for the foreign key
+* `type` - (Optional) The join type (LEFT, INNER, etc.)
+
+== Query Customization Annotations
+
+=== @Join
+
+Specifies a custom join condition for a field.
+
+[source,java]
+----
+@Table("article")
+@Join("LEFT JOIN user ON article.author_id=user.id")
+public class Article {
+    @Id
+    Long id;
+    String title;
+    User author;
+}
+----
+
+Parameters:
+* `type` - The join type (LEFT, INNER, etc.)
+* `tableName` - The name of the joined table
+* `alias` - The alias for the joined table
+* `joinCondition` - The SQL join condition
+
+=== @Joins
+
+Specifies multiple join conditions.
+
+[source,java]
+----
+@Table("article")
+@Joins({
+    @Join(type=JoinType.LEFT, tableName="user", alias="author", joinCondition="article.author_id=author.id"),
+    @Join(type=JoinType.LEFT, tableName="category", alias="cat", joinCondition="article.category_id=cat.id")
+})
+public class Article {
+    @Id
+    Long id;
+    String title;
+    User author;
+    Category category;
+}
+----
+
+=== @FieldName
+
+Maps a POJO field to a specific database column name.
+
+[source,java]
+----
+@Table("user")
+public class User {
+    @Id
+    Long id;
+    
+    @FieldName("user_name")
+    String name;
+    
+    @FieldName("email_address")
+    String email;
+}
+----
+
+=== @GroupBy
+
+Specifies GROUP BY clauses for aggregation queries.
+
+[source,java]
+----
+@Table("order")
+@GroupBy("order.id")
+public class OrderSummary {
+    @Id
+    Long id;
+    
+    @Select("COUNT(*)")
+    Integer itemCount;
+    
+    @Select("SUM(amount)")
+    BigDecimal totalAmount;
+}
+----
+
+=== @OrderBy
+
+Specifies ORDER BY clauses for sorting results.
+
+[source,java]
+----
+@Table("article")
+@OrderBy("article.publishDate DESC")
+public class Article {
+    @Id
+    Long id;
+    String title;
+    Date publishDate;
+}
+----
+
+== Advanced Annotations
+
+=== @Embedded
+
+Maps a nested object to columns in the same table.
+
+[source,java]
+----
+@Table("user")
+public class User {
+    @Id
+    Long id;
+    String name;
+    
+    @Embedded
+    Address address;
+}
+
+public class Address {
+    String street;
+    String city;
+    String country;
+}
+----
+
+Parameters:
+* `prefix` - (Optional) Prefix for the embedded fields' column names
+
+=== @Select
+
+Specifies a custom SQL expression for a field.
+
+[source,java]
+----
+@Table("user")
+public class User {
+    @Id
+    Long id;
+    String firstName;
+    String lastName;
+    
+    @Select("CONCAT(firstName, ' ', lastName)")
+    String fullName;
+}
+----
+
+=== @Transient
+
+Marks a field that should not be mapped to the database.
+
+[source,java]
+----
+@Table("user")
+public class User {
+    @Id
+    Long id;
+    String name;
+    
+    @Transient
+    String displayName; // Computed property
+}
+----
+
+=== @Other
+
+Used for fields that don't directly map to database columns.
+
+[source,java]
+----
+@Table("user")
+public class User {
+    @Id
+    Long id;
+    String name;
+    
+    @Other(prefix="pref_")
+    Map<String, Object> preferences;
+}
+----
+
+Parameters:
+* `prefix` - Prefix for the other fields' column names
+
+=== @SubClasses
+
+Specifies inheritance mapping for subclasses.
+
+[source,java]
+----
+@Table("person")
+@SubClasses({
+    @SubClass(value=Employee.class, discriminator="type", value="EMP"),
+    @SubClass(value=Customer.class, discriminator="type", value="CUST")
+})
+public class Person {
+    @Id
+    Long id;
+    String name;
+    String type;
+}
+
+@Table("employee")
+public class Employee extends Person {
+    String department;
+    Double salary;
+}
+----
+
+== Best Practices
+
+=== Annotation Usage
+
+* Use `@Table` on all entity classes
+* Always mark primary keys with `@Id`
+* Use `@Link` for relationships between entities
+* Consider using `@Embedded` for related fields in the same table
+* Use `@Transient` for computed or temporary fields
+
+=== Naming Conventions
+
+* Use clear, descriptive table and column names
+* Follow database naming conventions
+* Use consistent casing (e.g., snake_case for columns)
+* Prefix related fields appropriately
+
+=== Performance Considerations
+
+* Use appropriate join types (LEFT vs INNER)
+* Consider using `@Select` for computed fields
+* Use `@GroupBy` and aggregation functions carefully
+* Be mindful of the impact of `@SubClasses` on query complexity
+
+== Examples
+
+=== Complete Entity Example
+
+[source,java]
+----
+@Table("order")
+@OrderBy("order.createdAt DESC")
+public class Order {
+    @Id
+    Long id;
+    
+    @FieldName("order_date")
+    Date createdAt;
+    
+    @Link
+    Customer customer;
+    
+    @Embedded
+    Address shippingAddress;
+    
+    @Select("COUNT(*)")
+    Integer itemCount;
+    
+    @Transient
+    BigDecimal totalAmount;
+}
+
+@Table("customer")
+public class Customer {
+    @Id
+    Long id;
+    String name;
+    String email;
+}
+
+public class Address {
+    String street;
+    String city;
+    String country;
+}
+----
+
+=== Complex Query Example
+
+[source,java]
+----
+@Table("article")
+@Joins({
+    @Join(type=JoinType.LEFT, tableName="user", alias="author", joinCondition="article.author_id=author.id"),
+    @Join(type=JoinType.LEFT, tableName="category", alias="cat", joinCondition="article.category_id=cat.id")
+})
+@GroupBy("article.id")
+public class ArticleSummary {
+    @Id
+    Long id;
+    String title;
+    
+    @Select("COUNT(DISTINCT comment.id)")
+    Integer commentCount;
+    
+    @Select("MAX(comment.createdAt)")
+    Date lastCommentDate;
+    
+    User author;
+    Category category;
+}
+---- 
