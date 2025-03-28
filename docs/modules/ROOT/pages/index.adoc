@@ -4,7 +4,10 @@
 :page-partial:
 :page-layout: base
 
+image::../../_/logo_pojoquery.png[alt="PojoQuery Logo", width=200, height=200]
+
 PojoQuery is a lightweight utility for working with relational databases in Java. Instead of writing SQL queries in plain text, PojoQuery leverages Plain Old Java Objects (POJOs) to define the set of fields and tables (joins) to fetch.
+
 
 == Key Features
 
