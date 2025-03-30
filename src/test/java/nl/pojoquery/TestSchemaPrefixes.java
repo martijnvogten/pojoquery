@@ -1,16 +1,17 @@
 package nl.pojoquery;
 
+import static nl.pojoquery.TestUtils.norm;
+import static org.junit.Assert.assertEquals;
+
+import org.junit.Test;
+
 import nl.pojoquery.annotations.Id;
 import nl.pojoquery.annotations.JoinCondition;
 import nl.pojoquery.annotations.Table;
 import nl.pojoquery.pipeline.QueryBuilder;
-import org.junit.Test;
-
-import static nl.pojoquery.TestUtils.norm;
-import static org.junit.Assert.assertEquals;
 
 public class TestSchemaPrefixes {
-
+	
 	@Table(value="article", schema="schema1")
 	static class Article {
 		@Id
@@ -23,6 +24,7 @@ public class TestSchemaPrefixes {
 	
 	@Table(value="person", schema="schema2")
 	static class Person {
+		@Id
 		public String name;
 	}
 	
@@ -38,9 +40,9 @@ public class TestSchemaPrefixes {
 		assertEquals(
 				norm("""
 					SELECT
-					 `article`.id AS `article.id`,
-					 `article`.title AS `article.title`,
-					 `authors`.name AS `authors.name`
+					 `article`.`id` AS `article.id`,
+					 `article`.`title` AS `article.title`,
+					 `authors`.`name` AS `authors.name`
 					FROM `schema1`.`article` AS `article`
 					 LEFT JOIN `schema2`.`person` AS `authors` ON `article`.authorName=`authors`.name
 					"""),
@@ -52,10 +54,10 @@ public class TestSchemaPrefixes {
 		assertEquals(
 				norm("""
 					SELECT
-					 `book`.id AS `book.id`,
-					 `articles`.id AS `articles.id`,
-					 `articles`.title AS `articles.title`,
-					 `articles.authors`.name AS `articles.authors.name`
+					 `book`.`id` AS `book.id`,
+					 `articles`.`id` AS `articles.id`,
+					 `articles`.`title` AS `articles.title`,
+					 `articles.authors`.`name` AS `articles.authors.name`
 					FROM `schema3`.`book` AS `book`
 					 LEFT JOIN `schema1`.`article` AS `articles` ON `book`.id = `articles`.book_id
 					 LEFT JOIN `schema2`.`person` AS `articles.authors` ON `articles`.authorName=`articles.authors`.name
@@ -65,9 +67,7 @@ public class TestSchemaPrefixes {
 	
 	@Test
 	public void testAliasesWithAnExtraJoinWithoutObjectQuoting() {
-		
-		DbContext context = new DbContext.DefaultDbContext();
-		context.setQuoteObjectNames(false);
+		DbContext context = new DbContext.DefaultDbContext(DbContext.QuoteStyle.MYSQL, false);
 		
 		assertEquals(
 				norm("""

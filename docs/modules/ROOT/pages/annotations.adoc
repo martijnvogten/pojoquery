@@ -171,7 +171,7 @@ public class User {
     Long id;
     String name;
     
-    @Embedded
+    @Embedded(prefix = "address_")
     Address address;
 }
 
@@ -356,4 +356,109 @@ public class ArticleSummary {
     User author;
     Category category;
 }
----- 
+----
+
+=== @Link
+
+The `@Link` annotation is used to define relationships between entities. It provides several options for customizing the relationship:
+
+[source,java]
+----
+@Table("order")
+public class Order {
+    @Id
+    Long id;
+    
+    @Link(linkfield = "order_id", foreignlinkfield = "customer_id")
+    Customer customer;
+    
+    @Link(linktable = "order_items")
+    List<OrderItem> items;
+}
+----
+
+Available options:
+* `linkfield`: The name of the foreign key column in the target table (default: `{fieldName}_id`)
+* `foreignlinkfield`: The name of the foreign key column in the link table (default: `{tableName}_id`)
+* `linktable`: The name of the link table for many-to-many relationships (default: `NONE`)
+
+=== @Embedded
+
+The `@Embedded` annotation allows you to embed one entity within another, flattening its properties into the parent entity's table:
+
+[source,java]
+----
+@Table("user")
+public class User {
+    @Id
+    Long id;
+    
+    @Embedded(prefix = "address_")
+    Address address;
+}
+
+public class Address {
+    String street;
+    String city;
+    String country;
+}
+----
+
+Available options:
+* `prefix`: The prefix to use for embedded fields in the database (default: `{fieldName}_`)
+
+The fields will be stored in the database as:
+* `address_street`
+* `address_city`
+* `address_country`
+
+=== @FieldName
+
+The `@FieldName` annotation allows you to specify a custom name for a field in the database:
+
+[source,java]
+----
+@Table("user")
+public class User {
+    @Id
+    Long id;
+    
+    @FieldName("email_address")
+    String email;
+    
+    @FieldName("created_at")
+    LocalDateTime createdAt;
+}
+----
+
+This is useful when:
+* The database column name doesn't match Java naming conventions
+* You need to map to existing database columns
+* You want to use reserved words as column names
+
+=== @Transient
+
+The `@Transient` annotation marks fields that should not be persisted to the database:
+
+[source,java]
+----
+@Table("user")
+public class User {
+    @Id
+    Long id;
+    
+    String email;
+    
+    @Transient
+    String passwordHash;  // Computed field, not stored
+    
+    @Transient
+    List<String> roles;   // Loaded from a different source
+}
+----
+
+Use `@Transient` when:
+* The field is computed from other fields
+* The field is loaded from a different source
+* The field is used for temporary data
+* The field should not be included in queries 

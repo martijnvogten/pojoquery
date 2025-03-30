@@ -182,6 +182,82 @@ List<User> users = PojoQuery.build(context, User.class)
     .execute(dataSource);
 ----
 
+=== DbContextBuilder
+
+The `DbContextBuilder` provides a fluent API for configuring a `DbContext` with custom settings. This is the recommended way to create a custom `DbContext`:
+
+[source,java]
+----
+// Create a DbContext with custom settings
+DbContext context = DbContext.builder()
+    .withQuoteStyle(QuoteStyle.ANSI)    // Use ANSI quotes (") instead of MySQL backticks
+    .withQuotedObjectNames(false)       // Don't quote table and column names
+    .build();
+
+// Use the configured context
+List<User> users = PojoQuery.build(context, User.class)
+    .execute(dataSource);
+----
+
+==== Available Configuration Options
+
+* `withQuoteStyle(QuoteStyle)`: Set the quote style for database identifiers
+** `QuoteStyle.ANSI`: Uses double quotes (")
+** `QuoteStyle.MYSQL`: Uses backticks (`)
+* `withQuotedObjectNames(boolean)`: Enable or disable quoting of table and column names
+* `withFieldMappingFactory(FieldMappingFactory)`: Set a custom factory for field mappings
+
+==== Default Configuration
+
+If no options are specified, the builder creates a `DbContext` with these defaults:
+* MySQL quote style (backticks)
+* Object names quoted
+* Standard field mapping
+
+==== Example Configurations
+
+===== PostgreSQL Configuration
+
+[source,java]
+----
+DbContext postgresContext = DbContext.builder()
+    .withQuoteStyle(QuoteStyle.ANSI)    // PostgreSQL uses double quotes
+    .withQuotedObjectNames(true)        // Always quote identifiers in PostgreSQL
+    .build();
+----
+
+===== HSQLDB Configuration
+
+[source,java]
+----
+DbContext hsqldbContext = DbContext.builder()
+    .withQuoteStyle(QuoteStyle.ANSI)    // HSQLDB uses double quotes
+    .withQuotedObjectNames(true)        // Always quote identifiers in HSQLDB
+    .build();
+----
+
+===== Custom Field Mapping
+
+[source,java]
+----
+DbContext context = DbContext.builder()
+    .withFieldMappingFactory(field -> {
+        if (field.isAnnotationPresent(JsonField.class)) {
+            return new JsonFieldMapping(field);
+        }
+        return new SimpleFieldMapping(field);
+    })
+    .build();
+----
+
+==== Best Practices
+
+* Use the builder pattern instead of creating a custom `DbContext` implementation
+* Configure the context once and reuse it across queries
+* Match the quote style to your database engine
+* Consider using custom field mappings for special data types
+* Keep the configuration immutable after creation
+
 === Custom Field Mappings
 
 Define custom field mappings:

@@ -24,24 +24,21 @@ public interface DbContext {
 	static DbContext DEFAULT = new DefaultDbContext();
 
 	public String quoteObjectNames(String... names);
-
-	public void setQuoteStyle(QuoteStyle ansi);
-
 	public QuoteStyle getQuoteStyle();
-
-	public void setQuoteObjectNames(boolean addQuotes);
-	
 	public String quoteAlias(String alias);
-
 	public FieldMapping getFieldMapping(Field f);
 	
 	public class DefaultDbContext implements DbContext {
-		private QuoteStyle quoteStyle = QuoteStyle.MYSQL;
-		private boolean quoteObjects = true;
+		private final QuoteStyle quoteStyle;
+		private final boolean quoteObjects;
 
-		@Override
-		public void setQuoteStyle(QuoteStyle style) {
-			this.quoteStyle = style;
+		public DefaultDbContext() {
+			this(QuoteStyle.MYSQL, true);
+		}
+
+		public DefaultDbContext(QuoteStyle quoteStyle, boolean quoteObjects) {
+			this.quoteStyle = quoteStyle;
+			this.quoteObjects = quoteObjects;
 		}
 
 		@Override
@@ -69,11 +66,6 @@ public interface DbContext {
 		}
 
 		@Override
-		public void setQuoteObjectNames(boolean addQuotes) {
-			this.quoteObjects = addQuotes;
-		}
-
-		@Override
 		public FieldMapping getFieldMapping(Field f) {
 			return new SimpleFieldMapping(f);
 		}
@@ -83,4 +75,11 @@ public interface DbContext {
 		return DEFAULT;
 	}
 
+	/**
+	 * Creates a new DbContextBuilder for configuring a custom DbContext.
+	 * @return A new DbContextBuilder instance
+	 */
+	public static DbContextBuilder builder() {
+		return new DbContextBuilder();
+	}
 }

@@ -264,7 +264,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 						Alias a = new Alias(linkAlias, componentType, alias, f, QueryBuilder.determineIdFields(componentType));
 						a.setIsLinkedValue(true);
 						aliases.put(linkAlias, a);
-						addField(new SqlExpression("{" + linkAlias + "}." + linkAnn.fetchColumn()), linkAlias + ".value", f);
+						addField(new SqlExpression("{" + linkAlias + "}." + dbContext.quoteObjectNames(linkAnn.fetchColumn())), linkAlias + ".value", f);
 					} else if (linkAnn.linktable().equals(Link.NONE)) {
 						String linkAlias = joinMany(alias, query, f, componentType);
 						addClass(componentType, linkAlias, alias, f);
@@ -329,7 +329,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 					selectExpression = new SqlExpression(resolveJoinConditionAliases(f.getAnnotation(Select.class).value(), alias, null, null));
 				} else {
 					String fieldName = determineSqlFieldName(f);
-					selectExpression = new SqlExpression("{" + alias + "}." + (fieldNamePrefix == null ? "" : fieldNamePrefix) + fieldName);
+					selectExpression = new SqlExpression("{" + alias + "}." + dbContext.quoteObjectNames((fieldNamePrefix == null ? "" : fieldNamePrefix) + fieldName));
 				}
 				addField(selectExpression, fieldsAlias + "." + f.getName(), f);
 			}

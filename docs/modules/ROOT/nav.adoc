@@ -3,5 +3,6 @@
 * xref:getting-started.adoc[Getting Started]
 * xref:annotations.adoc[Annotations]
 * xref:query-building.adoc[Query Building]
+* xref:database-support.adoc[Database Support]
 * xref:advanced-topics.adoc[Advanced Topics]
 * xref:examples.adoc[Examples] 

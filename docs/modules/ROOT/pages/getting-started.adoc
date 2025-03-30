@@ -148,16 +148,16 @@ DB.runInTransaction(dataSource, connection -> {
     Article article = new Article();
     article.setTitle("New Article");
     article.setContent("Content here");
-    article.setAuthorId(authorId);
+    article.setAuthor(author);
     
     // Insert article
     Long articleId = PojoQuery.insert(connection, article);
     
     // Create comment
     Comment comment = new Comment();
-    comment.setArticleId(articleId);
+    comment.setArticle(article);
     comment.setContent("First comment");
-    comment.setAuthorId(commentAuthorId);
+    comment.setAuthor(commentAuthor);
     
     // Insert comment
     PojoQuery.insert(connection, comment);
@@ -179,7 +179,6 @@ DB.runInTransaction(dataSource, connection -> {
 
 * Use parameterized queries to prevent SQL injection
 * Leverage the fluent API for readability
-* Use appropriate join types (LEFT, INNER) based on your needs
 * Consider using streaming for large result sets
 
 === Error Handling

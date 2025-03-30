@@ -36,8 +36,7 @@ public class TestDbContext {
 		}
 		
 		{
-			DefaultDbContext dbContext = new DbContext.DefaultDbContext();
-			dbContext.setQuoteObjectNames(false);
+			DefaultDbContext dbContext = new DefaultDbContext(DbContext.QuoteStyle.MYSQL, false);
 			SqlQuery<?> query = QueryBuilder.from(dbContext, Article.class).getQuery();
 			
 			assertEquals(
