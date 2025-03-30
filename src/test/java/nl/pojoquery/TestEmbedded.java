@@ -70,9 +70,9 @@ public class TestEmbedded {
 		assertEquals(
 				norm("""
 					SELECT
-					 `user`.id AS `user.id`,
-					 `user`.home_address AS `home.address`,
-					 `user`.home_city AS `home.city`
+					 `user`.`id` AS `user.id`,
+					 `user`.`home_address` AS `home.address`,
+					 `user`.`home_city` AS `home.city`
 					 FROM `user` AS `user`
 					"""), norm(QueryBuilder.from(User.class).getQuery().toStatement().getSql()));
 		
@@ -99,13 +99,13 @@ public class TestEmbedded {
 		assertEquals(
 				norm("""
 				SELECT
-				 `user`.id AS `user.id`,
-				 `user`.home_address AS `home.address`,
-				 `user`.home_city AS `home.city`,
-				 `home.country`.id AS `home.country.id`,
-				 `home.country`.name AS `home.country.name`
+				 `user`.`id` AS `user.id`,
+				 `user`.`home_address` AS `home.address`,
+				 `user`.`home_city` AS `home.city`,
+				 `home.country`.`id` AS `home.country.id`,
+				 `home.country`.`name` AS `home.country.name`
 				FROM `user` AS `user`
-				 LEFT JOIN `country` AS `home.country` ON `user`.home_country_id = `home.country`.id
+				 LEFT JOIN `country` AS `home.country` ON `user`.`home_country_id` = `home.country`.`id`
 				"""), 
 				norm(QueryBuilder.from(UserWithCountry.class).getQuery().toStatement().getSql()));
 	}

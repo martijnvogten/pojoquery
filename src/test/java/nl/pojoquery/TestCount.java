@@ -43,7 +43,7 @@ public class TestCount {
 				SELECT
 				 COUNT(DISTINCT article.id)
 				FROM `article` AS `article`
-				 LEFT JOIN `comment` AS `comments` ON `article`.id = `comments`.article_id
+				 LEFT JOIN `comment` AS `comments` ON `article`.`id` = `comments`.`article_id`
 				"""), TestUtils.norm(countStatement.getSql()));
 	}
 }

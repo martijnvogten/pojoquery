@@ -26,7 +26,7 @@ public class TestGroupBy {
 		PojoQuery<WordCount> q = PojoQuery.build(WordCount.class);
 		Assert.assertEquals(TestUtils.norm("""
 			SELECT
-			 `wordindex`.word AS `wordindex.word`,
+			 `wordindex`.`word` AS `wordindex.word`,
 			 COUNT(*) AS `wordindex.wordCount`
 			FROM `wordindex` AS `wordindex`
 			GROUP BY wordindex.word

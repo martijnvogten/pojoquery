@@ -168,7 +168,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 					joinType = JoinType.INNER;
 				}
 				String idField = QueryBuilder.determineIdField(superMapping.clazz).getName();
-				query.addJoin(joinType, superMapping.schemaName, superMapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + idField + " = {" + combinedAlias + "}." + idField));
+				query.addJoin(joinType, superMapping.schemaName, superMapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + dbContext.quoteObjectNames(idField) + " = {" + combinedAlias + "}." + dbContext.quoteObjectNames(idField)));
 			}
 			
 			Alias newAlias = new Alias(combinedAlias, mapping.clazz, parentAlias, linkField, QueryBuilder.determineIdFields(mapping.clazz));
@@ -194,14 +194,14 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 				String linkAlias = alias + "." + mapping.tableName;
 				String idField = QueryBuilder.determineIdField(mapping.clazz).getName();
 				
-				query.addJoin(JoinType.LEFT, mapping.schemaName, mapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + idField + " = {" + alias + "}." + idField));
+				query.addJoin(JoinType.LEFT, mapping.schemaName, mapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + dbContext.quoteObjectNames(idField) + " = {" + alias + "}." + dbContext.quoteObjectNames(idField)));
 				Alias subClassAlias = new Alias(linkAlias, mapping.clazz, alias, thisIdField, QueryBuilder.determineIdFields(mapping.clazz));
 				subClassAlias.setIsASubClass(true);
 				aliases.put(linkAlias, subClassAlias);
 				subClasses.put(linkAlias, subClassAlias);
 				
 				// Also add the idfield of the linked alias, so we have at least one
-				addField(new SqlExpression("{" + linkAlias + "}." + idField), linkAlias + "." + idField, thisIdField);
+				addField(new SqlExpression("{" + linkAlias + "}." + dbContext.quoteObjectNames(idField)), linkAlias + "." + idField, thisIdField);
 				
 				addFields(linkAlias, mapping.clazz, thisMapping.clazz);
 				
@@ -278,7 +278,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 							linkfieldname = linkFieldName(clz);
 						}
 						
-						SqlExpression joinCondition = new SqlExpression("{" + alias + "}." + idField + " = {" + linkAlias + "}." + linkfieldname);
+						SqlExpression joinCondition = new SqlExpression("{" + alias + "}." + dbContext.quoteObjectNames(idField) + " = {" + linkAlias + "}." + dbContext.quoteObjectNames(linkfieldname));
 						if (f.getAnnotation(JoinCondition.class) != null) {
 							joinCondition = new SqlExpression(resolveJoinConditionAliases(f.getAnnotation(JoinCondition.class).value(), alias, linkAlias, linkAlias));
 						}
@@ -290,7 +290,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 						if (Link.NONE.equals(foreignlinkfieldname)) {
 							foreignlinkfieldname = linkFieldName(componentType);
 						}
-						SqlExpression foreignJoinCondition = new SqlExpression("{" + linkAlias + "}." + foreignlinkfieldname + " = {" + foreignLinkAlias + "}." + foreignIdField);
+						SqlExpression foreignJoinCondition = new SqlExpression("{" + linkAlias + "}." + dbContext.quoteObjectNames(foreignlinkfieldname) + " = {" + foreignLinkAlias + "}." + dbContext.quoteObjectNames(foreignIdField));
 						query.addJoin(JoinType.LEFT, determineTableMapping(componentType).get(0).schemaName, determineTableMapping(componentType).get(0).tableName, foreignLinkAlias, foreignJoinCondition);
 						
 						addClass(componentType, foreignLinkAlias, alias, f);
@@ -383,7 +383,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		}
 		
 		if (joinCondition == null) {
-			joinCondition = "{" + alias + "}." + idField + " = {" + linkAlias + "}." + linkField;
+			joinCondition = "{" + alias + "}." + dbContext.quoteObjectNames(idField) + " = {" + linkAlias + "}." + dbContext.quoteObjectNames(linkField);
 		} else {
 			joinCondition = resolveJoinConditionAliases(joinCondition, alias, linkAlias, linkAlias);
 		}
@@ -420,7 +420,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 			joinCondition = new SqlExpression(resolveJoinConditionAliases(f.getAnnotation(JoinCondition.class).value(), linkFieldAlias, linkAlias, null));
 		} else {
 			Field idField = QueryBuilder.determineIdField(type);
-			joinCondition = new SqlExpression("{" + linkFieldAlias + "}." + linkField + " = {" + linkAlias + "}." + idField.getName());
+			joinCondition = new SqlExpression("{" + linkFieldAlias + "}." + dbContext.quoteObjectNames(linkField) + " = {" + linkAlias + "}." + dbContext.quoteObjectNames(idField.getName()));
 		}
 		result.addJoin(JoinType.LEFT, table.schemaName, table.tableName, linkAlias, joinCondition);
 		return linkAlias;

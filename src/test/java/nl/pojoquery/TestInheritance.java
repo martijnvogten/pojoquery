@@ -84,15 +84,15 @@ public class TestInheritance {
 		assertEquals(
 				norm("""
 					SELECT
-					 `room`.id AS `room.id`,
-					 `room`.area AS `room.area`,
-					 `room.bedroom`.id AS `room.bedroom.id`,
-					 `room.bedroom`.numberOfBeds AS `room.bedroom.numberOfBeds`,
-					 `room.kitchen`.id AS `room.kitchen.id`,
-					 `room.kitchen`.hasDishWasher AS `room.kitchen.hasDishWasher`
+					 `room`.`id` AS `room.id`,
+					 `room`.`area` AS `room.area`,
+					 `room.bedroom`.`id` AS `room.bedroom.id`,
+					 `room.bedroom`.`numberOfBeds` AS `room.bedroom.numberOfBeds`,
+					 `room.kitchen`.`id` AS `room.kitchen.id`,
+					 `room.kitchen`.`hasDishWasher` AS `room.kitchen.hasDishWasher`
 					FROM `room` AS `room`
-					 LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.id = `room`.id
-					 LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.id = `room`.id
+					 LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.`id` = `room`.`id`
+					 LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.`id` = `room`.`id`
 					"""),
 				norm(sql));
 		
@@ -116,11 +116,11 @@ public class TestInheritance {
 		assertEquals(
 				norm("""
 					SELECT
-					 `bedroom`.numberOfBeds AS `bedroom.numberOfBeds`,
-					 `room`.id AS `bedroom.id`,
-					 `room`.area AS `bedroom.area`
+					 `bedroom`.`numberOfBeds` AS `bedroom.numberOfBeds`,
+					 `room`.`id` AS `bedroom.id`,
+					 `room`.`area` AS `bedroom.area`
 					FROM `bedroom` AS `bedroom`
-					 INNER JOIN `room` AS `room` ON `room`.id = `bedroom`.id
+					 INNER JOIN `room` AS `room` ON `room`.`id` = `bedroom`.`id`
 					"""),
 				norm(sql));
 		
@@ -143,13 +143,13 @@ public class TestInheritance {
 		assertEquals(
 			norm("""
 				SELECT
-				 `apartment`.id AS `apartment.id`,
-				 `bedrooms`.numberOfBeds AS `bedrooms.numberOfBeds`,
-				 `bedrooms.room`.id AS `bedrooms.id`,
-				 `bedrooms.room`.area AS `bedrooms.area`
+				 `apartment`.`id` AS `apartment.id`,
+				 `bedrooms`.`numberOfBeds` AS `bedrooms.numberOfBeds`,
+				 `bedrooms.room`.`id` AS `bedrooms.id`,
+				 `bedrooms.room`.`area` AS `bedrooms.area`
 				FROM `apartment` AS `apartment`
-				 LEFT JOIN `bedroom` AS `bedrooms` ON `apartment`.id = `bedrooms`.apartment_id
-				 LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms.room`.id = `bedrooms`.id
+				 LEFT JOIN `bedroom` AS `bedrooms` ON `apartment`.`id` = `bedrooms`.`apartment_id`
+				 LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms.room`.`id` = `bedrooms`.`id`
 				"""), 
 			norm(sql));
 	}
@@ -160,17 +160,17 @@ public class TestInheritance {
 		assertEquals(
 				norm("""
 					SELECT
-					 `apartment`.id AS `apartment.id`,
-					 `rooms`.id AS `rooms.id`,
-					 `rooms`.area AS `rooms.area`,
-					 `rooms.bedroom`.id AS `rooms.bedroom.id`,
-					 `rooms.bedroom`.numberOfBeds AS `rooms.bedroom.numberOfBeds`,
-					 `rooms.kitchen`.id AS `rooms.kitchen.id`,
-					 `rooms.kitchen`.hasDishWasher AS `rooms.kitchen.hasDishWasher`
+					 `apartment`.`id` AS `apartment.id`,
+					 `rooms`.`id` AS `rooms.id`,
+					 `rooms`.`area` AS `rooms.area`,
+					 `rooms.bedroom`.`id` AS `rooms.bedroom.id`,
+					 `rooms.bedroom`.`numberOfBeds` AS `rooms.bedroom.numberOfBeds`,
+					 `rooms.kitchen`.`id` AS `rooms.kitchen.id`,
+					 `rooms.kitchen`.`hasDishWasher` AS `rooms.kitchen.hasDishWasher`
 					FROM `apartment` AS `apartment`
-					 LEFT JOIN `room` AS `rooms` ON `apartment`.id = `rooms`.apartment_id
-					 LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.id = `rooms`.id
-					 LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.id = `rooms`.id
+					 LEFT JOIN `room` AS `rooms` ON `apartment`.`id` = `rooms`.`apartment_id`
+					 LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.`id` = `rooms`.`id`
+					 LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.`id` = `rooms`.`id`
 					"""),
 				norm(sql));
 		

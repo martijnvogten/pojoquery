@@ -48,8 +48,8 @@ public class TestCustomFields {
 		
 		Assert.assertEquals(norm("""
 			SELECT
-			 `user`.id AS `user.id`,
-			 `user`.email AS `user.email`,
+			 `user`.`id` AS `user.id`,
+			 `user`.`email` AS `user.email`,
 			 `user`.custom_linkedInUrl AS `user.linkedInUrl` 
 			FROM `user` AS `user`
 			"""), norm(p.getQuery().toStatement().getSql()));

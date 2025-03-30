@@ -39,9 +39,9 @@ public class TestJoinsAndAliases {
 		assertEquals(
 			norm("""
 				SELECT
-				 `article`.id AS `article.id`,
-				 `article`.title AS `article.title`,
-				 `authors`.name AS `authors.name`
+				 `article`.`id` AS `article.id`,
+				 `article`.`title` AS `article.title`,
+				 `authors`.`name` AS `authors.name`
 				FROM `article` AS `article`
 				 LEFT JOIN `person` AS `authors` ON `article`.authorName = `authors`.name
 				"""),
@@ -53,12 +53,12 @@ public class TestJoinsAndAliases {
 		assertEquals(
 			norm("""
 				SELECT
-				 `book`.id AS `book.id`,
-				 `articles`.id AS `articles.id`,
-				 `articles`.title AS `articles.title`,
-				 `articles.authors`.name AS `articles.authors.name`
+				 `book`.`id` AS `book.id`,
+				 `articles`.`id` AS `articles.id`,
+				 `articles`.`title` AS `articles.title`,
+				 `articles.authors`.`name` AS `articles.authors.name`
 				FROM `book` AS `book`
-				 LEFT JOIN `article` AS `articles` ON `book`.id = `articles`.book_id
+				 LEFT JOIN `article` AS `articles` ON `book`.`id` = `articles`.`book_id`
 				 LEFT JOIN `person` AS `articles.authors` ON `articles`.authorName = `articles.authors`.name
 				"""), 
 			norm(QueryBuilder.from(Book.class).getQuery().toStatement().getSql()));

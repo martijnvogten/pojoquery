@@ -62,27 +62,27 @@ public class TestBasics {
 		
 		assertEquals(norm("""
 			SELECT
-			 `article`.id AS `article.id`,
-			 `article`.title AS `article.title`,
-			 `article`.content AS `article.content`,
-			 `article`.author_id AS `article.author_id`,
-			 `author`.id AS `author.id`,
-			 `author`.firstName AS `author.firstName`,
-			 `author`.lastName AS `author.lastName`,
-			 `author`.email AS `author.email`,
-			 `comments`.id AS `comments.id`,
-			 `comments`.article_id AS `comments.article_id`,
-			 `comments`.comment AS `comments.comment`,
-			 `comments`.submitdate AS `comments.submitdate`,
-			 `comments`.author_id AS `comments.author_id`,
-			 `comments.author`.id AS `comments.author.id`,
-			 `comments.author`.firstName AS `comments.author.firstName`,
-			 `comments.author`.lastName AS `comments.author.lastName`,
-			 `comments.author`.email AS `comments.author.email`\s
+			 `article`.`id` AS `article.id`,
+			 `article`.`title` AS `article.title`,
+			 `article`.`content` AS `article.content`,
+			 `article`.`author_id` AS `article.author_id`,
+			 `author`.`id` AS `author.id`,
+			 `author`.`firstName` AS `author.firstName`,
+			 `author`.`lastName` AS `author.lastName`,
+			 `author`.`email` AS `author.email`,
+			 `comments`.`id` AS `comments.id`,
+			 `comments`.`article_id` AS `comments.article_id`,
+			 `comments`.`comment` AS `comments.comment`,
+			 `comments`.`submitdate` AS `comments.submitdate`,
+			 `comments`.`author_id` AS `comments.author_id`,
+			 `comments.author`.`id` AS `comments.author.id`,
+			 `comments.author`.`firstName` AS `comments.author.firstName`,
+			 `comments.author`.`lastName` AS `comments.author.lastName`,
+			 `comments.author`.`email` AS `comments.author.email`
 			FROM `article` AS `article`
-			 LEFT JOIN `user` AS `author` ON `article`.author_id = `author`.id
-			 LEFT JOIN `comment` AS `comments` ON `article`.id = `comments`.article_id
-			 LEFT JOIN `user` AS `comments.author` ON `comments`.author_id = `comments.author`.id
+			 LEFT JOIN `user` AS `author` ON `article`.`author_id` = `author`.`id`
+			 LEFT JOIN `comment` AS `comments` ON `article`.`id` = `comments`.`article_id`
+			 LEFT JOIN `user` AS `comments.author` ON `comments`.`author_id` = `comments.author`.`id`
 			"""), norm(sql));
 		
 	}

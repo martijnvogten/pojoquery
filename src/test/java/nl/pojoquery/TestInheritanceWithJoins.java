@@ -90,18 +90,18 @@ public class TestInheritanceWithJoins {
 		assertEquals(
 				norm("""
 					SELECT
-					 `room`.id AS `room.id`,
-					 `room`.area AS `room.area`,
-					 `house`.id AS `house.id`,
-					 `house`.address AS `house.address`,
-					 `room.bedroom`.id AS `room.bedroom.id`,
-					 `room.bedroom`.numberOfBeds AS `room.bedroom.numberOfBeds`,
-					 `room.kitchen`.id AS `room.kitchen.id`,
-					 `room.kitchen`.hasDishWasher AS `room.kitchen.hasDishWasher`
+					 `room`.`id` AS `room.id`,
+					 `room`.`area` AS `room.area`,
+					 `house`.`id` AS `house.id`,
+					 `house`.`address` AS `house.address`,
+					 `room.bedroom`.`id` AS `room.bedroom.id`,
+					 `room.bedroom`.`numberOfBeds` AS `room.bedroom.numberOfBeds`,
+					 `room.kitchen`.`id` AS `room.kitchen.id`,
+					 `room.kitchen`.`hasDishWasher` AS `room.kitchen.hasDishWasher`
 					FROM `room` AS `room`
-					 LEFT JOIN `house` AS `house` ON `room`.house_id = `house`.id
-					 LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.id = `room`.id
-					 LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.id = `room`.id
+					 LEFT JOIN `house` AS `house` ON `room`.`house_id` = `house`.`id`
+					 LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.`id` = `room`.`id`
+					 LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.`id` = `room`.`id`
 					"""),
 				norm(sql));
 		
@@ -126,14 +126,14 @@ public class TestInheritanceWithJoins {
 		assertEquals(
 				norm("""
 					SELECT
-					 `bedroom`.numberOfBeds AS `bedroom.numberOfBeds`,
-					 `room`.id AS `bedroom.id`,
-					 `room`.area AS `bedroom.area`,
-					 `house`.id AS `house.id`,
-					 `house`.address AS `house.address`
+					 `bedroom`.`numberOfBeds` AS `bedroom.numberOfBeds`,
+					 `room`.`id` AS `bedroom.id`,
+					 `room`.`area` AS `bedroom.area`,
+					 `house`.`id` AS `house.id`,
+					 `house`.`address` AS `house.address`
 					FROM `bedroom` AS `bedroom`
-					 INNER JOIN `room` AS `room` ON `room`.id = `bedroom`.id
-					 LEFT JOIN `house` AS `house` ON `room`.house_id = `house`.id
+					 INNER JOIN `room` AS `room` ON `room`.`id` = `bedroom`.`id`
+					 LEFT JOIN `house` AS `house` ON `room`.`house_id` = `house`.`id`
 					"""),
 				norm(sql));
 		
@@ -157,16 +157,16 @@ public class TestInheritanceWithJoins {
 		assertEquals(
 			norm("""
 				SELECT
-				 `apartment`.id AS `apartment.id`,
-				 `bedrooms`.numberOfBeds AS `bedrooms.numberOfBeds`,
-				 `bedrooms.room`.id AS `bedrooms.id`,
-				 `bedrooms.room`.area AS `bedrooms.area`,
-				 `bedrooms.house`.id AS `bedrooms.house.id`,
-				 `bedrooms.house`.address AS `bedrooms.house.address`
+				 `apartment`.`id` AS `apartment.id`,
+				 `bedrooms`.`numberOfBeds` AS `bedrooms.numberOfBeds`,
+				 `bedrooms.room`.`id` AS `bedrooms.id`,
+				 `bedrooms.room`.`area` AS `bedrooms.area`,
+				 `bedrooms.house`.`id` AS `bedrooms.house.id`,
+				 `bedrooms.house`.`address` AS `bedrooms.house.address`
 				FROM `apartment` AS `apartment`
-				 LEFT JOIN `bedroom` AS `bedrooms` ON `apartment`.id = `bedrooms`.apartment_id
-				 LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms.room`.id = `bedrooms`.id
-				 LEFT JOIN `house` AS `bedrooms.house` ON `bedrooms.room`.house_id = `bedrooms.house`.id
+				 LEFT JOIN `bedroom` AS `bedrooms` ON `apartment`.`id` = `bedrooms`.`apartment_id`
+				 LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms.room`.`id` = `bedrooms`.`id`
+				 LEFT JOIN `house` AS `bedrooms.house` ON `bedrooms.room`.`house_id` = `bedrooms.house`.`id`
 				"""), 
 			norm(sql));
 	}
@@ -178,20 +178,20 @@ public class TestInheritanceWithJoins {
 		assertEquals(
 				norm("""
 					SELECT
-					 `apartment`.id AS `apartment.id`,
-					 `rooms`.id AS `rooms.id`,
-					 `rooms`.area AS `rooms.area`,
-					 `rooms.house`.id AS `rooms.house.id`,
-					 `rooms.house`.address AS `rooms.house.address`,
-					 `rooms.bedroom`.id AS `rooms.bedroom.id`,
-					 `rooms.bedroom`.numberOfBeds AS `rooms.bedroom.numberOfBeds`,
-					 `rooms.kitchen`.id AS `rooms.kitchen.id`,
-					 `rooms.kitchen`.hasDishWasher AS `rooms.kitchen.hasDishWasher`
+					 `apartment`.`id` AS `apartment.id`,
+					 `rooms`.`id` AS `rooms.id`,
+					 `rooms`.`area` AS `rooms.area`,
+					 `rooms.house`.`id` AS `rooms.house.id`,
+					 `rooms.house`.`address` AS `rooms.house.address`,
+					 `rooms.bedroom`.`id` AS `rooms.bedroom.id`,
+					 `rooms.bedroom`.`numberOfBeds` AS `rooms.bedroom.numberOfBeds`,
+					 `rooms.kitchen`.`id` AS `rooms.kitchen.id`,
+					 `rooms.kitchen`.`hasDishWasher` AS `rooms.kitchen.hasDishWasher`
 					FROM `apartment` AS `apartment`
-					 LEFT JOIN `room` AS `rooms` ON `apartment`.id = `rooms`.apartment_id
-					 LEFT JOIN `house` AS `rooms.house` ON `rooms`.house_id = `rooms.house`.id
-					 LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.id = `rooms`.id
-					 LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.id = `rooms`.id
+					 LEFT JOIN `room` AS `rooms` ON `apartment`.`id` = `rooms`.`apartment_id`
+					 LEFT JOIN `house` AS `rooms.house` ON `rooms`.`house_id` = `rooms.house`.`id`
+					 LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.`id` = `rooms`.`id`
+					 LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.`id` = `rooms`.`id`
 					"""),
 				norm(sql));
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {

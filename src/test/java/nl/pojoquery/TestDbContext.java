@@ -28,8 +28,8 @@ public class TestDbContext {
 			assertEquals(
 					norm("""
 						SELECT
-						 `article`.id AS `article.id`,
-						 `article`.title AS `article.title`
+						 `article`.`id` AS `article.id`,
+						 `article`.`title` AS `article.title`
 						FROM `schema1`.`article` AS `article`
 						"""),
 					norm(query.toStatement().getSql()));

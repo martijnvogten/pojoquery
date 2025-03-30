@@ -59,7 +59,7 @@ public class TestSchemaPrefixes {
 					 `articles`.`title` AS `articles.title`,
 					 `articles.authors`.`name` AS `articles.authors.name`
 					FROM `schema3`.`book` AS `book`
-					 LEFT JOIN `schema1`.`article` AS `articles` ON `book`.id = `articles`.book_id
+					 LEFT JOIN `schema1`.`article` AS `articles` ON `book`.`id` = `articles`.`book_id`
 					 LEFT JOIN `schema2`.`person` AS `articles.authors` ON `articles`.authorName=`articles.authors`.name
 					"""),
 				norm(QueryBuilder.from(Book.class).getQuery().toStatement().getSql()));

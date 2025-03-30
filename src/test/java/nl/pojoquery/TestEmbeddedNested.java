@@ -51,16 +51,16 @@ public class TestEmbeddedNested {
 		assertEquals(
 				norm("""
 				SELECT
-				 `customer`.id AS `customer.id`,
-				 `customer`.name AS `customer.name`,
-				 `customer`.personal_phoneNumber AS `personal.phoneNumber`,
-				 `customer`.personal_home_address AS `personal.home.address`,
-				 `customer`.personal_home_city AS `personal.home.city`,
-				 `personal.home.country`.id AS `personal.home.country.id`,
-				 `personal.home.country`.name AS `personal.home.country.name`
+				 `customer`.`id` AS `customer.id`,
+				 `customer`.`name` AS `customer.name`,
+				 `customer`.`personal_phoneNumber` AS `personal.phoneNumber`,
+				 `customer`.`personal_home_address` AS `personal.home.address`,
+				 `customer`.`personal_home_city` AS `personal.home.city`,
+				 `personal.home.country`.`id` AS `personal.home.country.id`,
+				 `personal.home.country`.`name` AS `personal.home.country.name`
 				FROM `customer` AS `customer`
-				 LEFT JOIN `country` AS `personal.home.country` ON `customer`.personal_home_country_id = `personal.home.country`.id
- 				"""), 
+				 LEFT JOIN `country` AS `personal.home.country` ON `customer`.`personal_home_country_id` = `personal.home.country`.`id`
+				"""), 
 				norm(QueryBuilder.from(Customer.class).getQuery().toStatement().getSql()));
 	}
 	

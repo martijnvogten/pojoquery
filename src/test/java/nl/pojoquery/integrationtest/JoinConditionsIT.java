@@ -96,9 +96,9 @@ public class JoinConditionsIT {
 		String sql = q.toSql();
 		Assert.assertEquals(TestUtils.norm("""
 			SELECT
-			 `employee`.id AS `employee.id`,
-			 `department`.id AS `department.id`,
-			 `department`.name AS `department.name`\s
+			 `employee`.`id` AS `employee.id`,
+			 `department`.`id` AS `department.id`,
+			 `department`.`name` AS `department.name`\s
 			FROM `employee` AS `employee`
 			 LEFT JOIN `department` AS `department` ON `employee`.department_id = `department`.id
 			"""), norm(sql.trim()));

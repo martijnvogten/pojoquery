@@ -41,11 +41,11 @@ public class TestEnums {
 		assertEquals(
 			norm("""
 				SELECT
-				 `user`.id AS `user.id`,
-				 `roles`.element AS `roles.value`,
-				 `user`.state AS `user.state`
+				 `user`.`id` AS `user.id`,
+				 `roles`.`element` AS `roles.value`,
+				 `user`.`state` AS `user.state`
 				 FROM `user` AS `user`
-				 LEFT JOIN `user_roles` AS `roles` ON `user`.id = `roles`.user_id
+				 LEFT JOIN `user_roles` AS `roles` ON `user`.`id` = `roles`.`user_id`
 				"""), 
 			norm(QueryBuilder.from(User.class).toStatement().getSql()));
 		
