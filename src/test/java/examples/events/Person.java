@@ -2,7 +2,7 @@ package examples.events;
 
 import java.util.List;
 
-import nl.pojoquery.annotations.Table;
+import org.pojoquery.annotations.Table;
 
 
 @Table("person")

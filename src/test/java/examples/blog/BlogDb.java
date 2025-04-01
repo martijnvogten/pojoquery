@@ -4,12 +4,13 @@ import java.util.Date;
 
 import javax.sql.DataSource;
 
+import org.pojoquery.DB;
+import org.pojoquery.PojoQuery;
+import org.pojoquery.integrationtest.db.TestDatabase;
+
 import examples.blog.ArticleDetailExample.Article;
 import examples.blog.ArticleDetailExample.Comment;
 import examples.blog.ArticleDetailExample.User;
-import nl.pojoquery.DB;
-import nl.pojoquery.PojoQuery;
-import nl.pojoquery.integrationtest.db.TestDatabase;
 
 public class BlogDb {
 

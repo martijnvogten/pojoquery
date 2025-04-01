@@ -1,7 +1,7 @@
 package examples.events;
 
-import nl.pojoquery.annotations.Id;
-import nl.pojoquery.annotations.Table;
+import org.pojoquery.annotations.Id;
+import org.pojoquery.annotations.Table;
 
 @Table("person")
 public class PersonRecord {

@@ -4,11 +4,11 @@ import java.util.Date;
 
 import javax.sql.DataSource;
 
-import nl.pojoquery.DB;
-import nl.pojoquery.PojoQuery;
-import nl.pojoquery.annotations.Id;
-import nl.pojoquery.annotations.Table;
-import nl.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.DB;
+import org.pojoquery.PojoQuery;
+import org.pojoquery.annotations.Id;
+import org.pojoquery.annotations.Table;
+import org.pojoquery.integrationtest.db.TestDatabase;
 
 
 public class UsersExample {

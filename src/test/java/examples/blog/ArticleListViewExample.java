@@ -4,13 +4,14 @@ import java.util.Date;
 
 import javax.sql.DataSource;
 
+import org.pojoquery.PojoQuery;
+import org.pojoquery.annotations.GroupBy;
+import org.pojoquery.annotations.Join;
+import org.pojoquery.annotations.Select;
+import org.pojoquery.pipeline.SqlQuery.JoinType;
+
 import examples.blog.ArticleDetailExample.Article;
 import examples.blog.ArticleDetailExample.User;
-import nl.pojoquery.PojoQuery;
-import nl.pojoquery.annotations.GroupBy;
-import nl.pojoquery.annotations.Join;
-import nl.pojoquery.annotations.Select;
-import nl.pojoquery.pipeline.SqlQuery.JoinType;
 
 
 public class ArticleListViewExample {
