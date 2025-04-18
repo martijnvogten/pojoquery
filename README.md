@@ -1,154 +1,92 @@
 PojoQuery
 =========
 
-PojoQuery is a light-weight utility for working with relational databases in Java. 
-Instead of writing a SQL query in plain text, PojoQuery leverages Plain Old Java classes (POJO's) 
-to define the set of fields and tables (joins) to fetch.
-Because each field or property in the POJO corresponds to a field in the SELECT clause 
-of the query, the resultset maps perfectly to the defining classes to obtain a 
-type-safe result.
+PojoQuery is a lightweight utility for working with relational databases in Java. Instead of writing SQL queries in plain text, PojoQuery leverages Plain Old Java Objects (POJOs) to define the set of fields and tables (joins) to fetch.
+
+## Key Features
+
+* Type-safe database queries using POJOs
+* Automatic SQL generation from POJO structure
+* Support for complex joins and relationships via `@Link` and `@Join`
+* Customizable through annotations (`@Table`, `@Id`, `@FieldName`, `@Select`, etc.)
+* No lazy loading, no proxies, no session management complexity
+* Easily adaptable to different database engines or SQL dialects (tested with MySQL, PostgreSQL, HSQL)
+* Support for inheritance mapping (`@SubClasses`)
+* Support for embedded objects (`@Embedded`)
+* Handling of dynamic columns (`@Other`)
+
+## Quick Example
+
+Define your POJOs.
 
 ```java
-class ArticleExample {
-	javax.sql.DataSource database = DB.getDataSource();
-	
-	ArticleDetail fetchArticle(Long articleId) {
-		return PojoQuery.build(ArticleDetail.class)
-			.addWhere("article.id=?", articleId)
-			.addOrderBy("comments.submitdate")
-			.execute(database).get(0);
-	}
-}
-
-class ArticleDetail extends Article {
-	User author;
-	CommentDetail[] comments;
-}
+// Field access modifiers and getters/setters omitted for brevity
 
 @Table("article")
 class Article {
-	Long id;
-	String title;
-	String content;
-	Date publishdate;
-}
+    @Id Long id;
+    String title;
+    String content;
+    User author; // Automatically joins based on author_id
+    List<Comment> comments; // Automatically joins based on article_id in comment table
 
-@Table("comment")
-class CommentDetail {
-	Long id;
-	String comment;
-	Date submitdate;
-	User author;
+	// ...
 }
 
 @Table("user")
 class User {
-	Long id;
-	String firstName;
-	String lastName;
-	String email;
+    @Id Long id;
+    String firstName;
+    String lastName;
+    String email;
+
+	// ...
+}
+
+@Table("comment")
+class Comment {
+    @Id Long id;
+    Long article_id; // Foreign key
+    String comment;
+    Date submitdate;
+    User author; // Join based on author_id in comment table
+
+	// ...
 }
 ```
-	
 
-PojoQuery creates a SQL query from the `ArticleDetail` pojo, and transforms the JDBC ResultSet 
-into `ArticleDetail` instances.
-The generated SQL is _predictable_ and easy to read, much like you would write yourself:
-
-```sql
-SELECT
- `article`.id `article.id`,
- `article`.title `article.title`,
- `article`.content `article.content`,
- `author`.id `author.id`,
- `author`.firstName `author.firstName`,
- `author`.lastName `author.lastName`,
- `author`.email `author.email`,
- `comments`.id `comments.id`,
- `comments`.comment `comments.comment`,
- `comments`.submitdate `comments.submitdate`,
- `comments.author`.id `comments.author.id`,
- `comments.author`.firstName `comments.author.firstName`,
- `comments.author`.lastName `comments.author.lastName`,
- `comments.author`.email `comments.author.email` 
-FROM article 
- LEFT JOIN user `author` ON `article`.author_id=`author`.id
- LEFT JOIN comment `comments` ON `comments`.article_id=`article`.id
- LEFT JOIN user `comments.author` ON `comments`.author_id=`comments.author`.id 
-WHERE article.id=?  
-ORDER BY comments.submitdate
-```
-
-Note that PojoQuery uses the POJO _fieldnames_ `comments` and `author` to construct linkfield names `author_id` and 
-aliases for fields and tables `comments.author.id` and `comments.author` (you can also specify your own 
-using annotations).
-
-### No lazy loading: no complexity...
-
-The major difference with traditional Java ORM frameworks (JPA, Hibernate) is that instead of defining 
-_all links_ in the database we only specify the _links to fetch_. This means that there is _no lazy loading_.
-
-Although lazy loading has its obvious benefits (i.e. no need to specify which linked entities to load beforehand), 
-the drawbacks are significant: 
-- entities can only be used [in the context of a session](https://www.google.nl/search?q=lazyinitializationexception)
-- we cannot serialize objects easily to JSON, XML, [GWT](https://developers.google.com/web-toolkit/articles/using_gwt_with_hibernate)
-- proxy classes kill `instanceof` and `getClass`, complicate debugging and testing
-
-### ... instead: views!
-
-The alternative that PojoQuery offers is best to think of as a _view_: a set of fields and tables 
-with their respective join conditions. Thought of it this way, `ArticleDetail` is a _view_ that contains 
-all information needed to display an article in a blog: the title, content, comments and their authors.
-
-As an alternative example, when displaying articles in a list, we are not interested in individual comments. For this 
-purpose we create a different view, which only specifies a link to the author of the article.
+Build and execute the query:
 
 ```java
-class ArticleListView extends Article {
-	User author;
-}
-```
-	
+// Assuming 'connection' is the current JDBC Connection (javax.sql.Connection)
+List<Article> articles = PojoQuery.build(Article.class)
+    .addWhere("article.id = ?", 123L)
+    .addOrderBy("comments.submitdate DESC")
+    .execute(connection); // Execute against the current connection/transaction
 
-### Customization through annotations
-
-Being able to predict the field and table aliases makes it easy to extend the query. You can add clauses 
-using the methods `.addJoin()`, `addGroupBy()`, etc. or you can define them beforehand on the POJO itself
-using annotations.
-Let's say we want to improve on `ArticleListView` by adding two fields: the number of comments and 
-the date of the last comment. 
-
-
-```java
-@Join("LEFT JOIN comment ON comment.article_id=article.id")
-@GroupBy("article.id")
-class ArticleListView extends Article {
-	User author;
-	
-	@Select("COUNT(comment.id)")
-	int commentCount;
-	
-	@Select("MAX(comment.submitDate)")
-	Date lastCommentDate;
+for (Article article : articles) {
+    System.out.println("Article Title: " + article.getTitle());
+    System.out.println("Author: " + article.getAuthor().getFirstName());
+    System.out.println("Number of comments: " + article.getComments().size());
 }
 ```
 
-The Join, GroupBy and Select clauses are simply copied into the query.
+This generates a predictable SQL query, joining `article`, `user` (for article author), `comment`, and `user` (for comment author) tables.
 
-```sql
-SELECT
- `article`.id `article.id`,
- `article`.title `article.title`,
- `article`.content `article.content`,
- `author`.id `author.id`,
- `author`.firstName `author.firstName`,
- `author`.lastName `author.lastName`,
- `author`.email `author.email`,
- COUNT(comment.id) `article.commentCount`,
- MAX(comment.submitdate) `article.lastCommentDate` 
-FROM article 
- LEFT JOIN comment ON comment.article_id = article.id
- LEFT JOIN user `author` ON `article`.author_id=`author`.id 
-WHERE article_id=? 
-GROUP BY article.id 
-```
+## Getting Started
+
+To begin using PojoQuery in your project, see the Getting started section in the [PojoQuery docs](https://pojoquery.org).
+
+## Building from Source
+
+To build PojoQuery from the source code:
+
+1.  **Prerequisites:** Ensure you have JDK 17 or later installed.
+2.  **Clone the repository:** `git clone https://github.com/martijnvogten/pojoquery.git`
+3.  **Navigate to the project directory:** `cd pojoquery`
+4.  **Build with Maven Wrapper:**
+    *   On Linux/macOS: `./mvnw clean install`
+    *   On Windows: `mvnw.cmd clean install`
+
+This will compile the code, run tests, and install the artifact into your local Maven repository.
+
