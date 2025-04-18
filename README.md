@@ -11,7 +11,7 @@ PojoQuery is a lightweight utility for working with relational databases in Java
 * Customizable through annotations (`@Table`, `@Id`, `@FieldName`, `@Select`, etc.)
 * No lazy loading, no proxies, no session management complexity
 * Easily adaptable to different database engines or SQL dialects (tested with MySQL, PostgreSQL, HSQL)
-* Support for inheritance mapping (`@SubClasses`)
+* Support for table-per-subclass inheritance mapping (`@SubClasses`)
 * Support for embedded objects (`@Embedded`)
 * Handling of dynamic columns (`@Other`)
 

@@ -15,8 +15,8 @@ PojoQuery is a lightweight utility for working with relational databases in Java
 * Support for complex joins and relationships via `@Link` and `@Join`
 * Customizable through annotations (`@Table`, `@Id`, `@FieldName`, `@Select`, etc.)
 * No lazy loading, no proxies, no session management complexity
-* Easily adaptable to different database engines (tested with MySQL, PostgreSQL, HSQL)
-* Support for inheritance mapping (`@SubClasses`)
+* Easily adaptable to different database engines or SQL dialects (tested with MySQL, PostgreSQL, HSQL)
+* Support for table-per-subclass inheritance mapping (`@SubClasses`)
 * Support for embedded objects (`@Embedded`)
 * Handling of dynamic columns (`@Other`)
 
@@ -26,19 +26,17 @@ Define your POJOs:
 
 [source,java]
 ----
-// Base entity
+// Field access modifiers and getters/setters omitted for brevity
+
 @Table("article")
 class Article {
     @Id Long id;
     String title;
     String content;
-    Long author_id; // Foreign key
-}
+    User author; // Automatically joins based on author_id
+    List<Comment> comments; // Automatically joins based on article_id in comment table
 
-// View/DTO extending the base entity
-class ArticleDetail extends Article {
-    @Link User author; // Automatically joins based on author_id
-    @Link List<CommentDetail> comments; // Automatically joins based on article_id in comment table
+	// ...
 }
 
 @Table("user")
@@ -46,15 +44,20 @@ class User {
     @Id Long id;
     String firstName;
     String lastName;
+    String email;
+
+	// ...
 }
 
 @Table("comment")
-class CommentDetail {
+class Comment {
     @Id Long id;
     Long article_id; // Foreign key
     String comment;
     Date submitdate;
-    @Link User author; // Join based on author_id in comment table
+    User author; // Join based on author_id in comment table
+
+	// ...
 }
 ----
 
@@ -62,19 +65,16 @@ Build and execute the query:
 
 [source,java]
 ----
-// Assuming 'dataSource' is your configured javax.sql.DataSource
-ArticleDetail article = PojoQuery.build(ArticleDetail.class)
-    .addWhere("article.id = ?", 123L) // Add WHERE clause
-    .addOrderBy("comments.submitdate DESC") // Add ORDER BY
-    .execute(dataSource) // Execute against the database
-    .stream() // Get results as a stream
-    .findFirst() // Get the first result (or Optional.empty())
-    .orElse(null);
+// Assuming 'connection' is the current JDBC Connection (javax.sql.Connection)
+List<Article> articles = PojoQuery.build(Article.class)
+    .addWhere("article.id = ?", 123L)
+    .addOrderBy("comments.submitdate DESC")
+    .execute(connection); // Execute against the current connection/transaction
 
-if (article != null) {
-    System.out.println("Article Title: " + article.title);
-    System.out.println("Author: " + article.author.firstName);
-    System.out.println("Number of comments: " + article.comments.size());
+for (Article article : articles) {
+    System.out.println("Article Title: " + article.getTitle());
+    System.out.println("Author: " + article.getAuthor().getFirstName());
+    System.out.println("Number of comments: " + article.getComments().size());
 }
 ----
 
