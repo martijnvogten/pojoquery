@@ -1,369 +1,169 @@
-= Query Building
-:page-partial:
-:page-layout: base
+= Query Building API
 
-PojoQuery provides a fluent API for building and customizing queries. This page covers the various ways to build and modify queries.
+PojoQuery provides a fluent API via the `PojoQuery<T>` class to build and customize your database queries programmatically.
 
-== Basic Query Building
+== Creating a Query
 
-=== Creating a Query
-
-The basic way to create a query is using `PojoQuery.build()`:
+Start by obtaining a `PojoQuery` instance for your target POJO class using `PojoQuery.build()`:
 
 [source,java]
 ----
-// Simple query
-List<User> users = PojoQuery.build(User.class)
-    .execute(dataSource);
+import org.pojoquery.PojoQuery;
+import javax.sql.DataSource;
 
-// Query with conditions
-Article article = PojoQuery.build(Article.class)
-    .addWhere("article.id=?", articleId)
-    .execute(dataSource)
-    .get(0);
+// Assuming User is an annotated POJO and dataSource is configured
+
+// Build a query for the User class
+PojoQuery<User> userQuery = PojoQuery.build(User.class);
+
+// Build a query for a more complex view/DTO
+PojoQuery<ArticleDetail> articleQuery = PojoQuery.build(ArticleDetail.class);
 ----
 
-=== Adding Conditions
+== Adding Conditions (`WHERE`)
 
-Use `addWhere()` to add conditions to your query:
+Use `addWhere()` to add conditions to the `WHERE` clause. Conditions are combined with `AND`.
 
 [source,java]
 ----
-List<Article> articles = PojoQuery.build(Article.class)
-    .addWhere("article.status = ?", "PUBLISHED")
-    .addWhere("article.publishDate > ?", startDate)
-    .execute(dataSource);
+// Find user by email
+userQuery.addWhere("user.email = ?", "test@example.com");
+
+// Find articles by author ID and published status
+articleQuery.addWhere("article.author_id = ?", authorId);
+articleQuery.addWhere("article.published = ?", true);
+
+// Using curly braces for alias resolution (useful in complex scenarios)
+articleQuery.addWhere("{author.lastName} = ?", "Smith");
 ----
 
-=== Ordering Results
+*   Placeholders (`?`) are used for parameters to prevent SQL injection.
+*   Refer to columns using the alias defined by PojoQuery (usually `{table_name}.{column_name}` or `{field_name}.{column_name}` for linked entities).
 
-Use `addOrderBy()` to sort results:
+== Sorting Results (`ORDER BY`)
+
+Use `addOrderBy()` to specify sorting order. Multiple calls append sorting criteria.
 
 [source,java]
 ----
-List<Article> articles = PojoQuery.build(Article.class)
-    .addOrderBy("article.publishDate DESC")
-    .addOrderBy("article.title ASC")
-    .execute(dataSource);
+// Order users by last name, then first name
+userQuery.addOrderBy("user.lastName ASC");
+userQuery.addOrderBy("user.firstName ASC");
+
+// Order articles by publish date descending
+articleQuery.addOrderBy("article.publishDate DESC");
 ----
 
-=== Limiting Results
+== Limiting Results (`LIMIT`/`OFFSET`)
 
-Use `setLimit()` to restrict the number of results:
+Use `setLimit()` to control the number of rows returned and the starting offset.
 
 [source,java]
 ----
-// Get first 10 results
-List<Article> articles = PojoQuery.build(Article.class)
-    .setLimit(10)
-    .execute(dataSource);
+// Get the first 10 users
+userQuery.setLimit(10);
 
-// Get results 11-20 (pagination)
-List<Article> articles = PojoQuery.build(Article.class)
-    .setLimit(10, 20)
-    .execute(dataSource);
+// Get 20 users, skipping the first 40 (for pagination)
+userQuery.setLimit(40, 20); // offset, rowCount
 ----
 
-== Advanced Query Building
+== Customizing Joins (`addJoin`)
 
-=== Custom Joins
-
-Add custom joins using `addJoin()`:
+While `@Link` handles most joins automatically, you can add explicit joins using `addJoin()`.
 
 [source,java]
 ----
-List<Article> articles = PojoQuery.build(Article.class)
-    .addJoin(JoinType.LEFT, "category", "cat", 
-        "article.category_id=cat.id")
-    .addWhere("cat.name = ?", categoryName)
-    .execute(dataSource);
+import org.pojoquery.SqlExpression;
+import org.pojoquery.pipeline.SqlQuery.JoinType;
+
+// Add an INNER JOIN manually
+articleQuery.addJoin(
+    JoinType.INNER,                 // Join type
+    "category",                     // Table name
+    "cat",                          // Alias for the joined table
+    SqlExpression.sql("article.category_id = cat.id") // ON condition
+);
+
+// Add a WHERE clause referencing the joined table alias
+articleQuery.addWhere("cat.name = ?", "Technology");
 ----
 
-=== Group By
+== Customizing Selections (`addField`)
 
-Add grouping using `addGroupBy()`:
+Add custom fields or expressions to the `SELECT` clause.
 
 [source,java]
 ----
-class ArticleSummary {
-    @Id
-    Long id;
-    String title;
-    
-    @Select("COUNT(*)")
-    Integer commentCount;
+// Add a calculated field for full name
+userQuery.addField(
+    SqlExpression.sql("CONCAT(user.firstName, ' ', user.lastName)"), // SQL Expression
+    "user.fullName" // Alias for the result column (must match a field if mapping)
+);
+
+// Note: Often easier to use @Select annotation on the POJO field instead.
+----
+
+== Grouping Results (`addGroupBy`)
+
+Add `GROUP BY` clauses, typically used with aggregate functions defined via `@Select` or `addField`.
+
+[source,java]
+----
+// Assuming ArticleStats POJO has @Select fields for COUNT(*) etc.
+PojoQuery<ArticleStats> statsQuery = PojoQuery.build(ArticleStats.class);
+statsQuery.addGroupBy("article.author_id"); // Group by author
+----
+
+== Executing the Query
+
+Once the query is built, execute it against a `DataSource` or `Connection`.
+
+=== Standard Execution (Loads all results)
+
+[source,java]
+----
+List<User> users = userQuery.execute(dataSource);
+for (User user : users) {
+    System.out.println(user.getFullName());
 }
-
-List<ArticleSummary> summaries = PojoQuery.build(ArticleSummary.class)
-    .addGroupBy("article.id")
-    .execute(dataSource);
 ----
 
-=== Custom Fields
+=== Streaming Execution (Processes row by row)
 
-Add custom fields using `addField()`:
-
-[source,java]
-----
-List<Article> articles = PojoQuery.build(Article.class)
-    .addField(SqlExpression.sql("CONCAT(author.firstName, ' ', author.lastName)"), "authorName")
-    .execute(dataSource);
-----
-
-=== Subqueries
-
-Create subqueries using `SqlExpression`:
-
-[source,java]
-----
-List<Article> articles = PojoQuery.build(Article.class)
-    .addWhere(SqlExpression.sql(
-        "article.id IN (SELECT article_id FROM comment WHERE author_id = ?)",
-        authorId))
-    .execute(dataSource);
-----
-
-== Query Execution
-
-=== Basic Execution
-
-Execute queries using `execute()`:
+Use `executeStreaming()` for large result sets to avoid loading everything into memory.
 
 [source,java]
 ----
 // Using DataSource
-List<User> users = PojoQuery.build(User.class)
-    .execute(dataSource);
-
-// Using Connection
-List<User> users = PojoQuery.build(User.class)
-    .execute(connection);
-----
-
-=== Streaming Results
-
-For large result sets, use `executeStreaming()`:
-
-[source,java]
-----
-PojoQuery.build(Article.class)
+PojoQuery.build(VeryLargeTable.class)
     .executeStreaming(dataSource)
-    .forEach(article -> {
-        // Process each article
+    .forEach(record -> {
+        // Process each record as it's fetched
+        System.out.println("Processing record ID: " + record.id);
     });
-----
 
-=== Finding by ID
-
-Use `findById()` for primary key lookups:
-
-[source,java]
-----
-Article article = PojoQuery.build(Article.class)
-    .findById(dataSource, articleId);
-----
-
-== Query Customization
-
-=== Custom DbContext
-
-Use a custom `DbContext` for database-specific settings:
-
-[source,java]
-----
-DbContext context = new DbContext() {
-    @Override
-    public QuoteStyle getQuoteStyle() {
-        return QuoteStyle.ANSI;
-    }
-};
-
-List<User> users = PojoQuery.build(context, User.class)
-    .execute(dataSource);
-----
-
-=== DbContextBuilder
-
-The `DbContextBuilder` provides a fluent API for configuring a `DbContext` with custom settings. This is the recommended way to create a custom `DbContext`:
-
-[source,java]
-----
-// Create a DbContext with custom settings
-DbContext context = DbContext.builder()
-    .withQuoteStyle(QuoteStyle.ANSI)    // Use ANSI quotes (") instead of MySQL backticks
-    .withQuotedObjectNames(false)       // Don't quote table and column names
-    .build();
-
-// Use the configured context
-List<User> users = PojoQuery.build(context, User.class)
-    .execute(dataSource);
-----
-
-==== Available Configuration Options
-
-* `withQuoteStyle(QuoteStyle)`: Set the quote style for database identifiers
-** `QuoteStyle.ANSI`: Uses double quotes (")
-** `QuoteStyle.MYSQL`: Uses backticks (`)
-* `withQuotedObjectNames(boolean)`: Enable or disable quoting of table and column names
-* `withFieldMappingFactory(FieldMappingFactory)`: Set a custom factory for field mappings
-
-==== Default Configuration
-
-If no options are specified, the builder creates a `DbContext` with these defaults:
-* MySQL quote style (backticks)
-* Object names quoted
-* Standard field mapping
-
-==== Example Configurations
-
-===== PostgreSQL Configuration
-
-[source,java]
-----
-DbContext postgresContext = DbContext.builder()
-    .withQuoteStyle(QuoteStyle.ANSI)    // PostgreSQL uses double quotes
-    .withQuotedObjectNames(true)        // Always quote identifiers in PostgreSQL
-    .build();
-----
-
-===== HSQLDB Configuration
-
-[source,java]
-----
-DbContext hsqldbContext = DbContext.builder()
-    .withQuoteStyle(QuoteStyle.ANSI)    // HSQLDB uses double quotes
-    .withQuotedObjectNames(true)        // Always quote identifiers in HSQLDB
-    .build();
-----
-
-===== Custom Field Mapping
-
-[source,java]
-----
-DbContext context = DbContext.builder()
-    .withFieldMappingFactory(field -> {
-        if (field.isAnnotationPresent(JsonField.class)) {
-            return new JsonFieldMapping(field);
-        }
-        return new SimpleFieldMapping(field);
-    })
-    .build();
-----
-
-==== Best Practices
-
-* Use the builder pattern instead of creating a custom `DbContext` implementation
-* Configure the context once and reuse it across queries
-* Match the quote style to your database engine
-* Consider using custom field mappings for special data types
-* Keep the configuration immutable after creation
-
-=== Custom Field Mappings
-
-Define custom field mappings:
-
-[source,java]
-----
-class CustomDbContext extends DbContext.DefaultDbContext {
-    @Override
-    public FieldMapping getFieldMapping(Field f) {
-        if (f.getName().equals("fullName")) {
-            return new CustomFieldMapping(f);
-        }
-        return super.getFieldMapping(f);
-    }
+// Using Connection (less common, requires manual connection management)
+Connection conn = null;
+try {
+    conn = dataSource.getConnection();
+    PojoQuery.build(VeryLargeTable.class)
+        .executeStreaming(conn) // Pass the connection
+        .forEach(record -> {
+            // Process record
+        });
+} catch (SQLException e) {
+    // Handle exception
+} finally {
+    if (conn != null) try { conn.close(); } catch (SQLException ignore) {}
 }
 ----
 
-== Best Practices
+== Other Useful Methods
 
-=== Query Building
+*   `toSql()`: Get the generated SQL string (primarily for debugging).
+*   `toStatement()`: Get the `SqlExpression` containing the SQL and parameters.
+*   `findById(DataSource ds, Object id)`: Convenience method to fetch a single entity by its primary key.
+*   `countTotal(DataSource ds)`: Executes a `COUNT(DISTINCT primary_key)` query based on the current filters.
+*   `listIds(DataSource ds)`: Executes a query selecting only the primary key(s) based on the current filters.
 
-* Use parameterized queries to prevent SQL injection
-* Chain methods for readability
-* Use appropriate join types
-* Consider query performance
-* Use streaming for large result sets
-
-=== Error Handling
-
-* Check for null results
-* Handle database exceptions
-* Use transactions when needed
-* Validate input parameters
-
-=== Performance
-
-* Use appropriate indexes
-* Limit result sets
-* Use streaming for large datasets
-* Consider query complexity
-
-== Examples
-
-=== Complex Query Example
-
-[source,java]
-----
-class ArticleSearch {
-    @Id
-    Long id;
-    String title;
-    User author;
-    Category category;
-    
-    @Select("COUNT(DISTINCT comment.id)")
-    Integer commentCount;
-    
-    @Select("MAX(comment.createdAt)")
-    Date lastCommentDate;
-}
-
-List<ArticleSearch> results = PojoQuery.build(ArticleSearch.class)
-    .addJoin(JoinType.LEFT, "comment", "comment", 
-        "article.id=comment.article_id")
-    .addWhere("article.status = ?", "PUBLISHED")
-    .addWhere("article.publishDate BETWEEN ? AND ?", 
-        startDate, endDate)
-    .addWhere("category.name IN (?, ?)", 
-        "Technology", "Science")
-    .addGroupBy("article.id")
-    .addOrderBy("commentCount DESC")
-    .setLimit(20)
-    .execute(dataSource);
-----
-
-=== Pagination Example
-
-[source,java]
-----
-class PaginatedQuery<T> {
-    private final int pageSize;
-    private final int currentPage;
-    
-    public PaginatedQuery(int pageSize, int currentPage) {
-        this.pageSize = pageSize;
-        this.currentPage = currentPage;
-    }
-    
-    public List<T> execute(PojoQuery<T> query) {
-        int offset = (currentPage - 1) * pageSize;
-        return query
-            .setLimit(offset, pageSize)
-            .execute(dataSource);
-    }
-    
-    public int getTotalCount(PojoQuery<T> query) {
-        return query.buildCountStatement()
-            .execute(dataSource);
-    }
-}
-
-// Usage
-PaginatedQuery<Article> pagination = 
-    new PaginatedQuery<>(10, 1);
-List<Article> articles = pagination.execute(
-    PojoQuery.build(Article.class));
-int total = pagination.getTotalCount(
-    PojoQuery.build(Article.class));
----- 
+Refer to the `PojoQuery` class JavaDoc for a complete list of methods.

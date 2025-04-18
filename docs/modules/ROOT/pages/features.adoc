@@ -1,180 +1,36 @@
-= Features
-:page-partial:
-:page-layout: base
+= PojoQuery Features
 
-== Core Features
+PojoQuery offers a focused set of features for interacting with relational databases using POJOs.
 
-=== Type-Safe Database Queries
+== Core Concepts
 
-PojoQuery uses Plain Old Java Objects (POJOs) to define your database queries. Each field in your POJO corresponds to a column in your database, providing type safety and compile-time checking.
+*   **POJO-Driven Queries:** Define the structure of your desired result using Java classes (POJOs). PojoQuery uses reflection and annotations on these classes to generate SQL.
+*   **View-Based Approach:** Think of your POJO classes as defining a _view_ of your data, specifying which tables to join and which columns to select.
+*   **No Lazy Loading:** PojoQuery fetches all requested data eagerly in a single query. This avoids `LazyInitializationException` issues and simplifies object serialization and usage outside of a database session.
+*   **Predictable SQL:** The generated SQL is designed to be clean, readable, and predictable, closely mirroring how you might write it manually.
 
-[source,java]
-----
-@Table("user")
-class User {
-    Long id;
-    String firstName;
-    String lastName;
-    String email;
-}
-----
+== Key Features
 
-=== Automatic SQL Generation
+*   **Automatic SQL Generation:** Generates `SELECT`, `JOIN`, `WHERE`, `GROUP BY`, and `ORDER BY` clauses based on POJO structure and annotations.
+*   **Type-Safe Results:** Maps JDBC `ResultSet` rows directly to instances of your POJO classes.
+*   **Relationship Mapping (`@Link`):** Automatically generates `JOIN` clauses for one-to-one, one-to-many, and many-to-many relationships defined with the `@Link` annotation. Handles simple foreign key conventions and allows customization.
+*   **Customizable Mapping (`@Table`, `@FieldName`, `@Id`):** Control how classes and fields map to database tables and columns.
+*   **Custom SQL Expressions (`@Select`):** Include calculated fields or use database functions directly in your result POJO using the `@Select` annotation.
+*   **Custom Joins (`@Join`, `@Joins`):** Define complex or non-conventional join conditions explicitly.
+*   **Aggregation (`@GroupBy`, `@Select`):** Easily perform aggregation queries by combining `@GroupBy` on the class and `@Select` with aggregate functions (e.g., `COUNT`, `SUM`, `MAX`) on fields.
+*   **Inheritance Mapping (`@SubClasses`, `@SubClass`):** Supports single-table inheritance strategies using a discriminator column.
+*   **Embedded Objects (`@Embedded`):** Map fields from a nested value object into columns of the parent entity's table, optionally with a prefix.
+*   **Dynamic Columns (`@Other`):** Map multiple database columns starting with a specific prefix into a `Map<String, Object>` field in your POJO.
+*   **Fluent Query API:** Build queries programmatically using methods like `addWhere()`, `addOrderBy()`, `setLimit()`, `addJoin()`, etc.
+*   **Basic CRUD Operations:** Provides static helper methods in `PojoQuery` and `DB` for `insert`, `update`, and `delete` operations based on POJOs or raw SQL.
+*   **Streaming API:** Process large result sets efficiently without loading all rows into memory using `executeStreaming()` or `DB.queryRowsStreaming()`.
+*   **Transaction Management:** Basic transaction support via `DB.runInTransaction()`.
+*   **Database Agnostic (with caveats):** Designed to work with standard SQL. Specific database functions or syntax might require adjustments. Tested primarily with MySQL, PostgreSQL, and HSQLDB.
 
-The library automatically generates clean, predictable SQL queries based on your POJO structure. No need to write complex SQL strings or worry about SQL injection.
+== What PojoQuery is NOT
 
-[source,java]
-----
-// The POJO structure
-class ArticleDetail extends Article {
-    User author;
-    CommentDetail[] comments;
-}
+*   **A Full JPA Implementation:** It does not implement the Java Persistence API standard.
+*   **A Lazy-Loading ORM:** It intentionally avoids lazy loading and the associated complexities (sessions, proxies).
+*   **A Cache Provider:** It does not include a built-in second-level cache.
 
-// Generates a clean SQL query automatically
-ArticleDetail article = PojoQuery.build(ArticleDetail.class)
-    .addWhere("article.id=?", articleId)
-    .execute(database).get(0);
-----
-
-=== Relationship Support
-
-Easily define relationships between entities using standard Java field types. PojoQuery automatically handles the joins and field mapping.
-
-* One-to-One relationships
-* One-to-Many relationships
-* Many-to-Many relationships
-* Nested relationships
-
-=== No Lazy Loading
-
-Unlike traditional ORMs, PojoQuery doesn't use lazy loading. This means:
-
-* No LazyInitializationException issues
-* Easy serialization to JSON/XML
-* Predictable behavior
-* Simpler debugging and testing
-
-=== Customizable Through Annotations
-
-Fine-tune your queries using annotations:
-
-* `@Table` - Define table names
-* `@Join` - Specify join conditions
-* `@FieldName` - Customize field mappings
-* `@GroupBy` - Add grouping
-* `@OrderBy` - Define sorting
-* And more...
-
-=== Database Compatibility
-
-PojoQuery supports different database quote styles and naming conventions:
-
-* MySQL (backticks)
-* ANSI SQL (double quotes)
-* Customizable quote styles
-
-=== Query Building API
-
-Flexible API for building queries:
-
-* Add WHERE clauses
-* Specify ORDER BY
-* Set LIMIT and OFFSET
-* Add custom joins
-* Group results
-* And more...
-
-=== Transaction Support
-
-Built-in support for database transactions:
-
-[source,java]
-----
-DB.runInTransaction(dataSource, connection -> {
-    // Your transaction code here
-    return result;
-});
-----
-
-=== Streaming Support
-
-For large result sets, PojoQuery provides streaming capabilities to process results efficiently:
-
-[source,java]
-----
-PojoQuery.build(ArticleDetail.class)
-    .executeStreaming(database)
-    .forEach(article -> {
-        // Process each article
-    });
-----
-
-=== Error Handling
-
-Clear error messages and exceptions for common issues:
-
-* Missing annotations
-* Invalid field mappings
-* Database errors
-* Transaction failures
-
-== Advanced Features
-
-=== Custom Field Mappings
-
-Define custom field mappings for special cases:
-
-[source,java]
-----
-@FieldName("user_name")
-String name;
-----
-
-=== Embedded Objects
-
-Support for embedded objects to organize related fields:
-
-[source,java]
-----
-class User {
-    @Embedded
-    Address address;
-}
-
-class Address {
-    String street;
-    String city;
-    String country;
-}
-----
-
-=== Subclass Support
-
-Handle inheritance hierarchies with multiple tables:
-
-[source,java]
-----
-@Table("person")
-class Person {
-    Long id;
-    String name;
-}
-
-@Table("employee")
-class Employee extends Person {
-    String department;
-    Double salary;
-}
-----
-
-=== Custom SQL Expressions
-
-Add custom SQL expressions when needed:
-
-[source,java]
-----
-PojoQuery.build(User.class)
-    .addField(SqlExpression.sql("CONCAT(firstName, ' ', lastName)"), "fullName")
-    .execute(database);
----- 
+PojoQuery focuses on simplifying the process of fetching structured data from a relational database into Java objects based on the defined POJO "view".

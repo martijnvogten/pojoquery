@@ -1,319 +1,188 @@
 = Advanced Topics
-:page-partial:
-:page-layout: base
 
-This page covers advanced topics and techniques for using PojoQuery effectively.
+This section covers more advanced features and usage patterns in PojoQuery.
 
-== Custom Field Types
+== Inheritance Mapping
 
-=== Custom Type Converters
+PojoQuery supports single-table inheritance using the `@SubClasses` and `@SubClass` annotations.
 
-Create custom type converters for special field types:
-
-[source,java]
-----
-public class JsonTypeConverter implements FieldMapping {
-    private final Field field;
-    
-    public JsonTypeConverter(Field field) {
-        this.field = field;
-    }
-    
-    @Override
-    public void apply(Object target, Object value) {
-        if (value instanceof String) {
-            try {
-                Object jsonValue = new ObjectMapper()
-                    .readValue((String)value, field.getType());
-                field.setAccessible(true);
-                field.set(target, jsonValue);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-}
-
-// Usage
-class CustomDbContext extends DbContext.DefaultDbContext {
-    @Override
-    public FieldMapping getFieldMapping(Field f) {
-        if (f.isAnnotationPresent(JsonField.class)) {
-            return new JsonTypeConverter(f);
-        }
-        return super.getFieldMapping(f);
-    }
-}
-----
-
-=== Enum Handling
-
-Handle enum types with custom mappings:
+1.  Annotate the **base class** with `@Table` pointing to the table containing data for all subclasses.
+2.  Annotate the **base class** with `@SubClasses`, specifying the `discriminator` column name and an array of `@SubClass` definitions.
+3.  Each `@SubClass` annotation links a specific subclass (`value`) to its corresponding `discriminatorValue`.
+4.  Define the subclasses extending the base class. Fields specific to subclasses must correspond to columns present in the single base table.
 
 [source,java]
 ----
-public enum UserStatus {
-    ACTIVE("A"),
-    INACTIVE("I"),
-    PENDING("P");
-    
-    private final String code;
-    
-    UserStatus(String code) {
-        this.code = code;
+// Base class mapped to the 'person' table
+@Table("person")
+@SubClasses(
+    discriminator = "person_type", // Discriminator column in 'person' table
+    value = {
+        @SubClass(value = Employee.class, discriminatorValue = "EMP"), // 'EMP' identifies Employee rows
+        @SubClass(value = Customer.class, discriminatorValue = "CUST") // 'CUST' identifies Customer rows
     }
-    
-    public String getCode() {
-        return code;
-    }
-    
-    public static UserStatus fromCode(String code) {
-        for (UserStatus status : values()) {
-            if (status.code.equals(code)) {
-                return status;
-            }
-        }
-        throw new IllegalArgumentException(code);
-    }
-}
-
-@Table("user")
-public class User {
-    @Id
-    Long id;
-    
-    @FieldName("status_code")
-    UserStatus status;
-}
-----
-
-== Complex Joins and Relationships
-
-=== Many-to-Many Relationships
-
-Handle many-to-many relationships:
-
-[source,java]
-----
-@Table("article")
-public class Article {
-    @Id
-    Long id;
-    String title;
-    
-    @Link
-    List<Tag> tags;
-}
-
-@Table("tag")
-public class Tag {
-    @Id
-    Long id;
+)
+public abstract class Person {
+    @Id Long id;
     String name;
+    @FieldName("person_type") String type; // Field mapping to the discriminator column
+    // Common fields...
 }
 
-@Table("article_tag")
-public class ArticleTag {
-    @Id
-    Long articleId;
-    
-    @Id
-    Long tagId;
+// Employee subclass - fields map to columns in 'person' table
+public class Employee extends Person {
+    String department;
+    BigDecimal salary;
 }
+
+// Customer subclass - fields map to columns in 'person' table
+public class Customer extends Person {
+    Integer loyaltyPoints;
+}
+
+// --- Querying ---
+// Querying for the base class fetches instances of the correct subclass
+List<Person> persons = PojoQuery.build(Person.class).execute(dataSource);
+
+for (Person p : persons) {
+    if (p instanceof Employee) {
+        Employee emp = (Employee) p;
+        System.out.println("Employee: " + emp.name + ", Dept: " + emp.department);
+    } else if (p instanceof Customer) {
+        Customer cust = (Customer) p;
+        System.out.println("Customer: " + cust.name + ", Points: " + cust.loyaltyPoints);
+    }
+}
+
+// You can also query directly for a subclass
+List<Employee> employees = PojoQuery.build(Employee.class)
+    .addWhere("employee.department = ?", "Sales") // Note: Alias might be 'employee' or 'person' depending on context
+    .execute(dataSource);
 ----
 
-=== Custom Join Conditions
+== Streaming Large Result Sets
 
-Define custom join conditions using the `@JoinCondition` annotation:
+For queries returning many rows, use `executeStreaming()` to process results row-by-row, avoiding `OutOfMemoryError`.
 
 [source,java]
 ----
-@Table("article")
-public class Article {
-    @Id
-    Long id;
-    String title;
-    
-    @JoinCondition("{this}.id = {comments}.article_id")
-    List<Comment> comments;
+PojoQuery<LogEntry> query = PojoQuery.build(LogEntry.class)
+    .addWhere("log.timestamp > ?", oneHourAgo);
+
+// Process stream using DataSource
+try (Stream<LogEntry> stream = query.executeStreaming(dataSource).stream()) {
+    long errorCount = stream
+        .filter(entry -> "ERROR".equals(entry.level))
+        .count();
+    System.out.println("Found " + errorCount + " errors.");
 }
 
-@Table("comment")
-public class Comment {
-    @Id
-    Long id;
-    String content;
-    Long articleId;
-}
-----
-
-== Query Optimization
-
-=== Streaming Results
-
-For large result sets, use streaming to process rows one at a time:
-
-[source,java]
-----
-PojoQuery.build(Article.class)
-    .executeStreaming(dataSource)
-    .forEach(article -> {
-        // Process each article
+// Alternative using DB helper for raw SQL streaming
+DB.queryRowsStreaming(dataSource,
+    SqlExpression.sql("SELECT id, message FROM huge_log WHERE level = ?", "WARN"),
+    rowMap -> {
+        // Process each row as a Map<String, Object>
+        System.out.println("Warning ID: " + rowMap.get("id"));
     });
 ----
 
-=== Custom Field Selection
+== Custom Joins and Conditions
 
-Optimize queries by selecting only needed fields:
+Use `@Join` or `addJoin()` for joins not handled by `@Link` conventions. Use curly braces `{}` in `addWhere()` for alias resolution when referencing explicitly joined tables.
 
 [source,java]
 ----
-PojoQuery.build(Article.class)
-    .addField(SqlExpression.sql("article.id"), "id")
-    .addField(SqlExpression.sql("article.title"), "title")
+@Table("article")
+@Join(type = JoinType.INNER, tableName = "category", alias = "cat", joinCondition = "article.category_id = cat.id")
+public class ArticleWithCategory {
+    @Id Long id;
+    String title;
+    // Need to map category fields explicitly if not using @Link
+    @Select("cat.name") String categoryName;
+}
+
+// Querying with condition on joined table
+List<ArticleWithCategory> techArticles = PojoQuery.build(ArticleWithCategory.class)
+    .addWhere("{cat.name} = ?", "Technology") // Use alias from @Join
     .execute(dataSource);
 ----
 
-== Error Handling
+== CRUD Operations
 
-=== Custom Exception Handling
+PojoQuery provides static helpers for basic Insert, Update, Delete.
 
-Implement custom exception handling for database operations:
-
-[source,java]
-----
-try {
-    List<User> users = PojoQuery.build(User.class)
-        .execute(dataSource);
-} catch (DatabaseException e) {
-    // Handle database-specific errors
-    logger.error("Database error: " + e.getMessage());
-} catch (MappingException e) {
-    // Handle mapping errors
-    logger.error("Mapping error: " + e.getMessage());
-}
-----
-
-=== Validation
-
-Add validation before database operations:
+*   **Insert:** `PojoQuery.insert(dataSource, entity)` or `DB.insert(...)`
+    *   Handles single-table and multi-table inheritance inserts.
+    *   Populates the `@Id` field if it's auto-generated.
+*   **Update:** `PojoQuery.update(dataSource, entity)` or `DB.update(...)`
+    *   Updates based on the `@Id` field(s).
+    *   Handles multi-table inheritance updates.
+    *   Respects `@NoUpdate`.
+    *   Can optionally handle optimistic locking if the entity implements `HasVersion`.
+*   **Delete:** `PojoQuery.delete(dataSource, entity)` or `PojoQuery.deleteById(dataSource, Class, id)`
+    *   Deletes based on the `@Id` field(s).
+    *   Handles multi-table inheritance deletes (deletes from all mapped tables).
 
 [source,java]
 ----
-public class UserService {
-    public void createUser(User user) {
-        validateUser(user);
-        PojoQuery.insert(dataSource, user);
-    }
-    
-    private void validateUser(User user) {
-        if (user.getName() == null || user.getName().trim().isEmpty()) {
-            throw new ValidationException("User name is required");
-        }
-        if (user.getEmail() == null || !user.getEmail().matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
-            throw new ValidationException("Invalid email address");
-        }
-    }
+// --- Insert ---
+User newUser = new User();
+newUser.firstName = "Jane";
+newUser.lastName = "Doe";
+newUser.email = "jane.doe@example.com";
+PojoQuery.insert(dataSource, newUser); // newUser.id will be populated if auto-generated
+System.out.println("Inserted user with ID: " + newUser.id);
+
+// --- Update ---
+User existingUser = repo.findById(newUser.id); // Fetch first
+if (existingUser != null) {
+    existingUser.email = "jane.d@example.com";
+    int updatedRows = PojoQuery.update(dataSource, existingUser);
+    System.out.println("Updated rows: " + updatedRows);
 }
+
+// --- Delete ---
+PojoQuery.delete(dataSource, existingUser); // Delete by entity instance
+// OR
+PojoQuery.deleteById(dataSource, User.class, existingUser.id); // Delete by ID
 ----
 
-== Inheritance
+== Transactions
 
-PojoQuery supports inheritance hierarchies where each class maps to its own table. This is useful for modeling specialized types that share common properties.
-
-=== Basic Inheritance
-
-Here's an example using a room management system:
+Use `DB.runInTransaction()` for simple transaction management.
 
 [source,java]
 ----
-@Table("room")
-@SubClasses({BedRoom.class, Kitchen.class})
-public class Room {
-    @Id
-    Long id;
-    Double area;
-}
+import java.sql.Connection;
 
-@Table("bedroom")
-public class BedRoom extends Room {
-    Integer numberOfBeds;
-}
+DB.runInTransaction(dataSource, (Connection connection) -> {
+    // Operations within this lambda run in a single transaction
+    User user = new User();
+    user.firstName = "Temp";
+    PojoQuery.insert(connection, user); // Use the provided connection
 
-@Table("kitchen")
-public class Kitchen extends Room {
-    Boolean hasDishWasher;
-}
+    Account account = new Account();
+    account.userId = user.id;
+    account.balance = BigDecimal.ZERO;
+    PojoQuery.insert(connection, account); // Use the provided connection
+
+    // If no exception is thrown, the transaction commits automatically.
+    // If an exception occurs, it rolls back automatically.
+    return true; // Return value from the transaction lambda
+});
 ----
 
-When querying the base class, PojoQuery will automatically join with the subclass tables:
+== Custom DbContext
+
+Create a `DbContext` instance to customize identifier quoting style.
 
 [source,java]
 ----
-// Query all rooms
-List<Room> rooms = PojoQuery.build(Room.class)
-    .execute(dataSource);
+// Use double quotes for identifiers (PostgreSQL, SQL Server standard)
+DbContext customContext = new DbContext(DbContext.QuoteStyle.DOUBLE_QUOTES);
 
-// Process results
-for (Room room : rooms) {
-    if (room instanceof BedRoom) {
-        BedRoom bedroom = (BedRoom) room;
-        System.out.println("Bedroom with " + bedroom.numberOfBeds + " beds");
-    } else if (room instanceof Kitchen) {
-        Kitchen kitchen = (Kitchen) room;
-        System.out.println("Kitchen with dishwasher: " + kitchen.hasDishWasher);
-    }
-}
+// Build queries using this context
+PojoQuery<Product> productQuery = PojoQuery.build(customContext, Product.class);
+
+String sql = productQuery.toSql(); // SQL will use "product"."id" etc.
 ----
-
-=== Querying Specific Types
-
-You can also query specific types directly:
-
-[source,java]
-----
-// Query only bedrooms
-List<BedRoom> bedrooms = PojoQuery.build(BedRoom.class)
-    .execute(dataSource);
-
-// Query only kitchens
-List<Kitchen> kitchens = PojoQuery.build(Kitchen.class)
-    .execute(dataSource);
-----
-
-When querying a specific type, PojoQuery will automatically include the base class fields in the query.
-
-=== Nested Inheritance
-
-PojoQuery also supports deeper inheritance hierarchies:
-
-[source,java]
-----
-@Table("room")
-@SubClasses({BedRoom.class, Kitchen.class})
-public class Room {
-    @Id
-    Long id;
-    Double area;
-}
-
-@Table("bedroom")
-public class BedRoom extends Room {
-    Integer numberOfBeds;
-}
-
-@Table("luxury_bedroom")
-public class LuxuryBedRoom extends BedRoom {
-    Double tvScreenSize;
-}
-----
-
-When querying the base class, PojoQuery will automatically include all subclass tables in the query.
-
-=== Best Practices
-
-* Use `@SubClasses` annotation to specify all possible subclasses
-* Keep inheritance hierarchies shallow for better performance
-* Use appropriate table names that reflect the inheritance structure
-* Consider using composition instead of inheritance for complex relationships
-* Use type-safe casting when processing results 

@@ -1,410 +1,205 @@
-= Examples
-:page-partial:
-:page-layout: base
+= PojoQuery Examples
 
-This page provides real-world examples and use cases for PojoQuery.
+This page provides practical examples of using PojoQuery.
 
-== Blog System
+== Example 1: Basic Select
 
-=== Article Management
+Fetch all users ordered by last name.
 
-A blog system with articles, authors, comments, and categories:
+*POJO:*
+[source,java]
+----
+@Table("user")
+public class User {
+    @Id Long id;
+    String firstName;
+    String lastName;
+    String email;
+}
+----
 
+*Query:*
+[source,java]
+----
+List<User> users = PojoQuery.build(User.class)
+    .addOrderBy("user.lastName ASC")
+    .execute(dataSource);
+----
+
+== Example 2: Select with Join (`@Link`)
+
+Fetch an article including its author details.
+
+*POJOs:*
 [source,java]
 ----
 @Table("article")
 public class Article {
-    @Id
-    Long id;
+    @Id Long id;
     String title;
-    String content;
-    Date publishDate;
-    String status;
-    
-    @Link
-    User author;
-    
-    @Link
-    Category category;
+    Long author_id; // Foreign key
+}
+
+public class ArticleWithAuthor extends Article {
+    @Link User author; // Links to User based on author_id
 }
 
 @Table("user")
 public class User {
-    @Id
-    Long id;
+    @Id Long id;
     String firstName;
     String lastName;
-    String email;
-    String role;
+}
+----
+
+*Query:*
+[source,java]
+----
+ArticleWithAuthor article = PojoQuery.build(ArticleWithAuthor.class)
+    .addWhere("article.id = ?", 123L)
+    .execute(dataSource)
+    .stream().findFirst().orElse(null);
+
+if (article != null) {
+    System.out.println("Author: " + article.author.firstName);
+}
+----
+
+== Example 3: One-to-Many Relationship (`@Link`)
+
+Fetch an article including a list of its comments.
+
+*POJOs:*
+[source,java]
+----
+@Table("article")
+public class Article {
+    @Id Long id;
+    String title;
 }
 
-@Table("category")
-public class Category {
-    @Id
-    Long id;
-    String name;
-    String description;
+public class ArticleWithComments extends Article {
+    // Assumes 'comment' table has 'article_id' column
+    @Link List<Comment> comments;
 }
 
 @Table("comment")
 public class Comment {
-    @Id
-    Long id;
-    String content;
+    @Id Long id;
+    Long article_id;
+    String text;
     Date submitDate;
-    
-    @Link
-    User author;
-    
-    @Link
-    Article article;
 }
+----
 
-// Article detail view with comments
-class ArticleDetail extends Article {
-    @Link
-    List<Comment> comments;
+*Query:*
+[source,java]
+----
+ArticleWithComments article = PojoQuery.build(ArticleWithComments.class)
+    .addWhere("article.id = ?", 456L)
+    .addOrderBy("comments.submitDate DESC") // Order comments
+    .execute(dataSource)
+    .stream().findFirst().orElse(null);
+
+if (article != null) {
+    System.out.println("Comments count: " + article.comments.size());
+    article.comments.forEach(c -> System.out.println("- " + c.text));
 }
+----
 
-// Article list view with author
-class ArticleListView extends Article {
-    @Select("COUNT(DISTINCT comment.id)")
+== Example 4: Aggregation (`@GroupBy`, `@Select`)
+
+Get the count and latest comment date for each article.
+
+*POJO:*
+[source,java]
+----
+@Table("comment") // Query starts from comment table
+@GroupBy("comment.article_id") // Group by article
+public class ArticleCommentStats {
+    @FieldName("article_id") // Map the grouping key
+    Long articleId;
+
+    @Select("COUNT(*)")
     Integer commentCount;
-    
-    @Select("MAX(comment.submitDate)")
+
+    @Select("MAX(submitDate)")
     Date lastCommentDate;
 }
-
-// Usage examples
-public class ArticleService {
-    private final DataSource dataSource;
-    
-    public ArticleService(DataSource dataSource) {
-        this.dataSource = dataSource;
-    }
-    
-    // Get article with comments
-    public ArticleDetail getArticle(Long articleId) {
-        return PojoQuery.build(ArticleDetail.class)
-            .addWhere("article.id=?", articleId)
-            .addOrderBy("comments.submitDate")
-            .execute(dataSource)
-            .get(0);
-    }
-    
-    // Get articles by category
-    public List<ArticleListView> getArticlesByCategory(Long categoryId) {
-        return PojoQuery.build(ArticleListView.class)
-            .addJoin(JoinType.LEFT, "comment", "comment", 
-                "article.id=comment.article_id")
-            .addWhere("article.category_id=?", categoryId)
-            .addWhere("article.status=?", "PUBLISHED")
-            .addGroupBy("article.id")
-            .addOrderBy("article.publishDate DESC")
-            .execute(dataSource);
-    }
-    
-    // Get recent articles with comment counts
-    public List<ArticleListView> getRecentArticles(int limit) {
-        return PojoQuery.build(ArticleListView.class)
-            .addJoin(JoinType.LEFT, "comment", "comment", 
-                "article.id=comment.article_id")
-            .addWhere("article.status=?", "PUBLISHED")
-            .addGroupBy("article.id")
-            .addOrderBy("article.publishDate DESC")
-            .setLimit(limit)
-            .execute(dataSource);
-    }
-}
 ----
 
-== E-commerce System
-
-=== Product Catalog
-
-An e-commerce system with products, categories, and inventory:
-
+*Query:*
 [source,java]
 ----
-@Table("product")
-public class Product {
-    @Id
-    Long id;
-    String name;
-    String description;
-    BigDecimal price;
-    Integer stock;
-    String status;
-    
-    @Link
-    Category category;
-    
-    @Link
-    List<Tag> tags;
-}
+List<ArticleCommentStats> stats = PojoQuery.build(ArticleCommentStats.class)
+    .execute(dataSource);
 
-@Table("category")
-public class Category {
-    @Id
-    Long id;
-    String name;
-    String description;
-    
-    @Link
-    Category parent;
-}
-
-@Table("tag")
-public class Tag {
-    @Id
-    Long id;
-    String name;
-}
-
-@Table("product_tag")
-public class ProductTag {
-    @Id
-    Long productId;
-    @Id
-    Long tagId;
-}
-
-// Product detail view
-class ProductDetail extends Product {
-    @Select("COUNT(DISTINCT review.id)")
-    Integer reviewCount;
-    
-    @Select("AVG(review.rating)")
-    Double averageRating;
-    
-    @Link
-    List<Review> reviews;
-}
-
-// Product search view
-class ProductSearch extends Product {
-    @Select("MATCH(name, description) AGAINST (? IN BOOLEAN MODE)")
-    Double relevance;
-}
-
-// Usage examples
-public class ProductService {
-    private final DataSource dataSource;
-    
-    public ProductService(DataSource dataSource) {
-        this.dataSource = dataSource;
-    }
-    
-    // Get product with reviews
-    public ProductDetail getProduct(Long productId) {
-        return PojoQuery.build(ProductDetail.class)
-            .addJoin(JoinType.LEFT, "review", "review", 
-                "product.id=review.product_id")
-            .addWhere("product.id=?", productId)
-            .addGroupBy("product.id")
-            .execute(dataSource)
-            .get(0);
-    }
-    
-    // Search products
-    public List<ProductSearch> searchProducts(String query) {
-        return PojoQuery.build(ProductSearch.class)
-            .addWhere("product.status=?", "ACTIVE")
-            .addWhere("MATCH(name, description) AGAINST (? IN BOOLEAN MODE)", 
-                query)
-            .addOrderBy("relevance DESC")
-            .execute(dataSource);
-    }
-    
-    // Get products by category
-    public List<Product> getProductsByCategory(Long categoryId) {
-        return PojoQuery.build(Product.class)
-            .addWhere("product.category_id=?", categoryId)
-            .addWhere("product.status=?", "ACTIVE")
-            .addOrderBy("product.name")
-            .execute(dataSource);
-    }
-}
+stats.forEach(s -> System.out.println(
+    "Article " + s.articleId + ": " + s.commentCount + " comments, last on " + s.lastCommentDate
+));
 ----
 
-== Content Management System
+== Example 5: Custom SQL Field (`@Select`)
 
-=== Page Management
+Fetch user with a calculated full name field.
 
-A CMS with pages, sections, and content blocks:
-
+*POJO:*
 [source,java]
 ----
-@Table("page")
-public class Page {
-    @Id
-    Long id;
-    String title;
-    String slug;
-    String status;
-    Date publishDate;
-    
-    @Link
-    User author;
-    
-    @Link
-    List<Section> sections;
-}
+@Table("user")
+public class UserWithFullName {
+    @Id Long id;
+    String firstName;
+    String lastName;
 
-@Table("section")
-public class Section {
-    @Id
-    Long id;
-    String title;
-    String content;
-    Integer order;
-    
-    @Link
-    Page page;
-}
-
-@Table("content_block")
-public class ContentBlock {
-    @Id
-    Long id;
-    String type;
-    String content;
-    Integer order;
-    
-    @Link
-    Section section;
-}
-
-// Page detail view
-class PageDetail extends Page {
-    @Select("COUNT(DISTINCT view.id)")
-    Integer viewCount;
-    
-    @Link
-    List<Section> sections;
-}
-
-// Section detail view
-class SectionDetail extends Section {
-    @Link
-    List<ContentBlock> blocks;
-}
-
-// Usage examples
-public class PageService {
-    private final DataSource dataSource;
-    
-    public PageService(DataSource dataSource) {
-        this.dataSource = dataSource;
-    }
-    
-    // Get page with sections and blocks
-    public PageDetail getPage(String slug) {
-        return PojoQuery.build(PageDetail.class)
-            .addJoin(JoinType.LEFT, "view", "view", 
-                "page.id=view.page_id")
-            .addWhere("page.slug=?", slug)
-            .addWhere("page.status=?", "PUBLISHED")
-            .addGroupBy("page.id")
-            .execute(dataSource)
-            .get(0);
-    }
-    
-    // Get recent pages
-    public List<Page> getRecentPages(int limit) {
-        return PojoQuery.build(Page.class)
-            .addWhere("page.status=?", "PUBLISHED")
-            .addOrderBy("page.publishDate DESC")
-            .setLimit(limit)
-            .execute(dataSource);
-    }
-    
-    // Get pages by author
-    public List<Page> getPagesByAuthor(Long authorId) {
-        return PojoQuery.build(Page.class)
-            .addWhere("page.author_id=?", authorId)
-            .addOrderBy("page.publishDate DESC")
-            .execute(dataSource);
-    }
+    @Select("CONCAT(firstName, ' ', lastName)") // Database-specific function
+    String fullName;
 }
 ----
 
-== Reporting System
-
-=== Analytics and Reports
-
-A reporting system with metrics and analytics:
-
+*Query:*
 [source,java]
 ----
-@Table("metric")
-public class Metric {
-    @Id
-    Long id;
-    String name;
-    String type;
-    Date timestamp;
-    Double value;
-    
-    @Link
-    Dimension dimension;
-}
+UserWithFullName user = PojoQuery.build(UserWithFullName.class)
+    .addWhere("user.id = ?", 789L)
+    .execute(dataSource)
+    .stream().findFirst().orElse(null);
 
-@Table("dimension")
-public class Dimension {
-    @Id
-    Long id;
-    String name;
-    String value;
+if (user != null) {
+    System.out.println("Full Name: " + user.fullName);
 }
+----
 
-// Daily summary view
-class DailySummary {
-    @Id
-    Date date;
-    
-    @Select("COUNT(DISTINCT metric.id)")
-    Integer metricCount;
-    
-    @Select("SUM(metric.value)")
-    Double totalValue;
-    
-    @Select("AVG(metric.value)")
-    Double averageValue;
-}
+== Example 6: Insert Operation
 
-// Usage examples
-public class AnalyticsService {
-    private final DataSource dataSource;
-    
-    public AnalyticsService(DataSource dataSource) {
-        this.dataSource = dataSource;
-    }
-    
-    // Get daily summary
-    public List<DailySummary> getDailySummary(Date startDate, Date endDate) {
-        return PojoQuery.build(DailySummary.class)
-            .addWhere("metric.timestamp BETWEEN ? AND ?", 
-                startDate, endDate)
-            .addGroupBy("DATE(metric.timestamp)")
-            .addOrderBy("date DESC")
-            .execute(dataSource);
-    }
-    
-    // Get metrics by dimension
-    public List<Metric> getMetricsByDimension(Long dimensionId) {
-        return PojoQuery.build(Metric.class)
-            .addWhere("metric.dimension_id=?", dimensionId)
-            .addOrderBy("metric.timestamp DESC")
-            .execute(dataSource);
-    }
-    
-    // Get latest metrics
-    public List<Metric> getLatestMetrics(int limit) {
-        return PojoQuery.build(Metric.class)
-            .addOrderBy("metric.timestamp DESC")
-            .setLimit(limit)
-            .execute(dataSource);
-    }
-}
----- 
+Insert a new user record.
+
+*POJO:* (Same as Example 1)
+
+*Operation:*
+[source,java]
+----
+User newUser = new User();
+newUser.firstName = "Alice";
+newUser.lastName = "Wonder";
+newUser.email = "alice@example.com";
+
+PojoQuery.insert(dataSource, newUser);
+// newUser.id is now populated if it was auto-generated
+System.out.println("New user ID: " + newUser.id);
+----
+
+== Example 7: Update Operation
+
+Update an existing user's email.
+
+*POJO:* (Same as Example 1)
+
+*Operation:*
+[source,java]
+----
+// Assume 'userToUpdate' was fetched previously
+userToUpdate.email = "alice.w@example.com";
+int updatedRows = PojoQuery.update(dataSource, userToUpdate);
+System.out.println("Rows updated: " + updatedRows);
+----

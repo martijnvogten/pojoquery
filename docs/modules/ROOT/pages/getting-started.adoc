@@ -1,196 +1,158 @@
-= Getting Started
-:page-partial:
-:page-layout: base
+= Getting Started with PojoQuery
+
+This guide will walk you through setting up PojoQuery in your project and executing your first query.
 
 == Prerequisites
 
-* Java 8 or higher
-* A relational database (MySQL, PostgreSQL, etc.)
-* Maven or Gradle for dependency management
+* Java Development Kit (JDK) 17 or later.
+* A build tool like Maven or Gradle.
+* A JDBC-compliant database (e.g., MySQL, PostgreSQL, HSQLDB).
+* A JDBC `DataSource` configured for your database connection.
 
-== Adding PojoQuery to Your Project
+== Installation
 
 === Maven
 
-Add the following dependency to your `pom.xml`:
+Add the PojoQuery dependency to your `pom.xml`:
 
 [source,xml]
 ----
 <dependency>
-    <groupId>nl.pojoquery</groupId>
-    <artifactId>pojoquery</artifactId>
-    <version>1.0.0</version>
+  <groupId>org.pojoquery</groupId>
+  <artifactId>pojoquery</artifactId>
+  <version>3.0.0</version> <!-- Use the latest version -->
+</dependency>
+
+<!-- Add your JDBC driver dependency, e.g., for MySQL -->
+<dependency>
+    <groupId>com.mysql</groupId>
+    <artifactId>mysql-connector-j</artifactId>
+    <version>8.0.33</version> <!-- Use the appropriate version -->
+    <scope>runtime</scope>
 </dependency>
 ----
 
 === Gradle
 
-Add the following to your `build.gradle`:
+Add the PojoQuery dependency to your `build.gradle` file:
 
 [source,groovy]
 ----
 dependencies {
-    implementation 'nl.pojoquery:pojoquery:1.0.0'
+    implementation 'org.pojoquery:pojoquery:3.0.0' // Use the latest version
+
+    // Add your JDBC driver dependency, e.g., for MySQL
+    runtimeOnly 'com.mysql:mysql-connector-j:8.0.33' // Use the appropriate version
 }
 ----
 
-== Basic Usage
+== Your First Query
 
-=== 1. Create Your POJOs
+Let's assume you have a `user` table in your database.
 
-First, create your POJO classes with the appropriate annotations:
+1.  *Define the POJO:* Create a Java class representing the `user` table.
 
-[source,java]
-----
-@Table("user")
-public class User {
-    @Id
-    Long id;
-    String firstName;
-    String lastName;
-    String email;
-}
+    [source,java]
+    ----
+    import org.pojoquery.annotations.Table;
+    import org.pojoquery.annotations.Id;
 
-@Table("article")
-public class Article {
-    @Id
-    Long id;
-    String title;
-    String content;
-    Date publishDate;
-    
-    @Link
-    User author;
-}
-----
+    @Table("user") // Maps this class to the 'user' table
+    public class User {
+        @Id // Marks 'id' as the primary key
+        public Long id;
 
-=== 2. Set Up Your Database Connection
+        public String firstName;
+        public String lastName;
+        public String email;
 
-Create a DataSource for your database:
+        // Optional: Add methods like getters/setters or helper methods
+        public String getFullName() {
+            return (firstName != null ? firstName : "")
+                   + " "
+                   + (lastName != null ? lastName : "");
+        }
+    }
+    ----
 
-[source,java]
-----
-DataSource dataSource = // Your database connection setup
-----
+2.  *Configure DataSource:* Obtain a `javax.sql.DataSource` instance connected to your database. How you do this depends on your application framework (e.g., Spring, HikariCP, basic JDBC).
 
-=== 3. Create and Execute Queries
+    [source,java]
+    ----
+    // Example using a simple DataSource (replace with your actual configuration)
+    import javax.sql.DataSource;
+    import com.mysql.cj.jdbc.MysqlDataSource; // Example for MySQL
 
-Use PojoQuery to build and execute queries:
+    public class DatabaseConfig {
+        public static DataSource getDataSource() {
+            MysqlDataSource dataSource = new MysqlDataSource();
+            dataSource.setURL("jdbc:mysql://localhost:3306/mydatabase");
+            dataSource.setUser("username");
+            dataSource.setPassword("password");
+            return dataSource;
+        }
+    }
+    ----
 
-[source,java]
-----
-// Simple query
-List<User> users = PojoQuery.build(User.class)
-    .execute(dataSource);
+3.  *Build and Execute the Query:* Use `PojoQuery.build()` to create and run the query.
 
-// Query with conditions
-Article article = PojoQuery.build(Article.class)
-    .addWhere("article.id=?", articleId)
-    .execute(dataSource)
-    .get(0);
+    [source,java]
+    ----
+    import org.pojoquery.PojoQuery;
+    import javax.sql.DataSource;
+    import java.util.List;
 
-// Query with joins
-class ArticleDetail extends Article {
-    User author;
-    List<Comment> comments;
-}
+    public class UserRepository {
 
-ArticleDetail article = PojoQuery.build(ArticleDetail.class)
-    .addWhere("article.id=?", articleId)
-    .execute(dataSource)
-    .get(0);
-----
+        private DataSource dataSource;
 
-== Common Use Cases
+        public UserRepository(DataSource dataSource) {
+            this.dataSource = dataSource;
+        }
 
-=== Fetching a Single Record
+        public User findById(Long userId) {
+            // Build the query for the User class
+            PojoQuery<User> query = PojoQuery.build(User.class)
+                // Add a WHERE clause. 'user.id' refers to the 'id' column in the 'user' table.
+                .addWhere("user.id = ?", userId);
 
-[source,java]
-----
-User user = PojoQuery.build(User.class)
-    .addWhere("user.id=?", userId)
-    .execute(dataSource)
-    .get(0);
-----
+            // Execute the query and get the results
+            List<User> results = query.execute(dataSource);
 
-=== Fetching with Joins
+            // Return the first result, or null if not found
+            return results.isEmpty() ? null : results.get(0);
+        }
 
-[source,java]
-----
-class OrderDetail extends Order {
-    Customer customer;
-    List<OrderItem> items;
-}
+        public List<User> findAll() {
+            return PojoQuery.build(User.class)
+                .addOrderBy("user.lastName ASC") // Optional: Add sorting
+                .execute(dataSource);
+        }
+    }
 
-OrderDetail order = PojoQuery.build(OrderDetail.class)
-    .addWhere("order.id=?", orderId)
-    .execute(dataSource)
-    .get(0);
-----
+    // --- Usage Example ---
+    public class MainApp {
+        public static void main(String[] args) {
+            DataSource ds = DatabaseConfig.getDataSource();
+            UserRepository repo = new UserRepository(ds);
 
-=== Adding Conditions
+            User user = repo.findById(1L);
+            if (user != null) {
+                System.out.println("Found user: " + user.getFullName() + " (" + user.email + ")");
+            } else {
+                System.out.println("User not found.");
+            }
 
-[source,java]
-----
-List<Article> articles = PojoQuery.build(Article.class)
-    .addWhere("article.publishDate > ?", startDate)
-    .addWhere("article.status = ?", "PUBLISHED")
-    .addOrderBy("article.publishDate DESC")
-    .execute(dataSource);
-----
-
-=== Using Transactions
-
-[source,java]
-----
-DB.runInTransaction(dataSource, connection -> {
-    // Create new article
-    Article article = new Article();
-    article.setTitle("New Article");
-    article.setContent("Content here");
-    article.setAuthor(author);
-    
-    // Insert article
-    Long articleId = PojoQuery.insert(connection, article);
-    
-    // Create comment
-    Comment comment = new Comment();
-    comment.setArticle(article);
-    comment.setContent("First comment");
-    comment.setAuthor(commentAuthor);
-    
-    // Insert comment
-    PojoQuery.insert(connection, comment);
-    
-    return articleId;
-});
-----
-
-== Best Practices
-
-=== POJO Design
-
-* Use meaningful field names that match your database columns
-* Add appropriate annotations (`@Table`, `@Id`, `@Link`, etc.)
-* Keep POJOs simple and focused
-* Use inheritance for different views of the same data
-
-=== Query Building
-
-* Use parameterized queries to prevent SQL injection
-* Leverage the fluent API for readability
-* Consider using streaming for large result sets
-
-=== Error Handling
-
-* Always check for null results when using `get(0)`
-* Use try-with-resources for database connections
-* Handle database exceptions appropriately
-* Validate input parameters
+            List<User> allUsers = repo.findAll();
+            System.out.println("\nAll Users:");
+            allUsers.forEach(u -> System.out.println("- " + u.getFullName()));
+        }
+    }
+    ----
 
 == Next Steps
 
-* Read the xref:annotations.adoc[Annotations] documentation to learn about available annotations
-* Check out the xref:query-building.adoc[Query Building] guide for advanced query features
-* Look at xref:examples.adoc[Examples] for real-world use cases
-* Explore xref:advanced-topics.adoc[Advanced Topics] for more complex scenarios 
+*   Explore the xref:features.adoc[Core Features] of PojoQuery.
+*   Learn about the available xref:annotations.adoc[Annotations] for customization.
+*   See more complex xref:examples.adoc[Examples].
+*   Understand how to use the xref:query-building.adoc[Query Building API].

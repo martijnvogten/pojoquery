@@ -8,96 +8,89 @@ image:logo_pojoquery.png[alt="PojoQuery Logo", width=200, height=200]
 
 PojoQuery is a lightweight utility for working with relational databases in Java. Instead of writing SQL queries in plain text, PojoQuery leverages Plain Old Java Objects (POJOs) to define the set of fields and tables (joins) to fetch.
 
-
 == Key Features
 
 * Type-safe database queries using POJOs
 * Automatic SQL generation from POJO structure
-* Support for complex joins and relationships
-* No lazy loading - predictable query behavior
-* Customizable through annotations
-* Support for different database quote styles
-
-== Why PojoQuery?
-
-Traditional ORM frameworks like Hibernate/JPA or Microsoft Entity Framework often introduce complexity with features like lazy loading, which can lead to:
-
-* LazyInitializationException issues
-* Serialization problems with JSON/XML
-* Proxy class complications
-* Complex debugging and testing
-
-PojoQuery takes a different approach by treating your POJOs as database views, making it:
-
-* Simple to understand and use
-* Predictable in behavior
-* Easy to debug and test
-* Straightforward to serialize
+* Support for complex joins and relationships via `@Link` and `@Join`
+* Customizable through annotations (`@Table`, `@Id`, `@FieldName`, `@Select`, etc.)
+* No lazy loading, no proxies, no session management complexity
+* Easily adaptable to different database engines (tested with MySQL, PostgreSQL, HSQL)
+* Support for inheritance mapping (`@SubClasses`)
+* Support for embedded objects (`@Embedded`)
+* Handling of dynamic columns (`@Other`)
 
 == Quick Example
 
+Define your POJOs:
+
 [source,java]
 ----
-class ArticleDetail extends Article {
-    User author;
-    CommentDetail[] comments;
-}
-
+// Base entity
 @Table("article")
 class Article {
-    Long id;
+    @Id Long id;
     String title;
     String content;
-    Date publishdate;
+    Long author_id; // Foreign key
 }
 
-// Usage
+// View/DTO extending the base entity
+class ArticleDetail extends Article {
+    @Link User author; // Automatically joins based on author_id
+    @Link List<CommentDetail> comments; // Automatically joins based on article_id in comment table
+}
+
+@Table("user")
+class User {
+    @Id Long id;
+    String firstName;
+    String lastName;
+}
+
+@Table("comment")
+class CommentDetail {
+    @Id Long id;
+    Long article_id; // Foreign key
+    String comment;
+    Date submitdate;
+    @Link User author; // Join based on author_id in comment table
+}
+----
+
+Build and execute the query:
+
+[source,java]
+----
+// Assuming 'dataSource' is your configured javax.sql.DataSource
 ArticleDetail article = PojoQuery.build(ArticleDetail.class)
-    .addWhere("article.id=?", articleId)
-    .addOrderBy("comments.submitdate")
-    .execute(database).get(0);
+    .addWhere("article.id = ?", 123L) // Add WHERE clause
+    .addOrderBy("comments.submitdate DESC") // Add ORDER BY
+    .execute(dataSource) // Execute against the database
+    .stream() // Get results as a stream
+    .findFirst() // Get the first result (or Optional.empty())
+    .orElse(null);
+
+if (article != null) {
+    System.out.println("Article Title: " + article.title);
+    System.out.println("Author: " + article.author.firstName);
+    System.out.println("Number of comments: " + article.comments.size());
+}
 ----
 
-This generates a clean, predictable SQL query:
-
-[source,sql]
-----
-SELECT
- `article`.id `article.id`,
- `article`.title `article.title`,
- `article`.content `article.content`,
- `author`.id `author.id`,
- `author`.firstName `author.firstName`,
- `author`.lastName `author.lastName`,
- `author`.email `author.email`,
- `comments`.id `comments.id`,
- `comments`.comment `comments.comment`,
- `comments`.submitdate `comments.submitdate`,
- `comments.author`.id `comments.author.id`,
- `comments.author`.firstName `comments.author.firstName`,
- `comments.author`.lastName `comments.author.lastName`,
- `comments.author`.email `comments.author.email` 
-FROM article 
- LEFT JOIN user `author` ON `article`.author_id=`author`.id
- LEFT JOIN comment `comments` ON `comments`.article_id=`article`.id
- LEFT JOIN user `comments.author` ON `comments`.author_id=`comments.author`.id 
-WHERE article.id=?  
-ORDER BY comments.submitdate
-----
+This generates a predictable SQL query, joining `article`, `user` (for article author), `comment`, and `user` (for comment author) tables.
 
 == Getting Started
 
-To get started with PojoQuery, check out our xref:getting-started.adoc[Getting Started] guide. You'll learn how to:
-
-* Set up PojoQuery in your project
-* Create your first POJO-based queries
-* Work with relationships and joins
-* Use annotations for customization
+To begin using PojoQuery in your project, follow our xref:getting-started.adoc[Getting Started] guide.
 
 == Documentation Structure
 
-* xref:features.adoc[Features] - Detailed overview of PojoQuery features
-* xref:annotations.adoc[Annotations] - Available annotations and their usage
-* xref:query-building.adoc[Query Building] - How to build and customize queries
-* xref:advanced-topics.adoc[Advanced Topics] - Advanced usage patterns and techniques
-* xref:examples.adoc[Examples] - Real-world examples and use cases 
+* xref:getting-started.adoc[Getting Started] - Setup and basic usage.
+* xref:features.adoc[Features] - Overview of PojoQuery capabilities.
+* xref:annotations.adoc[Annotations] - Detailed reference for all annotations.
+* xref:query-building.adoc[Query Building] - Using the fluent API to construct queries.
+* xref:database-support.adoc[Database Support] - Information on supported databases and configuration.
+* xref:advanced-topics.adoc[Advanced Topics] - Inheritance, custom joins, streaming, and more.
+* xref:examples.adoc[Examples] - Practical code examples.
+

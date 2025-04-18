@@ -1,260 +1,40 @@
 = Database Support
-:page-partial:
-:page-layout: base
 
-PojoQuery supports multiple database engines, each with their own specific requirements and configurations. This page describes the supported databases and how to configure PojoQuery for each one.
+PojoQuery is designed to work with relational databases that support standard SQL and provide a JDBC driver.
 
-== Supported Databases
+== Tested Databases
 
-PojoQuery supports the following database engines:
+PojoQuery is regularly tested against:
 
-* MySQL (5.7+)
-* PostgreSQL (9.6+)
-* HSQLDB (2.0+)
-* MariaDB (10.0+)
+*   **MySQL:** Versions 5.7 and 8.0+
+*   **PostgreSQL:** Versions 10+
+*   **HSQLDB:** Primarily for testing purposes.
 
-== Database-Specific Configurations
+== General Compatibility
 
-=== MySQL
+PojoQuery should work with most modern relational databases, including:
 
-MySQL uses backticks (`) for quoting identifiers and is the default configuration in PojoQuery.
+*   SQL Server
+*   Oracle
+*   MariaDB
+*   SQLite (with appropriate JDBC driver)
 
-[source,java]
-----
-// Default configuration (MySQL)
-DbContext context = DbContext.builder().build();
+The core query generation relies on standard SQL syntax for `SELECT`, `FROM`, `JOIN`, `WHERE`, `GROUP BY`, `ORDER BY`, and `LIMIT`/`OFFSET`.
 
-// Explicit MySQL configuration
-DbContext context = DbContext.builder()
-    .withQuoteStyle(QuoteStyle.MYSQL)    // Uses backticks
-    .withQuotedObjectNames(true)         // Always quote identifiers
-    .build();
-----
+== Database-Specific Considerations
 
-==== MySQL-Specific Features
+*   **SQL Functions (`@Select`):** When using the `@Select` annotation with database functions (e.g., `CONCAT`, `YEAR`, `MAX`), ensure you use syntax compatible with your target database.
+*   **Quoting:** PojoQuery attempts to quote identifiers (table names, column names, aliases) correctly based on the `DbContext`. The default context uses backticks (` `` `) suitable for MySQL. You can create a custom `DbContext` for other quoting styles (e.g., double quotes `"` for PostgreSQL, SQL Server).
+    [source,java]
+    ----
+    // Example for PostgreSQL/Standard SQL quoting
+    DbContext pgContext = new DbContext(DbContext.QuoteStyle.DOUBLE_QUOTES);
+    PojoQuery<User> query = PojoQuery.build(pgContext, User.class);
+    ----
+*   **Generated Keys:** The mechanism for retrieving auto-generated keys after an `INSERT` relies on standard JDBC `Statement.RETURN_GENERATED_KEYS`. This is widely supported.
+*   **LIMIT/OFFSET Syntax:** PojoQuery generates the `LIMIT offset, rowCount` syntax. While common, some databases might use different syntax (e.g., `OFFSET offset FETCH NEXT rowCount ROWS ONLY` in SQL Server/Oracle). For maximum compatibility across databases not using `LIMIT offset, rowCount`, you might need to handle pagination outside of PojoQuery's `setLimit()` or use database-specific query modifications if necessary.
+*   **Data Types:** Ensure that the Java types used in your POJOs map correctly to the corresponding data types in your database according to your JDBC driver's behavior. PojoQuery performs basic handling for `LocalDate` and `Enum` types during parameter setting.
 
-* Support for MySQL-specific functions
-* Proper handling of MySQL's backtick quoting
-* Support for MySQL's auto-increment columns
-* Handling of MySQL's BIGINT type mapping to Java Long
+== Configuration
 
-=== PostgreSQL
-
-PostgreSQL uses double quotes (") for quoting identifiers and requires specific configuration.
-
-[source,java]
-----
-DbContext context = DbContext.builder()
-    .withQuoteStyle(QuoteStyle.ANSI)     // Uses double quotes
-    .withQuotedObjectNames(true)         // Always quote identifiers
-    .build();
-----
-
-==== PostgreSQL-Specific Features
-
-* Support for JSON/JSONB fields
-* Proper handling of PostgreSQL's schema support
-* Support for PostgreSQL's SERIAL type
-* Handling of PostgreSQL's specific date/time types
-
-==== JSON Field Support
-
-[source,java]
-----
-@Table("user")
-public class User {
-    @Id
-    Long id;
-    
-    @FieldName("metadata")
-    JsonNode metadata;  // Using Jackson's JsonNode
-}
-
-// Custom field mapping for JSON
-DbContext context = DbContext.builder()
-    .withFieldMappingFactory(field -> {
-        if (field.getType().equals(JsonNode.class)) {
-            return new JsonFieldMapping(field);
-        }
-        return new SimpleFieldMapping(field);
-    })
-    .build();
-----
-
-=== HSQLDB
-
-HSQLDB uses double quotes (") for quoting identifiers and is commonly used for testing.
-
-[source,java]
-----
-DbContext context = DbContext.builder()
-    .withQuoteStyle(QuoteStyle.ANSI)     // Uses double quotes
-    .withQuotedObjectNames(true)         // Always quote identifiers
-    .build();
-----
-
-==== HSQLDB-Specific Features
-
-* Support for HSQLDB's schema support
-* Proper handling of HSQLDB's sequence support
-* Support for HSQLDB's specific data types
-
-==== Sequence Support
-
-[source,java]
-----
-// Using HSQLDB sequences
-DbContext context = DbContext.builder()
-    .withFieldMappingFactory(field -> {
-        if (field.isAnnotationPresent(Sequence.class)) {
-            return new SequenceFieldMapping(field);
-        }
-        return new SimpleFieldMapping(field);
-    })
-    .build();
-----
-
-=== MariaDB
-
-MariaDB is a fork of MySQL and uses the same configuration as MySQL.
-
-[source,java]
-----
-DbContext context = DbContext.builder()
-    .withQuoteStyle(QuoteStyle.MYSQL)    // Uses backticks
-    .withQuotedObjectNames(true)         // Always quote identifiers
-    .build();
-----
-
-==== MariaDB-Specific Features
-
-* Support for MariaDB-specific functions
-* Proper handling of MariaDB's backtick quoting
-* Support for MariaDB's auto-increment columns
-* Handling of MariaDB's specific data types
-
-== Common Configuration Patterns
-
-=== Development Environment
-
-For development, you might want to use HSQLDB with a simpler configuration:
-
-[source,java]
-----
-DbContext devContext = DbContext.builder()
-    .withQuoteStyle(QuoteStyle.ANSI)
-    .withQuotedObjectNames(false)        // Simpler SQL for development
-    .build();
-----
-
-=== Production Environment
-
-For production, use the appropriate database-specific configuration:
-
-[source,java]
-----
-// PostgreSQL production configuration
-DbContext prodContext = DbContext.builder()
-    .withQuoteStyle(QuoteStyle.ANSI)
-    .withQuotedObjectNames(true)
-    .withFieldMappingFactory(field -> {
-        // Add any production-specific field mappings
-        return new SimpleFieldMapping(field);
-    })
-    .build();
-----
-
-== Best Practices
-
-=== Database Configuration
-
-* Always use the appropriate quote style for your database
-* Enable object name quoting in production
-* Consider database-specific features when designing your schema
-* Use appropriate field mappings for special data types
-
-=== Performance Considerations
-
-* Use appropriate indexes for your database
-* Consider database-specific query optimizations
-* Use streaming for large result sets
-* Monitor query performance
-
-=== Security
-
-* Use parameterized queries to prevent SQL injection
-* Follow database-specific security best practices
-* Use appropriate connection pooling
-* Implement proper error handling
-
-== Troubleshooting
-
-=== Common Issues
-
-* Incorrect quote style causing SQL syntax errors
-* Missing schema prefixes
-* Incorrect handling of special data types
-* Connection pool configuration issues
-
-=== Solutions
-
-* Verify the quote style matches your database
-* Check schema configuration
-* Implement appropriate field mappings
-* Review connection pool settings
-
-== Examples
-
-=== Complete Database Configuration Example
-
-[source,java]
-----
-public class DatabaseConfig {
-    private final DbContext dbContext;
-    
-    public DatabaseConfig(DatabaseType type) {
-        this.dbContext = createContext(type);
-    }
-    
-    private DbContext createContext(DatabaseType type) {
-        switch (type) {
-            case MYSQL:
-                return DbContext.builder()
-                    .withQuoteStyle(QuoteStyle.MYSQL)
-                    .withQuotedObjectNames(true)
-                    .build();
-                    
-            case POSTGRESQL:
-                return DbContext.builder()
-                    .withQuoteStyle(QuoteStyle.ANSI)
-                    .withQuotedObjectNames(true)
-                    .withFieldMappingFactory(field -> {
-                        if (field.getType().equals(JsonNode.class)) {
-                            return new JsonFieldMapping(field);
-                        }
-                        return new SimpleFieldMapping(field);
-                    })
-                    .build();
-                    
-            case HSQLDB:
-                return DbContext.builder()
-                    .withQuoteStyle(QuoteStyle.ANSI)
-                    .withQuotedObjectNames(true)
-                    .build();
-                    
-            default:
-                throw new IllegalArgumentException("Unsupported database type: " + type);
-        }
-    }
-    
-    public DbContext getDbContext() {
-        return dbContext;
-    }
-}
-
-// Usage
-DatabaseConfig config = new DatabaseConfig(DatabaseType.POSTGRESQL);
-DbContext context = config.getDbContext();
-List<User> users = PojoQuery.build(context, User.class)
-    .execute(dataSource);
----- 
+PojoQuery interacts with the database solely through a standard `javax.sql.DataSource`. Configure your `DataSource` using your preferred connection pool (like HikariCP, c3p0, Tomcat JDBC Pool) or framework (like Spring Boot) and pass it to PojoQuery's execution methods (`execute`, `executeStreaming`, `findById`, etc.) or the static `DB` helper methods.

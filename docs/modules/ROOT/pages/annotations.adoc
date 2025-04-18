@@ -1,464 +1,308 @@
-= Annotations
-:page-partial:
-:page-layout: base
+= Annotation Reference
 
-PojoQuery provides a set of annotations to customize your POJOs and queries. This page documents all available annotations and their usage.
+PojoQuery uses annotations to map POJOs to database structures and customize query generation.
 
-== Core Annotations
+== Core Mapping Annotations
 
 === @Table
-
-Maps a POJO class to a database table.
-
+*Description:* Maps a POJO class to a specific database table. Essential for root entities.
+*Target:* `Class`
+*Parameters:*
+** `value` (String, required): The name of the database table.
+** `schema` (String, optional): The database schema name.
+*Example:*
 [source,java]
 ----
-@Table("user")
-public class User {
-    Long id;
-    String name;
-}
-----
+@Table("users") // Maps to 'users' table in the default schema
+public class User { ... }
 
-Parameters:
-* `value` - The name of the database table
-* `schema` - (Optional) The database schema name
+@Table(value="orders", schema="sales") // Maps to 'sales.orders' table
+public class Order { ... }
+----
 
 === @Id
-
-Marks a field as the primary key of the table.
-
+*Description:* Marks one or more fields as the primary key component(s) of the entity. Used for `findById`, updates, and relationship joining by default.
+*Target:* `Field`
+*Example:*
 [source,java]
 ----
-@Table("user")
-public class User {
+@Table("products")
+public class Product {
     @Id
-    Long id;
+    Long productId; // Single primary key
     String name;
 }
-----
 
-=== @Link
-
-Indicates a relationship between entities. Used for joins.
-
-[source,java]
-----
-@Table("article")
-public class Article {
-    @Id
-    Long id;
-    String title;
-    
-    @Link
-    User author;
-}
-----
-
-Parameters:
-* `field` - (Optional) The database column name for the foreign key
-* `type` - (Optional) The join type (LEFT, INNER, etc.)
-
-== Query Customization Annotations
-
-=== @Join
-
-Specifies a custom join condition for a field.
-
-[source,java]
-----
-@Table("article")
-@Join("LEFT JOIN user ON article.author_id=user.id")
-public class Article {
-    @Id
-    Long id;
-    String title;
-    User author;
-}
-----
-
-Parameters:
-* `type` - The join type (LEFT, INNER, etc.)
-* `tableName` - The name of the joined table
-* `alias` - The alias for the joined table
-* `joinCondition` - The SQL join condition
-
-=== @Joins
-
-Specifies multiple join conditions.
-
-[source,java]
-----
-@Table("article")
-@Joins({
-    @Join(type=JoinType.LEFT, tableName="user", alias="author", joinCondition="article.author_id=author.id"),
-    @Join(type=JoinType.LEFT, tableName="category", alias="cat", joinCondition="article.category_id=cat.id")
-})
-public class Article {
-    @Id
-    Long id;
-    String title;
-    User author;
-    Category category;
+@Table("order_items")
+public class OrderItem {
+    @Id Long orderId; // Composite key part 1
+    @Id Long itemId;  // Composite key part 2
+    int quantity;
 }
 ----
 
 === @FieldName
-
-Maps a POJO field to a specific database column name.
-
+*Description:* Specifies the exact database column name for a POJO field when it differs from the field name (or the convention-based name).
+*Target:* `Field`
+*Parameters:*
+** `value` (String, required): The name of the database column.
+*Example:*
 [source,java]
 ----
-@Table("user")
-public class User {
-    @Id
-    Long id;
-    
-    @FieldName("user_name")
-    String name;
-    
-    @FieldName("email_address")
-    String email;
-}
-----
-
-=== @GroupBy
-
-Specifies GROUP BY clauses for aggregation queries.
-
-[source,java]
-----
-@Table("order")
-@GroupBy("order.id")
-public class OrderSummary {
-    @Id
-    Long id;
-    
-    @Select("COUNT(*)")
-    Integer itemCount;
-    
-    @Select("SUM(amount)")
-    BigDecimal totalAmount;
-}
-----
-
-=== @OrderBy
-
-Specifies ORDER BY clauses for sorting results.
-
-[source,java]
-----
-@Table("article")
-@OrderBy("article.publishDate DESC")
-public class Article {
-    @Id
-    Long id;
-    String title;
-    Date publishDate;
-}
-----
-
-== Advanced Annotations
-
-=== @Embedded
-
-Maps a nested object to columns in the same table.
-
-[source,java]
-----
-@Table("user")
-public class User {
-    @Id
-    Long id;
-    String name;
-    
-    @Embedded(prefix = "address_")
-    Address address;
-}
-
-public class Address {
-    String street;
-    String city;
-    String country;
-}
-----
-
-Parameters:
-* `prefix` - (Optional) Prefix for the embedded fields' column names
-
-=== @Select
-
-Specifies a custom SQL expression for a field.
-
-[source,java]
-----
-@Table("user")
-public class User {
-    @Id
-    Long id;
-    String firstName;
-    String lastName;
-    
-    @Select("CONCAT(firstName, ' ', lastName)")
-    String fullName;
+@Table("customers")
+public class Customer {
+    @Id Long id;
+    @FieldName("first_name") String firstName;
+    @FieldName("email_addr") String emailAddress;
 }
 ----
 
 === @Transient
-
-Marks a field that should not be mapped to the database.
-
+*Description:* Marks a field that should be ignored by PojoQuery during database mapping (SELECT, INSERT, UPDATE). Useful for calculated fields or temporary state.
+*Target:* `Field`
+*Example:*
 [source,java]
 ----
-@Table("user")
-public class User {
-    @Id
-    Long id;
-    String name;
-    
+@Table("products")
+public class Product {
+    @Id Long id;
+    BigDecimal price;
+    BigDecimal taxRate;
+
     @Transient
-    String displayName; // Computed property
+    BigDecimal priceIncludingTax; // Calculated in Java, not stored in DB
+}
+----
+
+== Relationship Annotations
+
+=== @Link
+*Description:* Defines a relationship to another entity (one-to-one, one-to-many, many-to-many), triggering automatic JOIN generation. PojoQuery uses conventions or annotation parameters to determine join columns and tables.
+*Target:* `Field`
+*Parameters:*
+** `linkfield` (String, optional): The foreign key column name.
+*** For one-to-one/many-to-one: Column in the *current* entity's table referencing the target entity's ID (Default: `{fieldName}_id`, e.g., `author_id`).
+*** For many-to-many: Column in the `linktable` referencing the *current* entity's ID (Default: `{currentTableName}_id`, e.g., `article_id`).
+** `foreignlinkfield` (String, optional): Used only for many-to-many. The foreign key column name in the `linktable` referencing the *target* entity's ID (Default: `{fieldName}_id`, e.g., `tag_id`).
+** `linktable` (String, optional): The name of the intermediate join table for many-to-many relationships. If present, indicates a many-to-many link. (Default: `Link.NONE`).
+** `fetchColumn` (String, optional): For collections of simple types (e.g., `List<String>`, `Set<Role>`), specifies the column in the `linktable` holding the collection element values. (Default: `Link.NONE`).
+** `type` (JoinType, optional): The type of join to generate (`LEFT`, `INNER`, `RIGHT`). (Default: `JoinType.LEFT`).
+*Examples:*
+[source,java]
+----
+@Table("article")
+public class Article {
+    @Id Long id;
+    // One-to-One/Many-to-One: Assumes 'author_id' column in 'article' table
+    @Link User author;
+
+    // One-to-Many: Assumes 'article_id' column in 'comment' table
+    @Link List<Comment> comments;
+
+    // Many-to-Many: Uses 'article_tag' link table
+    @Link(linktable="article_tag", linkfield="article_id", foreignlinkfield="tag_id")
+    List<Tag> tags;
+
+    // Collection of Enums: Uses 'article_flags' table, gets value from 'flag_value' column
+    @Link(linktable="article_flags", linkfield="article_id", fetchColumn="flag_value")
+    Set<ArticleFlag> flags;
+}
+----
+
+== Query Customization Annotations
+
+=== @Select
+*Description:* Specifies a custom SQL expression or function call to populate a field. The result of the expression will be mapped to this field.
+*Target:* `Field`
+*Parameters:*
+** `value` (String, required): The SQL expression. Use database-specific syntax.
+*Example:*
+[source,java]
+----
+@Table("users")
+public class UserStats {
+    @Id Long id;
+    @FieldName("first_name") String firstName;
+    @FieldName("last_name") String lastName;
+
+    @Select("CONCAT(first_name, ' ', last_name)") // Database CONCAT function
+    String fullName;
+
+    @Select("YEAR(registration_date)") // Database YEAR function
+    Integer registrationYear;
+}
+----
+
+=== @Join
+*Description:* Adds a custom, explicit SQL JOIN clause to the query for this entity. Can be used instead of or alongside `@Link`.
+*Target:* `Class`
+*Parameters:*
+** `value` (String, required if other parameters are not set): The full SQL JOIN clause (e.g., `"LEFT JOIN user u ON a.user_id = u.id"`).
+** `type` (JoinType, optional): The join type (`LEFT`, `INNER`, `RIGHT`).
+** `schemaName` (String, optional): Schema of the table to join.
+** `tableName` (String, optional): Name of the table to join.
+** `alias` (String, optional): Alias for the joined table.
+** `joinCondition` (String, optional): The `ON` condition for the join.
+*Example:*
+[source,java]
+----
+@Table("article")
+// Add a specific join manually
+@Join("LEFT JOIN user_profile p ON article.author_id = p.user_id AND p.active = true")
+public class ArticleWithProfile {
+    @Id Long id;
+    // ... other fields
+    // You might need @Select or @FieldName to map fields from 'p' if not using @Link
+}
+----
+
+=== @Joins
+*Description:* Container annotation to allow multiple `@Join` annotations on a single class.
+*Target:* `Class`
+*Parameters:*
+** `value` (Join[], required): An array of `@Join` annotations.
+*Example:*
+[source,java]
+----
+@Table("order")
+@Joins({
+    @Join("LEFT JOIN customer c ON order.customer_id = c.id"),
+    @Join("LEFT JOIN address shipping ON order.shipping_address_id = shipping.id")
+})
+public class OrderDetails { ... }
+----
+
+=== @GroupBy
+*Description:* Adds a `GROUP BY` clause to the generated SQL query. Typically used with `@Select` annotations containing aggregate functions.
+*Target:* `Class`
+*Parameters:*
+** `value` (String[], required): An array of SQL expressions to group by (e.g., `{"article.id", "author.id"}`).
+*Example:*
+[source,java]
+----
+@Table("comment")
+@GroupBy("comment.article_id") // Group comments by article
+public class ArticleCommentSummary {
+    @FieldName("article_id") Long articleId;
+
+    @Select("COUNT(*)")
+    Integer commentCount;
+
+    @Select("MAX(submitdate)")
+    Date lastCommentDate;
+}
+----
+
+=== @OrderBy
+*Description:* Adds an `ORDER BY` clause to the generated SQL query for default sorting.
+*Target:* `Class`
+*Parameters:*
+** `value` (String, required): The SQL `ORDER BY` expression (e.g., `"publishDate DESC, title ASC"`).
+*Example:*
+[source,java]
+----
+@Table("products")
+@OrderBy("category ASC, price DESC")
+public class Product { ... }
+----
+
+== Advanced Mapping Annotations
+
+=== @Embedded
+*Description:* Maps fields from a nested Java object (which is *not* an entity itself) into columns of the parent entity's table. Flattens the structure.
+*Target:* `Field`
+*Parameters:*
+** `prefix` (String, optional): A prefix to be added to the column names generated from the embedded object's fields. (Default: `{fieldName}_`, e.g., `address_`).
+*Example:*
+[source,java]
+----
+@Table("users")
+public class User {
+    @Id Long id;
+    @Embedded(prefix = "ship_") // Columns: ship_street, ship_city, ship_zip
+    Address shippingAddress;
+}
+
+// Address is NOT an entity, just a value object
+public class Address {
+    String street;
+    String city;
+    String zip;
 }
 ----
 
 === @Other
-
-Used for fields that don't directly map to database columns.
-
+*Description:* Maps multiple database columns starting with a specific prefix into a single `Map<String, Object>` field. Useful for dynamic or EAV-like structures.
+*Target:* `Field`
+*Parameters:*
+** `prefix` (String, required): The prefix identifying columns that belong to this map. The map keys will be the column names *without* the prefix.
+*Example:*
 [source,java]
 ----
-@Table("user")
-public class User {
-    @Id
-    Long id;
-    String name;
-    
+@Table("settings")
+public class UserSettings {
+    @Id Long userId;
+    // Maps columns like 'pref_theme', 'pref_language' into the map
+    // Map keys will be 'theme', 'language'
     @Other(prefix="pref_")
     Map<String, Object> preferences;
 }
 ----
 
-Parameters:
-* `prefix` - Prefix for the other fields' column names
-
 === @SubClasses
+*Description:* Defines an inheritance mapping strategy (currently supports single-table inheritance) for a base class. Used in conjunction with `@SubClass`.
+*Target:* `Class` (on the base class)
+*Parameters:*
+** `value` (SubClass[], required): An array of `@SubClass` annotations defining the subclasses.
+** `discriminator` (String, required): The name of the database column that holds the value identifying the specific subclass.
+*Example:* (See `@SubClass`)
 
-Specifies inheritance mapping for subclasses.
-
+=== @SubClass
+*Description:* Defines a specific subclass within an inheritance hierarchy declared by `@SubClasses`.
+*Target:* Annotation (used within `@SubClasses`)
+*Parameters:*
+** `value` (Class<?>, required): The subclass `Class` object (e.g., `Employee.class`).
+** `discriminatorValue` (String, required): The value in the `discriminator` column that identifies rows belonging to this subclass.
+*Example:*
 [source,java]
 ----
-@Table("person")
-@SubClasses({
-    @SubClass(value=Employee.class, discriminator="type", value="EMP"),
-    @SubClass(value=Customer.class, discriminator="type", value="CUST")
-})
-public class Person {
-    @Id
-    Long id;
+@Table("person") // Base table contains all columns
+@SubClasses(
+    discriminator = "person_type", // Column indicating the type
+    value = {
+        @SubClass(value = Employee.class, discriminatorValue = "EMP"),
+        @SubClass(value = Customer.class, discriminatorValue = "CUST")
+    }
+)
+public abstract class Person {
+    @Id Long id;
     String name;
-    String type;
+    @FieldName("person_type") String type; // Mapped discriminator field
 }
 
-@Table("employee")
+// Employee specific fields (columns must exist in 'person' table)
 public class Employee extends Person {
     String department;
-    Double salary;
+    BigDecimal salary;
+}
+
+// Customer specific fields (columns must exist in 'person' table)
+public class Customer extends Person {
+    Integer loyaltyPoints;
 }
 ----
 
-== Best Practices
-
-=== Annotation Usage
-
-* Use `@Table` on all entity classes
-* Always mark primary keys with `@Id`
-* Use `@Link` for relationships between entities
-* Consider using `@Embedded` for related fields in the same table
-* Use `@Transient` for computed or temporary fields
-
-=== Naming Conventions
-
-* Use clear, descriptive table and column names
-* Follow database naming conventions
-* Use consistent casing (e.g., snake_case for columns)
-* Prefix related fields appropriately
-
-=== Performance Considerations
-
-* Use appropriate join types (LEFT vs INNER)
-* Consider using `@Select` for computed fields
-* Use `@GroupBy` and aggregation functions carefully
-* Be mindful of the impact of `@SubClasses` on query complexity
-
-== Examples
-
-=== Complete Entity Example
-
+=== @NoUpdate
+*Description:* Marks a field that should not be included in `UPDATE` statements generated by `PojoQuery.update()`. Useful for created timestamps or immutable fields.
+*Target:* `Field`
+*Example:*
 [source,java]
 ----
-@Table("order")
-@OrderBy("order.createdAt DESC")
-public class Order {
-    @Id
-    Long id;
-    
-    @FieldName("order_date")
-    Date createdAt;
-    
-    @Link
-    Customer customer;
-    
-    @Embedded
-    Address shippingAddress;
-    
-    @Select("COUNT(*)")
-    Integer itemCount;
-    
-    @Transient
-    BigDecimal totalAmount;
-}
-
-@Table("customer")
-public class Customer {
-    @Id
-    Long id;
-    String name;
-    String email;
-}
-
-public class Address {
-    String street;
-    String city;
-    String country;
-}
-----
-
-=== Complex Query Example
-
-[source,java]
-----
-@Table("article")
-@Joins({
-    @Join(type=JoinType.LEFT, tableName="user", alias="author", joinCondition="article.author_id=author.id"),
-    @Join(type=JoinType.LEFT, tableName="category", alias="cat", joinCondition="article.category_id=cat.id")
-})
-@GroupBy("article.id")
-public class ArticleSummary {
-    @Id
-    Long id;
-    String title;
-    
-    @Select("COUNT(DISTINCT comment.id)")
-    Integer commentCount;
-    
-    @Select("MAX(comment.createdAt)")
-    Date lastCommentDate;
-    
-    User author;
-    Category category;
-}
-----
-
-=== @Link
-
-The `@Link` annotation is used to define relationships between entities. It provides several options for customizing the relationship:
-
-[source,java]
-----
-@Table("order")
-public class Order {
-    @Id
-    Long id;
-    
-    @Link(linkfield = "order_id", foreignlinkfield = "customer_id")
-    Customer customer;
-    
-    @Link(linktable = "order_items")
-    List<OrderItem> items;
-}
-----
-
-Available options:
-* `linkfield`: The name of the foreign key column in the target table (default: `{fieldName}_id`)
-* `foreignlinkfield`: The name of the foreign key column in the link table (default: `{tableName}_id`)
-* `linktable`: The name of the link table for many-to-many relationships (default: `NONE`)
-
-=== @Embedded
-
-The `@Embedded` annotation allows you to embed one entity within another, flattening its properties into the parent entity's table:
-
-[source,java]
-----
-@Table("user")
-public class User {
-    @Id
-    Long id;
-    
-    @Embedded(prefix = "address_")
-    Address address;
-}
-
-public class Address {
-    String street;
-    String city;
-    String country;
-}
-----
-
-Available options:
-* `prefix`: The prefix to use for embedded fields in the database (default: `{fieldName}_`)
-
-The fields will be stored in the database as:
-* `address_street`
-* `address_city`
-* `address_country`
-
-=== @FieldName
-
-The `@FieldName` annotation allows you to specify a custom name for a field in the database:
-
-[source,java]
-----
-@Table("user")
-public class User {
-    @Id
-    Long id;
-    
-    @FieldName("email_address")
-    String email;
-    
-    @FieldName("created_at")
+@Table("records")
+public class Record {
+    @Id Long id;
+    String data;
+    @NoUpdate // This field will not be updated
     LocalDateTime createdAt;
 }
 ----
-
-This is useful when:
-* The database column name doesn't match Java naming conventions
-* You need to map to existing database columns
-* You want to use reserved words as column names
-
-=== @Transient
-
-The `@Transient` annotation marks fields that should not be persisted to the database:
-
-[source,java]
-----
-@Table("user")
-public class User {
-    @Id
-    Long id;
-    
-    String email;
-    
-    @Transient
-    String passwordHash;  // Computed field, not stored
-    
-    @Transient
-    List<String> roles;   // Loaded from a different source
-}
-----
-
-Use `@Transient` when:
-* The field is computed from other fields
-* The field is loaded from a different source
-* The field is used for temporary data
-* The field should not be included in queries 

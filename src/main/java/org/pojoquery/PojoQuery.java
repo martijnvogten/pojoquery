@@ -40,123 +40,285 @@ public class PojoQuery<T> {
 	}
 	
 
+	/**
+	 * Builds a PojoQuery instance using the default DbContext.
+	 *
+	 * @param clz the class type of the result
+	 * @param <T> the type of the result
+	 * @return a new PojoQuery instance
+	 */
 	public static <T> PojoQuery<T> build(Class<T> clz) {
 		return build(DbContext.getDefault(), clz);
 	}
-	
+
+	/**
+	 * Builds a PojoQuery instance using the specified DbContext.
+	 *
+	 * @param context the database context
+	 * @param clz the class type of the result
+	 * @param <T> the type of the result
+	 * @return a new PojoQuery instance
+	 */
 	public static <T> PojoQuery<T> build(DbContext context, Class<T> clz) {
 		return new PojoQuery<T>(context, clz);
 	}
-	
+
+	/**
+	 * Gets the underlying SQL query.
+	 *
+	 * @return the SQL query
+	 */
 	public SqlQuery<DefaultSqlQuery> getQuery() {
 		return query;
 	}
 
+	/**
+	 * Gets the list of SQL fields in the query.
+	 *
+	 * @return the list of SQL fields
+	 */
 	public List<SqlField> getFields() {
 		return query.getFields();
 	}
 
+	/**
+	 * Sets the list of SQL fields in the query.
+	 *
+	 * @param fields the list of SQL fields
+	 */
 	public void setFields(List<SqlField> fields) {
 		query.setFields(fields);
 	}
 
+	/**
+	 * Gets the list of SQL joins in the query.
+	 *
+	 * @return the list of SQL joins
+	 */
 	public List<SqlJoin> getJoins() {
 		return query.getJoins();
 	}
 
+	/**
+	 * Sets the list of SQL joins in the query.
+	 *
+	 * @param joins the list of SQL joins
+	 * @return the current PojoQuery instance
+	 */
 	public PojoQuery<T> setJoins(List<SqlJoin> joins) {
 		query.setJoins(joins);
 		return this;
 	}
 
+	/**
+	 * Gets the list of WHERE conditions in the query.
+	 *
+	 * @return the list of WHERE conditions
+	 */
 	public List<SqlExpression> getWheres() {
 		return query.getWheres();
 	}
 
+	/**
+	 * Sets the list of WHERE conditions in the query.
+	 *
+	 * @param wheres the list of WHERE conditions
+	 * @return the current PojoQuery instance
+	 */
 	public PojoQuery<T> setWheres(List<SqlExpression> wheres) {
 		query.setWheres(wheres);
 		return this;
 	}
 
+	/**
+	 * Gets the list of GROUP BY clauses in the query.
+	 *
+	 * @return the list of GROUP BY clauses
+	 */
 	public List<String> getGroupBy() {
 		return query.getGroupBy();
 	}
 
+	/**
+	 * Sets the list of GROUP BY clauses in the query.
+	 *
+	 * @param groupBy the list of GROUP BY clauses
+	 * @return the current PojoQuery instance
+	 */
 	public PojoQuery<T> setGroupBy(List<String> groupBy) {
 		query.setGroupBy(groupBy);
 		return this;
 	}
 
+	/**
+	 * Gets the list of ORDER BY clauses in the query.
+	 *
+	 * @return the list of ORDER BY clauses
+	 */
 	public List<String> getOrderBy() {
 		return query.getOrderBy();
 	}
 
+	/**
+	 * Sets the list of ORDER BY clauses in the query.
+	 *
+	 * @param orderBy the list of ORDER BY clauses
+	 * @return the current PojoQuery instance
+	 */
 	public PojoQuery<T> setOrderBy(List<String> orderBy) {
 		query.setOrderBy(orderBy);
 		return this;
 	}
 
+	/**
+	 * Adds a field to the query.
+	 *
+	 * @param expression the SQL expression for the field
+	 * @return the current PojoQuery instance
+	 */
 	public PojoQuery<T> addField(SqlExpression expression) {
 		query.addField(expression);
 		return this;
 	}
 
+	/**
+	 * Adds a field with an alias to the query.
+	 *
+	 * @param expression the SQL expression for the field
+	 * @param alias the alias for the field
+	 * @return the current PojoQuery instance
+	 */
 	public PojoQuery<T> addField(SqlExpression expression, String alias) {
 		query.addField(expression, alias);
 		return this;
 	}
 
+	/**
+	 * Adds a GROUP BY clause to the query.
+	 *
+	 * @param group the GROUP BY clause
+	 * @return the current PojoQuery instance
+	 */
 	public PojoQuery<T> addGroupBy(String group) {
 		query.addGroupBy(group);
 		return this;
 	}
 
+	/**
+	 * Adds a WHERE condition to the query.
+	 *
+	 * @param where the WHERE condition
+	 * @return the current PojoQuery instance
+	 */
 	public PojoQuery<T> addWhere(SqlExpression where) {
 		query.addWhere(where);
 		return this;
 	}
 
+	/**
+	 * Adds a WHERE condition with parameters to the query.
+	 *
+	 * @param sql the SQL string for the WHERE condition
+	 * @param params the parameters for the WHERE condition
+	 * @return the current PojoQuery instance
+	 */
 	public PojoQuery<T> addWhere(String sql, Object... params) {
 		query.addWhere(sql, params);
 		return this;
 	}
 
+	/**
+	 * Adds an ORDER BY clause to the query.
+	 *
+	 * @param order the ORDER BY clause
+	 * @return the current PojoQuery instance
+	 */
 	public PojoQuery<T> addOrderBy(String order) {
 		query.addOrderBy(order);
 		return this;
 	}
 
+	/**
+	 * Sets a limit on the number of rows returned by the query.
+	 *
+	 * @param rowCount the maximum number of rows
+	 * @return the current PojoQuery instance
+	 */
 	public PojoQuery<T> setLimit(int rowCount) {
 		query.setLimit(rowCount);
 		return this;
 	}
 
+	/**
+	 * Sets a limit with an offset on the number of rows returned by the query.
+	 *
+	 * @param offset the starting row offset
+	 * @param rowCount the maximum number of rows
+	 * @return the current PojoQuery instance
+	 */
 	public PojoQuery<T> setLimit(int offset, int rowCount) {
 		query.setLimit(offset, rowCount);
 		return this;
 	}
 
+	/**
+	 * Converts the query to a SQL statement.
+	 *
+	 * @return the SQL statement
+	 */
 	public SqlExpression toStatement() {
 		return query.toStatement();
 	}
 
+	/**
+	 * Adds a join to the query.
+	 *
+	 * @param type the type of join
+	 * @param tableName the name of the table to join
+	 * @param alias the alias for the table
+	 * @param joinCondition the join condition
+	 * @return the current PojoQuery instance
+	 */
 	public PojoQuery<T> addJoin(JoinType type, String tableName, String alias, SqlExpression joinCondition) {
 		query.addJoin(type, tableName, alias, joinCondition);
 		return this;
 	}
 
+	/**
+	 * Gets the name of the table associated with the query.
+	 *
+	 * @return the table name
+	 */
 	public String getTable() {
 		return query.getTable();
 	}
 
+	/**
+	 * Executes the query using the specified DataSource.
+	 *
+	 * @param db the DataSource
+	 * @return the list of results
+	 */
 	public List<T> execute(DataSource db) {
 		return queryBuilder.processRows(DB.queryRows(db, query.toStatement()));
 	}
 
+	/**
+	 * Executes the query using the specified Connection.
+	 *
+	 * @param connection the database connection
+	 * @return the list of results
+	 */
 	public List<T> execute(Connection connection) {
 		return queryBuilder.processRows(DB.queryRows(connection, query.toStatement()));
 	}
-	
+
+	/**
+	 * Executes the query in streaming mode using the specified DataSource.
+	 *
+	 * @param db the DataSource
+	 * @return the list of results
+	 */
 	public List<T> executeStreaming(DataSource db) {
 		List<T> result = new ArrayList<>();
 		Map<Object, Object> allEntities = new HashMap<>();
@@ -422,15 +584,34 @@ public class PojoQuery<T> {
 		return ids;
 	}
 	
+	/**
+	 * Converts the query to a SQL string.
+	 *
+	 * @return the SQL string
+	 */
 	public String toSql() {
 		return query.toStatement().getSql();
 	}
 
+	/**
+	 * Finds an entity by its ID using the specified Connection.
+	 *
+	 * @param connection the database connection
+	 * @param id the ID of the entity
+	 * @return the entity, or null if not found
+	 */
 	public T findById(Connection connection, Object id) {
 		query.getWheres().addAll(QueryBuilder.buildIdCondition(dbContext, resultClass, id));
 		return returnSingleRow(execute(connection));
 	}
 
+	/**
+	 * Finds an entity by its ID using the specified DataSource.
+	 *
+	 * @param db the DataSource
+	 * @param id the ID of the entity
+	 * @return the entity, or null if not found
+	 */
 	public T findById(DataSource db, Object id) {
 		query.getWheres().addAll(QueryBuilder.buildIdCondition(dbContext, resultClass, id));
 		return returnSingleRow(executeStreaming(db));
@@ -506,10 +687,23 @@ public class PojoQuery<T> {
 		return null;
 	}
 	
+	/**
+	 * Processes rows and maps them to the result type.
+	 *
+	 * @param rows the list of rows
+	 * @return the list of mapped results
+	 */
 	public List<T> processRows(List<Map<String, Object>> rows) {
 		return queryBuilder.processRows(rows);
 	}
 
+	/**
+	 * Lists the IDs of the entities in the query result.
+	 *
+	 * @param db the DataSource
+	 * @param <PK> the type of the primary key
+	 * @return the list of IDs
+	 */
 	@SuppressWarnings("unchecked")
 	public <PK> List<PK> listIds(DataSource db) {
 		List<Field> idFields = QueryBuilder.determineIdFields(resultClass);
@@ -525,6 +719,12 @@ public class PojoQuery<T> {
 		return result;
 	}
 	
+	/**
+	 * Counts the total number of rows in the query result.
+	 *
+	 * @param db the DataSource
+	 * @return the total count
+	 */
 	public int countTotal(DataSource db) {
 		SqlExpression stmt = queryBuilder.buildCountStatement();
 		List<Map<String, Object>> rows = DB.queryRows(db, stmt);

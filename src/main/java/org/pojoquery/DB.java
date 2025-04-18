@@ -162,7 +162,7 @@ public interface DB {
 			} catch (SQLException e) {
 				e.printStackTrace();
 			}
-			}
+		}
     }
 	
 	/**
@@ -336,16 +336,44 @@ public interface DB {
 		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 	
+	/**
+	 * Inserts a new record into the specified table using a connection and schema name.
+	 *
+	 * @param <PK>       The type of the primary key that will be returned.
+	 * @param connection The database connection.
+	 * @param schemaName The schema name.
+	 * @param tableName  The name of the table where the record will be inserted.
+	 * @param values     A map containing the column names as keys and their corresponding values.
+	 * @return           The primary key of the newly inserted record.
+	 */
 	public static <PK> PK insert(Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values) {
 		SqlExpression insertSql = buildInsertOrUpdate(DbContext.getDefault(), schemaName, tableName, values, false);
 		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 	
+	/**
+	 * Inserts a new record into the specified table using a connection.
+	 *
+	 * @param <PK>       The type of the primary key that will be returned.
+	 * @param connection The database connection.
+	 * @param tableName  The name of the table where the record will be inserted.
+	 * @param values     A map containing the column names as keys and their corresponding values.
+	 * @return           The primary key of the newly inserted record.
+	 */
 	public static <PK> PK insert(Connection connection, String tableName, Map<String, ? extends Object> values) {
 		SqlExpression insertSql = buildInsertOrUpdate(DbContext.getDefault(), null, tableName, values, false);
 		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 	
+	/**
+     * Inserts or updates a record in the database without a schema name.
+     * 
+     * @param <PK> the type of the primary key
+     * @param db the data source
+     * @param tableName the name of the table
+     * @param values the values to insert or update
+     * @return the generated primary key or null if the operation didn't generate keys (e.g., update)
+     */
 	public static <PK> PK insertOrUpdate(DataSource db, String tableName, Map<String, ? extends Object> values) {
 		SqlExpression insertSql = buildInsertOrUpdate(DbContext.getDefault(), null, tableName, values, true);
 		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
