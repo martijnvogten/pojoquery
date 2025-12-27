@@ -6,71 +6,110 @@
 
 image:logo_pojoquery.png[alt="PojoQuery Logo", width=200, height=200]
 
-PojoQuery is a lightweight utility for working with relational databases in Java. Instead of writing SQL queries in plain text, PojoQuery leverages Plain Old Java Objects (POJOs) to define the set of fields and tables (joins) to fetch.
+== What is PojoQuery?
+
+PojoQuery is a lightweight Java library for working with relational databases that takes a different approach to Object-Relational Mapping (ORM). Instead of using Java classes as table definitions, PojoQuery uses them as *query definitions* that shape the result set. This simple yet powerful paradigm eliminates many common ORM problems while keeping your database access code clean and maintainable.
+
+[.lead]
+*The PojoQuery Difference:* Your Java classes define what you want to get from the database, not how data is stored, freeing you from the object-relational impedance mismatch.
 
 == Key Features
 
-* Type-safe database queries using POJOs
-* Automatic SQL generation from POJO structure
-* Support for complex joins and relationships via `@Link` and `@Join`
-* Customizable through annotations (`@Table`, `@Id`, `@FieldName`, `@Select`, etc.)
-* No lazy loading, no proxies, no session management complexity
-* Easily adaptable to different database engines or SQL dialects (tested with MySQL, PostgreSQL, HSQL)
-* Support for table-per-subclass inheritance mapping (`@SubClasses`)
-* Support for embedded objects (`@Embedded`)
-* Handling of dynamic columns (`@Other`)
+[cols="1,3"]
+|===
+| Feature | Description
+
+| *Type-safe queries* 
+| Define queries using Java POJOs with full type safety and IDE support
+
+| *Smart SQL generation* 
+| Automatic SQL generation with optimized JOINs based on your POJO structure
+
+| *Relationship mapping* 
+| Easily map one-to-one, one-to-many, and many-to-many relationships
+
+| *No session management* 
+| No lazy loading, no proxies, no complex session tracking
+
+| *Complete control* 
+| Full access to customize SQL when needed while keeping the ORM advantages
+
+| *Clean POJO model* 
+| No need to extend base classes or implement interfaces
+
+| *Multi-database support* 
+| Works with MySQL, PostgreSQL, HSQLDB, and most JDBC-compliant databases
+
+| *Inheritance mapping* 
+| Support for table-per-subclass inheritance patterns
+
+| *Embedded objects* 
+| Map complex object structures to database tables with `@Embedded`
+
+| *Dynamic columns* 
+| Handle schemaless patterns with `@Other` for dynamic column mappings
+|===
+
+== Rationale
+
+The main difference with conventional Object Relational Mapping (ORM) is that types (Java classes) do not double as table definitions but rather as *query definitions*. More precisely, the POJO defines the shape of the resultset. This implies that type definitions must be *cycle-free*. 
+
+This principle is the key to avoiding lazy loading and other complexities of conventional ORM. See link:https://martijnvogten.github.io/2025/04/16/the-basic-mistake-all-orms-make-and-how-to-fix-it.html[this article] about model-driven ORM.
+
+[quote, Martin Fowler]
+____
+The hardest part of building a software system is deciding what to build [...], not the actual implementation difficulties.
+____
+
+PojoQuery allows you to focus on the data you need for each use case rather than trying to shoehorn your domain model into database tables.
 
 == Quick Example
 
-Define your POJOs:
+Define your POJOs to represent the data structure you want to retrieve:
 
 [source,java]
 ----
-// Field access modifiers and getters/setters omitted for brevity
-
+// Define the main entity, mapping to the 'article' table
 @Table("article")
 class Article {
     @Id Long id;
     String title;
     String content;
-    User author; // Automatically joins based on author_id
-    List<Comment> comments; // Automatically joins based on article_id in comment table
-
-	// ...
+    User author; // Automatically joins with the 'user' table based on 'author_id'
+    List<Comment> comments; // Automatically joins with the 'comment' table based on 'article_id'
 }
 
+// Define the related 'user' entity
 @Table("user")
 class User {
     @Id Long id;
     String firstName;
     String lastName;
     String email;
-
-	// ...
 }
 
+// Define the related 'comment' entity
 @Table("comment")
 class Comment {
     @Id Long id;
-    Long article_id; // Foreign key
+    Long article_id; // Foreign key linking back to Article
     String comment;
     Date submitdate;
-    User author; // Join based on author_id in comment table
-
-	// ...
+    User author; // Automatically joins with the 'user' table based on 'author_id'
 }
 ----
 
-Build and execute the query:
+Build and execute the query using PojoQuery:
 
 [source,java]
 ----
-// Assuming 'connection' is the current JDBC Connection (javax.sql.Connection)
-List<Article> articles = PojoQuery.build(Article.class)
-    .addWhere("article.id = ?", 123L)
-    .addOrderBy("comments.submitdate DESC")
-    .execute(connection); // Execute against the current connection/transaction
+// Assuming 'connection' is your active JDBC Connection
+List<Article> articles = PojoQuery.build(Article.class) // Start building a query for Article
+    .addWhere("article.id = ?", 123L) // Filter by article ID
+    .addOrderBy("comments.submitdate DESC") // Order comments by submission date
+    .execute(connection); // Execute the query against the database connection
 
+// Process the results
 for (Article article : articles) {
     System.out.println("Article Title: " + article.getTitle());
     System.out.println("Author: " + article.getAuthor().getFirstName());
@@ -80,17 +119,61 @@ for (Article article : articles) {
 
 This generates a predictable SQL query, joining `article`, `user` (for article author), `comment`, and `user` (for comment author) tables.
 
+== When to Use PojoQuery
+
+* When you need to fetch complex, nested data structures with a single query
+* When you want direct control over the SQL being generated
+* When you need to create different "views" or projections of your data
+* When you want to avoid the complexity of ORM session management
+* In applications with complex read/query patterns but simple write operations
+* When performance and predictability are priorities
+
 == Getting Started
 
-To begin using PojoQuery in your project, follow our xref:getting-started.adoc[Getting Started] guide.
+To begin using PojoQuery in your project, see our xref:getting-started.adoc[Getting Started] guide.
 
 == Documentation Structure
 
-* xref:getting-started.adoc[Getting Started] - Setup and basic usage.
-* xref:features.adoc[Features] - Overview of PojoQuery capabilities.
-* xref:annotations.adoc[Annotations] - Detailed reference for all annotations.
-* xref:query-building.adoc[Query Building] - Using the fluent API to construct queries.
-* xref:database-support.adoc[Database Support] - Information on supported databases and configuration.
-* xref:advanced-topics.adoc[Advanced Topics] - Inheritance, custom joins, streaming, and more.
-* xref:examples.adoc[Examples] - Practical code examples.
+* xref:getting-started.adoc[Getting Started] - Setup and basic usage
+* xref:features.adoc[Features] - Overview of PojoQuery capabilities
+* xref:annotations.adoc[Annotations] - Detailed reference for all annotations
+* xref:query-building.adoc[Query Building] - Using the fluent API to construct queries
+* xref:database-support.adoc[Database Support] - Information on supported databases and configuration
+* xref:advanced-topics.adoc[Advanced Topics] - Inheritance, custom joins, streaming, and more
+* xref:examples.adoc[Examples] - Practical code examples
 
+== Building from Source
+
+To build PojoQuery from the source code:
+
+. *Prerequisites:* Ensure you have JDK 17 or later installed.
+. *Clone the repository:*
++
+[source,bash]
+----
+git clone https://github.com/martijnvogten/pojoquery.git
+----
+. *Navigate to the project directory:*
++
+[source,bash]
+----
+cd pojoquery
+----
+. *Build with Maven Wrapper:*
++
+--
+* On Linux/macOS:
++
+[source,bash]
+----
+./mvnw clean install
+----
+* On Windows:
++
+[source,bash]
+----
+mvnw.cmd clean install
+----
+--
+
+This will compile the code, run tests, and install the artifact into your local Maven repository.

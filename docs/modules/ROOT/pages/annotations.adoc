@@ -2,6 +2,30 @@
 
 PojoQuery uses annotations to map POJOs to database structures and customize query generation.
 
+== Quick Reference
+
+[cols="2,1,4"]
+|===
+| Annotation | Target | Purpose
+
+| `@Table` | Class | Maps class to database table
+| `@Id` | Field | Marks primary key field(s)
+| `@FieldName` | Field | Custom column name mapping
+| `@Transient` | Field | Excludes field from database mapping
+| `@Link` | Field | Defines entity relationship (auto JOIN)
+| `@JoinCondition` | Field | Custom condition for `@Link` joins
+| `@Select` | Field | Custom SQL expression for field
+| `@Join` | Class | Explicit SQL JOIN clause
+| `@Joins` | Class | Container for multiple `@Join`
+| `@GroupBy` | Class | Adds GROUP BY clause
+| `@OrderBy` | Class | Default ORDER BY clause
+| `@Embedded` | Field | Flattens nested object into parent columns
+| `@Other` | Field | Maps prefixed columns to Map
+| `@SubClasses` | Class | Defines inheritance mapping
+| `@SubClass` | Annotation | Subclass discriminator mapping
+| `@NoUpdate` | Field | Excludes field from UPDATE statements
+|===
+
 == Core Mapping Annotations
 
 === @Table
@@ -77,7 +101,7 @@ public class Product {
 == Relationship Annotations
 
 === @Link
-*Description:* Defines a relationship to another entity (one-to-one, one-to-many, many-to-many), triggering automatic JOIN generation. PojoQuery uses conventions or annotation parameters to determine join columns and tables.
+*Description:* Defines a relationship to another entity (one-to-one, one-to-many, many-to-many), triggering automatic JOIN generation. PojoQuery uses conventions or annotation parameters to determine join columns and tables. Can be combined with `@JoinCondition` for complex filtering.
 *Target:* `Field`
 *Parameters:*
 ** `linkfield` (String, optional): The foreign key column name.
@@ -106,6 +130,52 @@ public class Article {
     // Collection of Enums: Uses 'article_flags' table, gets value from 'flag_value' column
     @Link(linktable="article_flags", linkfield="article_id", fetchColumn="flag_value")
     Set<ArticleFlag> flags;
+}
+----
+
+=== @JoinCondition
+*Description:* Specifies a custom join condition for a `@Link` relationship. This is particularly useful when you have multiple relationships to the same table that need to be distinguished by an additional condition (e.g., role-based relationships), or when the default join convention doesn't apply.
+*Target:* `Field` (used alongside `@Link`)
+*Parameters:*
+** `value` (String, required): The SQL join condition. Supports placeholders:
+*** `{this}` - refers to the current entity's table alias
+*** `{linktable}` - refers to the link table alias (for many-to-many)
+*** `{fieldName}` - refers to the target entity's table alias
+*Examples:*
+[source,java]
+----
+@Table("event")
+public class EventWithParticipants {
+    @Id Long eventID;
+    String title;
+
+    // Multiple relationships to the same 'person' table, distinguished by role
+    @Link(linktable="event_person", linkfield="eventID", foreignlinkfield="personID")
+    @JoinCondition("{this}.eventID={linktable}.eventID AND {linktable}.role='visitor'")
+    List<Person> visitors;
+
+    @Link(linktable="event_person", linkfield="eventID", foreignlinkfield="personID")
+    @JoinCondition("{this}.eventID={linktable}.eventID AND {linktable}.role='organizer'")
+    List<Person> organizers;
+}
+
+@Table("employee")
+public class Employee {
+    @Id Long id;
+
+    // Custom join condition for one-to-one relationship
+    @JoinCondition("{this}.department_id = {department}.id")
+    Department department;
+}
+
+@Table("festival")
+public class Festival {
+    @Id Long festivalId;
+    String name;
+
+    // Join condition on a collection without @Link
+    @JoinCondition("{events}.festivalId = {this}.festivalId")
+    List<Event> events;
 }
 ----
 

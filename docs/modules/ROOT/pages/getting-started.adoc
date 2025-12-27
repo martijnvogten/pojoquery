@@ -50,105 +50,105 @@ dependencies {
 
 Let's assume you have a `user` table in your database.
 
-1.  *Define the POJO:* Create a Java class representing the `user` table.
+*Define the POJO:* Create a Java class representing the `user` table.
 
-    [source,java]
-    ----
-    import org.pojoquery.annotations.Table;
-    import org.pojoquery.annotations.Id;
+[source,java]
+----
+import org.pojoquery.annotations.Table;
+import org.pojoquery.annotations.Id;
 
-    @Table("user") // Maps this class to the 'user' table
-    public class User {
-        @Id // Marks 'id' as the primary key
-        public Long id;
+@Table("user") // Maps this class to the 'user' table
+public class User {
+	@Id // Marks 'id' as the primary key
+	public Long id;
 
-        public String firstName;
-        public String lastName;
-        public String email;
+	public String firstName;
+	public String lastName;
+	public String email;
 
-        // Optional: Add methods like getters/setters or helper methods
-        public String getFullName() {
-            return (firstName != null ? firstName : "")
-                   + " "
-                   + (lastName != null ? lastName : "");
-        }
-    }
-    ----
+	// Optional: Add methods like getters/setters or helper methods
+	public String getFullName() {
+		return (firstName != null ? firstName : "")
+				+ " "
+				+ (lastName != null ? lastName : "");
+	}
+}
+----
 
-2.  *Configure DataSource:* Obtain a `javax.sql.DataSource` instance connected to your database. How you do this depends on your application framework (e.g., Spring, HikariCP, basic JDBC).
+*Configure DataSource:* Obtain a `javax.sql.DataSource` instance connected to your database. How you do this depends on your application framework (e.g., Spring, HikariCP, basic JDBC).
 
-    [source,java]
-    ----
-    // Example using a simple DataSource (replace with your actual configuration)
-    import javax.sql.DataSource;
-    import com.mysql.cj.jdbc.MysqlDataSource; // Example for MySQL
+[source,java]
+----
+// Example using a simple DataSource (replace with your actual configuration)
+import javax.sql.DataSource;
+import com.mysql.cj.jdbc.MysqlDataSource; // Example for MySQL
 
-    public class DatabaseConfig {
-        public static DataSource getDataSource() {
-            MysqlDataSource dataSource = new MysqlDataSource();
-            dataSource.setURL("jdbc:mysql://localhost:3306/mydatabase");
-            dataSource.setUser("username");
-            dataSource.setPassword("password");
-            return dataSource;
-        }
-    }
-    ----
+public class DatabaseConfig {
+	public static DataSource getDataSource() {
+		MysqlDataSource dataSource = new MysqlDataSource();
+		dataSource.setURL("jdbc:mysql://localhost:3306/mydatabase");
+		dataSource.setUser("username");
+		dataSource.setPassword("password");
+		return dataSource;
+	}
+}
+----
 
-3.  *Build and Execute the Query:* Use `PojoQuery.build()` to create and run the query.
+*Build and Execute the Query:* Use `PojoQuery.build()` to create and run the query.
 
-    [source,java]
-    ----
-    import org.pojoquery.PojoQuery;
-    import javax.sql.DataSource;
-    import java.util.List;
+[source,java]
+----
+import org.pojoquery.PojoQuery;
+import javax.sql.DataSource;
+import java.util.List;
 
-    public class UserRepository {
+public class UserRepository {
 
-        private DataSource dataSource;
+	private DataSource dataSource;
 
-        public UserRepository(DataSource dataSource) {
-            this.dataSource = dataSource;
-        }
+	public UserRepository(DataSource dataSource) {
+		this.dataSource = dataSource;
+	}
 
-        public User findById(Long userId) {
-            // Build the query for the User class
-            PojoQuery<User> query = PojoQuery.build(User.class)
-                // Add a WHERE clause. 'user.id' refers to the 'id' column in the 'user' table.
-                .addWhere("user.id = ?", userId);
+	public User findById(Long userId) {
+		// Build the query for the User class
+		PojoQuery<User> query = PojoQuery.build(User.class)
+			// Add a WHERE clause. 'user.id' refers to the 'id' column in the 'user' table.
+			.addWhere("user.id = ?", userId);
 
-            // Execute the query and get the results
-            List<User> results = query.execute(dataSource);
+		// Execute the query and get the results
+		List<User> results = query.execute(dataSource);
 
-            // Return the first result, or null if not found
-            return results.isEmpty() ? null : results.get(0);
-        }
+		// Return the first result, or null if not found
+		return results.isEmpty() ? null : results.get(0);
+	}
 
-        public List<User> findAll() {
-            return PojoQuery.build(User.class)
-                .addOrderBy("user.lastName ASC") // Optional: Add sorting
-                .execute(dataSource);
-        }
-    }
+	public List<User> findAll() {
+		return PojoQuery.build(User.class)
+			.addOrderBy("user.lastName ASC") // Optional: Add sorting
+			.execute(dataSource);
+	}
+}
 
-    // --- Usage Example ---
-    public class MainApp {
-        public static void main(String[] args) {
-            DataSource ds = DatabaseConfig.getDataSource();
-            UserRepository repo = new UserRepository(ds);
+// --- Usage Example ---
+public class MainApp {
+	public static void main(String[] args) {
+		DataSource ds = DatabaseConfig.getDataSource();
+		UserRepository repo = new UserRepository(ds);
 
-            User user = repo.findById(1L);
-            if (user != null) {
-                System.out.println("Found user: " + user.getFullName() + " (" + user.email + ")");
-            } else {
-                System.out.println("User not found.");
-            }
+		User user = repo.findById(1L);
+		if (user != null) {
+			System.out.println("Found user: " + user.getFullName() + " (" + user.email + ")");
+		} else {
+			System.out.println("User not found.");
+		}
 
-            List<User> allUsers = repo.findAll();
-            System.out.println("\nAll Users:");
-            allUsers.forEach(u -> System.out.println("- " + u.getFullName()));
-        }
-    }
-    ----
+		List<User> allUsers = repo.findAll();
+		System.out.println("\nAll Users:");
+		allUsers.forEach(u -> System.out.println("- " + u.getFullName()));
+	}
+}
+----
 
 == Next Steps
 

@@ -1,0 +1,404 @@
+= Troubleshooting & FAQ
+
+This page addresses common issues and frequently asked questions when working with PojoQuery.
+
+== Common Issues
+
+=== Linked Objects Are Null
+
+*Problem:* Your `@Link` field returns `null` even though you expect data.
+
+*Possible Causes:*
+
+1. **Missing `@Table` annotation on the linked class:**
++
+[source,java]
+----
+// WRONG: Missing @Table
+public class Author {
+    @Id Long id;
+    String name;
+}
+
+// CORRECT
+@Table("author")
+public class Author {
+    @Id Long id;
+    String name;
+}
+----
+
+2. **Foreign key column name doesn't match convention:**
++
+By default, PojoQuery expects `{fieldName}_id` as the foreign key column. If your column differs, use the `linkfield` parameter:
++
+[source,java]
+----
+@Table("article")
+public class Article {
+    @Id Long id;
+    
+    // If column is 'writer_id' instead of 'author_id'
+    @Link(linkfield = "writer_id")
+    Author author;
+}
+----
+
+3. **No matching data in database:**
++
+Remember that `@Link` uses `LEFT JOIN` by default. If the foreign key value doesn't match any row in the target table, the linked object will be `null`.
+
+=== Collection Is Empty When It Shouldn't Be
+
+*Problem:* Your `List<T>` or `Set<T>` field with `@Link` returns an empty collection.
+
+*Possible Causes:*
+
+1. **Foreign key on wrong side:**
++
+For one-to-many relationships, the foreign key should be in the *child* table:
++
+[source,java]
+----
+// Parent entity
+@Table("article")
+public class Article {
+    @Id Long id;
+    @Link List<Comment> comments; // Expects 'article_id' column in 'comment' table
+}
+
+// Child entity - must have foreign key column
+@Table("comment")
+public class Comment {
+    @Id Long id;
+    Long article_id; // This column links back to Article
+    String text;
+}
+----
+
+2. **Missing link table for many-to-many:**
++
+[source,java]
+----
+// WRONG: No linktable specified for many-to-many
+@Link List<Tag> tags;
+
+// CORRECT
+@Link(linktable = "article_tag", linkfield = "article_id", foreignlinkfield = "tag_id")
+List<Tag> tags;
+----
+
+=== Generated SQL Looks Wrong
+
+*Problem:* The SQL query doesn't match your expectations.
+
+*Solution:* Use `toSql()` to inspect the generated SQL:
+[source,java]
+----
+PojoQuery<Article> query = PojoQuery.build(Article.class)
+    .addWhere("article.id = ?", 123L);
+
+// Print the generated SQL for debugging
+System.out.println(query.toSql());
+
+// Then execute
+List<Article> results = query.execute(dataSource);
+----
+
+=== Circular Reference Error
+
+*Problem:* You're getting a stack overflow or circular reference error.
+
+*Explanation:* PojoQuery requires *cycle-free* type definitions. Unlike traditional ORMs, you cannot have bidirectional relationships in your POJO structure.
+
+[source,java]
+----
+// WRONG: Circular reference
+@Table("author")
+public class Author {
+    @Id Long id;
+    @Link List<Book> books; // Author -> Book
+}
+
+@Table("book")
+public class Book {
+    @Id Long id;
+    @Link Author author; // Book -> Author (creates cycle!)
+}
+
+// CORRECT: Create separate view classes for different use cases
+@Table("author")
+public class AuthorWithBooks {
+    @Id Long id;
+    String name;
+    @Link List<BookSummary> books;
+}
+
+@Table("book")
+public class BookSummary {
+    @Id Long id;
+    String title;
+    // No link back to Author
+}
+
+@Table("book")
+public class BookWithAuthor {
+    @Id Long id;
+    String title;
+    @Link Author author;
+}
+
+@Table("author")
+public class Author {
+    @Id Long id;
+    String name;
+    // No link to Books
+}
+----
+
+=== Reserved SQL Keywords as Table/Column Names
+
+*Problem:* Your table or column name is a reserved SQL keyword (e.g., `order`, `user`, `group`).
+
+*Solution:* PojoQuery quotes identifiers by default. If you're still having issues, ensure you're using the correct `DbContext`:
+[source,java]
+----
+// MySQL (backticks) - default
+DbContext mysqlContext = new DbContext(DbContext.QuoteStyle.BACKTICKS);
+
+// PostgreSQL / SQL Server (double quotes)
+DbContext pgContext = new DbContext(DbContext.QuoteStyle.DOUBLE_QUOTES);
+
+PojoQuery<Order> query = PojoQuery.build(pgContext, Order.class);
+----
+
+=== Type Mismatch Errors
+
+*Problem:* Getting class cast exceptions or type conversion errors.
+
+*Common Fixes:*
+
+* Ensure Java types match database column types
+* Use `Long` instead of `long` for nullable columns
+* For dates, PojoQuery supports both `java.util.Date` and `java.time.LocalDate`
+* For enums, ensure the database column contains valid enum constant names
+
+[source,java]
+----
+@Table("task")
+public class Task {
+    @Id Long id;
+    
+    // Use wrapper types for nullable columns
+    Integer priority;      // Not 'int'
+    Boolean completed;     // Not 'boolean'
+    
+    // Enum - column should contain 'PENDING', 'IN_PROGRESS', or 'DONE'
+    TaskStatus status;
+}
+
+public enum TaskStatus {
+    PENDING, IN_PROGRESS, DONE
+}
+----
+
+== Frequently Asked Questions
+
+=== How do I select only specific fields?
+
+Create a POJO with only the fields you need:
+[source,java]
+----
+// Full entity
+@Table("user")
+public class User {
+    @Id Long id;
+    String firstName;
+    String lastName;
+    String email;
+    String passwordHash;
+    Date lastLogin;
+}
+
+// Lightweight projection
+@Table("user")
+public class UserSummary {
+    @Id Long id;
+    String firstName;
+    String lastName;
+    // Only these fields will be selected
+}
+
+List<UserSummary> summaries = PojoQuery.build(UserSummary.class).execute(dataSource);
+----
+
+=== Can I use PojoQuery with Spring Boot?
+
+Yes! PojoQuery works with any `DataSource`. In Spring Boot:
+[source,java]
+----
+@Repository
+public class ArticleRepository {
+    
+    @Autowired
+    private DataSource dataSource;
+    
+    public List<Article> findAll() {
+        return PojoQuery.build(Article.class).execute(dataSource);
+    }
+    
+    public Article findById(Long id) {
+        return PojoQuery.build(Article.class)
+            .addWhere("article.id = ?", id)
+            .execute(dataSource)
+            .stream().findFirst().orElse(null);
+    }
+}
+----
+
+=== How do I handle pagination?
+
+Use `setLimit()` with offset and row count:
+[source,java]
+----
+int page = 2;
+int pageSize = 20;
+int offset = (page - 1) * pageSize;
+
+List<Article> articles = PojoQuery.build(Article.class)
+    .addOrderBy("article.publishDate DESC")
+    .setLimit(offset, pageSize)  // offset, rowCount
+    .execute(dataSource);
+
+// Get total count for pagination UI
+long totalCount = PojoQuery.build(Article.class).countTotal(dataSource);
+----
+
+=== How do I use raw SQL when needed?
+
+Use the `DB` helper class for raw SQL operations:
+[source,java]
+----
+import org.pojoquery.DB;
+import org.pojoquery.SqlExpression;
+
+// Raw query returning Maps
+List<Map<String, Object>> rows = DB.queryRows(dataSource, 
+    SqlExpression.sql("SELECT * FROM user WHERE email LIKE ?", "%@example.com"));
+
+// Raw update
+int affected = DB.update(dataSource, 
+    SqlExpression.sql("UPDATE user SET last_login = NOW() WHERE id = ?", userId));
+----
+
+=== What's the difference between `@Link` and `@Join`?
+
+* **`@Link`**: Declares a *relationship* between entities. PojoQuery automatically generates the appropriate JOIN based on conventions or parameters. Use for standard foreign key relationships.
+
+* **`@Join`**: Adds an *explicit SQL JOIN clause* to the query. Use for non-standard joins, joins to tables not represented by entities, or complex conditions not expressible with `@Link`.
+
+[source,java]
+----
+// @Link - relationship-based, automatic JOIN generation
+@Table("article")
+public class ArticleWithAuthor {
+    @Id Long id;
+    @Link User author; // Generates: LEFT JOIN user author ON article.author_id = author.id
+}
+
+// @Join - explicit SQL JOIN
+@Table("article")
+@Join("LEFT JOIN user_stats us ON article.author_id = us.user_id AND us.year = 2024")
+public class ArticleWithStats {
+    @Id Long id;
+    @Select("us.view_count") Integer authorViewCount;
+}
+----
+
+=== How do I debug parameter binding?
+
+Create a helper to log SQL with parameters:
+[source,java]
+----
+PojoQuery<Article> query = PojoQuery.build(Article.class)
+    .addWhere("article.status = ?", "published")
+    .addWhere("article.author_id = ?", 42L);
+
+SqlExpression stmt = query.toStatement();
+System.out.println("SQL: " + stmt.getSql());
+System.out.println("Parameters: " + Arrays.toString(stmt.getParameters()));
+----
+
+=== Does PojoQuery support stored procedures?
+
+Not directly. Use standard JDBC for stored procedures:
+[source,java]
+----
+try (Connection conn = dataSource.getConnection();
+     CallableStatement cs = conn.prepareCall("{call my_procedure(?, ?)}")) {
+    cs.setLong(1, userId);
+    cs.registerOutParameter(2, Types.VARCHAR);
+    cs.execute();
+    String result = cs.getString(2);
+}
+----
+
+== Performance Tips
+
+=== Avoid N+1 Queries
+
+PojoQuery fetches all linked data in a *single query* by design. Unlike lazy-loading ORMs, you won't encounter N+1 query problems:
+[source,java]
+----
+// This is ONE query, not N+1!
+List<ArticleWithComments> articles = PojoQuery.build(ArticleWithComments.class)
+    .execute(dataSource);
+
+// All comments are already loaded
+for (ArticleWithComments article : articles) {
+    System.out.println(article.comments.size()); // No additional query
+}
+----
+
+=== Use Streaming for Large Result Sets
+
+For queries returning thousands of rows, use streaming to avoid memory issues:
+[source,java]
+----
+try (Stream<LogEntry> stream = PojoQuery.build(LogEntry.class)
+        .addWhere("log.date > ?", yesterday)
+        .executeStreaming(dataSource)
+        .stream()) {
+    
+    stream.filter(e -> "ERROR".equals(e.level))
+          .forEach(this::processError);
+}
+----
+
+=== Create Focused View Classes
+
+Don't fetch data you don't need. Create lightweight POJOs for list views:
+[source,java]
+----
+// For detail view - includes everything
+@Table("product")
+public class ProductDetail {
+    @Id Long id;
+    String name;
+    String description;
+    BigDecimal price;
+    @Link Category category;
+    @Link List<Review> reviews;
+    @Link List<ProductImage> images;
+}
+
+// For list view - minimal data
+@Table("product")
+public class ProductListItem {
+    @Id Long id;
+    String name;
+    BigDecimal price;
+    @Select("(SELECT url FROM product_image WHERE product_id = product.id LIMIT 1)")
+    String thumbnailUrl;
+}
+----

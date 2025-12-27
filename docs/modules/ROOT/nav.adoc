@@ -6,3 +6,4 @@
 * xref:database-support.adoc[Database Support]
 * xref:advanced-topics.adoc[Advanced Topics]
 * xref:examples.adoc[Examples]
+* xref:troubleshooting.adoc[Troubleshooting & FAQ]

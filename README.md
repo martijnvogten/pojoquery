@@ -15,24 +15,28 @@ PojoQuery is a lightweight utility for working with relational databases in Java
 * Support for embedded objects (`@Embedded`)
 * Handling of dynamic columns (`@Other`)
 
+## Rationale
+
+The main difference with conventional Object Relational Mapping (ORM) is that types (Java classes) do not double as table definitions but rather as *query definitions*. More precisely, the POJO defines the shape of the resultset. This implies that type definitions must be *cycle-free*. The principle is the key to avoiding lazy loading and other complexities of conventional ORM. See [this article](https://martijnvogten.github.io/2025/04/16/the-basic-mistake-all-orms-make-and-how-to-fix-it.html) about model-driven ORM.
+
 ## Quick Example
 
-Define your POJOs.
+Define your POJOs to represent the data structure you want to retrieve. Access modifiers and getters/setters are omitted for brevity.
 
 ```java
-// Field access modifiers and getters/setters omitted for brevity
-
+// Define the main entity, mapping to the 'article' table
 @Table("article")
 class Article {
     @Id Long id;
     String title;
     String content;
-    User author; // Automatically joins based on author_id
-    List<Comment> comments; // Automatically joins based on article_id in comment table
+    User author; // Automatically joins with the 'user' table based on 'author_id'
+    List<Comment> comments; // Automatically joins with the 'comment' table based on 'article_id'
 
-	// ...
+    // Getters and setters...
 }
 
+// Define the related 'user' entity
 @Table("user")
 class User {
     @Id Long id;
@@ -40,30 +44,32 @@ class User {
     String lastName;
     String email;
 
-	// ...
+    // Getters and setters...
 }
 
+// Define the related 'comment' entity
 @Table("comment")
 class Comment {
     @Id Long id;
-    Long article_id; // Foreign key
+    Long article_id; // Foreign key linking back to Article
     String comment;
     Date submitdate;
-    User author; // Join based on author_id in comment table
+    User author; // Automatically joins with the 'user' table based on 'author_id'
 
-	// ...
+    // Getters and setters...
 }
 ```
 
-Build and execute the query:
+Build and execute the query using PojoQuery:
 
 ```java
-// Assuming 'connection' is the current JDBC Connection (javax.sql.Connection)
-List<Article> articles = PojoQuery.build(Article.class)
-    .addWhere("article.id = ?", 123L)
-    .addOrderBy("comments.submitdate DESC")
-    .execute(connection); // Execute against the current connection/transaction
+// Assuming 'connection' is your active JDBC Connection (java.sql.Connection)
+List<Article> articles = PojoQuery.build(Article.class) // Start building a query for Article
+    .addWhere("article.id = ?", 123L) // Filter by article ID
+    .addOrderBy("comments.submitdate DESC") // Order comments by submission date
+    .execute(connection); // Execute the query against the database connection
 
+// Process the results
 for (Article article : articles) {
     System.out.println("Article Title: " + article.getTitle());
     System.out.println("Author: " + article.getAuthor().getFirstName());

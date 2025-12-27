@@ -172,17 +172,114 @@ DB.runInTransaction(dataSource, (Connection connection) -> {
 });
 ----
 
-== Custom DbContext
+== Optimistic Locking
 
-Create a `DbContext` instance to customize identifier quoting style.
+PojoQuery supports optimistic locking to prevent lost updates in concurrent environments. This is implemented through the `HasVersion` interface.
+
+=== How It Works
+
+1. Your entity implements `HasVersion`, providing a `version` field
+2. On each update, PojoQuery checks that the version in the database matches the version in your entity
+3. If versions match, the update proceeds and the version is incremented
+4. If versions don't match (another transaction modified the row), a `StaleObjectException` is thrown
+
+=== Implementation
 
 [source,java]
 ----
-// Use double quotes for identifiers (PostgreSQL, SQL Server standard)
-DbContext customContext = new DbContext(DbContext.QuoteStyle.DOUBLE_QUOTES);
+import org.pojoquery.HasVersion;
 
-// Build queries using this context
-PojoQuery<Product> productQuery = PojoQuery.build(customContext, Product.class);
+@Table("product")
+public class Product implements HasVersion {
+    @Id Long id;
+    String name;
+    BigDecimal price;
+    Long version; // Version column in database
 
-String sql = productQuery.toSql(); // SQL will use "product"."id" etc.
+    @Override
+    public Long getVersion() {
+        return version;
+    }
+
+    @Override
+    public void setVersion(Long version) {
+        this.version = version;
+    }
+}
 ----
+
+=== Database Schema
+
+Your table needs a `version` column (or whatever name you use):
+[source,sql]
+----
+CREATE TABLE product (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(255),
+    price DECIMAL(10,2),
+    version BIGINT DEFAULT 0
+);
+----
+
+=== Usage Example
+
+[source,java]
+----
+import org.pojoquery.StaleObjectException;
+
+// User A fetches the product
+Product productA = PojoQuery.build(Product.class)
+    .addWhere("product.id = ?", 123L)
+    .execute(dataSource)
+    .get(0);
+// productA.version = 1
+
+// User B fetches the same product
+Product productB = PojoQuery.build(Product.class)
+    .addWhere("product.id = ?", 123L)
+    .execute(dataSource)
+    .get(0);
+// productB.version = 1
+
+// User A updates the product
+productA.price = new BigDecimal("29.99");
+PojoQuery.update(dataSource, productA); // Success! version becomes 2
+
+// User B tries to update the same product
+productB.price = new BigDecimal("24.99");
+try {
+    PojoQuery.update(dataSource, productB); // Fails! version mismatch
+} catch (StaleObjectException e) {
+    // Handle the conflict - typically refresh and retry, or notify user
+    System.out.println("Product was modified by another user. Please refresh.");
+}
+----
+
+=== Handling Stale Object Exceptions
+
+[source,java]
+----
+public void updateProductPrice(Long productId, BigDecimal newPrice) {
+    int maxRetries = 3;
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            Product product = PojoQuery.build(Product.class)
+                .addWhere("product.id = ?", productId)
+                .execute(dataSource)
+                .stream().findFirst()
+                .orElseThrow(() -> new RuntimeException("Product not found"));
+            
+            product.price = newPrice;
+            PojoQuery.update(dataSource, product);
+            return; // Success
+            
+        } catch (StaleObjectException e) {
+            if (attempt == maxRetries - 1) {
+                throw new RuntimeException("Failed to update after " + maxRetries + " attempts", e);
+            }
+            // Retry with fresh data
+        }
+    }
+}
+----
+

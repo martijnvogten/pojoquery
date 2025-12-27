@@ -203,3 +203,332 @@ userToUpdate.email = "alice.w@example.com";
 int updatedRows = PojoQuery.update(dataSource, userToUpdate);
 System.out.println("Rows updated: " + updatedRows);
 ----
+== Example 8: Many-to-Many Relationship
+
+Fetch articles with their associated tags using a link table.
+
+*Database Schema:*
+[source,sql]
+----
+-- article table
+CREATE TABLE article (id BIGINT PRIMARY KEY, title VARCHAR(255));
+
+-- tag table
+CREATE TABLE tag (id BIGINT PRIMARY KEY, name VARCHAR(100));
+
+-- link table (many-to-many)
+CREATE TABLE article_tag (
+    article_id BIGINT REFERENCES article(id),
+    tag_id BIGINT REFERENCES tag(id),
+    PRIMARY KEY (article_id, tag_id)
+);
+----
+
+*POJOs:*
+[source,java]
+----
+@Table("article")
+public class ArticleWithTags {
+    @Id Long id;
+    String title;
+
+    @Link(linktable = "article_tag", linkfield = "article_id", foreignlinkfield = "tag_id")
+    List<Tag> tags;
+}
+
+@Table("tag")
+public class Tag {
+    @Id Long id;
+    String name;
+}
+----
+
+*Query:*
+[source,java]
+----
+List<ArticleWithTags> articles = PojoQuery.build(ArticleWithTags.class)
+    .execute(dataSource);
+
+for (ArticleWithTags article : articles) {
+    System.out.println(article.title + " - Tags: " + 
+        article.tags.stream().map(t -> t.name).collect(Collectors.joining(", ")));
+}
+----
+
+== Example 9: Filtered Relationships with `@JoinCondition`
+
+Fetch events with separate lists for visitors and organizers from the same person table.
+
+*Database Schema:*
+[source,sql]
+----
+CREATE TABLE event (id BIGINT PRIMARY KEY, title VARCHAR(255));
+CREATE TABLE person (id BIGINT PRIMARY KEY, firstname VARCHAR(100), lastname VARCHAR(100));
+CREATE TABLE event_person (
+    event_id BIGINT,
+    person_id BIGINT,
+    role VARCHAR(20), -- 'visitor' or 'organizer'
+    PRIMARY KEY (event_id, person_id, role)
+);
+----
+
+*POJOs:*
+[source,java]
+----
+@Table("event")
+public class EventWithParticipants {
+    @Id Long id;
+    String title;
+
+    @Link(linktable = "event_person", linkfield = "event_id", foreignlinkfield = "person_id")
+    @JoinCondition("{this}.id = {linktable}.event_id AND {linktable}.role = 'visitor'")
+    List<Person> visitors;
+
+    @Link(linktable = "event_person", linkfield = "event_id", foreignlinkfield = "person_id")
+    @JoinCondition("{this}.id = {linktable}.event_id AND {linktable}.role = 'organizer'")
+    List<Person> organizers;
+}
+
+@Table("person")
+public class Person {
+    @Id Long id;
+    String firstname;
+    String lastname;
+}
+----
+
+*Query:*
+[source,java]
+----
+EventWithParticipants event = PojoQuery.build(EventWithParticipants.class)
+    .addWhere("event.id = ?", 1L)
+    .execute(dataSource)
+    .stream().findFirst().orElse(null);
+
+if (event != null) {
+    System.out.println("Event: " + event.title);
+    System.out.println("Visitors: " + event.visitors.size());
+    System.out.println("Organizers: " + event.organizers.size());
+}
+----
+
+== Example 10: Embedded Objects
+
+Map address fields from the same table into a nested object.
+
+*Database Schema:*
+[source,sql]
+----
+CREATE TABLE customer (
+    id BIGINT PRIMARY KEY,
+    name VARCHAR(255),
+    -- Shipping address columns with prefix
+    ship_street VARCHAR(255),
+    ship_city VARCHAR(100),
+    ship_zip VARCHAR(20),
+    -- Billing address columns with prefix
+    bill_street VARCHAR(255),
+    bill_city VARCHAR(100),
+    bill_zip VARCHAR(20)
+);
+----
+
+*POJOs:*
+[source,java]
+----
+// Value object (not an entity - no @Table)
+public class Address {
+    String street;
+    String city;
+    String zip;
+}
+
+@Table("customer")
+public class Customer {
+    @Id Long id;
+    String name;
+
+    @Embedded(prefix = "ship_")
+    Address shippingAddress;
+
+    @Embedded(prefix = "bill_")
+    Address billingAddress;
+}
+----
+
+*Query:*
+[source,java]
+----
+Customer customer = PojoQuery.build(Customer.class)
+    .addWhere("customer.id = ?", 100L)
+    .execute(dataSource)
+    .stream().findFirst().orElse(null);
+
+if (customer != null) {
+    System.out.println("Ship to: " + customer.shippingAddress.city);
+    System.out.println("Bill to: " + customer.billingAddress.city);
+}
+----
+
+== Example 11: Streaming Large Result Sets
+
+Process millions of log entries without loading all into memory.
+
+*POJO:*
+[source,java]
+----
+@Table("access_log")
+public class AccessLog {
+    @Id Long id;
+    String ipAddress;
+    String requestPath;
+    Integer statusCode;
+    LocalDate accessDate;
+}
+----
+
+*Streaming Query:*
+[source,java]
+----
+LocalDate yesterday = LocalDate.now().minusDays(1);
+
+// Using try-with-resources to ensure proper cleanup
+try (Stream<AccessLog> stream = PojoQuery.build(AccessLog.class)
+        .addWhere("access_log.accessDate = ?", yesterday)
+        .executeStreaming(dataSource)
+        .stream()) {
+
+    // Count 404 errors without loading all rows
+    long notFoundCount = stream
+        .filter(log -> log.statusCode == 404)
+        .count();
+
+    System.out.println("404 errors yesterday: " + notFoundCount);
+}
+
+// Alternative: process each row with a callback
+DB.queryRowsStreaming(dataSource,
+    SqlExpression.sql("SELECT * FROM access_log WHERE status_code >= ?", 500),
+    row -> {
+        System.out.println("Error on path: " + row.get("request_path"));
+    });
+----
+
+== Example 12: Handling Optional Relationships
+
+Gracefully handle nullable foreign keys.
+
+*POJOs:*
+[source,java]
+----
+@Table("task")
+public class Task {
+    @Id Long id;
+    String title;
+    Long assignee_id; // Nullable foreign key
+
+    @Link // Will be null if assignee_id is null
+    User assignee;
+}
+
+@Table("user")
+public class User {
+    @Id Long id;
+    String name;
+}
+----
+
+*Query with Null Handling:*
+[source,java]
+----
+List<Task> tasks = PojoQuery.build(Task.class)
+    .execute(dataSource);
+
+for (Task task : tasks) {
+    String assigneeName = task.assignee != null 
+        ? task.assignee.name 
+        : "Unassigned";
+    System.out.println(task.title + " - " + assigneeName);
+}
+
+// Query only unassigned tasks
+List<Task> unassigned = PojoQuery.build(Task.class)
+    .addWhere("task.assignee_id IS NULL")
+    .execute(dataSource);
+----
+
+== Example 13: Delete Operation
+
+Delete a record by entity or by ID.
+
+*Operations:*
+[source,java]
+----
+// Delete by entity instance
+User userToDelete = repo.findById(123L);
+if (userToDelete != null) {
+    PojoQuery.delete(dataSource, userToDelete);
+    System.out.println("User deleted");
+}
+
+// Delete by ID directly (more efficient - no need to fetch first)
+PojoQuery.deleteById(dataSource, User.class, 456L);
+
+// Delete with raw SQL for bulk operations
+int deleted = DB.update(dataSource,
+    SqlExpression.sql("DELETE FROM session WHERE last_activity < ?", 
+        LocalDate.now().minusDays(30)));
+System.out.println("Cleaned up " + deleted + " old sessions");
+----
+
+== Example 14: Dynamic Columns with `@Other`
+
+Handle tables with dynamic/schemaless column patterns.
+
+*Database Schema:*
+[source,sql]
+----
+CREATE TABLE product (
+    id BIGINT PRIMARY KEY,
+    name VARCHAR(255),
+    -- Dynamic attribute columns with prefix
+    attr_color VARCHAR(50),
+    attr_size VARCHAR(20),
+    attr_weight DECIMAL(10,2),
+    attr_material VARCHAR(100)
+);
+----
+
+*POJO:*
+[source,java]
+----
+@Table("product")
+public class Product {
+    @Id Long id;
+    String name;
+
+    // All columns starting with 'attr_' will be collected here
+    // Map keys will be 'color', 'size', 'weight', 'material' (without prefix)
+    @Other(prefix = "attr_")
+    Map<String, Object> attributes;
+}
+----
+
+*Query:*
+[source,java]
+----
+Product product = PojoQuery.build(Product.class)
+    .addWhere("product.id = ?", 1L)
+    .execute(dataSource)
+    .stream().findFirst().orElse(null);
+
+if (product != null) {
+    System.out.println("Product: " + product.name);
+    System.out.println("Color: " + product.attributes.get("color"));
+    System.out.println("Size: " + product.attributes.get("size"));
+    
+    // Iterate all dynamic attributes
+    product.attributes.forEach((key, value) -> 
+        System.out.println("  " + key + ": " + value));
+}
+----
