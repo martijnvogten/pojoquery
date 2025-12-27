@@ -6,7 +6,7 @@ This page addresses common issues and frequently asked questions when working wi
 
 === Linked Objects Are Null
 
-*Problem:* Your `@Link` field returns `null` even though you expect data.
+*Problem:* Your linked object field returns `null` even though you expect data.
 
 *Possible Causes:*
 
@@ -50,7 +50,7 @@ Remember that `@Link` uses `LEFT JOIN` by default. If the foreign key value does
 
 === Collection Is Empty When It Shouldn't Be
 
-*Problem:* Your `List<T>` or `Set<T>` field with `@Link` returns an empty collection.
+*Problem:* Your `List<T>` or `Set<T>` collection field returns an empty collection.
 
 *Possible Causes:*
 
@@ -64,7 +64,7 @@ For one-to-many relationships, the foreign key should be in the *child* table:
 @Table("article")
 public class Article {
     @Id Long id;
-    @Link List<Comment> comments; // Expects 'article_id' column in 'comment' table
+    List<Comment> comments; // Expects 'article_id' column in 'comment' table
 }
 
 // Child entity - must have foreign key column
@@ -78,12 +78,14 @@ public class Comment {
 
 2. **Missing link table for many-to-many:**
 +
+For many-to-many relationships (junction/link tables), you must specify the linktable:
++
 [source,java]
 ----
 // WRONG: No linktable specified for many-to-many
-@Link List<Tag> tags;
+List<Tag> tags;
 
-// CORRECT
+// CORRECT: @Link is REQUIRED for many-to-many with linktable
 @Link(linktable = "article_tag", linkfield = "article_id", foreignlinkfield = "tag_id")
 List<Tag> tags;
 ----
@@ -117,13 +119,13 @@ List<Article> results = query.execute(dataSource);
 @Table("author")
 public class Author {
     @Id Long id;
-    @Link List<Book> books; // Author -> Book
+    List<Book> books; // Author -> Book
 }
 
 @Table("book")
 public class Book {
     @Id Long id;
-    @Link Author author; // Book -> Author (creates cycle!)
+    Author author; // Book -> Author (creates cycle!)
 }
 
 // CORRECT: Create separate view classes for different use cases
@@ -131,7 +133,7 @@ public class Book {
 public class AuthorWithBooks {
     @Id Long id;
     String name;
-    @Link List<BookSummary> books;
+    List<BookSummary> books;
 }
 
 @Table("book")
@@ -145,7 +147,7 @@ public class BookSummary {
 public class BookWithAuthor {
     @Id Long id;
     String title;
-    @Link Author author;
+    Author author;
 }
 
 @Table("author")
@@ -293,17 +295,19 @@ int affected = DB.update(dataSource,
 
 === What's the difference between `@Link` and `@Join`?
 
-* **`@Link`**: Declares a *relationship* between entities. PojoQuery automatically generates the appropriate JOIN based on conventions or parameters. Use for standard foreign key relationships.
+* **Convention-based joins**: PojoQuery automatically infers relationships from field names. A field named `author` of type `User` will generate `LEFT JOIN user author ON article.author_id = author.id`. No annotation needed!
 
-* **`@Join`**: Adds an *explicit SQL JOIN clause* to the query. Use for non-standard joins, joins to tables not represented by entities, or complex conditions not expressible with `@Link`.
+* **`@Link`**: Used when you need to override conventions—for many-to-many relationships (linktable), non-standard column names (linkfield), or fetching simple values (fetchColumn).
+
+* **`@Join`**: Adds an *explicit SQL JOIN clause* to the query. Use for non-standard joins, joins to tables not represented by entities, or complex conditions.
 
 [source,java]
 ----
-// @Link - relationship-based, automatic JOIN generation
+// Convention-based - no annotation needed!
 @Table("article")
 public class ArticleWithAuthor {
     @Id Long id;
-    @Link User author; // Generates: LEFT JOIN user author ON article.author_id = author.id
+    User author; // Generates: LEFT JOIN user author ON article.author_id = author.id
 }
 
 // @Join - explicit SQL JOIN
@@ -387,9 +391,9 @@ public class ProductDetail {
     String name;
     String description;
     BigDecimal price;
-    @Link Category category;
-    @Link List<Review> reviews;
-    @Link List<ProductImage> images;
+    Category category;        // Convention: joins on category_id
+    List<Review> reviews;     // Convention: joins on product_id in review table
+    List<ProductImage> images; // Convention: joins on product_id in product_image table
 }
 
 // For list view - minimal data

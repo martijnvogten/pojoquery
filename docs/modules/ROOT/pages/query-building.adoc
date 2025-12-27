@@ -69,7 +69,7 @@ userQuery.setLimit(40, 20); // offset, rowCount
 
 == Customizing Joins (`addJoin`)
 
-While `@Link` handles most joins automatically, you can add explicit joins using `addJoin()`.
+While convention-based joins handle most relationships automatically, you can add explicit joins using `addJoin()`.
 
 [source,java]
 ----

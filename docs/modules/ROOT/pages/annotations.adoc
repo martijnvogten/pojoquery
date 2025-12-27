@@ -101,7 +101,13 @@ public class Product {
 == Relationship Annotations
 
 === @Link
-*Description:* Defines a relationship to another entity (one-to-one, one-to-many, many-to-many), triggering automatic JOIN generation. PojoQuery uses conventions or annotation parameters to determine join columns and tables. Can be combined with `@JoinCondition` for complex filtering.
+*Description:* Explicitly defines a relationship to another entity. For simple relationships following naming conventions (e.g., `author` field with `author_id` column), `@Link` is *optional* — PojoQuery will infer the join automatically. Use `@Link` when you need to:
+
+* Specify a many-to-many relationship with a link table
+* Override the default foreign key column name
+* Fetch simple values from a link table
+* Change the join type (e.g., INNER instead of LEFT)
+
 *Target:* `Field`
 *Parameters:*
 ** `linkfield` (String, optional): The foreign key column name.
@@ -117,19 +123,22 @@ public class Product {
 @Table("article")
 public class Article {
     @Id Long id;
-    // One-to-One/Many-to-One: Assumes 'author_id' column in 'article' table
-    @Link User author;
+    
+    // Convention-based joins - @Link is OPTIONAL for these:
+    User author;              // Joins on 'author_id' column automatically
+    List<Comment> comments;   // Joins on 'article_id' in comment table automatically
 
-    // One-to-Many: Assumes 'article_id' column in 'comment' table
-    @Link List<Comment> comments;
-
-    // Many-to-Many: Uses 'article_tag' link table
+    // Many-to-Many: @Link IS REQUIRED with linktable parameter
     @Link(linktable="article_tag", linkfield="article_id", foreignlinkfield="tag_id")
     List<Tag> tags;
 
-    // Collection of Enums: Uses 'article_flags' table, gets value from 'flag_value' column
+    // Collection of Enums: @Link IS REQUIRED with fetchColumn parameter
     @Link(linktable="article_flags", linkfield="article_id", fetchColumn="flag_value")
     Set<ArticleFlag> flags;
+    
+    // Non-conventional FK name: @Link IS REQUIRED with linkfield parameter
+    @Link(linkfield="writer_id")
+    User writer;
 }
 ----
 

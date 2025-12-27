@@ -77,6 +77,8 @@ class Article {
     String content;
     User author; // Automatically joins with the 'user' table based on 'author_id'
     List<Comment> comments; // Automatically joins with the 'comment' table based on 'article_id'
+
+    // Getters and setters omitted for brevity
 }
 
 // Define the related 'user' entity
@@ -86,16 +88,19 @@ class User {
     String firstName;
     String lastName;
     String email;
+
+    // Getters and setters omitted for brevity
 }
 
 // Define the related 'comment' entity
 @Table("comment")
 class Comment {
     @Id Long id;
-    Long article_id; // Foreign key linking back to Article
     String comment;
     Date submitdate;
     User author; // Automatically joins with the 'user' table based on 'author_id'
+
+    // Getters and setters omitted for brevity
 }
 ----
 

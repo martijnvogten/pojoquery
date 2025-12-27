@@ -26,18 +26,23 @@ public abstract class Person {
     @Id Long id;
     String name;
     @FieldName("person_type") String type; // Field mapping to the discriminator column
-    // Common fields...
+
+    // Getters and setters omitted for brevity
 }
 
 // Employee subclass - fields map to columns in 'person' table
 public class Employee extends Person {
     String department;
     BigDecimal salary;
+
+    // Getters and setters omitted for brevity
 }
 
 // Customer subclass - fields map to columns in 'person' table
 public class Customer extends Person {
     Integer loyaltyPoints;
+
+    // Getters and setters omitted for brevity
 }
 
 // --- Querying ---
@@ -47,10 +52,10 @@ List<Person> persons = PojoQuery.build(Person.class).execute(dataSource);
 for (Person p : persons) {
     if (p instanceof Employee) {
         Employee emp = (Employee) p;
-        System.out.println("Employee: " + emp.name + ", Dept: " + emp.department);
+        System.out.println("Employee: " + emp.getName() + ", Dept: " + emp.getDepartment());
     } else if (p instanceof Customer) {
         Customer cust = (Customer) p;
-        System.out.println("Customer: " + cust.name + ", Points: " + cust.loyaltyPoints);
+        System.out.println("Customer: " + cust.getName() + ", Points: " + cust.getLoyaltyPoints());
     }
 }
 
@@ -88,7 +93,7 @@ DB.queryRowsStreaming(dataSource,
 
 == Custom Joins and Conditions
 
-Use `@Join` or `addJoin()` for joins not handled by `@Link` conventions. Use curly braces `{}` in `addWhere()` for alias resolution when referencing explicitly joined tables.
+Use `@Join` or `addJoin()` for joins not covered by convention-based relationship mapping. Use curly braces `{}` in `addWhere()` for alias resolution when referencing explicitly joined tables.
 
 [source,java]
 ----
@@ -97,7 +102,7 @@ Use `@Join` or `addJoin()` for joins not handled by `@Link` conventions. Use cur
 public class ArticleWithCategory {
     @Id Long id;
     String title;
-    // Need to map category fields explicitly if not using @Link
+    // Map category fields explicitly since we're using @Join
     @Select("cat.name") String categoryName;
 }
 
@@ -127,16 +132,16 @@ PojoQuery provides static helpers for basic Insert, Update, Delete.
 ----
 // --- Insert ---
 User newUser = new User();
-newUser.firstName = "Jane";
-newUser.lastName = "Doe";
-newUser.email = "jane.doe@example.com";
-PojoQuery.insert(dataSource, newUser); // newUser.id will be populated if auto-generated
-System.out.println("Inserted user with ID: " + newUser.id);
+newUser.setFirstName("Jane");
+newUser.setLastName("Doe");
+newUser.setEmail("jane.doe@example.com");
+PojoQuery.insert(dataSource, newUser); // newUser.getId() will be populated if auto-generated
+System.out.println("Inserted user with ID: " + newUser.getId());
 
 // --- Update ---
-User existingUser = repo.findById(newUser.id); // Fetch first
+User existingUser = repo.findById(newUser.getId()); // Fetch first
 if (existingUser != null) {
-    existingUser.email = "jane.d@example.com";
+    existingUser.setEmail("jane.d@example.com");
     int updatedRows = PojoQuery.update(dataSource, existingUser);
     System.out.println("Updated rows: " + updatedRows);
 }
@@ -144,7 +149,7 @@ if (existingUser != null) {
 // --- Delete ---
 PojoQuery.delete(dataSource, existingUser); // Delete by entity instance
 // OR
-PojoQuery.deleteById(dataSource, User.class, existingUser.id); // Delete by ID
+PojoQuery.deleteById(dataSource, User.class, existingUser.getId()); // Delete by ID
 ----
 
 == Transactions
@@ -158,12 +163,12 @@ import java.sql.Connection;
 DB.runInTransaction(dataSource, (Connection connection) -> {
     // Operations within this lambda run in a single transaction
     User user = new User();
-    user.firstName = "Temp";
+    user.setFirstName("Temp");
     PojoQuery.insert(connection, user); // Use the provided connection
 
     Account account = new Account();
-    account.userId = user.id;
-    account.balance = BigDecimal.ZERO;
+    account.setUserId(user.getId());
+    account.setBalance(BigDecimal.ZERO);
     PojoQuery.insert(connection, account); // Use the provided connection
 
     // If no exception is thrown, the transaction commits automatically.
@@ -205,6 +210,8 @@ public class Product implements HasVersion {
     public void setVersion(Long version) {
         this.version = version;
     }
+
+    // Other getters and setters omitted for brevity
 }
 ----
 
@@ -232,21 +239,21 @@ Product productA = PojoQuery.build(Product.class)
     .addWhere("product.id = ?", 123L)
     .execute(dataSource)
     .get(0);
-// productA.version = 1
+// productA.getVersion() = 1
 
 // User B fetches the same product
 Product productB = PojoQuery.build(Product.class)
     .addWhere("product.id = ?", 123L)
     .execute(dataSource)
     .get(0);
-// productB.version = 1
+// productB.getVersion() = 1
 
 // User A updates the product
-productA.price = new BigDecimal("29.99");
+productA.setPrice(new BigDecimal("29.99"));
 PojoQuery.update(dataSource, productA); // Success! version becomes 2
 
 // User B tries to update the same product
-productB.price = new BigDecimal("24.99");
+productB.setPrice(new BigDecimal("24.99"));
 try {
     PojoQuery.update(dataSource, productB); // Fails! version mismatch
 } catch (StaleObjectException e) {
@@ -269,7 +276,7 @@ public void updateProductPrice(Long productId, BigDecimal newPrice) {
                 .stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Product not found"));
             
-            product.price = newPrice;
+            product.setPrice(newPrice);
             PojoQuery.update(dataSource, product);
             return; // Success
             

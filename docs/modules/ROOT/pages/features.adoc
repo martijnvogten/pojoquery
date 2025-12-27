@@ -13,7 +13,7 @@ PojoQuery offers a focused set of features for interacting with relational datab
 
 *   **Automatic SQL Generation:** Generates `SELECT`, `JOIN`, `WHERE`, `GROUP BY`, and `ORDER BY` clauses based on POJO structure and annotations.
 *   **Type-Safe Results:** Maps JDBC `ResultSet` rows directly to instances of your POJO classes.
-*   **Relationship Mapping (`@Link`):** Automatically generates `JOIN` clauses for one-to-one, one-to-many, and many-to-many relationships defined with the `@Link` annotation. Handles simple foreign key conventions and allows customization.
+*   **Convention-Based Relationship Mapping:** Automatically generates `JOIN` clauses for one-to-one, one-to-many, and many-to-many relationships based on field naming conventions (e.g., `author` field joins on `author_id` column). Use `@Link` only when you need to customize the join behavior.
 *   **Customizable Mapping (`@Table`, `@FieldName`, `@Id`):** Control how classes and fields map to database tables and columns.
 *   **Custom SQL Expressions (`@Select`):** Include calculated fields or use database functions directly in your result POJO using the `@Select` annotation.
 *   **Custom Joins (`@Join`, `@Joins`):** Define complex or non-conventional join conditions explicitly.

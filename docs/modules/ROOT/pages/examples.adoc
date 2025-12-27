@@ -15,6 +15,8 @@ public class User {
     String firstName;
     String lastName;
     String email;
+
+    // Getters and setters omitted for brevity
 }
 ----
 
@@ -26,7 +28,7 @@ List<User> users = PojoQuery.build(User.class)
     .execute(dataSource);
 ----
 
-== Example 2: Select with Join (`@Link`)
+== Example 2: Select with Join
 
 Fetch an article including its author details.
 
@@ -37,11 +39,14 @@ Fetch an article including its author details.
 public class Article {
     @Id Long id;
     String title;
-    Long author_id; // Foreign key
+
+    // Getters and setters omitted for brevity
 }
 
 public class ArticleWithAuthor extends Article {
-    @Link User author; // Links to User based on author_id
+    User author; // Automatically joins on 'author_id' column
+
+    // Getters and setters omitted for brevity
 }
 
 @Table("user")
@@ -49,6 +54,8 @@ public class User {
     @Id Long id;
     String firstName;
     String lastName;
+
+    // Getters and setters omitted for brevity
 }
 ----
 
@@ -61,11 +68,11 @@ ArticleWithAuthor article = PojoQuery.build(ArticleWithAuthor.class)
     .stream().findFirst().orElse(null);
 
 if (article != null) {
-    System.out.println("Author: " + article.author.firstName);
+    System.out.println("Author: " + article.getAuthor().getFirstName());
 }
 ----
 
-== Example 3: One-to-Many Relationship (`@Link`)
+== Example 3: One-to-Many Relationship
 
 Fetch an article including a list of its comments.
 
@@ -76,19 +83,23 @@ Fetch an article including a list of its comments.
 public class Article {
     @Id Long id;
     String title;
+
+    // Getters and setters omitted for brevity
 }
 
 public class ArticleWithComments extends Article {
-    // Assumes 'comment' table has 'article_id' column
-    @Link List<Comment> comments;
+    List<Comment> comments; // Automatically joins on 'article_id' in comment table
+
+    // Getters and setters omitted for brevity
 }
 
 @Table("comment")
 public class Comment {
     @Id Long id;
-    Long article_id;
     String text;
     Date submitDate;
+
+    // Getters and setters omitted for brevity
 }
 ----
 
@@ -102,8 +113,8 @@ ArticleWithComments article = PojoQuery.build(ArticleWithComments.class)
     .stream().findFirst().orElse(null);
 
 if (article != null) {
-    System.out.println("Comments count: " + article.comments.size());
-    article.comments.forEach(c -> System.out.println("- " + c.text));
+    System.out.println("Comments count: " + article.getComments().size());
+    article.getComments().forEach(c -> System.out.println("- " + c.getText()));
 }
 ----
 
@@ -125,6 +136,8 @@ public class ArticleCommentStats {
 
     @Select("MAX(submitDate)")
     Date lastCommentDate;
+
+    // Getters and setters omitted for brevity
 }
 ----
 
@@ -154,6 +167,8 @@ public class UserWithFullName {
 
     @Select("CONCAT(firstName, ' ', lastName)") // Database-specific function
     String fullName;
+
+    // Getters and setters omitted for brevity
 }
 ----
 
@@ -166,7 +181,7 @@ UserWithFullName user = PojoQuery.build(UserWithFullName.class)
     .stream().findFirst().orElse(null);
 
 if (user != null) {
-    System.out.println("Full Name: " + user.fullName);
+    System.out.println("Full Name: " + user.getFullName());
 }
 ----
 
@@ -180,13 +195,13 @@ Insert a new user record.
 [source,java]
 ----
 User newUser = new User();
-newUser.firstName = "Alice";
-newUser.lastName = "Wonder";
-newUser.email = "alice@example.com";
+newUser.setFirstName("Alice");
+newUser.setLastName("Wonder");
+newUser.setEmail("alice@example.com");
 
 PojoQuery.insert(dataSource, newUser);
-// newUser.id is now populated if it was auto-generated
-System.out.println("New user ID: " + newUser.id);
+// newUser.getId() is now populated if it was auto-generated
+System.out.println("New user ID: " + newUser.getId());
 ----
 
 == Example 7: Update Operation
@@ -199,7 +214,7 @@ Update an existing user's email.
 [source,java]
 ----
 // Assume 'userToUpdate' was fetched previously
-userToUpdate.email = "alice.w@example.com";
+userToUpdate.setEmail("alice.w@example.com");
 int updatedRows = PojoQuery.update(dataSource, userToUpdate);
 System.out.println("Rows updated: " + updatedRows);
 ----
@@ -234,12 +249,16 @@ public class ArticleWithTags {
 
     @Link(linktable = "article_tag", linkfield = "article_id", foreignlinkfield = "tag_id")
     List<Tag> tags;
+
+    // Getters and setters omitted for brevity
 }
 
 @Table("tag")
 public class Tag {
     @Id Long id;
     String name;
+
+    // Getters and setters omitted for brevity
 }
 ----
 
@@ -250,8 +269,8 @@ List<ArticleWithTags> articles = PojoQuery.build(ArticleWithTags.class)
     .execute(dataSource);
 
 for (ArticleWithTags article : articles) {
-    System.out.println(article.title + " - Tags: " + 
-        article.tags.stream().map(t -> t.name).collect(Collectors.joining(", ")));
+    System.out.println(article.getTitle() + " - Tags: " + 
+        article.getTags().stream().map(Tag::getName).collect(Collectors.joining(", ")));
 }
 ----
 
@@ -287,6 +306,8 @@ public class EventWithParticipants {
     @Link(linktable = "event_person", linkfield = "event_id", foreignlinkfield = "person_id")
     @JoinCondition("{this}.id = {linktable}.event_id AND {linktable}.role = 'organizer'")
     List<Person> organizers;
+
+    // Getters and setters omitted for brevity
 }
 
 @Table("person")
@@ -294,6 +315,8 @@ public class Person {
     @Id Long id;
     String firstname;
     String lastname;
+
+    // Getters and setters omitted for brevity
 }
 ----
 
@@ -306,9 +329,9 @@ EventWithParticipants event = PojoQuery.build(EventWithParticipants.class)
     .stream().findFirst().orElse(null);
 
 if (event != null) {
-    System.out.println("Event: " + event.title);
-    System.out.println("Visitors: " + event.visitors.size());
-    System.out.println("Organizers: " + event.organizers.size());
+    System.out.println("Event: " + event.getTitle());
+    System.out.println("Visitors: " + event.getVisitors().size());
+    System.out.println("Organizers: " + event.getOrganizers().size());
 }
 ----
 
@@ -341,6 +364,8 @@ public class Address {
     String street;
     String city;
     String zip;
+
+    // Getters and setters omitted for brevity
 }
 
 @Table("customer")
@@ -353,6 +378,8 @@ public class Customer {
 
     @Embedded(prefix = "bill_")
     Address billingAddress;
+
+    // Getters and setters omitted for brevity
 }
 ----
 
@@ -365,8 +392,8 @@ Customer customer = PojoQuery.build(Customer.class)
     .stream().findFirst().orElse(null);
 
 if (customer != null) {
-    System.out.println("Ship to: " + customer.shippingAddress.city);
-    System.out.println("Bill to: " + customer.billingAddress.city);
+    System.out.println("Ship to: " + customer.getShippingAddress().getCity());
+    System.out.println("Bill to: " + customer.getBillingAddress().getCity());
 }
 ----
 
@@ -384,6 +411,8 @@ public class AccessLog {
     String requestPath;
     Integer statusCode;
     LocalDate accessDate;
+
+    // Getters and setters omitted for brevity
 }
 ----
 
@@ -400,7 +429,7 @@ try (Stream<AccessLog> stream = PojoQuery.build(AccessLog.class)
 
     // Count 404 errors without loading all rows
     long notFoundCount = stream
-        .filter(log -> log.statusCode == 404)
+        .filter(log -> log.getStatusCode() == 404)
         .count();
 
     System.out.println("404 errors yesterday: " + notFoundCount);
@@ -425,16 +454,18 @@ Gracefully handle nullable foreign keys.
 public class Task {
     @Id Long id;
     String title;
-    Long assignee_id; // Nullable foreign key
 
-    @Link // Will be null if assignee_id is null
-    User assignee;
+    User assignee; // Will be null if assignee_id is null (LEFT JOIN by default)
+
+    // Getters and setters omitted for brevity
 }
 
 @Table("user")
 public class User {
     @Id Long id;
     String name;
+
+    // Getters and setters omitted for brevity
 }
 ----
 
@@ -445,10 +476,10 @@ List<Task> tasks = PojoQuery.build(Task.class)
     .execute(dataSource);
 
 for (Task task : tasks) {
-    String assigneeName = task.assignee != null 
-        ? task.assignee.name 
+    String assigneeName = task.getAssignee() != null 
+        ? task.getAssignee().getName() 
         : "Unassigned";
-    System.out.println(task.title + " - " + assigneeName);
+    System.out.println(task.getTitle() + " - " + assigneeName);
 }
 
 // Query only unassigned tasks
@@ -511,6 +542,8 @@ public class Product {
     // Map keys will be 'color', 'size', 'weight', 'material' (without prefix)
     @Other(prefix = "attr_")
     Map<String, Object> attributes;
+
+    // Getters and setters omitted for brevity
 }
 ----
 
@@ -523,12 +556,12 @@ Product product = PojoQuery.build(Product.class)
     .stream().findFirst().orElse(null);
 
 if (product != null) {
-    System.out.println("Product: " + product.name);
-    System.out.println("Color: " + product.attributes.get("color"));
-    System.out.println("Size: " + product.attributes.get("size"));
+    System.out.println("Product: " + product.getName());
+    System.out.println("Color: " + product.getAttributes().get("color"));
+    System.out.println("Size: " + product.getAttributes().get("size"));
     
     // Iterate all dynamic attributes
-    product.attributes.forEach((key, value) -> 
+    product.getAttributes().forEach((key, value) -> 
         System.out.println("  " + key + ": " + value));
 }
 ----
