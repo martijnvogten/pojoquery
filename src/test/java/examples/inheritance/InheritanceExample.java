@@ -11,6 +11,7 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.schema.SchemaGenerator;
 
 public class InheritanceExample {
 	
@@ -64,9 +65,10 @@ public class InheritanceExample {
 	}
 	
 	private static void createTables(DataSource db) {
-		DB.executeDDL(db, "CREATE TABLE room (room_id BIGINT NOT NULL AUTO_INCREMENT, `area` DECIMAL, PRIMARY KEY(room_id))");
-		DB.executeDDL(db, "CREATE TABLE kitchen (room_id BIGINT NOT NULL, `hasDishWasher` TINYINT, PRIMARY KEY(room_id))");
-		DB.executeDDL(db, "CREATE TABLE bedroom (room_id BIGINT NOT NULL, `numberOfBeds` INT, PRIMARY KEY(room_id))");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(Room.class)) {
+			DB.executeDDL(db, ddl);
+		}
+	}
 	}
 
 	

@@ -11,6 +11,7 @@ import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.schema.SchemaGenerator;
 
 public class LocalDateIT {
 
@@ -36,7 +37,9 @@ public class LocalDateIT {
 	
 	private static DataSource initDatabase() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		DB.executeDDL(db, "CREATE TABLE user (id BIGINT NOT NULL AUTO_INCREMENT, dateOfBirth DATE, PRIMARY KEY (id))");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(User.class)) {
+			DB.executeDDL(db, ddl);
+		}
 		return db;
 	}
 	

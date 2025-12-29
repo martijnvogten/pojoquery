@@ -8,6 +8,7 @@ import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.MysqlDatabases;
+import org.pojoquery.schema.SchemaGenerator;
 
 import javax.sql.DataSource;
 import java.util.List;
@@ -56,8 +57,9 @@ public class SchemaPrefixesIT {
 		List<Map<String, Object>> results;
 
 		DataSource db = dropAndRecreate();
-		DB.executeDDL(db, "CREATE TABLE pojoquery_integrationtest_schema1.article(id bigint not null auto_increment, primary key(id), book_id bigint default null, title varchar(255))");
-		DB.executeDDL(db, "CREATE TABLE pojoquery_integrationtest_schema2.book(id bigint not null auto_increment, primary key(id), title varchar(255))");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(Article.class, Book.class)) {
+			DB.executeDDL(db, ddl);
+		}
 		DB.insert(
 			db,
 			"pojoquery_integrationtest_schema1",

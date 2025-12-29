@@ -14,6 +14,7 @@ import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.schema.SchemaGenerator;
 
 public class ForeignValueFieldsIT {
 	
@@ -25,6 +26,14 @@ public class ForeignValueFieldsIT {
 		
 		@Link(linktable="poule_weightclass", fetchColumn="weightclass")
 		Integer[] weightClasses;
+	}
+
+	@Table("poule_weightclass")
+	static class PouleWeightClass {
+		@Id
+		Long poule_id;
+		@Id
+		Integer weightClass;
 	}
 
 	@Table("poule")
@@ -64,8 +73,9 @@ public class ForeignValueFieldsIT {
 	}
 
 	private void insertTestData(DataSource db) {
-		DB.executeDDL(db, "CREATE TABLE poule (id BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY (id));");
-		DB.executeDDL(db, "CREATE TABLE poule_weightclass (poule_id BIGINT NOT NULL, weightClass INT, PRIMARY KEY (poule_id, weightClass));");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(Poule.class, PouleWeightClass.class)) {
+			DB.executeDDL(db, ddl);
+		}
 
 		Poule p = new Poule();
 		PojoQuery.insert(db, p);

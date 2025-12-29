@@ -14,6 +14,7 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.schema.SchemaGenerator;
 
 public class UpdatesIT {
 	
@@ -37,6 +38,14 @@ public class UpdatesIT {
 		String title;
 	}
 	
+	@Table("user_roles")
+	static class UserRoles {
+		@Id
+		Long user_id;
+		@Id
+		String role;
+	}
+	
 	static class UserDetail extends User {
 		@Link(linktable="user_roles", fetchColumn="role")
 		Set<Role> roles = new HashSet<>();
@@ -45,7 +54,9 @@ public class UpdatesIT {
 	@Test
 	public void testUpdates() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		DB.executeDDL(db, "CREATE TABLE user (id BIGINT NOT NULL AUTO_INCREMENT, username VARCHAR(255), PRIMARY KEY (id));");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(User.class)) {
+			DB.executeDDL(db, ddl);
+		}
 
 		User u = new User();
 		PojoQuery.insert(db, u);
@@ -61,8 +72,9 @@ public class UpdatesIT {
 	@Test
 	public void testInsertWithAuthor() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		DB.executeDDL(db, "CREATE TABLE user (id BIGINT NOT NULL AUTO_INCREMENT, username VARCHAR(255), PRIMARY KEY (id));");
-		DB.executeDDL(db, "CREATE TABLE article (id BIGINT NOT NULL AUTO_INCREMENT, author_id BIGINT NOT NULL, title VARCHAR(255), PRIMARY KEY (id));");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(User.class, Article.class)) {
+			DB.executeDDL(db, ddl);
+		}
 		
 		User u = new User();
 		u.username = "bob";
@@ -81,8 +93,9 @@ public class UpdatesIT {
 	@Test
 	public void testInsertWithRoles() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		DB.executeDDL(db, "CREATE TABLE user (id BIGINT NOT NULL AUTO_INCREMENT, username VARCHAR(255), PRIMARY KEY (id));");
-		DB.executeDDL(db, "CREATE TABLE user_roles (user_id BIGINT NOT NULL, role VARCHAR(255), PRIMARY KEY (user_id, role));");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(User.class, UserRoles.class)) {
+			DB.executeDDL(db, ddl);
+		}
 		
 		UserDetail u = new UserDetail();
 		u.roles.add(Role.EDITOR);

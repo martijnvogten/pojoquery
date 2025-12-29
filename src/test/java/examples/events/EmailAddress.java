@@ -1,10 +1,13 @@
 package examples.events;
 
+import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 
 @Table("emailaddress")
 public class EmailAddress {
+	@Id
 	private Long person_id;
+	@Id
 	private String email;
 	private String name;
 	

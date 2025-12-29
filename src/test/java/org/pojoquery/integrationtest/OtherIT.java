@@ -14,6 +14,7 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Other;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.schema.SchemaGenerator;
 
 public class OtherIT {
 
@@ -71,8 +72,9 @@ public class OtherIT {
 
 	private static DataSource initDatabase() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		DB.executeDDL(db, "CREATE TABLE room (id BIGINT NOT NULL AUTO_INCREMENT, area INT, PRIMARY KEY (id))");
-		DB.executeDDL(db, "CREATE TABLE bedroom (id BIGINT NOT NULL AUTO_INCREMENT, numberOfBeds INT, PRIMARY KEY (id))");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(Room.class, BedRoom.class)) {
+			DB.executeDDL(db, ddl);
+		}
 		return db;
 	}
 

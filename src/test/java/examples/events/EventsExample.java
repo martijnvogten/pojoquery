@@ -13,6 +13,7 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.schema.SchemaGenerator;
 
 
 public class EventsExample {
@@ -103,10 +104,18 @@ public class EventsExample {
 	}
 
 	private static void createTables(DataSource db) {
-		DB.executeDDL(db, "CREATE TABLE event  (id BIGINT NOT NULL AUTO_INCREMENT, title TEXT, `date` DATETIME, PRIMARY KEY(id))");
-		DB.executeDDL(db, "CREATE TABLE person (id BIGINT NOT NULL AUTO_INCREMENT, age INT, firstName VARCHAR(255), lastName VARCHAR(255), PRIMARY KEY(id))");
-		DB.executeDDL(db, "CREATE TABLE event_person (person_id BIGINT NOT NULL, event_id BIGINT NOT NULL, PRIMARY KEY(person_id, event_id))");
-		DB.executeDDL(db, "CREATE TABLE emailaddress (person_id BIGINT NOT NULL, name VARCHAR(128), email VARCHAR(128) NOT NULL, PRIMARY KEY(person_id, name, email))");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(Event.class)) {
+			DB.executeDDL(db, ddl);
+		}
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(PersonRecord.class)) {
+			DB.executeDDL(db, ddl);
+		}
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(EventPersonLink.class)) {
+			DB.executeDDL(db, ddl);
+		}
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(EmailAddress.class)) {
+			DB.executeDDL(db, ddl);
+		}
 	}
 	
 	private static <K,V> Map<K,V> map(K k1, V v1, K k2, V v2) {

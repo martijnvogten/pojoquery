@@ -460,7 +460,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		return f.getName() + "_id";
 	}
 
-	private static boolean isListOrArray(Class<?> type) {
+	public static boolean isListOrArray(Class<?> type) {
 		return (type.isArray() && !type.getComponentType().isPrimitive()) || Iterable.class.isAssignableFrom(type);
 	}
 

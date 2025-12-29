@@ -9,6 +9,7 @@ import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.schema.SchemaGenerator;
 
 
 public class UsersExample {
@@ -67,19 +68,8 @@ public class UsersExample {
 	}
 
 	private static void createTables(DataSource db) {
-		DB.executeDDL(db, """
-			CREATE TABLE `user` (
-			  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-			  `modifiedBy_id` bigint(20) DEFAULT NULL,
-			  `createdBy_id` bigint(20) DEFAULT NULL,
-			  `firstName` varchar(255) DEFAULT NULL,
-			  `lastName` varchar(255) DEFAULT NULL,
-			  `password` varchar(255) DEFAULT NULL,
-			  `email` varchar(255) DEFAULT NULL,
-			  `modificationDate` datetime DEFAULT NULL,
-			  `creationDate` datetime DEFAULT NULL,
-			  PRIMARY KEY (`id`)
-			)
-			""");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(User.class)) {
+			DB.executeDDL(db, ddl);
+		}
 	}
 }

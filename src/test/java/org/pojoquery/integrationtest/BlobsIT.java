@@ -10,6 +10,7 @@ import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.schema.SchemaGenerator;
 
 public class BlobsIT {
 
@@ -46,7 +47,9 @@ public class BlobsIT {
 	
 	private static DataSource initDatabase() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		DB.executeDDL(db, "CREATE TABLE file (id BIGINT NOT NULL AUTO_INCREMENT, data BLOB, PRIMARY KEY (id))");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(File.class)) {
+			DB.executeDDL(db, ddl);
+		}
 		return db;
 	}
 	

@@ -19,6 +19,7 @@ import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.schema.SchemaGenerator;
 
 public class JoinConditionsIT {
 
@@ -70,6 +71,15 @@ public class JoinConditionsIT {
 		String name;
 		@JoinCondition("{events}.festivalId = {this}.festivalId")
 		List<Event> events;
+	}
+	
+	@Table("event_person")
+	static class EventPerson {
+		@Id
+		Long eventID;
+		@Id
+		Long personID;
+		String role;
 	}
 	
 	@Table("employee")
@@ -171,10 +181,9 @@ public class JoinConditionsIT {
 	
 	private static DataSource initDatabase() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		DB.executeDDL(db, "CREATE TABLE person (personID BIGINT NOT NULL AUTO_INCREMENT, firstname VARCHAR(1023), lastname VARCHAR(1023), PRIMARY KEY (personID))");
-		DB.executeDDL(db, "CREATE TABLE event (eventID BIGINT NOT NULL AUTO_INCREMENT, festivalID BIGINT, title VARCHAR(1023), date DATE, location VARCHAR(1023), PRIMARY KEY (eventID))");
-		DB.executeDDL(db, "CREATE TABLE festival (festivalID BIGINT NOT NULL AUTO_INCREMENT, name VARCHAR(1023), PRIMARY KEY (festivalID))");
-		DB.executeDDL(db, "CREATE TABLE event_person (eventID BIGINT NOT NULL, personID BIGINT NOT NULL, role VARCHAR(1023), PRIMARY KEY (eventID, personID))");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(Person.class, Event.class, Festival.class, EventPerson.class)) {
+			DB.executeDDL(db, ddl);
+		}
 		return db;
 	}
 

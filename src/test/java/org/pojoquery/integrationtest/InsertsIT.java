@@ -13,6 +13,7 @@ import org.pojoquery.DB.Transaction;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.schema.SchemaGenerator;
 
 public class InsertsIT {
 
@@ -61,7 +62,9 @@ public class InsertsIT {
 
 	private static DataSource initDatabase() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		DB.executeDDL(db, "CREATE TABLE user (id BIGINT NOT NULL AUTO_INCREMENT, PRIMARY KEY (id))");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(User.class)) {
+			DB.executeDDL(db, ddl);
+		}
 		return db;
 	}
 	

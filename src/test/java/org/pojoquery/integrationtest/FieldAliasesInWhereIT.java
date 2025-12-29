@@ -13,6 +13,7 @@ import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.schema.SchemaGenerator;
 
 public class FieldAliasesInWhereIT {
 
@@ -85,9 +86,9 @@ public class FieldAliasesInWhereIT {
 
 	private static DataSource initDatabase() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		DB.executeDDL(db, "CREATE TABLE room (id BIGINT NOT NULL AUTO_INCREMENT, area DECIMAL, house_id BIGINT, PRIMARY KEY (id))");
-		DB.executeDDL(db, "CREATE TABLE house (id BIGINT NOT NULL AUTO_INCREMENT, owner_id BIGINT, address VARCHAR(1023), PRIMARY KEY (id))");
-		DB.executeDDL(db, "CREATE TABLE person (id BIGINT NOT NULL AUTO_INCREMENT, name VARCHAR(1023), PRIMARY KEY (id))");
+		for (String ddl : SchemaGenerator.generateCreateTableStatements(Room.class, House.class, Person.class)) {
+			DB.executeDDL(db, ddl);
+		}
 		return db;
 	}
 

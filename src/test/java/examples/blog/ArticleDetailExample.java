@@ -48,6 +48,14 @@ public class ArticleDetailExample {
 		public Long author_id;
 	}
 	
+	@Table("views")
+	public static class Views {
+		@Id
+		public Long id;
+		public Long article_id;
+		public Date viewedAt;
+	}
+	
 	public static class ArticleDetail extends Article {
 		public User author;
 		public CommentDetail[] comments;
