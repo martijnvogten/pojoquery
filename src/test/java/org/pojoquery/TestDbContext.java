@@ -4,7 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.pojoquery.TestUtils.norm;
 
 import org.junit.Test;
-import org.pojoquery.DbContext.DefaultDbContext;
+import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.pipeline.QueryBuilder;
@@ -35,7 +35,10 @@ public class TestDbContext {
 		}
 		
 		{
-			DefaultDbContext dbContext = new DefaultDbContext(DbContext.QuoteStyle.MYSQL, false);
+			DbContext dbContext = DbContext.builder()
+				.dialect(Dialect.MYSQL)
+				.quoteObjectNames(false)
+				.build();
 			SqlQuery<?> query = QueryBuilder.from(dbContext, Article.class).getQuery();
 			
 			assertEquals(

@@ -66,7 +66,10 @@ public class TestSchemaPrefixes {
 	
 	@Test
 	public void testAliasesWithAnExtraJoinWithoutObjectQuoting() {
-		DbContext context = new DbContext.DefaultDbContext(DbContext.QuoteStyle.MYSQL, false);
+		DbContext context = DbContext.builder()
+			.dialect(DbContext.Dialect.MYSQL)
+			.quoteObjectNames(false)
+			.build();
 		
 		assertEquals(
 				norm("""

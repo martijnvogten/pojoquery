@@ -10,7 +10,9 @@ import java.util.Date;
 import java.util.Map;
 
 import org.pojoquery.annotations.Lob;
-import org.pojoquery.pipeline.SimpleFieldMapping;
+import org.pojoquery.dialects.HsqldbDbContext;
+import org.pojoquery.dialects.MysqlDbContext;
+import org.pojoquery.dialects.PostgresDbContext;
 
 public interface DbContext {
 
@@ -50,11 +52,44 @@ public interface DbContext {
 
 	// Holder class to allow mutable default context
 	class DefaultHolder {
-		static DbContext instance = new DefaultDbContext();
+		static DbContext instance = new MysqlDbContext();
 	}
 
 	// Keep for backward compatibility - references DefaultHolder.instance
 	static DbContext DEFAULT = DefaultHolder.instance;
+
+	/**
+	 * Creates a DbContext for the specified SQL dialect with sensible defaults.
+	 * This is the recommended way to get a DbContext for a specific database.
+	 * 
+	 * <p>Example usage:</p>
+	 * <pre>
+	 * // For MySQL/MariaDB
+	 * DbContext.setDefault(DbContext.forDialect(Dialect.MYSQL));
+	 * 
+	 * // For PostgreSQL
+	 * DbContext.setDefault(DbContext.forDialect(Dialect.POSTGRES));
+	 * 
+	 * // For HSQLDB (testing)
+	 * DbContext.setDefault(DbContext.forDialect(Dialect.HSQLDB));
+	 * </pre>
+	 * 
+	 * @param dialect the SQL dialect
+	 * @return a pre-configured DbContext for the dialect
+	 */
+	static DbContext forDialect(Dialect dialect) {
+		switch (dialect) {
+			case MYSQL:
+				return new MysqlDbContext();
+			case HSQLDB:
+				return new HsqldbDbContext();
+			case POSTGRES:
+				return new PostgresDbContext();
+			case ANSI:
+			default:
+				return new MysqlDbContext(); // Fall back to MySQL for ANSI
+		}
+	}
 
 	public String quoteObjectNames(String... names);
 
@@ -165,49 +200,6 @@ public interface DbContext {
 
 	default String getTableSuffix() {
 		return " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-	}
-
-	public class DefaultDbContext implements DbContext {
-		private final QuoteStyle quoteStyle;
-		private final boolean quoteObjects;
-
-		public DefaultDbContext() {
-			this(QuoteStyle.MYSQL, true);
-		}
-
-		public DefaultDbContext(QuoteStyle quoteStyle, boolean quoteObjects) {
-			this.quoteStyle = quoteStyle;
-			this.quoteObjects = quoteObjects;
-		}
-
-		@Override
-		public String quoteObjectNames(String... names) {
-			String ret = "";
-			for (int i = 0, nl = names.length; i < nl; i++) {
-				String name = names[i];
-				if (i > 0) {
-					ret += ".";
-				}
-				ret += quoteObjects ? quoteStyle.quote(name) : name;
-			}
-			return ret;
-		}
-
-		@Override
-		public QuoteStyle getQuoteStyle() {
-			return quoteStyle;
-		}
-
-		@Override
-		public String quoteAlias(String alias) {
-			// Always quote aliases
-			return quoteStyle.quote(alias);
-		}
-
-		@Override
-		public FieldMapping getFieldMapping(Field f) {
-			return new SimpleFieldMapping(f);
-		}
 	}
 
 	public static DbContext getDefault() {

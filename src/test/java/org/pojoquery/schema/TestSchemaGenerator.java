@@ -228,8 +228,8 @@ public class TestSchemaGenerator {
         assertTrue(sql.contains("`title`"));
         assertTrue(sql.contains("`content`"));
         assertTrue(sql.contains("`summary`"));
-        // content should be CLOB, summary should be VARCHAR
-        assertTrue(sql.contains("`content` CLOB"));
+        // content should be LONGTEXT (MySQL's LOB type), summary should be VARCHAR
+        assertTrue(sql.contains("`content` LONGTEXT"));
         assertTrue(sql.contains("`summary` VARCHAR"));
     }
     

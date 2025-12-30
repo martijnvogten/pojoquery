@@ -1,4 +1,4 @@
-package org.pojoquery.integrationtest.db;
+package org.pojoquery.dialects;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
@@ -15,10 +15,21 @@ import org.pojoquery.annotations.Lob;
 import org.pojoquery.pipeline.SimpleFieldMapping;
 
 /**
- * DbContext implementation for HSQLDB.
- * Uses QuoteStyle.NONE so identifiers are case-insensitive (stored as uppercase).
+ * DbContext implementation for HSQLDB (HyperSQL Database).
+ * Uses no quoting for case-insensitive identifiers, but quotes aliases with ANSI style.
+ * Ideal for testing and embedded database scenarios.
  */
 public class HsqldbDbContext implements DbContext {
+
+    @Override
+    public Dialect getDialect() {
+        return Dialect.HSQLDB;
+    }
+
+    @Override
+    public QuoteStyle getQuoteStyle() {
+        return QuoteStyle.NONE;
+    }
 
     @Override
     public String quoteObjectNames(String... names) {
@@ -31,11 +42,6 @@ public class HsqldbDbContext implements DbContext {
             ret.append(names[i]);
         }
         return ret.toString();
-    }
-
-    @Override
-    public QuoteStyle getQuoteStyle() {
-        return QuoteStyle.NONE;
     }
 
     @Override
@@ -54,7 +60,6 @@ public class HsqldbDbContext implements DbContext {
     public String mapJavaTypeToSql(Field field) {
         Class<?> type = field.getType();
 
-        // Handle primitive types and wrappers
         if (type == Long.class || type == long.class) {
             return "BIGINT";
         }
@@ -83,7 +88,13 @@ public class HsqldbDbContext implements DbContext {
             return "BIGINT";
         }
 
-        // Date/Time types
+        if (type == String.class) {
+            if (field.getAnnotation(Lob.class) != null) {
+                return "CLOB";
+            }
+            return "VARCHAR(" + getDefaultVarcharLength() + ")";
+        }
+
         if (type == Date.class || type == LocalDateTime.class) {
             return "TIMESTAMP";
         }
@@ -94,30 +105,19 @@ public class HsqldbDbContext implements DbContext {
             return "TIME";
         }
 
-        // String and text types
-        if (type == String.class) {
-            if (field.getAnnotation(Lob.class) != null) {            
-                return "CLOB";
-            }
-            return "VARCHAR(" + getDefaultVarcharLength() + ")";
-        }
-
-        // Binary types
         if (type == byte[].class) {
             return "BLOB";
         }
 
-        // Enum types - store as VARCHAR
         if (type.isEnum()) {
             return "VARCHAR(" + getDefaultVarcharLength() + ")";
         }
 
-        // Map/JSON types - HSQLDB doesn't have native JSON, use CLOB
+        // HSQLDB doesn't have native JSON, use CLOB
         if (Map.class.isAssignableFrom(type)) {
             return "CLOB";
         }
 
-        // Default fallback
         return "VARCHAR(" + getDefaultVarcharLength() + ")";
     }
 
@@ -128,19 +128,11 @@ public class HsqldbDbContext implements DbContext {
 
     @Override
     public String getTableSuffix() {
-        // No engine specification for HSQLDB
         return "";
     }
 
     @Override
     public int getStreamingFetchSize() {
-        // HSQLDB doesn't support Integer.MIN_VALUE like MySQL
-        // Use 0 for default behavior
-        return 0;
-    }
-
-    @Override
-    public Dialect getDialect() {
-        return Dialect.HSQLDB;
+        return 0; // HSQLDB default
     }
 }

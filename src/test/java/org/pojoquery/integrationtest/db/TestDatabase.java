@@ -4,11 +4,12 @@ import javax.sql.DataSource;
 
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.pojoquery.DbContext;
+import org.pojoquery.DbContext.Dialect;
 
 public class TestDatabase {
 	
 	private static int dbCounter = 0;
-	private static final HsqldbDbContext HSQLDB_CONTEXT = new HsqldbDbContext();
+	private static final DbContext HSQLDB_CONTEXT = DbContext.forDialect(Dialect.HSQLDB);
 	
 	static {
 		// Set HSQLDB context as default for all PojoQuery operations
