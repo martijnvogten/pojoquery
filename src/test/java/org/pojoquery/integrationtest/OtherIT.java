@@ -75,6 +75,8 @@ public class OtherIT {
 		for (String ddl : SchemaGenerator.generateCreateTableStatements(Room.class, BedRoom.class)) {
 			DB.executeDDL(db, ddl);
 		}
+		// Add custom field 'area' as a column in the room table
+		DB.executeDDL(db, "ALTER TABLE room ADD COLUMN area INT");
 		return db;
 	}
 

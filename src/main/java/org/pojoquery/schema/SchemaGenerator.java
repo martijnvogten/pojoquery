@@ -16,6 +16,7 @@ import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.SubClasses;
+import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.CustomizableQueryBuilder;
 import org.pojoquery.pipeline.QueryBuilder;
@@ -70,7 +71,7 @@ public class SchemaGenerator {
         }
         
         for (TableMapping mapping : tableMappings) {
-            String fullTableName = getFullTableName(mapping);
+            String fullTableName = getFullTableName(mapping, dbContext);
             // Skip if we've already generated this table
             if (generatedTables.contains(fullTableName)) {
                 continue;
@@ -124,12 +125,32 @@ public class SchemaGenerator {
                     // Determine the foreign key column name
                     String fkColumnName = determineForeignKeyColumnNameForCollection(entityClass, field);
                     
-                    // Add to inferred foreign keys for the component type
-                    inferredForeignKeys.computeIfAbsent(componentType, k -> new ArrayList<>())
-                            .add(new InferredForeignKey(fkColumnName, entityClass));
+                    // Find the root table class for the component type (handles inheritance)
+                    // The FK should be added to the class that defines the root @Table
+                    Class<?> rootTableClass = findRootTableClass(componentType);
+                    if (rootTableClass != null) {
+                        inferredForeignKeys.computeIfAbsent(rootTableClass, k -> new ArrayList<>())
+                                .add(new InferredForeignKey(fkColumnName, entityClass));
+                    }
                 }
             }
         }
+    }
+    
+    /**
+     * Finds the class that has the root @Table annotation for the given class.
+     * Walks up the inheritance hierarchy to find the first class with @Table.
+     */
+    private static Class<?> findRootTableClass(Class<?> clazz) {
+        Class<?> rootTableClass = null;
+        Class<?> current = clazz;
+        while (current != null) {
+            if (current.getAnnotation(Table.class) != null) {
+                rootTableClass = current;
+            }
+            current = current.getSuperclass();
+        }
+        return rootTableClass;
     }
     
     /**
@@ -256,11 +277,11 @@ public class SchemaGenerator {
     private static String generateCreateTableForMapping(TableMapping mapping, DbContext dbContext, List<InferredForeignKey> inferredForeignKeys) {
         StringBuilder sb = new StringBuilder();
         
-        String tableName = getFullTableName(mapping);
+        String tableName = getFullTableName(mapping, dbContext);
         
         // CREATE TABLE
         sb.append("CREATE TABLE ");
-        sb.append(dbContext.quoteObjectNames(tableName)).append(" (\n");
+        sb.append(tableName).append(" (\n");
         
         List<String> columnDefinitions = new ArrayList<>();
         List<String> primaryKeyColumns = new ArrayList<>();
@@ -428,11 +449,11 @@ public class SchemaGenerator {
         return sb.toString();
     }
     
-    private static String getFullTableName(TableMapping mapping) {
+    private static String getFullTableName(TableMapping mapping, DbContext dbContext) {
         if (mapping.schemaName != null && !mapping.schemaName.isEmpty()) {
-            return mapping.schemaName + "." + mapping.tableName;
+            return dbContext.quoteObjectNames(mapping.schemaName) + "." + dbContext.quoteObjectNames(mapping.tableName);
         }
-        return mapping.tableName;
+        return dbContext.quoteObjectNames(mapping.tableName);
     }
     
     // ========== Schema Migration Methods ==========
@@ -505,7 +526,7 @@ public class SchemaGenerator {
         }
         
         for (TableMapping mapping : tableMappings) {
-            String fullTableName = getFullTableName(mapping);
+            String fullTableName = getFullTableName(mapping, dbContext);
             // Skip if we've already processed this table
             if (processedTables.contains(fullTableName)) {
                 continue;
@@ -566,10 +587,10 @@ public class SchemaGenerator {
         
         // Generate ALTER TABLE ADD COLUMN statement(s)
         StringBuilder sb = new StringBuilder();
-        String tableName = getFullTableName(mapping);
+        String tableName = getFullTableName(mapping, dbContext);
         
         sb.append("ALTER TABLE ");
-        sb.append(dbContext.quoteObjectNames(tableName));
+        sb.append(tableName);
         sb.append("\n");
         
         for (int i = 0; i < missingColumns.size(); i++) {

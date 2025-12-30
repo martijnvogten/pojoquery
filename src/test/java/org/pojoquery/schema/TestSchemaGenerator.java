@@ -129,11 +129,23 @@ public class TestSchemaGenerator {
         Festival festival;
     }
     
+    // Subclass that doesn't add any FK fields - used to test collection FK inference
+    public static class EventSubclass extends Event {
+        String additionalInfo;
+    }
+    
     @Table("festival")
     public static class Festival {
         @Id
         Long festivalId;
         String name;
+    }
+    
+    // Festival with collection of subclass entities - should infer FK in Event (root) table
+    @Table("festival")
+    public static class FestivalWithEvents extends Festival {
+        @Link(foreignlinkfield="festivalID")
+        List<EventSubclass> events;
     }
 
     @Test
@@ -453,6 +465,26 @@ public class TestSchemaGenerator {
         
         // Tags should NOT have article_id since Article.tags uses a linktable
         assertTrue("Tags table should not have article_id for many-to-many", !tagsTable.contains("article_id"));
+    }
+    
+    @Test
+    public void testInferredForeignKeyFromCollectionWithInheritance() {
+        // FestivalWithEvents has List<EventSubclass> events with @Link(foreignlinkfield="festivalID")
+        // The FK should be inferred in Event (root table), not just EventSubclass
+        List<String> statements = SchemaGenerator.generateCreateTableStatements(Event.class, FestivalWithEvents.class);
+        System.out.println("Inferred FK from collection with inheritance test:");
+        for (String stmt : statements) {
+            System.out.println(stmt);
+            System.out.println();
+        }
+        
+        String eventTable = statements.stream()
+            .filter(s -> s.contains("`event`"))
+            .findFirst()
+            .orElse("");
+        
+        // Event table should have festivalID column inferred from FestivalWithEvents.events
+        assertTrue("Event table should have festivalID column", eventTable.contains("`festivalID`"));
     }
     
     @Test

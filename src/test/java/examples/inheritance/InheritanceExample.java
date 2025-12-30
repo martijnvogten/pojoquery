@@ -69,7 +69,5 @@ public class InheritanceExample {
 			DB.executeDDL(db, ddl);
 		}
 	}
-	}
-
 	
 }

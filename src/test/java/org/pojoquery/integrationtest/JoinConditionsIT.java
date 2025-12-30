@@ -2,8 +2,7 @@ package org.pojoquery.integrationtest;
 
 import static org.pojoquery.TestUtils.norm;
 
-import java.util.Date;
-import java.util.GregorianCalendar;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -37,7 +36,7 @@ public class JoinConditionsIT {
 		Long eventID;
 		String title;
 		String location;
-		Date date;
+		LocalDateTime date;
 	}
 	
 	static class EventWithFestival extends Event {
@@ -155,7 +154,7 @@ public class JoinConditionsIT {
 		
 		// Event on programming
 		EventWithFestival conference = new EventWithFestival();
-		conference.date = new GregorianCalendar(2020, 4, 15).getTime();
+		conference.date = LocalDateTime.of(2020, 5, 15, 0, 0);
 		conference.location = "Las Vegas";
 		conference.festival = communic8;
 		PojoQuery.insert(db, conference);
