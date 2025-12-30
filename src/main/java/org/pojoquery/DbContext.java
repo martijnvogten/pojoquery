@@ -15,7 +15,8 @@ public interface DbContext {
 	
 	public enum QuoteStyle {
 		ANSI("\""),
-		MYSQL("`");
+		MYSQL("`"),
+		NONE("");
 
 		private final String quote;
 
@@ -24,11 +25,35 @@ public interface DbContext {
 		}
 
 		public String quote(String name) {
+			if (quote.isEmpty()) {
+				return name;
+			}
 			return quote + name + quote;
 		}
 	}
 
-	static DbContext DEFAULT = new DefaultDbContext();
+	public enum Dialect {
+		MYSQL,
+		HSQLDB,
+		POSTGRES,
+		ANSI
+	}
+
+	/**
+	 * Returns the SQL dialect for this database context.
+	 * Used to generate dialect-specific SQL syntax (e.g., upsert statements).
+	 */
+	default Dialect getDialect() {
+		return Dialect.MYSQL;
+	}
+
+	// Holder class to allow mutable default context
+	class DefaultHolder {
+		static DbContext instance = new DefaultDbContext();
+	}
+
+	// Keep for backward compatibility - references DefaultHolder.instance
+	static DbContext DEFAULT = DefaultHolder.instance;
 
 	public String quoteObjectNames(String... names);
 	public QuoteStyle getQuoteStyle();
@@ -109,6 +134,15 @@ public interface DbContext {
 		return " NOT NULL AUTO_INCREMENT";
 	}
 	
+	/**
+	 * Returns the fetch size to use for streaming result sets.
+	 * MySQL uses Integer.MIN_VALUE to enable streaming mode.
+	 * Other databases typically use a positive value like 100 or 0 for default.
+	 */
+	default int getStreamingFetchSize() {
+		return Integer.MIN_VALUE; // MySQL default
+	}
+	
 	default String getTableSuffix() {
 		return " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 	}
@@ -157,7 +191,15 @@ public interface DbContext {
 	}
 
 	public static DbContext getDefault() {
-		return DEFAULT;
+		return DefaultHolder.instance;
+	}
+
+	/**
+	 * Sets the default DbContext. Useful for tests that need a different database configuration.
+	 * @param context The DbContext to use as default
+	 */
+	public static void setDefault(DbContext context) {
+		DefaultHolder.instance = context;
 	}
 
 	/**

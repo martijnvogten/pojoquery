@@ -124,7 +124,10 @@ public interface DB {
     public static void queryRowsStreaming(Connection conn, SqlExpression queryStatement, Consumer<Map<String,Object>> rowCallback) {
         try (PreparedStatement stmt = conn.prepareStatement(queryStatement.getSql());) {
 			applyParameters(queryStatement.getParameters(), stmt);
-			stmt.setFetchSize(Integer.MIN_VALUE);
+			int fetchSize = DbContext.getDefault().getStreamingFetchSize();
+			if (fetchSize != 0) {
+				stmt.setFetchSize(fetchSize);
+			}
 			try (ResultSet rs = stmt.executeQuery()) {
 				List<String> fieldNames = extractResultSetFieldNames(rs);
 				while (rs.next()) {
@@ -430,10 +433,10 @@ public interface DB {
      * @param schemaName the schema name (optional)
      * @param tableName the table name
      * @param values the values to insert or update
-     * @param addOnDuplicateKeyClause whether to add an ON DUPLICATE KEY clause
+     * @param isUpsert whether to generate an upsert statement (insert or update on conflict)
      * @return the SQL expression
      */
-	private static SqlExpression buildInsertOrUpdate(DbContext context, String schemaName, String tableName, Map<String, ? extends Object> values, boolean addOnDuplicateKeyClause) {
+	private static SqlExpression buildInsertOrUpdate(DbContext context, String schemaName, String tableName, Map<String, ? extends Object> values, boolean isUpsert) {
 		List<String> qmarks = new ArrayList<String>();
 		List<String> quotedFields = new ArrayList<String>();
 		List<Object> params = new ArrayList<Object>();
@@ -447,13 +450,52 @@ public interface DB {
 			params.add(values.get(f));
 			updateList.add(quotedField + "=?");
 		}
-		if (addOnDuplicateKeyClause) {
-			params.addAll(new ArrayList<Object>(params));
-		}
-		String sql = "INSERT INTO " + prefixAndQuoteTableName(context, schemaName, tableName) + " (" + implode(",", quotedFields) + ")" + " VALUES (" + implode(",", qmarks) + ")";
 		
-		if (addOnDuplicateKeyClause) {
-			sql += " ON DUPLICATE KEY UPDATE " + implode(",", updateList);
+		String qualifiedTableName = prefixAndQuoteTableName(context, schemaName, tableName);
+		String sql;
+		
+		if (isUpsert) {
+			switch (context.getDialect()) {
+			case MYSQL:
+				// MySQL: INSERT ... ON DUPLICATE KEY UPDATE
+				params.addAll(new ArrayList<Object>(params));
+				sql = "INSERT INTO " + qualifiedTableName + " (" + implode(",", quotedFields) + ")" 
+					+ " VALUES (" + implode(",", qmarks) + ")"
+					+ " ON DUPLICATE KEY UPDATE " + implode(",", updateList);
+				break;
+			case POSTGRES:
+				// PostgreSQL: INSERT ... ON CONFLICT DO UPDATE
+				params.addAll(new ArrayList<Object>(params));
+				sql = "INSERT INTO " + qualifiedTableName + " (" + implode(",", quotedFields) + ")"
+					+ " VALUES (" + implode(",", qmarks) + ")"
+					+ " ON CONFLICT DO UPDATE SET " + implode(",", updateList);
+				break;
+			case HSQLDB:
+				// HSQLDB: MERGE INTO ... USING ... ON ... WHEN MATCHED/NOT MATCHED
+				// Reference vals.column instead of new placeholders to avoid duplicate params
+				List<String> valsUpdateList = new ArrayList<String>();
+				List<String> valsFieldRefs = new ArrayList<String>();
+				for (String f : values.keySet()) {
+					final String quotedField = context.quoteObjectNames(f);
+					valsUpdateList.add(quotedField + "=vals." + quotedField);
+					valsFieldRefs.add("vals." + quotedField);
+				}
+				sql = "MERGE INTO " + qualifiedTableName + " t"
+					+ " USING (VALUES(" + implode(",", qmarks) + ")) AS vals(" + implode(",", quotedFields) + ")"
+					+ " ON t.id = vals.id"
+					+ " WHEN MATCHED THEN UPDATE SET " + implode(",", valsUpdateList)
+					+ " WHEN NOT MATCHED THEN INSERT (" + implode(",", quotedFields) + ") VALUES (" + implode(",", valsFieldRefs) + ")";
+				break;
+			case ANSI:
+			default:
+				// Fallback: just do a plain INSERT (no upsert support)
+				sql = "INSERT INTO " + qualifiedTableName + " (" + implode(",", quotedFields) + ")" 
+					+ " VALUES (" + implode(",", qmarks) + ")";
+				break;
+			}
+		} else {
+			sql = "INSERT INTO " + qualifiedTableName + " (" + implode(",", quotedFields) + ")" 
+				+ " VALUES (" + implode(",", qmarks) + ")";
 		}
 		
 		return new SqlExpression(sql, params);
@@ -593,11 +635,17 @@ public interface DB {
 					stmt.executeUpdate();
 					success = true;
 					try (ResultSet keysResult = stmt.getGeneratedKeys()) {
-						if (keysResult != null && keysResult.next()) {
-							return (T) keysResult.getObject(1);
-						} else {
-							return null;
+						if (keysResult != null) {
+							try {
+								if (keysResult.next()) {
+									return (T) keysResult.getObject(1);
+								}
+							} catch (SQLException e) {
+								// Some databases (e.g., HSQLDB) throw exception when no keys were generated
+								// This is normal for tables without auto-increment columns
+							}
 						}
+						return null;
 					}
 				case UPDATE:
 					Integer affectedRows = stmt.executeUpdate();

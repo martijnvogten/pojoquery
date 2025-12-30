@@ -54,9 +54,7 @@ public class UpdatesIT {
 	@Test
 	public void testUpdates() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(User.class)) {
-			DB.executeDDL(db, ddl);
-		}
+		SchemaGenerator.createTables(db, User.class);
 
 		User u = new User();
 		PojoQuery.insert(db, u);
@@ -72,9 +70,7 @@ public class UpdatesIT {
 	@Test
 	public void testInsertWithAuthor() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(User.class, Article.class)) {
-			DB.executeDDL(db, ddl);
-		}
+		SchemaGenerator.createTables(db, User.class, Article.class);
 		
 		User u = new User();
 		u.username = "bob";
@@ -93,9 +89,7 @@ public class UpdatesIT {
 	@Test
 	public void testInsertWithRoles() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(User.class, UserRoles.class)) {
-			DB.executeDDL(db, ddl);
-		}
+		SchemaGenerator.createTables(db, User.class, UserRoles.class);
 		
 		UserDetail u = new UserDetail();
 		u.roles.add(Role.EDITOR);

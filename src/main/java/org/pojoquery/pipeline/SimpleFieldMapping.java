@@ -2,7 +2,9 @@ package org.pojoquery.pipeline;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
+import java.sql.Blob;
 import java.sql.Date;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -35,16 +37,25 @@ public class SimpleFieldMapping implements FieldMapping {
 			if (value instanceof Date && (f.getType().equals(LocalDate.class))) {
 				value = ((Date)value).toLocalDate();
 			}
+			if (value instanceof Timestamp && (f.getType().equals(LocalDateTime.class))) {
+				value = ((Timestamp)value).toLocalDateTime();
+			}
 			if (value instanceof LocalDateTime && (f.getType().equals(Instant.class))) {
 				value = ((LocalDateTime)value).atZone(ZoneOffset.UTC).toInstant();
 			}
 			if (value instanceof Timestamp && (f.getType().equals(Instant.class))) {
 				value = ((Timestamp)value).toInstant();
 			}
+			if (value instanceof Blob && f.getType().equals(byte[].class)) {
+				Blob blob = (Blob) value;
+				value = blob.getBytes(1, (int) blob.length());
+			}
 			f.setAccessible(true);
 			f.set(targetEntity, value);
 		} catch (IllegalArgumentException | IllegalAccessException e) {
 			throw new MappingException("Exception setting value of field " + f + " of entity " + targetEntity, e);
+		} catch (SQLException e) {
+			throw new MappingException("Exception reading blob value for field " + f + " of entity " + targetEntity, e);
 		}
 	}
 

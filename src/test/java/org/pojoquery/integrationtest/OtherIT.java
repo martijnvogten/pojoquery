@@ -44,7 +44,7 @@ public class OtherIT {
 		Assert.assertEquals((Long)1L, u.id);
 		
 		PojoQuery<Room> build = PojoQuery.build(Room.class);
-		build.addField(SqlExpression.sql("`room`.area"), "room.area");
+		build.addField(SqlExpression.sql("{room}.area"), "room.area");
 		Room loaded = build.findById(db, u.id);
 		Assert.assertNotNull(loaded.specs);
 		Assert.assertEquals(25, loaded.specs.get("area"));
@@ -63,7 +63,7 @@ public class OtherIT {
 		Assert.assertEquals((Long)1L, bedroom.id);
 		
 		PojoQuery<BedRoom> build = PojoQuery.build(BedRoom.class);
-		build.addField(SqlExpression.sql("`room`.area"), "bedroom.area");
+		build.addField(SqlExpression.sql("{room}.area"), "bedroom.area");
 		Room loaded = build.findById(db, bedroom.id);
 		Assert.assertNotNull(loaded.specs);
 		Assert.assertEquals(25, loaded.specs.get("area"));
@@ -72,9 +72,8 @@ public class OtherIT {
 
 	private static DataSource initDatabase() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(Room.class, BedRoom.class)) {
-			DB.executeDDL(db, ddl);
-		}
+		// BedRoom extends Room, so only pass BedRoom (Room table is created automatically)
+		SchemaGenerator.createTables(db, BedRoom.class);
 		// Add custom field 'area' as a column in the room table
 		DB.executeDDL(db, "ALTER TABLE room ADD COLUMN area INT");
 		return db;

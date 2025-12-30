@@ -556,13 +556,16 @@ public class PojoQuery<T> {
 			Field idField = idFields.get(0);
 			idField.setAccessible(true);
 			try {
+				Object value = ids;
 				if (ids instanceof BigInteger && idField.getType().isAssignableFrom(Long.class)) {
 					// See https://bugs.mysql.com/bug.php?id=101823
 					// generated keys are always biginteger so we must convert if idField is Long
-					idField.set(o, ((BigInteger)ids).longValue());
-				} else {
-					idField.set(o, ids);
+					value = ((BigInteger)ids).longValue();
+				} else if (ids instanceof Integer && idField.getType().isAssignableFrom(Long.class)) {
+					// HSQLDB returns Integer for BIGINT identity columns
+					value = ((Integer)ids).longValue();
 				}
+				idField.set(o, value);
 			} catch (IllegalArgumentException e) {
 				throw new MappingException("Could not set Id field value " + idField, e);
 			} catch (IllegalAccessException e) {

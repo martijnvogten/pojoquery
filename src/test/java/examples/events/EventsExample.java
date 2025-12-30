@@ -104,18 +104,7 @@ public class EventsExample {
 	}
 
 	private static void createTables(DataSource db) {
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(Event.class)) {
-			DB.executeDDL(db, ddl);
-		}
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(PersonRecord.class)) {
-			DB.executeDDL(db, ddl);
-		}
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(EventPersonLink.class)) {
-			DB.executeDDL(db, ddl);
-		}
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(EmailAddress.class)) {
-			DB.executeDDL(db, ddl);
-		}
+		SchemaGenerator.createTables(db, Event.class, PersonRecord.class, EventPersonLink.class, EmailAddress.class);
 	}
 	
 	private static <K,V> Map<K,V> map(K k1, V v1, K k2, V v2) {

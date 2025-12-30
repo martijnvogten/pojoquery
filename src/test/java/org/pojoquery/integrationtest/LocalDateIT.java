@@ -37,9 +37,7 @@ public class LocalDateIT {
 	
 	private static DataSource initDatabase() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(User.class)) {
-			DB.executeDDL(db, ddl);
-		}
+		SchemaGenerator.createTables(db, User.class);
 		return db;
 	}
 	

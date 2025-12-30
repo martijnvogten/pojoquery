@@ -47,9 +47,7 @@ public class BlobsIT {
 	
 	private static DataSource initDatabase() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(File.class)) {
-			DB.executeDDL(db, ddl);
-		}
+		SchemaGenerator.createTables(db, File.class);
 		return db;
 	}
 	

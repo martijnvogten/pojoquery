@@ -24,9 +24,7 @@ public class BlogDb {
 	}
 	
 	private static void createTables(DataSource db) {
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(Article.class, User.class, Comment.class, Views.class)) {
-			DB.executeDDL(db, ddl);
-		}
+		SchemaGenerator.createTables(db, Article.class, User.class, Comment.class, Views.class);
 	}
 	
 	private static void insertData(DataSource db) {

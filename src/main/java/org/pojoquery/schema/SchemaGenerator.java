@@ -40,7 +40,7 @@ public class SchemaGenerator {
      * @throws IllegalArgumentException if the class does not have a @Table annotation
      */
     public static List<String> generateCreateTableStatements(Class<?> entityClass) {
-        return generateCreateTableStatements(entityClass, DbContext.DEFAULT);
+        return generateCreateTableStatements(entityClass, DbContext.getDefault());
     }
     
     /**
@@ -247,7 +247,7 @@ public class SchemaGenerator {
      * @return list of CREATE TABLE statements
      */
     public static List<String> generateCreateTableStatements(Class<?>... entityClasses) {
-        return generateCreateTableStatements(DbContext.DEFAULT, entityClasses);
+        return generateCreateTableStatements(DbContext.getDefault(), entityClasses);
     }
     
     /**
@@ -272,6 +272,19 @@ public class SchemaGenerator {
             generateCreateTableStatements(entityClass, dbContext, generatedTables, statements, inferredForeignKeys);
         }
         return statements;
+    }
+    
+    /**
+     * Creates tables in the database for the given entity classes.
+     * This is a convenience method that generates and executes CREATE TABLE statements.
+     * 
+     * @param db the data source to execute the statements on
+     * @param classes the entity classes to create tables for
+     */
+    public static void createTables(javax.sql.DataSource db, Class<?>... classes) {
+        for (String ddl : generateCreateTableStatements(classes)) {
+            org.pojoquery.DB.executeDDL(db, ddl);
+        }
     }
     
     private static String generateCreateTableForMapping(TableMapping mapping, DbContext dbContext, List<InferredForeignKey> inferredForeignKeys) {
@@ -443,7 +456,11 @@ public class SchemaGenerator {
         sb.append(dbContext.mapJavaTypeToSql(type));
         
         if (autoIncrement) {
-            sb.append(dbContext.getAutoIncrementSyntax());
+            String autoIncrementSyntax = dbContext.getAutoIncrementSyntax();
+            if (!autoIncrementSyntax.isEmpty()) {
+                sb.append(" ");
+                sb.append(autoIncrementSyntax);
+            }
         }
         
         return sb.toString();
@@ -485,7 +502,7 @@ public class SchemaGenerator {
      * @return list of DDL statements
      */
     public static List<String> generateMigrationStatements(SchemaInfo schemaInfo, Class<?>... entityClasses) {
-        return generateMigrationStatements(schemaInfo, DbContext.DEFAULT, entityClasses);
+        return generateMigrationStatements(schemaInfo, DbContext.getDefault(), entityClasses);
     }
     
     /**

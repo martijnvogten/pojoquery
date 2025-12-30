@@ -216,8 +216,14 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		Alias alias;
 		String parent = parentAlias;
 		List<Class<?>> parentClasses = new ArrayList<>();
+		Set<String> visited = new HashSet<>();
 		parentClasses.add(clz);
 		while ((alias = aliases.get(parent)) != null) {
+			if (visited.contains(parent)) {
+				// Avoid infinite loop in parent chain
+				break;
+			}
+			visited.add(parent);
 			parentClasses.add(alias.getResultClass());
 			if (alias.getResultClass().equals(clz)) {
 				String message = parentClasses.stream()
@@ -497,6 +503,9 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		
 		for (String key : allKeys) {
 			int dotPos = key.lastIndexOf(".");
+			if (dotPos < 0) {
+				throw new RuntimeException("Key does not contain a dot: '" + key + "', allKeys: " + allKeys);
+			}
 			String alias = key.substring(0, dotPos);
 			if (!keysByAlias.containsKey(alias)) {
 				keysByAlias.put(alias, new ArrayList<>());

@@ -73,9 +73,7 @@ public class ForeignValueFieldsIT {
 	}
 
 	private void insertTestData(DataSource db) {
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(Poule.class, PouleWeightClass.class)) {
-			DB.executeDDL(db, ddl);
-		}
+		SchemaGenerator.createTables(db, Poule.class, PouleWeightClass.class);
 
 		Poule p = new Poule();
 		PojoQuery.insert(db, p);

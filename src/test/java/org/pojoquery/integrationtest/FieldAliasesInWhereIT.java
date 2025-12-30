@@ -68,7 +68,7 @@ public class FieldAliasesInWhereIT {
 		
 		{
 			List<Room> results = PojoQuery.build(Room.class)
-				.addWhere(SqlExpression.sql("`house.owner`.name = ?", "John Lennon"))
+				.addWhere(SqlExpression.sql("{house.owner}.name = ?", "John Lennon"))
 				.execute(db);
 			
 			Assert.assertEquals(1, results.size());
@@ -86,9 +86,7 @@ public class FieldAliasesInWhereIT {
 
 	private static DataSource initDatabase() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(Room.class, House.class, Person.class)) {
-			DB.executeDDL(db, ddl);
-		}
+		SchemaGenerator.createTables(db, Room.class, House.class, Person.class);
 		return db;
 	}
 

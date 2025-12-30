@@ -9,6 +9,7 @@ import java.util.Map;
 import javax.sql.DataSource;
 
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
@@ -21,6 +22,12 @@ import org.pojoquery.integrationtest.db.TestDatabase;
 import org.pojoquery.schema.SchemaGenerator;
 
 public class JoinConditionsIT {
+
+	@BeforeClass
+	public static void setupDbContext() {
+		// Trigger TestDatabase static initialization to set DbContext
+		TestDatabase.initDbContext();
+	}
 
 	@Table("person")
 	static class Person {
@@ -104,11 +111,11 @@ public class JoinConditionsIT {
 		String sql = q.toSql();
 		Assert.assertEquals(TestUtils.norm("""
 			SELECT
-			 `employee`.`id` AS `employee.id`,
-			 `department`.`id` AS `department.id`,
-			 `department`.`name` AS `department.name`\s
-			FROM `employee` AS `employee`
-			 LEFT JOIN `department` AS `department` ON `employee`.department_id = `department`.id
+			 "employee".id AS "employee.id",
+			 "department".id AS "department.id",
+			 "department".name AS "department.name"
+			FROM employee AS "employee"
+			 LEFT JOIN department AS "department" ON "employee".department_id = "department".id
 			"""), norm(sql.trim()));
 	}
 	
@@ -180,9 +187,7 @@ public class JoinConditionsIT {
 	
 	private static DataSource initDatabase() {
 		DataSource db = TestDatabase.dropAndRecreate();
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(Person.class, Event.class, Festival.class, EventPerson.class)) {
-			DB.executeDDL(db, ddl);
-		}
+		SchemaGenerator.createTables(db, Person.class, Event.class, Festival.class, EventPerson.class);
 		return db;
 	}
 
