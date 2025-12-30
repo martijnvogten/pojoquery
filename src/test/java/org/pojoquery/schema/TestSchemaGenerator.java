@@ -476,4 +476,94 @@ public class TestSchemaGenerator {
         // Event table should have festivalID column inferred from EventWithFestival.festival
         assertTrue("Event table should have festivalID column", eventTable.contains("`festivalID`"));
     }
+    
+    // ========== Migration Tests ==========
+    
+    @Test
+    public void testMigrationWithNewTable() {
+        // Create empty schema info (simulating no existing tables)
+        SchemaInfo emptySchema = new SchemaInfo();
+        
+        List<String> statements = SchemaGenerator.generateMigrationStatements(emptySchema, User.class);
+        System.out.println("Migration with new table:");
+        for (String stmt : statements) {
+            System.out.println(stmt);
+        }
+        
+        assertEquals("Should generate 1 CREATE TABLE statement", 1, statements.size());
+        assertTrue("Should be CREATE TABLE", statements.get(0).startsWith("CREATE TABLE"));
+        assertTrue("Should contain users table", statements.get(0).contains("`users`"));
+    }
+    
+    @Test
+    public void testMigrationWithExistingTableMissingColumns() {
+        // Create schema info with existing table but missing columns
+        SchemaInfo schemaInfo = new SchemaInfo();
+        SchemaInfo.TableInfo usersTable = new SchemaInfo.TableInfo("users", null);
+        usersTable.addColumn("id");
+        usersTable.addColumn("username");
+        // Missing: email_address, age, active, createdAt
+        schemaInfo.addTableForTesting(null, "users", usersTable);
+        
+        List<String> statements = SchemaGenerator.generateMigrationStatements(schemaInfo, User.class);
+        System.out.println("Migration with existing table missing columns:");
+        for (String stmt : statements) {
+            System.out.println(stmt);
+        }
+        
+        assertEquals("Should generate 1 ALTER TABLE statement", 1, statements.size());
+        assertTrue("Should be ALTER TABLE", statements.get(0).startsWith("ALTER TABLE"));
+        assertTrue("Should contain ADD COLUMN for email_address", statements.get(0).contains("`email_address`"));
+        assertTrue("Should contain ADD COLUMN for age", statements.get(0).contains("`age`"));
+        assertTrue("Should contain ADD COLUMN for active", statements.get(0).contains("`active`"));
+        assertTrue("Should contain ADD COLUMN for createdAt", statements.get(0).contains("`createdAt`"));
+    }
+    
+    @Test
+    public void testMigrationWithCompleteTable() {
+        // Create schema info with table that has all columns
+        SchemaInfo schemaInfo = new SchemaInfo();
+        SchemaInfo.TableInfo usersTable = new SchemaInfo.TableInfo("users", null);
+        usersTable.addColumn("id");
+        usersTable.addColumn("username");
+        usersTable.addColumn("email_address");
+        usersTable.addColumn("age");
+        usersTable.addColumn("active");
+        usersTable.addColumn("createdAt");
+        schemaInfo.addTableForTesting(null, "users", usersTable);
+        
+        List<String> statements = SchemaGenerator.generateMigrationStatements(schemaInfo, User.class);
+        System.out.println("Migration with complete table:");
+        System.out.println("Statements: " + statements.size());
+        
+        assertEquals("Should generate 0 statements (table is up-to-date)", 0, statements.size());
+    }
+    
+    @Test
+    public void testMigrationMultipleTables() {
+        // Test with multiple entities - one new, one existing with missing columns
+        SchemaInfo schemaInfo = new SchemaInfo();
+        SchemaInfo.TableInfo usersTable = new SchemaInfo.TableInfo("users", null);
+        usersTable.addColumn("id");
+        usersTable.addColumn("username");
+        schemaInfo.addTableForTesting(null, "users", usersTable);
+        // products table doesn't exist
+        
+        List<String> statements = SchemaGenerator.generateMigrationStatements(schemaInfo, User.class, Product.class);
+        System.out.println("Migration with multiple tables:");
+        for (String stmt : statements) {
+            System.out.println(stmt);
+            System.out.println();
+        }
+        
+        assertEquals("Should generate 2 statements", 2, statements.size());
+        
+        // First should be ALTER TABLE for users (adding missing columns)
+        assertTrue("First should be ALTER TABLE", statements.get(0).startsWith("ALTER TABLE"));
+        assertTrue("Should be for users table", statements.get(0).contains("`users`"));
+        
+        // Second should be CREATE TABLE for products
+        assertTrue("Second should be CREATE TABLE", statements.get(1).startsWith("CREATE TABLE"));
+        assertTrue("Should be for products table", statements.get(1).contains("`products`"));
+    }
 }

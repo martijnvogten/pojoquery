@@ -434,4 +434,257 @@ public class SchemaGenerator {
         }
         return mapping.tableName;
     }
+    
+    // ========== Schema Migration Methods ==========
+    
+    /**
+     * Represents a column definition for schema generation.
+     */
+    public static class ColumnDefinition {
+        public final String name;
+        public final String sqlType;
+        public final boolean autoIncrement;
+        public final boolean isPrimaryKey;
+        
+        public ColumnDefinition(String name, String sqlType, boolean autoIncrement, boolean isPrimaryKey) {
+            this.name = name;
+            this.sqlType = sqlType;
+            this.autoIncrement = autoIncrement;
+            this.isPrimaryKey = isPrimaryKey;
+        }
+    }
+    
+    /**
+     * Generates DDL statements (CREATE TABLE or ALTER TABLE) based on the existing schema.
+     * If a table doesn't exist, generates CREATE TABLE.
+     * If a table exists but has missing columns, generates ALTER TABLE ADD COLUMN.
+     * 
+     * @param schemaInfo the existing schema information
+     * @param entityClasses the entity classes to generate DDL for
+     * @return list of DDL statements
+     */
+    public static List<String> generateMigrationStatements(SchemaInfo schemaInfo, Class<?>... entityClasses) {
+        return generateMigrationStatements(schemaInfo, DbContext.DEFAULT, entityClasses);
+    }
+    
+    /**
+     * Generates DDL statements (CREATE TABLE or ALTER TABLE) based on the existing schema.
+     * If a table doesn't exist, generates CREATE TABLE.
+     * If a table exists but has missing columns, generates ALTER TABLE ADD COLUMN.
+     * 
+     * @param schemaInfo the existing schema information
+     * @param dbContext the database context for dialect-specific generation
+     * @param entityClasses the entity classes to generate DDL for
+     * @return list of DDL statements
+     */
+    public static List<String> generateMigrationStatements(SchemaInfo schemaInfo, DbContext dbContext, Class<?>... entityClasses) {
+        Set<String> processedTables = new HashSet<>();
+        List<String> statements = new ArrayList<>();
+        Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
+        
+        // First pass: scan all classes for collection fields to build the inferred foreign keys map
+        for (Class<?> entityClass : entityClasses) {
+            scanForInferredForeignKeys(entityClass, inferredForeignKeys);
+        }
+        
+        // Second pass: generate DDL statements
+        for (Class<?> entityClass : entityClasses) {
+            generateMigrationStatements(entityClass, schemaInfo, dbContext, processedTables, statements, inferredForeignKeys);
+        }
+        return statements;
+    }
+    
+    private static void generateMigrationStatements(Class<?> entityClass, SchemaInfo schemaInfo, DbContext dbContext,
+            Set<String> processedTables, List<String> statements, Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys) {
+        // Scan for inferred foreign keys
+        scanForInferredForeignKeys(entityClass, inferredForeignKeys);
+        
+        List<TableMapping> tableMappings = QueryBuilder.determineTableMapping(entityClass);
+        if (tableMappings.isEmpty()) {
+            throw new IllegalArgumentException("Class " + entityClass.getName() + " must have a @Table annotation");
+        }
+        
+        for (TableMapping mapping : tableMappings) {
+            String fullTableName = getFullTableName(mapping);
+            // Skip if we've already processed this table
+            if (processedTables.contains(fullTableName)) {
+                continue;
+            }
+            processedTables.add(fullTableName);
+            
+            // Get inferred foreign keys for this class
+            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.clazz);
+            
+            // Check if table exists
+            SchemaInfo.TableInfo existingTable = schemaInfo.getTable(mapping.schemaName, mapping.tableName);
+            
+            if (existingTable == null) {
+                // Table doesn't exist - generate CREATE TABLE
+                statements.add(generateCreateTableForMapping(mapping, dbContext, fks));
+            } else {
+                // Table exists - check for missing columns and generate ALTER TABLE
+                String alterStatement = generateAlterTableForMapping(mapping, existingTable, dbContext, fks);
+                if (alterStatement != null) {
+                    statements.add(alterStatement);
+                }
+            }
+        }
+        
+        // Handle @SubClasses annotation for table-per-subclass inheritance
+        SubClasses subClassesAnn = entityClass.getAnnotation(SubClasses.class);
+        if (subClassesAnn != null) {
+            for (Class<?> subClass : subClassesAnn.value()) {
+                generateMigrationStatements(subClass, schemaInfo, dbContext, processedTables, statements, inferredForeignKeys);
+            }
+        }
+    }
+    
+    /**
+     * Generates an ALTER TABLE statement to add missing columns to an existing table.
+     * 
+     * @param mapping the table mapping
+     * @param existingTable information about the existing table
+     * @param dbContext the database context
+     * @param inferredForeignKeys inferred foreign keys to add
+     * @return ALTER TABLE statement, or null if no columns need to be added
+     */
+    private static String generateAlterTableForMapping(TableMapping mapping, SchemaInfo.TableInfo existingTable, 
+            DbContext dbContext, List<InferredForeignKey> inferredForeignKeys) {
+        
+        List<ColumnDefinition> requiredColumns = getRequiredColumns(mapping, dbContext, inferredForeignKeys);
+        List<ColumnDefinition> missingColumns = new ArrayList<>();
+        
+        for (ColumnDefinition col : requiredColumns) {
+            if (!existingTable.hasColumn(col.name)) {
+                missingColumns.add(col);
+            }
+        }
+        
+        if (missingColumns.isEmpty()) {
+            return null;
+        }
+        
+        // Generate ALTER TABLE ADD COLUMN statement(s)
+        StringBuilder sb = new StringBuilder();
+        String tableName = getFullTableName(mapping);
+        
+        sb.append("ALTER TABLE ");
+        sb.append(dbContext.quoteObjectNames(tableName));
+        sb.append("\n");
+        
+        for (int i = 0; i < missingColumns.size(); i++) {
+            ColumnDefinition col = missingColumns.get(i);
+            sb.append("  ADD COLUMN ");
+            sb.append(dbContext.quoteObjectNames(col.name));
+            sb.append(" ");
+            sb.append(col.sqlType);
+            // Note: We don't add AUTO_INCREMENT for ALTER TABLE as that requires PRIMARY KEY changes
+            
+            if (i < missingColumns.size() - 1) {
+                sb.append(",");
+            }
+            sb.append("\n");
+        }
+        
+        sb.append(";");
+        
+        return sb.toString();
+    }
+    
+    /**
+     * Gets all required columns for a table mapping.
+     */
+    private static List<ColumnDefinition> getRequiredColumns(TableMapping mapping, DbContext dbContext, 
+            List<InferredForeignKey> inferredForeignKeys) {
+        
+        List<ColumnDefinition> columns = new ArrayList<>();
+        Set<String> existingColumnNames = new HashSet<>();
+        
+        // Determine if we have a composite key from the overall class hierarchy
+        List<Field> idFields = QueryBuilder.determineIdFields(mapping.clazz);
+        boolean isCompositeKey = idFields.size() > 1;
+        
+        // Check if this is a subclass table
+        boolean hasIdFieldInThisMapping = false;
+        for (Field field : mapping.fields) {
+            if (field.getAnnotation(Id.class) != null) {
+                hasIdFieldInThisMapping = true;
+                break;
+            }
+        }
+        
+        // Add ID fields if needed (for subclass tables)
+        if (!hasIdFieldInThisMapping && !idFields.isEmpty()) {
+            for (Field idField : idFields) {
+                String columnName = QueryBuilder.determineSqlFieldName(idField);
+                String sqlType = dbContext.mapJavaTypeToSql(idField.getType());
+                columns.add(new ColumnDefinition(columnName, sqlType, false, true));
+                existingColumnNames.add(columnName.toLowerCase());
+            }
+        }
+        
+        // Process fields
+        for (Field field : mapping.fields) {
+            // Handle embedded fields
+            if (field.getAnnotation(Embedded.class) != null) {
+                Embedded embedded = field.getAnnotation(Embedded.class);
+                String prefix = Embedded.DEFAULT.equals(embedded.prefix()) ? "" : embedded.prefix();
+                addEmbeddedColumnsToList(field.getType(), prefix, columns, existingColumnNames, dbContext, isCompositeKey);
+                continue;
+            }
+            
+            // Handle linked fields
+            if (isLinkedField(field)) {
+                if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
+                    String columnName = determineForeignKeyColumnName(field);
+                    String sqlType = dbContext.mapJavaTypeToSql(Long.class);
+                    columns.add(new ColumnDefinition(columnName, sqlType, false, false));
+                    existingColumnNames.add(columnName.toLowerCase());
+                }
+                continue;
+            }
+            
+            String columnName = QueryBuilder.determineSqlFieldName(field);
+            boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
+            boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
+            String sqlType = dbContext.mapJavaTypeToSql(field.getType());
+            
+            columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey));
+            existingColumnNames.add(columnName.toLowerCase());
+        }
+        
+        // Add inferred foreign key columns
+        if (inferredForeignKeys != null) {
+            for (InferredForeignKey fk : inferredForeignKeys) {
+                if (!existingColumnNames.contains(fk.columnName.toLowerCase())) {
+                    String sqlType = dbContext.mapJavaTypeToSql(Long.class);
+                    columns.add(new ColumnDefinition(fk.columnName, sqlType, false, false));
+                    existingColumnNames.add(fk.columnName.toLowerCase());
+                }
+            }
+        }
+        
+        return columns;
+    }
+    
+    private static void addEmbeddedColumnsToList(Class<?> embeddedClass, String prefix, 
+            List<ColumnDefinition> columns, Set<String> existingColumnNames, DbContext dbContext, boolean isCompositeKey) {
+        Collection<Field> fields = QueryBuilder.filterFields(embeddedClass);
+        for (Field field : fields) {
+            if (field.getAnnotation(Embedded.class) != null) {
+                Embedded nested = field.getAnnotation(Embedded.class);
+                String nestedPrefix = prefix + (Embedded.DEFAULT.equals(nested.prefix()) ? "" : nested.prefix());
+                addEmbeddedColumnsToList(field.getType(), nestedPrefix, columns, existingColumnNames, dbContext, isCompositeKey);
+                continue;
+            }
+            
+            String columnName = prefix + QueryBuilder.determineSqlFieldName(field);
+            boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
+            boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
+            String sqlType = dbContext.mapJavaTypeToSql(field.getType());
+            
+            columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey));
+            existingColumnNames.add(columnName.toLowerCase());
+        }
+    }
 }
