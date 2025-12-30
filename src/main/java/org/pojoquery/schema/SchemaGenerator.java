@@ -130,7 +130,7 @@ public class SchemaGenerator {
                     Class<?> rootTableClass = findRootTableClass(componentType);
                     if (rootTableClass != null) {
                         inferredForeignKeys.computeIfAbsent(rootTableClass, k -> new ArrayList<>())
-                                .add(new InferredForeignKey(fkColumnName, entityClass));
+                                .add(new InferredForeignKey(fkColumnName));
                     }
                 }
             }
@@ -176,7 +176,7 @@ public class SchemaGenerator {
                 Class<?> tableClass = findTableClass(entityClass);
                 if (tableClass != null) {
                     inferredForeignKeys.computeIfAbsent(tableClass, k -> new ArrayList<>())
-                            .add(new InferredForeignKey(fkColumnName, field.getType()));
+                            .add(new InferredForeignKey(fkColumnName));
                 }
             }
         }
@@ -232,11 +232,9 @@ public class SchemaGenerator {
      */
     private static class InferredForeignKey {
         final String columnName;
-        final Class<?> referencedClass;
         
-        InferredForeignKey(String columnName, Class<?> referencedClass) {
+        InferredForeignKey(String columnName) {
             this.columnName = columnName;
-            this.referencedClass = referencedClass;
         }
     }
     
@@ -320,7 +318,7 @@ public class SchemaGenerator {
             for (Field idField : idFields) {
                 String columnName = QueryBuilder.determineSqlFieldName(idField);
                 // Add as NOT NULL (not auto-increment - it references the parent table)
-                String columnDef = formatColumnDefinition(columnName, idField.getType(), false, dbContext);
+                String columnDef = formatColumnDefinition(columnName, idField.getType(), false, dbContext, idField);
                 columnDefinitions.add(columnDef);
                 primaryKeyColumns.add(dbContext.quoteObjectNames(columnName));
                 existingColumnNames.add(columnName.toLowerCase());
@@ -341,7 +339,7 @@ public class SchemaGenerator {
                 // For single entity references, add a foreign key column
                 if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
                     String columnName = determineForeignKeyColumnName(field);
-                    String columnDef = formatColumnDefinition(columnName, Long.class, false, dbContext);
+                    String columnDef = formatIdColumnDefinition(columnName, dbContext);
                     columnDefinitions.add(columnDef);
                     existingColumnNames.add(columnName.toLowerCase());
                 }
@@ -353,7 +351,7 @@ public class SchemaGenerator {
             boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
             // Only auto-increment if single primary key (not composite) and it's in this mapping
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
-            String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext);
+            String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext, field);
             columnDefinitions.add(columnDef);
             existingColumnNames.add(columnName.toLowerCase());
             
@@ -367,7 +365,7 @@ public class SchemaGenerator {
             for (InferredForeignKey fk : inferredForeignKeys) {
                 // Only add if not already defined in the entity
                 if (!existingColumnNames.contains(fk.columnName.toLowerCase())) {
-                    String columnDef = formatColumnDefinition(fk.columnName, Long.class, false, dbContext);
+                    String columnDef = formatIdColumnDefinition(fk.columnName, dbContext);
                     columnDefinitions.add(columnDef);
                     existingColumnNames.add(fk.columnName.toLowerCase());
                 }
@@ -417,7 +415,7 @@ public class SchemaGenerator {
             String columnName = prefix + QueryBuilder.determineSqlFieldName(field);
             boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
-            String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext);
+            String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext, field);
             columnDefinitions.add(columnDef);
             existingColumnNames.add(columnName.toLowerCase());
             
@@ -449,11 +447,22 @@ public class SchemaGenerator {
         return field.getName() + "_id";
     }
     
-    private static String formatColumnDefinition(String columnName, Class<?> type, boolean autoIncrement, DbContext dbContext) {
+    private static String formatIdColumnDefinition(String columnName, DbContext dbContext) {
         StringBuilder sb = new StringBuilder();
         sb.append(dbContext.quoteObjectNames(columnName));
         sb.append(" ");
-        sb.append(dbContext.mapJavaTypeToSql(type));
+
+        sb.append(dbContext.getKeyColumnType());
+
+        return sb.toString();
+    }
+
+    private static String formatColumnDefinition(String columnName, Class<?> type, boolean autoIncrement, DbContext dbContext, Field field) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(dbContext.quoteObjectNames(columnName));
+        sb.append(" ");
+        
+        sb.append(dbContext.mapJavaTypeToSql(field));
         
         if (autoIncrement) {
             String autoIncrementSyntax = dbContext.getAutoIncrementSyntax();
@@ -655,7 +664,7 @@ public class SchemaGenerator {
         if (!hasIdFieldInThisMapping && !idFields.isEmpty()) {
             for (Field idField : idFields) {
                 String columnName = QueryBuilder.determineSqlFieldName(idField);
-                String sqlType = dbContext.mapJavaTypeToSql(idField.getType());
+                String sqlType = dbContext.mapJavaTypeToSql(idField);
                 columns.add(new ColumnDefinition(columnName, sqlType, false, true));
                 existingColumnNames.add(columnName.toLowerCase());
             }
@@ -675,7 +684,7 @@ public class SchemaGenerator {
             if (isLinkedField(field)) {
                 if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
                     String columnName = determineForeignKeyColumnName(field);
-                    String sqlType = dbContext.mapJavaTypeToSql(Long.class);
+                    String sqlType = dbContext.getKeyColumnType();
                     columns.add(new ColumnDefinition(columnName, sqlType, false, false));
                     existingColumnNames.add(columnName.toLowerCase());
                 }
@@ -685,7 +694,7 @@ public class SchemaGenerator {
             String columnName = QueryBuilder.determineSqlFieldName(field);
             boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
-            String sqlType = dbContext.mapJavaTypeToSql(field.getType());
+            String sqlType = dbContext.mapJavaTypeToSql(field);
             
             columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey));
             existingColumnNames.add(columnName.toLowerCase());
@@ -695,7 +704,7 @@ public class SchemaGenerator {
         if (inferredForeignKeys != null) {
             for (InferredForeignKey fk : inferredForeignKeys) {
                 if (!existingColumnNames.contains(fk.columnName.toLowerCase())) {
-                    String sqlType = dbContext.mapJavaTypeToSql(Long.class);
+                    String sqlType = dbContext.getKeyColumnType();
                     columns.add(new ColumnDefinition(fk.columnName, sqlType, false, false));
                     existingColumnNames.add(fk.columnName.toLowerCase());
                 }
@@ -719,7 +728,7 @@ public class SchemaGenerator {
             String columnName = prefix + QueryBuilder.determineSqlFieldName(field);
             boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
-            String sqlType = dbContext.mapJavaTypeToSql(field.getType());
+            String sqlType = dbContext.mapJavaTypeToSql(field);
             
             columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey));
             existingColumnNames.add(columnName.toLowerCase());

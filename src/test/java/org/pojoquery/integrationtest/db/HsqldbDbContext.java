@@ -11,6 +11,7 @@ import java.util.Map;
 
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
+import org.pojoquery.annotations.Lob;
 import org.pojoquery.pipeline.SimpleFieldMapping;
 
 /**
@@ -50,7 +51,9 @@ public class HsqldbDbContext implements DbContext {
     }
 
     @Override
-    public String mapJavaTypeToSql(Class<?> type) {
+    public String mapJavaTypeToSql(Field field) {
+        Class<?> type = field.getType();
+
         // Handle primitive types and wrappers
         if (type == Long.class || type == long.class) {
             return "BIGINT";
@@ -93,6 +96,9 @@ public class HsqldbDbContext implements DbContext {
 
         // String and text types
         if (type == String.class) {
+            if (field.getAnnotation(Lob.class) != null) {            
+                return "CLOB";
+            }
             return "VARCHAR(" + getDefaultVarcharLength() + ")";
         }
 

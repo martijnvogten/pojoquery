@@ -8,6 +8,7 @@ import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Id;
+import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
 import org.pojoquery.schema.SchemaGenerator;
@@ -21,8 +22,17 @@ public class BlobsIT {
 		byte[] data;
 	}
 	
+	@Table("article")
+	public static class Article {
+		@Id
+		Long id;
+		String title;
+		@Lob
+		String content;
+	}
+	
 	@Test
-	public void testInserts() {
+	public void testBlobInserts() {
 		DataSource db = initDatabase();
 		
 		File f = new File();
@@ -49,6 +59,37 @@ public class BlobsIT {
 		DataSource db = TestDatabase.dropAndRecreate();
 		SchemaGenerator.createTables(db, File.class);
 		return db;
+	}
+	
+	@Test
+	public void testClobInserts() {
+		DataSource db = TestDatabase.dropAndRecreate();
+		SchemaGenerator.createTables(db, Article.class);
+		
+		// Create a large text content (larger than typical VARCHAR)
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < 1000; i++) {
+			sb.append("This is line ").append(i).append(" of the article content.\n");
+		}
+		String largeContent = sb.toString();
+		
+		Article article = new Article();
+		article.title = "Test Article";
+		article.content = largeContent;
+		PojoQuery.insert(db, article);
+		Assert.assertEquals((Long)1L, article.id);
+		
+		// Load and verify
+		Article loaded = PojoQuery.build(Article.class).findById(db, article.id);
+		Assert.assertEquals("Test Article", loaded.title);
+		Assert.assertEquals(largeContent, loaded.content);
+		
+		// Update the CLOB
+		String updatedContent = "Updated content that is much shorter.";
+		DB.update(db, SqlExpression.sql("UPDATE article SET content = ? WHERE id = ?", updatedContent, article.id));
+		
+		Article reloaded = PojoQuery.build(Article.class).findById(db, article.id);
+		Assert.assertEquals(updatedContent, reloaded.content);
 	}
 	
 }

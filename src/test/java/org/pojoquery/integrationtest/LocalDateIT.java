@@ -6,7 +6,6 @@ import javax.sql.DataSource;
 
 import org.junit.Assert;
 import org.junit.Test;
-import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;

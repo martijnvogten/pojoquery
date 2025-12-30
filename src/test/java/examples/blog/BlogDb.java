@@ -4,7 +4,6 @@ import java.util.Date;
 
 import javax.sql.DataSource;
 
-import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.integrationtest.db.TestDatabase;
 import org.pojoquery.schema.SchemaGenerator;

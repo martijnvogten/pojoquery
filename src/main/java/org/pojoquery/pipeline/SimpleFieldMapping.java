@@ -3,6 +3,7 @@ package org.pojoquery.pipeline;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.sql.Blob;
+import java.sql.Clob;
 import java.sql.Date;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -49,6 +50,10 @@ public class SimpleFieldMapping implements FieldMapping {
 			if (value instanceof Blob && f.getType().equals(byte[].class)) {
 				Blob blob = (Blob) value;
 				value = blob.getBytes(1, (int) blob.length());
+			}
+			if (value instanceof Clob && f.getType().equals(String.class)) {
+				Clob clob = (Clob) value;
+				value = clob.getSubString(1, (int) clob.length());
 			}
 			f.setAccessible(true);
 			f.set(targetEntity, value);

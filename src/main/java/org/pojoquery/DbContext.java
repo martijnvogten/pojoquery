@@ -9,10 +9,11 @@ import java.time.LocalTime;
 import java.util.Date;
 import java.util.Map;
 
+import org.pojoquery.annotations.Lob;
 import org.pojoquery.pipeline.SimpleFieldMapping;
 
 public interface DbContext {
-	
+
 	public enum QuoteStyle {
 		ANSI("\""),
 		MYSQL("`"),
@@ -56,17 +57,32 @@ public interface DbContext {
 	static DbContext DEFAULT = DefaultHolder.instance;
 
 	public String quoteObjectNames(String... names);
+
 	public QuoteStyle getQuoteStyle();
+
 	public String quoteAlias(String alias);
+
 	public FieldMapping getFieldMapping(Field f);
-	
+
 	// Schema generation methods
 	default String getDefaultVarcharLength() {
 		return "255";
 	}
-	
-	default String mapJavaTypeToSql(Class<?> type) {
-		// Handle primitive types and wrappers
+
+	default String getKeyColumnType() {
+		return "BIGINT";
+	}
+
+	/**
+	 * Maps a Java field to its SQL type, considering any annotations on the field.
+	 * 
+	 * @param field the field to map (may be null for non-field contexts like FK
+	 *              columns)
+	 * @return the SQL type string
+	 */
+	default String mapJavaTypeToSql(Field field) {
+		Class<?> type = field.getType();
+
 		if (type == Long.class || type == long.class) {
 			return "BIGINT";
 		}
@@ -94,12 +110,16 @@ public interface DbContext {
 		if (type == BigInteger.class) {
 			return "BIGINT";
 		}
-		
+
 		// Handle String
 		if (type == String.class) {
+			if (field.getAnnotation(Lob.class) != null) {
+				return "CLOB";
+			}
+
 			return "VARCHAR(" + getDefaultVarcharLength() + ")";
 		}
-		
+
 		// Handle date/time types
 		if (type == Date.class || type == java.sql.Timestamp.class || type == LocalDateTime.class) {
 			return "DATETIME";
@@ -110,30 +130,30 @@ public interface DbContext {
 		if (type == java.sql.Time.class || type == LocalTime.class) {
 			return "TIME";
 		}
-		
+
 		// Handle byte array (binary data)
 		if (type == byte[].class) {
 			return "BLOB";
 		}
-		
+
 		// Handle enums
 		if (type.isEnum()) {
 			return "VARCHAR(50)";
 		}
-		
+
 		// Handle Map (for @Other annotation)
 		if (Map.class.isAssignableFrom(type)) {
 			return "JSON";
 		}
-		
+
 		// Default to TEXT for unknown types
-		return "TEXT";
+		throw new IllegalArgumentException("Cannot map Java type to SQL type: " + type);
 	}
-	
+
 	default String getAutoIncrementSyntax() {
 		return " NOT NULL AUTO_INCREMENT";
 	}
-	
+
 	/**
 	 * Returns the fetch size to use for streaming result sets.
 	 * MySQL uses Integer.MIN_VALUE to enable streaming mode.
@@ -142,11 +162,11 @@ public interface DbContext {
 	default int getStreamingFetchSize() {
 		return Integer.MIN_VALUE; // MySQL default
 	}
-	
+
 	default String getTableSuffix() {
 		return " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 	}
-	
+
 	public class DefaultDbContext implements DbContext {
 		private final QuoteStyle quoteStyle;
 		private final boolean quoteObjects;
@@ -195,7 +215,9 @@ public interface DbContext {
 	}
 
 	/**
-	 * Sets the default DbContext. Useful for tests that need a different database configuration.
+	 * Sets the default DbContext. Useful for tests that need a different database
+	 * configuration.
+	 * 
 	 * @param context The DbContext to use as default
 	 */
 	public static void setDefault(DbContext context) {
@@ -204,6 +226,7 @@ public interface DbContext {
 
 	/**
 	 * Creates a new DbContextBuilder for configuring a custom DbContext.
+	 * 
 	 * @return A new DbContextBuilder instance
 	 */
 	public static DbContextBuilder builder() {

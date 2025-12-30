@@ -14,6 +14,7 @@ import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
+import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 
@@ -81,6 +82,16 @@ public class TestSchemaGenerator {
         
         @Link(linktable = "article_tag")
         List<Tag> tags;  // Many-to-many, should not create column
+    }
+    
+    @Table("blog_posts")
+    public static class BlogPost {
+        @Id
+        Long id;
+        String title;
+        @Lob
+        String content;  // Should be CLOB
+        String summary;  // Should be VARCHAR
     }
     
     @Table("tags")
@@ -205,6 +216,21 @@ public class TestSchemaGenerator {
         assertTrue(sql.contains("`title`"));
         // Should NOT contain a tags column since it's a collection
         assertTrue(!sql.contains("tags"));
+    }
+    
+    @Test
+    public void testLobAnnotation() {
+        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(BlogPost.class);
+        String sql = String.join("\n", sqlList);
+        System.out.println(sql);
+        
+        assertTrue(sql.contains("`id`"));
+        assertTrue(sql.contains("`title`"));
+        assertTrue(sql.contains("`content`"));
+        assertTrue(sql.contains("`summary`"));
+        // content should be CLOB, summary should be VARCHAR
+        assertTrue(sql.contains("`content` CLOB"));
+        assertTrue(sql.contains("`summary` VARCHAR"));
     }
     
     @Test

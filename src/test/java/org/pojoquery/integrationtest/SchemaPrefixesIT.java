@@ -1,9 +1,13 @@
 package org.pojoquery.integrationtest;
 
+import java.util.List;
+import java.util.Map;
+
+import javax.sql.DataSource;
+
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
@@ -12,10 +16,6 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
 import org.pojoquery.schema.SchemaGenerator;
-
-import javax.sql.DataSource;
-import java.util.List;
-import java.util.Map;
 
 public class SchemaPrefixesIT {
 
