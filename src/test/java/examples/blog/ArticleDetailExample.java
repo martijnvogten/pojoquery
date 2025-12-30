@@ -66,8 +66,8 @@ public class ArticleDetailExample {
 		
 		QueryBuilder<ArticleDetail> qb = QueryBuilder.from(ArticleDetail.class);
 		DefaultSqlQuery q = qb.getQuery()
-				.addWhere("article.id=?", 1L)
-				.addOrderBy("comments.submitdate DESC");
+				.addWhere("{article}.id=?", 1L)
+				.addOrderBy("{comments}.submitdate DESC");
 		System.out.println(q.toStatement().getSql());
 		
 		for(ArticleDetail article : qb.processRows(DB.queryRows(db, q.toStatement()))) {

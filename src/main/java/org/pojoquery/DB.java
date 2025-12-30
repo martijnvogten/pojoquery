@@ -437,6 +437,27 @@ public interface DB {
      * @return the SQL expression
      */
 	private static SqlExpression buildInsertOrUpdate(DbContext context, String schemaName, String tableName, Map<String, ? extends Object> values, boolean isUpsert) {
+		String qualifiedTableName = prefixAndQuoteTableName(context, schemaName, tableName);
+		
+		// Handle empty values (e.g., when only auto-generated ID exists)
+		if (values.isEmpty()) {
+			String sql;
+			switch (context.getDialect()) {
+			case MYSQL:
+				sql = "INSERT INTO " + qualifiedTableName + " () VALUES ()";
+				break;
+			case POSTGRES:
+				sql = "INSERT INTO " + qualifiedTableName + " DEFAULT VALUES";
+				break;
+			case HSQLDB:
+			case ANSI:
+			default:
+				sql = "INSERT INTO " + qualifiedTableName + " DEFAULT VALUES";
+				break;
+			}
+			return new SqlExpression(sql, new ArrayList<>());
+		}
+		
 		List<String> qmarks = new ArrayList<String>();
 		List<String> quotedFields = new ArrayList<String>();
 		List<Object> params = new ArrayList<Object>();
@@ -451,7 +472,6 @@ public interface DB {
 			updateList.add(quotedField + "=?");
 		}
 		
-		String qualifiedTableName = prefixAndQuoteTableName(context, schemaName, tableName);
 		String sql;
 		
 		if (isUpsert) {

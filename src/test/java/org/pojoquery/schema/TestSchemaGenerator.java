@@ -1,6 +1,7 @@
 package org.pojoquery.schema;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
@@ -17,6 +18,7 @@ import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.dialects.PostgresDbContext;
 
 public class TestSchemaGenerator {
 
@@ -369,12 +371,12 @@ public class TestSchemaGenerator {
         System.out.println(sql);
         
         // Count occurrences - room should only appear once, not multiple times
-        int roomCount = countOccurrences(sql, "CREATE TABLE `room`");
-        int bedroomCount = countOccurrences(sql, "CREATE TABLE `bedroom`");
-        int kitchenCount = countOccurrences(sql, "CREATE TABLE `kitchen`");
+        int roomCount = countOccurrences(sql, "`room`");
+        int bedroomCount = countOccurrences(sql, "`bedroom`");
+        int kitchenCount = countOccurrences(sql, "`kitchen`");
         
-        // Each table should be created exactly once
-        assertTrue("Room table should be created once", roomCount >= 1);
+        // Each table should be created exactly once (table name appears once in CREATE TABLE)
+        assertTrue("Room table should be created once", roomCount == 1);
         assertTrue("Bedroom table should be created once", bedroomCount == 1);
         assertTrue("Kitchen table should be created once", kitchenCount == 1);
     }
@@ -623,5 +625,72 @@ public class TestSchemaGenerator {
         // Second should be CREATE TABLE for products
         assertTrue("Second should be CREATE TABLE", statements.get(1).startsWith("CREATE TABLE"));
         assertTrue("Should be for products table", statements.get(1).contains("`products`"));
+    }
+    
+    @Test
+    public void testPostgresForeignKeyUsesBigintNotBigserial() {
+        // PostgreSQL FK columns should use BIGINT (non-auto-increment), not BIGSERIAL
+        PostgresDbContext postgresContext = new PostgresDbContext();
+        List<String> statements = SchemaGenerator.generateCreateTableStatements(postgresContext, EventWithFestival.class, Festival.class);
+        
+        System.out.println("PostgreSQL FK column type test:");
+        for (String stmt : statements) {
+            System.out.println(stmt);
+            System.out.println();
+        }
+        
+        String eventTable = statements.stream()
+            .filter(s -> s.contains("\"event\""))
+            .findFirst()
+            .orElse("");
+        
+        // The FK column (festivalID) should use BIGINT, not BIGSERIAL
+        assertTrue("Event table should have festivalID column", eventTable.contains("\"festivalID\""));
+        assertTrue("FK column festivalID should use BIGINT", eventTable.contains("\"festivalID\" BIGINT"));
+        assertFalse("FK column festivalID should NOT use BIGSERIAL", eventTable.contains("\"festivalID\" BIGSERIAL"));
+        
+        // But the PK column (eventID) should use BIGSERIAL for auto-increment
+        assertTrue("PK column eventID should use BIGSERIAL", eventTable.contains("\"eventID\" BIGSERIAL"));
+    }
+    
+    // Test entity for composite key with linked entities (like EventPersonLink)
+    @Table("event_person")
+    public static class EventPersonLink {
+        @Id
+        Long event_id;
+        
+        @Id
+        Long person_id;
+        
+        // These linked entities would normally generate FK columns,
+        // but they should NOT duplicate the existing @Id columns
+        Event event;
+        Festival person; // Using Festival as a stand-in for Person
+    }
+    
+    @Test
+    public void testCompositeKeyWithLinkedEntitiesNoDuplicateColumns() {
+        // When an entity has both @Id fields and linked entities that would
+        // generate FK columns with the same name, the columns should not be duplicated
+        List<String> statements = SchemaGenerator.generateCreateTableStatements(EventPersonLink.class);
+        
+        System.out.println("Composite key with linked entities test:");
+        for (String stmt : statements) {
+            System.out.println(stmt);
+            System.out.println();
+        }
+        
+        assertEquals("Should generate 1 statement", 1, statements.size());
+        String sql = statements.get(0);
+        
+        // Count occurrences of column definitions (with BIGINT type) - should appear only once each
+        int personIdColCount = countOccurrences(sql, "`person_id` BIGINT");
+        assertEquals("person_id column definition should appear exactly once", 1, personIdColCount);
+        
+        int eventIdColCount = countOccurrences(sql, "`event_id` BIGINT");
+        assertEquals("event_id column definition should appear exactly once", 1, eventIdColCount);
+        
+        // Should have composite primary key
+        assertTrue("Should have composite PRIMARY KEY", sql.contains("PRIMARY KEY (`event_id`, `person_id`)"));
     }
 }

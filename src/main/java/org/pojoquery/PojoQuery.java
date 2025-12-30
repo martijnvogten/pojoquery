@@ -14,6 +14,7 @@ import java.util.Map;
 import javax.sql.DataSource;
 
 import org.pojoquery.annotations.Embedded;
+import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.NoUpdate;
 import org.pojoquery.annotations.Other;
@@ -538,6 +539,8 @@ public class PojoQuery<T> {
 						Object idValue = idField.get(val);
 						values.put(linkfieldName, idValue);
 					}
+                } else if (f.getAnnotation(Id.class) != null && val == null) {
+                	// Skip auto-generated ID field when value is null (for INSERT)
                 } else {
                 	values.put(QueryBuilder.determineSqlFieldName(f), val);
                 }

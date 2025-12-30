@@ -48,7 +48,6 @@ public class EventsExample {
 		
 		public Person person;
 		public Event event;
-
 	}
 	
 	public static void main(String[] args) {
@@ -62,7 +61,7 @@ public class EventsExample {
 		}
 		
 		PojoQuery<EventWithPersons> q = PojoQuery.build(EventWithPersons.class)
-					.addWhere("persons.firstname=?", "John");
+					.addWhere("{persons}.firstname=?", "John");
 		
 		for(EventWithPersons event : q.execute(db)) {
 			System.out.println(event.persons.get(0).getEmailAddresses().get(0));

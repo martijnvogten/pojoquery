@@ -197,8 +197,8 @@ public class DbContextBuilder {
         }
 
         @Override
-        public String getTableSuffix() {
-            return base.getTableSuffix();
+        public String getCreateTableSuffix() {
+            return base.getCreateTableSuffix();
         }
 
         @Override
@@ -207,8 +207,8 @@ public class DbContextBuilder {
         }
         
         @Override
-        public String getKeyColumnType() {
-            return base.getKeyColumnType();
+        public String getForeignKeyColumnType() {
+            return base.getForeignKeyColumnType();
         }
         
         @Override

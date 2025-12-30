@@ -104,8 +104,21 @@ public interface DbContext {
 		return "255";
 	}
 
-	default String getKeyColumnType() {
-		return "BIGINT";
+	/**
+	 * Returns the SQL type for foreign key columns that reference other tables.
+	 * This should NOT be an auto-incrementing type.
+	 * @return the SQL type for foreign key columns (e.g., "BIGINT")
+	 */
+	public String getForeignKeyColumnType();
+	
+	/**
+	 * Returns the SQL type for auto-incrementing primary key columns.
+	 * For databases like PostgreSQL, this may return a special type like "BIGSERIAL".
+	 * Default implementation returns getKeyColumnType() for backward compatibility.
+	 * @return the SQL type for auto-incrementing primary key columns
+	 */
+	default String getAutoIncrementKeyColumnType() {
+		return getForeignKeyColumnType();
 	}
 
 	/**
@@ -198,7 +211,7 @@ public interface DbContext {
 		return Integer.MIN_VALUE; // MySQL default
 	}
 
-	default String getTableSuffix() {
+	default String getCreateTableSuffix() {
 		return " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 	}
 

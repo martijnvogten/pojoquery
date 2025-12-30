@@ -122,12 +122,17 @@ public class PostgresDbContext implements DbContext {
     }
     
     @Override
-    public String getKeyColumnType() {
-        return "BIGSERIAL"; // Auto-incrementing in PostgreSQL
+    public String getForeignKeyColumnType() {
+        return "BIGINT"; // For foreign key columns (non-auto-incrementing)
+    }
+    
+    @Override
+    public String getAutoIncrementKeyColumnType() {
+        return "BIGSERIAL"; // Auto-incrementing primary key type in PostgreSQL
     }
 
     @Override
-    public String getTableSuffix() {
+    public String getCreateTableSuffix() {
         return "";
     }
 

@@ -339,9 +339,12 @@ public class SchemaGenerator {
                 // For single entity references, add a foreign key column
                 if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
                     String columnName = determineForeignKeyColumnName(field);
-                    String columnDef = formatIdColumnDefinition(columnName, dbContext);
-                    columnDefinitions.add(columnDef);
-                    existingColumnNames.add(columnName.toLowerCase());
+                    // Only add if not already defined (e.g., as an @Id field)
+                    if (!existingColumnNames.contains(columnName.toLowerCase())) {
+                        String columnDef = formatIdColumnDefinition(columnName, dbContext);
+                        columnDefinitions.add(columnDef);
+                        existingColumnNames.add(columnName.toLowerCase());
+                    }
                 }
                 // Collections are handled via inferred foreign keys in the referenced table
                 continue;
@@ -389,7 +392,7 @@ public class SchemaGenerator {
         sb.append(")");
         
         // Add engine specification based on DbContext
-        String tableSuffix = dbContext.getTableSuffix();
+        String tableSuffix = dbContext.getCreateTableSuffix();
         if (tableSuffix != null && !tableSuffix.isEmpty()) {
             sb.append(tableSuffix);
         }
@@ -452,7 +455,7 @@ public class SchemaGenerator {
         sb.append(dbContext.quoteObjectNames(columnName));
         sb.append(" ");
 
-        sb.append(dbContext.getKeyColumnType());
+        sb.append(dbContext.getForeignKeyColumnType());
 
         return sb.toString();
     }
@@ -462,13 +465,19 @@ public class SchemaGenerator {
         sb.append(dbContext.quoteObjectNames(columnName));
         sb.append(" ");
         
-        sb.append(dbContext.mapJavaTypeToSql(field));
-        
-        if (autoIncrement) {
-            String autoIncrementSyntax = dbContext.getAutoIncrementSyntax();
-            if (!autoIncrementSyntax.isEmpty()) {
-                sb.append(" ");
-                sb.append(autoIncrementSyntax);
+        // For auto-increment primary keys, some databases use special types (e.g., BIGSERIAL in Postgres)
+        if (autoIncrement && !dbContext.getAutoIncrementKeyColumnType().equals("BIGINT")) {
+            // Use the auto-increment key column type which includes auto-increment semantics (e.g., BIGSERIAL)
+            sb.append(dbContext.getAutoIncrementKeyColumnType());
+        } else {
+            sb.append(dbContext.mapJavaTypeToSql(field));
+            
+            if (autoIncrement) {
+                String autoIncrementSyntax = dbContext.getAutoIncrementSyntax();
+                if (!autoIncrementSyntax.isEmpty()) {
+                    sb.append(" ");
+                    sb.append(autoIncrementSyntax);
+                }
             }
         }
         
@@ -684,9 +693,12 @@ public class SchemaGenerator {
             if (isLinkedField(field)) {
                 if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
                     String columnName = determineForeignKeyColumnName(field);
-                    String sqlType = dbContext.getKeyColumnType();
-                    columns.add(new ColumnDefinition(columnName, sqlType, false, false));
-                    existingColumnNames.add(columnName.toLowerCase());
+                    // Only add if not already defined (e.g., as an @Id field)
+                    if (!existingColumnNames.contains(columnName.toLowerCase())) {
+                        String sqlType = dbContext.getForeignKeyColumnType();
+                        columns.add(new ColumnDefinition(columnName, sqlType, false, false));
+                        existingColumnNames.add(columnName.toLowerCase());
+                    }
                 }
                 continue;
             }
@@ -704,7 +716,7 @@ public class SchemaGenerator {
         if (inferredForeignKeys != null) {
             for (InferredForeignKey fk : inferredForeignKeys) {
                 if (!existingColumnNames.contains(fk.columnName.toLowerCase())) {
-                    String sqlType = dbContext.getKeyColumnType();
+                    String sqlType = dbContext.getForeignKeyColumnType();
                     columns.add(new ColumnDefinition(fk.columnName, sqlType, false, false));
                     existingColumnNames.add(fk.columnName.toLowerCase());
                 }

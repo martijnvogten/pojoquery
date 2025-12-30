@@ -56,6 +56,11 @@ public class HsqldbDbContext implements DbContext {
         return new SimpleFieldMapping(f);
     }
 
+	@Override
+	public String getForeignKeyColumnType() {
+		return "BIGINT";
+	}
+
     @Override
     public String mapJavaTypeToSql(Field field) {
         Class<?> type = field.getType();
@@ -127,7 +132,7 @@ public class HsqldbDbContext implements DbContext {
     }
 
     @Override
-    public String getTableSuffix() {
+    public String getCreateTableSuffix() {
         return "";
     }
 
