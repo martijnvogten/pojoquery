@@ -879,20 +879,17 @@ public class TestSchemaGenerator {
             sql.contains("ALTER TABLE `person_friends` ADD FOREIGN KEY (`friends_id`) REFERENCES `person`(`id`)"));
     }
     
-    // ========== Test entities for @NotNull, @Unique, and @Column annotations ==========
+    // ========== Test entities for @Column(nullable, unique, length, precision, scale) ==========
     
     @Table("accounts")
     public static class Account {
         @Id
         Long id;
         
-        @org.pojoquery.annotations.NotNull
-        @org.pojoquery.annotations.Unique
+        @org.pojoquery.annotations.Column(nullable = false, unique = true)
         String username;
         
-        @org.pojoquery.annotations.NotNull
-        @org.pojoquery.annotations.Unique
-        @org.pojoquery.annotations.Column(length = 100)
+        @org.pojoquery.annotations.Column(length = 100, nullable = false, unique = true)
         String email;
         
         @org.pojoquery.annotations.Column(length = 50)
@@ -916,7 +913,7 @@ public class TestSchemaGenerator {
     public void testNotNullAnnotation() {
         List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class);
         String sql = String.join("\n", sqlList);
-        System.out.println("NotNull annotation test:\n" + sql);
+        System.out.println("Column nullable=false test:\n" + sql);
         
         // username and email should have NOT NULL
         assertTrue("username should be NOT NULL", sql.contains("`username` VARCHAR(255) NOT NULL"));
@@ -933,7 +930,7 @@ public class TestSchemaGenerator {
     public void testUniqueAnnotation() {
         List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class);
         String sql = String.join("\n", sqlList);
-        System.out.println("Unique annotation test:\n" + sql);
+        System.out.println("Column unique=true test:\n" + sql);
         
         // username and email should have UNIQUE
         assertTrue("username should be UNIQUE", sql.contains("`username` VARCHAR(255) NOT NULL UNIQUE"));

@@ -8,7 +8,7 @@ import java.lang.annotation.Target;
 /**
  * Provides additional column definition options for schema generation.
  * This annotation can be used to customize column properties like length,
- * precision, and scale.
+ * precision, scale, nullability, and uniqueness.
  * 
  * <p>Example usage:</p>
  * <pre>
@@ -17,13 +17,13 @@ import java.lang.annotation.Target;
  *     &#64;Id
  *     public Long id;
  *     
- *     &#64;Column(length = 50)
- *     public String username;     // Will be VARCHAR(50)
+ *     &#64;Column(length = 50, nullable = false, unique = true)
+ *     public String username;     // Will be VARCHAR(50) NOT NULL UNIQUE
  *     
- *     &#64;Column(length = 100)
- *     public String email;        // Will be VARCHAR(100)
+ *     &#64;Column(length = 100, nullable = false)
+ *     public String email;        // Will be VARCHAR(100) NOT NULL
  *     
- *     public String description;  // Will be VARCHAR(255) - default length
+ *     public String description;  // Will be VARCHAR(255) - default length, nullable
  *     
  *     &#64;Column(precision = 10, scale = 2)
  *     public BigDecimal price;    // Will be DECIMAL(10,2)
@@ -53,4 +53,16 @@ public @interface Column {
      * Default is 4.
      */
     int scale() default 4;
+    
+    /**
+     * Whether the column allows NULL values.
+     * Default is true (nullable).
+     */
+    boolean nullable() default true;
+    
+    /**
+     * Whether the column has a UNIQUE constraint.
+     * Default is false.
+     */
+    boolean unique() default false;
 }

@@ -12,13 +12,12 @@ import java.util.Map;
 import java.util.Set;
 
 import org.pojoquery.DbContext;
+import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
-import org.pojoquery.annotations.NotNull;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.annotations.Unique;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.CustomizableQueryBuilder;
 import org.pojoquery.pipeline.QueryBuilder;
@@ -591,7 +590,7 @@ public class SchemaGenerator {
                     String columnName = determineForeignKeyColumnName(field);
                     // Only add if not already defined (e.g., as an @Id field)
                     if (!existingColumnNames.contains(columnName.toLowerCase())) {
-                        String columnDef = formatIdColumnDefinition(columnName, dbContext);
+                        String columnDef = formatForeignKeyColumnDefinition(columnName, dbContext, field);
                         columnDefinitions.add(columnDef);
                         existingColumnNames.add(columnName.toLowerCase());
                     }
@@ -735,6 +734,29 @@ public class SchemaGenerator {
 
         return sb.toString();
     }
+    
+    private static String formatForeignKeyColumnDefinition(String columnName, DbContext dbContext, Field field) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(dbContext.quoteObjectNames(columnName));
+        sb.append(" ");
+
+        sb.append(dbContext.getForeignKeyColumnType());
+        
+        // Check @Link for nullable and unique constraints
+        if (field != null) {
+            Link linkAnn = field.getAnnotation(Link.class);
+            if (linkAnn != null) {
+                if (!linkAnn.nullable()) {
+                    sb.append(" NOT NULL");
+                }
+                if (linkAnn.unique()) {
+                    sb.append(" UNIQUE");
+                }
+            }
+        }
+
+        return sb.toString();
+    }
 
     private static String formatColumnDefinition(String columnName, Class<?> type, boolean autoIncrement, DbContext dbContext, Field field) {
         StringBuilder sb = new StringBuilder();
@@ -748,9 +770,12 @@ public class SchemaGenerator {
         } else {
             sb.append(dbContext.mapJavaTypeToSql(field));
             
-            // Add NOT NULL constraint if @NotNull is present (and not already implied by auto-increment)
-            if (!autoIncrement && field != null && field.getAnnotation(NotNull.class) != null) {
-                sb.append(" NOT NULL");
+            // Add NOT NULL constraint if @Column(nullable=false) is present (and not already implied by auto-increment)
+            if (!autoIncrement && field != null) {
+                Column columnAnn = field.getAnnotation(Column.class);
+                if (columnAnn != null && !columnAnn.nullable()) {
+                    sb.append(" NOT NULL");
+                }
             }
             
             if (autoIncrement) {
@@ -762,9 +787,12 @@ public class SchemaGenerator {
             }
         }
         
-        // Add UNIQUE constraint if @Unique is present
-        if (field != null && field.getAnnotation(Unique.class) != null) {
-            sb.append(" UNIQUE");
+        // Add UNIQUE constraint if @Column(unique=true) is present
+        if (field != null) {
+            Column columnAnn = field.getAnnotation(Column.class);
+            if (columnAnn != null && columnAnn.unique()) {
+                sb.append(" UNIQUE");
+            }
         }
         
         return sb.toString();
@@ -1026,7 +1054,11 @@ public class SchemaGenerator {
                     // Only add if not already defined (e.g., as an @Id field)
                     if (!existingColumnNames.contains(columnName.toLowerCase())) {
                         String sqlType = dbContext.getForeignKeyColumnType();
-                        columns.add(new ColumnDefinition(columnName, sqlType, false, false));
+                        // Check @Link for nullable and unique
+                        Link linkAnn = field.getAnnotation(Link.class);
+                        boolean notNull = linkAnn != null && !linkAnn.nullable();
+                        boolean unique = linkAnn != null && linkAnn.unique();
+                        columns.add(new ColumnDefinition(columnName, sqlType, false, false, notNull, unique));
                         existingColumnNames.add(columnName.toLowerCase());
                     }
                 }
@@ -1037,8 +1069,9 @@ public class SchemaGenerator {
             boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String sqlType = dbContext.mapJavaTypeToSql(field);
-            boolean notNull = !shouldAutoIncrement && field.getAnnotation(NotNull.class) != null;
-            boolean unique = field.getAnnotation(Unique.class) != null;
+            Column columnAnn = field.getAnnotation(Column.class);
+            boolean notNull = !shouldAutoIncrement && columnAnn != null && !columnAnn.nullable();
+            boolean unique = columnAnn != null && columnAnn.unique();
             
             columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey, notNull, unique));
             existingColumnNames.add(columnName.toLowerCase());
@@ -1073,8 +1106,9 @@ public class SchemaGenerator {
             boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String sqlType = dbContext.mapJavaTypeToSql(field);
-            boolean notNull = !shouldAutoIncrement && field.getAnnotation(NotNull.class) != null;
-            boolean unique = field.getAnnotation(Unique.class) != null;
+            Column columnAnn = field.getAnnotation(Column.class);
+            boolean notNull = !shouldAutoIncrement && columnAnn != null && !columnAnn.nullable();
+            boolean unique = columnAnn != null && columnAnn.unique();
             
             columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey, notNull, unique));
             existingColumnNames.add(columnName.toLowerCase());

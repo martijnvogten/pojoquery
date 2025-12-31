@@ -13,4 +13,16 @@ public @interface Link {
 	String fetchColumn() default NONE;
 	String foreignlinkfield() default NONE;
 	String linkfield() default NONE;
+	
+	/**
+	 * Whether the foreign key column allows NULL values.
+	 * Default is true (nullable).
+	 */
+	boolean nullable() default true;
+	
+	/**
+	 * Whether the foreign key column has a UNIQUE constraint.
+	 * Default is false.
+	 */
+	boolean unique() default false;
 }

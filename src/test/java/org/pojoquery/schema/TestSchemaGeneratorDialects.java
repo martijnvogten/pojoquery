@@ -310,13 +310,12 @@ public class TestSchemaGeneratorDialects {
         }
     }
     
-    // Test entities for @NotNull, @Unique, and @Column annotations
+    // Test entities for @Column(nullable, unique, length, precision, scale) annotations
     @Table("accounts")
     public static class Account {
         @Id Long id;
         
-        @org.pojoquery.annotations.NotNull
-        @org.pojoquery.annotations.Unique
+        @org.pojoquery.annotations.Column(nullable = false, unique = true)
         String username;
         
         @org.pojoquery.annotations.Column(length = 100)
@@ -327,11 +326,11 @@ public class TestSchemaGeneratorDialects {
     }
     
     @Test
-    public void testNotNullAndUniqueAnnotationsAcrossDialects() {
+    public void testColumnNullableAndUniqueAnnotationsAcrossDialects() {
         List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class, dbContext);
         String sql = String.join("\n", sqlList);
         
-        System.out.println(dialect + " (NotNull/Unique):\n" + sql + "\n");
+        System.out.println(dialect + " (Column nullable/unique):\n" + sql + "\n");
         
         // All dialects should have NOT NULL and UNIQUE constraints
         assertTrue(dialect + " should have NOT NULL", sql.toUpperCase().contains("NOT NULL"));
