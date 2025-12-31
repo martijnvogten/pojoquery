@@ -330,22 +330,38 @@ public class PojoQuery<T> {
 	}
 
 	public static <PK> PK insert(Connection conn, Class<?> type, Object o) {
-		return insert(conn, null, type, o);
+		return insert(DbContext.getDefault(), conn, null, type, o);
+	}
+
+	public static <PK> PK insert(DbContext context, Connection conn, Class<?> type, Object o) {
+		return insert(context, conn, null, type, o);
 	}
 
 	public static <PK> PK insert(DataSource db, Class<?> type, Object o) {
-		return insert(null, db, type, o);
+		return insert(DbContext.getDefault(), null, db, type, o);
+	}
+
+	public static <PK> PK insert(DbContext context, DataSource db, Class<?> type, Object o) {
+		return insert(context, null, db, type, o);
 	}
 
 	public static <PK> PK insert(DataSource db, Object o) {
-		return insert(db, o.getClass(), o);
+		return insert(DbContext.getDefault(), db, o.getClass(), o);
+	}
+
+	public static <PK> PK insert(DbContext context, DataSource db, Object o) {
+		return insert(context, db, o.getClass(), o);
 	}
 
 	public static <PK> PK insert(Connection connection, Object o) {
-		return insert(connection, o.getClass(), o);
+		return insert(DbContext.getDefault(), connection, o.getClass(), o);
 	}
 
-	private static <PK> PK insert(Connection conn, DataSource db, Class<?> type, Object o) {
+	public static <PK> PK insert(DbContext context, Connection connection, Object o) {
+		return insert(context, connection, o.getClass(), o);
+	}
+
+	private static <PK> PK insert(DbContext context, Connection conn, DataSource db, Class<?> type, Object o) {
 		// If the class hierarchy contains multiple tables, create separate
 		// inserts
 		List<TableMapping> tables = QueryBuilder.determineTableMapping(type);
@@ -356,9 +372,9 @@ public class PojoQuery<T> {
 		if (tables.size() == 1) {
 			PK ids;
 			if (conn != null) {
-				ids = DB.insert(conn, tables.get(0).tableName, extractValues(type, o));
+				ids = DB.insert(context, conn, tables.get(0).tableName, extractValues(type, o));
 			} else {
-				ids = DB.insert(db, tables.get(0).tableName, extractValues(type, o));
+				ids = DB.insert(context, db, tables.get(0).tableName, extractValues(type, o));
 			}
 			if (ids != null) {
 				applyGeneratedId(o, ids);
@@ -369,9 +385,9 @@ public class PojoQuery<T> {
 			Map<String, Object> values = extractValues(topType.clazz, o);
 			PK ids;
 			if (conn != null) {
-				ids = DB.insert(conn, topType.tableName, values);
+				ids = DB.insert(context, conn, topType.tableName, values);
 			} else {
-				ids = DB.insert(db, topType.tableName, values);
+				ids = DB.insert(context, db, topType.tableName, values);
 			}
 			if (ids != null) {
 				applyGeneratedId(o, ids);
@@ -387,9 +403,9 @@ public class PojoQuery<T> {
 				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.clazz : type, o, topType.clazz);
 				subvals.put(idField, ids);
 				if (conn != null) {
-					DB.insert(conn, supertype.tableName, subvals);
+					DB.insert(context, conn, supertype.tableName, subvals);
 				} else {
-					DB.insert(db, supertype.tableName, subvals);
+					DB.insert(context, db, supertype.tableName, subvals);
 				}
 				topType = supertype;
 			}
@@ -399,22 +415,38 @@ public class PojoQuery<T> {
 	}
 
 	public static int update(DataSource db, Object object) {
-		return update(null, db, object.getClass(), object);
+		return update(DbContext.getDefault(), null, db, object.getClass(), object);
+	}
+
+	public static int update(DbContext context, DataSource db, Object object) {
+		return update(context, null, db, object.getClass(), object);
 	}
 
 	public static int update(Connection connection, Object object) {
-		return update(connection, null, object.getClass(), object);
+		return update(DbContext.getDefault(), connection, null, object.getClass(), object);
+	}
+
+	public static int update(DbContext context, Connection connection, Object object) {
+		return update(context, connection, null, object.getClass(), object);
 	}
 
 	public static int update(DataSource db, Class<?> type, Object object) {
-		return update(null, db, type, object);
+		return update(DbContext.getDefault(), null, db, type, object);
+	}
+
+	public static int update(DbContext context, DataSource db, Class<?> type, Object object) {
+		return update(context, null, db, type, object);
 	}
 
 	public static int update(Connection connection, Class<?> type, Object object) {
-		return update(connection, null, type, object);
+		return update(DbContext.getDefault(), connection, null, type, object);
 	}
 
-	private static int update(Connection conn, DataSource db, Class<?> type, Object o) {
+	public static int update(DbContext context, Connection connection, Class<?> type, Object object) {
+		return update(context, connection, null, type, object);
+	}
+
+	private static int update(DbContext context, Connection conn, DataSource db, Class<?> type, Object o) {
 		// If the class hierarchy contains multiple tables, create separate
 		// inserts
 		List<TableMapping> tables = QueryBuilder.determineTableMapping(type);
@@ -438,9 +470,9 @@ public class PojoQuery<T> {
 
 			int affectedRows;
 			if (conn != null) {
-				affectedRows = DB.update(conn, tables.get(0).tableName, values, ids);
+				affectedRows = DB.update(context, conn, tables.get(0).tableName, values, ids);
 			} else {
-				affectedRows = DB.update(db, tables.get(0).tableName, values, ids);
+				affectedRows = DB.update(context, db, tables.get(0).tableName, values, ids);
 			}
 			if (o instanceof HasVersion && affectedRows == 0) {
 				throw new StaleObjectException();
@@ -460,9 +492,9 @@ public class PojoQuery<T> {
 			}
 
 			if (conn != null) {
-				affectedRows = DB.update(conn, topType.tableName, values, topIds);
+				affectedRows = DB.update(context, conn, topType.tableName, values, topIds);
 			} else {
-				affectedRows = DB.update(db, topType.tableName, values, topIds);
+				affectedRows = DB.update(context, db, topType.tableName, values, topIds);
 			}
 			
 			if (affectedRows == 0) {
@@ -473,9 +505,9 @@ public class PojoQuery<T> {
 				TableMapping supertype = tables.remove(0);
 				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.clazz : type, o, topType.clazz);
 				if (conn != null) {
-					DB.update(conn, supertype.tableName, subvals, ids);
+					DB.update(context, conn, supertype.tableName, subvals, ids);
 				} else {
-					DB.update(db, supertype.tableName, subvals, ids);
+					DB.update(context, db, supertype.tableName, subvals, ids);
 				}
 				topType = supertype;
 			}
