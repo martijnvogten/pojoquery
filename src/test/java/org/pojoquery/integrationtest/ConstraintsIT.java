@@ -1,7 +1,6 @@
 package org.pojoquery.integrationtest;
 
 import java.math.BigDecimal;
-import java.sql.SQLException;
 
 import javax.sql.DataSource;
 
