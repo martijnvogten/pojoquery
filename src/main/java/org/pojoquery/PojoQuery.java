@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import javax.sql.DataSource;
 
@@ -49,6 +50,7 @@ public class PojoQuery<T> {
 	 * @return a new PojoQuery instance
 	 */
 	public static <T> PojoQuery<T> build(Class<T> clz) {
+		Objects.requireNonNull(clz, "class must not be null");
 		return build(DbContext.getDefault(), clz);
 	}
 
@@ -346,18 +348,22 @@ public class PojoQuery<T> {
 	}
 
 	public static <PK> PK insert(DataSource db, Object o) {
+		Objects.requireNonNull(o, "entity must not be null");
 		return insert(DbContext.getDefault(), db, o.getClass(), o);
 	}
 
 	public static <PK> PK insert(DbContext context, DataSource db, Object o) {
+		Objects.requireNonNull(o, "entity must not be null");
 		return insert(context, db, o.getClass(), o);
 	}
 
 	public static <PK> PK insert(Connection connection, Object o) {
+		Objects.requireNonNull(o, "entity must not be null");
 		return insert(DbContext.getDefault(), connection, o.getClass(), o);
 	}
 
 	public static <PK> PK insert(DbContext context, Connection connection, Object o) {
+		Objects.requireNonNull(o, "entity must not be null");
 		return insert(context, connection, o.getClass(), o);
 	}
 
@@ -415,18 +421,22 @@ public class PojoQuery<T> {
 	}
 
 	public static int update(DataSource db, Object object) {
+		Objects.requireNonNull(object, "entity must not be null");
 		return update(DbContext.getDefault(), null, db, object.getClass(), object);
 	}
 
 	public static int update(DbContext context, DataSource db, Object object) {
+		Objects.requireNonNull(object, "entity must not be null");
 		return update(context, null, db, object.getClass(), object);
 	}
 
 	public static int update(Connection connection, Object object) {
+		Objects.requireNonNull(object, "entity must not be null");
 		return update(DbContext.getDefault(), connection, null, object.getClass(), object);
 	}
 
 	public static int update(DbContext context, Connection connection, Object object) {
+		Objects.requireNonNull(object, "entity must not be null");
 		return update(context, connection, null, object.getClass(), object);
 	}
 
@@ -656,18 +666,22 @@ public class PojoQuery<T> {
 	}
 
 	public static void delete(Connection conn, Object entity) {
+		Objects.requireNonNull(entity, "entity must not be null");
 		delete(DbContext.getDefault(), conn, null, entity);
 	}
 	
 	public static void delete(DbContext context, Connection conn, Object entity) {
+		Objects.requireNonNull(entity, "entity must not be null");
 		delete(context, conn, null, entity);
 	}
 	
 	public static void delete(DataSource db, Object entity) {
+		Objects.requireNonNull(entity, "entity must not be null");
 		delete(DbContext.getDefault(), db, entity);
 	}
 	
 	public static void delete(DbContext context, DataSource db, Object entity) {
+		Objects.requireNonNull(entity, "entity must not be null");
 		delete(context, null, db, entity);
 	}
 	
