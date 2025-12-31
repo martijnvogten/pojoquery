@@ -151,20 +151,10 @@ public interface DB {
      * @param rowCallback the callback to process each row
      */
     public static void queryRowsStreaming(DataSource db, SqlExpression queryStatement, Consumer<Map<String,Object>> rowCallback) {
-        Connection connection = null;
-		try {
-			connection = db.getConnection();
+		try (Connection connection = db.getConnection()) {
 			queryRowsStreaming(connection, queryStatement, rowCallback);
 		} catch (SQLException e) {
 			throw new DatabaseException(e);
-		} finally {
-			try {
-				if (connection != null) {
-					connection.close();
-				}
-			} catch (SQLException e) {
-				e.printStackTrace();
-			}
 		}
     }
 	
@@ -647,20 +637,10 @@ public interface DB {
      * @return the processed result
      */
 	public static <T> T execute(DataSource db, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
-		Connection connection = null;
-		try {
-			connection = db.getConnection();
+		try (Connection connection = db.getConnection()) {
 			return execute(connection, type, sql, params, processor);
 		} catch (SQLException e) {
 			throw new DatabaseException(e);
-		} finally {
-			try {
-				if (connection != null) {
-					connection.close();
-				}
-			} catch (SQLException e) {
-				e.printStackTrace();
-			}
 		}
 	}
 
@@ -771,23 +751,25 @@ public interface DB {
 	 * @return the result of the transaction
 	 */
 	public static <T> T runInTransaction(Connection connection, Transaction<T> transaction) {
-		boolean success = false;
 		try {
 			connection.setAutoCommit(false);
 			T result = transaction.run(connection);
 			connection.commit();
-			success = true;
 			return result;
 		} catch (SQLException e) {
-			throw new DatabaseException(e);
-		} finally {
-			if (!success) {
-				try {
-					connection.rollback();
-				} catch (SQLException e) {
-					e.printStackTrace();
-				}
+			try {
+				connection.rollback();
+			} catch (SQLException rollbackEx) {
+				e.addSuppressed(rollbackEx);
 			}
+			throw new DatabaseException(e);
+		} catch (RuntimeException e) {
+			try {
+				connection.rollback();
+			} catch (SQLException rollbackEx) {
+				e.addSuppressed(rollbackEx);
+			}
+			throw e;
 		}
 	}
 
@@ -800,20 +782,10 @@ public interface DB {
 	 * @return the result of the transaction
 	 */
 	public static <T> T runInTransaction(DataSource dataSource, Transaction<T> transaction) {
-		Connection connection = null;
-		try {
-			connection = dataSource.getConnection();
+		try (Connection connection = dataSource.getConnection()) {
 			return runInTransaction(connection, transaction);
 		} catch (SQLException e) {
 			throw new DatabaseException(e);
-		} finally {
-			try {
-				if (connection != null) {
-					connection.close();
-				}
-			} catch (SQLException e) {
-				e.printStackTrace();
-			}
 		}
 	}
 

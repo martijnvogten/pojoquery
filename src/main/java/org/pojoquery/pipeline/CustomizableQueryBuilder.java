@@ -2,6 +2,8 @@ package org.pojoquery.pipeline;
 
 import static org.pojoquery.util.Strings.implode;
 
+import java.util.Objects;
+
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -343,6 +345,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	}
 
 	public static String determineSqlFieldName(Field f) {
+		Objects.requireNonNull(f, "field must not be null");
 		String fieldName = f.getName();
 		if (f.getAnnotation(FieldName.class) != null) {
 			fieldName = f.getAnnotation(FieldName.class).value();
