@@ -13,7 +13,7 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
 public class ForeignValueFieldsIT {
@@ -33,7 +33,7 @@ public class ForeignValueFieldsIT {
 		@Id
 		Long poule_id;
 		@Id
-		Integer weightClass;
+		Integer weightclass;
 	}
 
 	@Table("poule")
@@ -43,13 +43,13 @@ public class ForeignValueFieldsIT {
 		Long id;	
 		
 		@Link(linktable="poule_weightclass", fetchColumn="weightclass")
-		@JoinCondition("{this}.id = {linktable}.poule_id AND {linktable}.weightClass > -32")
+		@JoinCondition("{this}.id = {linktable}.poule_id AND {linktable}.weightclass > -32")
 		Integer[] weightClasses;
 	}
 
 	@Test
 	public void testUpdates() {
-		DataSource db = TestDatabase.dropAndRecreate();
+		DataSource db = TestDatabaseProvider.getDataSource();
 		insertTestData(db);
 		
 		PojoQuery<Poule> query = PojoQuery.build(Poule.class)
@@ -62,7 +62,7 @@ public class ForeignValueFieldsIT {
 	
 	@Test
 	public void testJoinCondition() {
-		DataSource db = TestDatabase.dropAndRecreate();
+		DataSource db = TestDatabaseProvider.getDataSource();
 		insertTestData(db);
 		
 		PojoQuery<PouleWithHeavyWeights> query = PojoQuery.build(PouleWithHeavyWeights.class)
@@ -79,9 +79,9 @@ public class ForeignValueFieldsIT {
 		PojoQuery.insert(db, p);
 		Assert.assertEquals((Long)1L, p.id);
 		
-		DB.insert(db, "poule_weightclass", Map.of("poule_id", 1, "weightClass", -30));
-		DB.insert(db, "poule_weightclass", Map.of("poule_id", 1, "weightClass", -32));
-		DB.insert(db, "poule_weightclass", Map.of("poule_id", 1, "weightClass", -34));
+		DB.insert(db, "poule_weightclass", Map.of("poule_id", 1, "weightclass", -30));
+		DB.insert(db, "poule_weightclass", Map.of("poule_id", 1, "weightclass", -32));
+		DB.insert(db, "poule_weightclass", Map.of("poule_id", 1, "weightclass", -34));
 	}
 	
 }

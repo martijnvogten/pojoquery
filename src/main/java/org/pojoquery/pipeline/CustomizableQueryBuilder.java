@@ -436,13 +436,20 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		return CurlyMarkers.processMarkers(expression, marker -> {
 			if ("linktable".equals(marker)) {
 				return "{" + linkTableAlias + "}";
+			} else if (marker.startsWith("linktable.")) {
+				String rest = marker.substring("linktable.".length());
+				return "{" + linkTableAlias + "}." + dbContext.quoteObjectNames(rest);
 			} else if ("this".equals(marker)) {
 				return "{" + alias + "}";
 			} else if (marker.startsWith("this.")) {
 				String rest = marker.substring("this.".length());
-				return isRootOrSuperClassOfRoot(alias) ? "{" + rest + "}" : "{" + alias + "." + rest + "}" ; 
+				return "{" + alias + "." + rest + "}";
+			} else if (marker.contains(".")) {
+				// Handle alias.column patterns - keep as marker for resolveAliases to handle
+				return "{" + marker + "}";
 			} else {
-				return isRootOrSuperClassOfRoot(alias) ? "{" + marker + "}" : "{" + alias + "." + marker + "}" ; 
+				// Simple field reference - prefix with current alias if not at root level
+				return isRootOrSuperClassOfRoot(alias) ? "{" + marker + "}" : "{" + alias + "." + marker + "}" ;
 			}
 		});
 	}

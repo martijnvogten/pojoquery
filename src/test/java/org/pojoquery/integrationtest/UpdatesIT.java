@@ -13,7 +13,7 @@ import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
 public class UpdatesIT {
@@ -53,7 +53,7 @@ public class UpdatesIT {
 
 	@Test
 	public void testUpdates() {
-		DataSource db = TestDatabase.dropAndRecreate();
+		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, User.class);
 
 		User u = new User();
@@ -69,7 +69,7 @@ public class UpdatesIT {
 	
 	@Test
 	public void testInsertWithAuthor() {
-		DataSource db = TestDatabase.dropAndRecreate();
+		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, User.class, Article.class);
 		
 		User u = new User();
@@ -88,7 +88,7 @@ public class UpdatesIT {
 	
 	@Test
 	public void testInsertWithRoles() {
-		DataSource db = TestDatabase.dropAndRecreate();
+		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, User.class, UserRoles.class);
 		
 		UserDetail u = new UserDetail();

@@ -18,15 +18,15 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
 public class JoinConditionsIT {
 
 	@BeforeClass
 	public static void setupDbContext() {
-		// Trigger TestDatabase static initialization to set DbContext
-		TestDatabase.initDbContext();
+		// Trigger TestDatabaseProvider static initialization to set DbContext
+		TestDatabaseProvider.initDbContext();
 	}
 
 	@Table("person")
@@ -53,18 +53,18 @@ public class JoinConditionsIT {
 
 	public static class EventWithVisitorsAndOrganizers extends Event {
 		@Link(linktable="event_person", linkfield="eventID", foreignlinkfield="personID")
-		@JoinCondition("{this}.eventID={linktable}.eventID AND {linktable}.role='visitor'")
+		@JoinCondition("{this.eventID}={linktable.eventID} AND {linktable.role}='visitor'")
 		public List<Person> visitors;
 		
 		@Link(linktable="event_person", linkfield="eventID", foreignlinkfield="personID")
-		@JoinCondition("{this}.eventID={linktable}.eventID AND {linktable}.role='organizer'")
+		@JoinCondition("{this.eventID}={linktable.eventID} AND {linktable.role}='organizer'")
 		public List<Person> organizers;
 	}
 	
 	@Table("festival")
 	static class Festival {
 		@Id
-		Long festivalId;
+		Long festivalID;
 		String name;
 		@Link(foreignlinkfield="festivalID")
 		List<EventWithVisitorsAndOrganizers> events;
@@ -73,9 +73,9 @@ public class JoinConditionsIT {
 	@Table("festival")
 	static class FestivalWithJoinConditionOnEvents {
 		@Id
-		Long festivalId;
+		Long festivalID;
 		String name;
-		@JoinCondition("{events}.festivalId = {this}.festivalId")
+		@JoinCondition("{events.festivalID} = {this.festivalID}")
 		List<Event> events;
 	}
 	
@@ -93,7 +93,7 @@ public class JoinConditionsIT {
 		@Id
 		Long id;
 		
-		@JoinCondition("{this}.department_id = {department}.id")
+		@JoinCondition("{this.department_id} = {department.id}")
 		Department department;
 	}
 	
@@ -116,7 +116,7 @@ public class JoinConditionsIT {
 			 "department".name AS "department.name"
 			FROM employee AS "employee"
 			 LEFT JOIN department AS "department" ON "employee".department_id = "department".id
-			"""), norm(sql.trim()));
+			""".replaceAll("\"", "")), norm(sql.trim().replaceAll("`", "\"").replaceAll("\"", "")));
 	}
 	
 	
@@ -186,7 +186,7 @@ public class JoinConditionsIT {
 	}
 	
 	private static DataSource initDatabase() {
-		DataSource db = TestDatabase.dropAndRecreate();
+		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, Person.class, Event.class, Festival.class, EventPerson.class);
 		return db;
 	}

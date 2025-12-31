@@ -11,7 +11,7 @@ import org.pojoquery.PojoQuery;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
 public class FieldAliasesInWhereIT {
@@ -84,7 +84,7 @@ public class FieldAliasesInWhereIT {
 	
 
 	private static DataSource initDatabase() {
-		DataSource db = TestDatabase.dropAndRecreate();
+		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, Room.class, House.class, Person.class);
 		return db;
 	}

@@ -10,7 +10,7 @@ import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
 public class BlobsIT {
@@ -56,14 +56,14 @@ public class BlobsIT {
 	}
 	
 	private static DataSource initDatabase() {
-		DataSource db = TestDatabase.dropAndRecreate();
+		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, File.class);
 		return db;
 	}
 	
 	@Test
 	public void testClobInserts() {
-		DataSource db = TestDatabase.dropAndRecreate();
+		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, Article.class);
 		
 		// Create a large text content (larger than typical VARCHAR)

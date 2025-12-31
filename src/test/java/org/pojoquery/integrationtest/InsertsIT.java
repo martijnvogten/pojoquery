@@ -12,7 +12,7 @@ import org.pojoquery.PojoQuery;
 import org.pojoquery.DB.Transaction;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
 public class InsertsIT {
@@ -61,7 +61,7 @@ public class InsertsIT {
 	}
 
 	private static DataSource initDatabase() {
-		DataSource db = TestDatabase.dropAndRecreate();
+		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, User.class);
 		return db;
 	}

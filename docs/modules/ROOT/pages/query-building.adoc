@@ -40,6 +40,78 @@ articleQuery.addWhere("{author.lastName} = ?", "Smith");
 *   Placeholders (`?`) are used for parameters to prevent SQL injection.
 *   Refer to columns using the alias defined by PojoQuery (usually `{table_name}.{column_name}` or `{field_name}.{column_name}` for linked entities).
 
+== Alias Resolution with Curly Braces
+
+One of PojoQuery's handy features is **alias resolution** using curly braces `{}`. This lets you reference fields and table aliases in a clean, readable way — and PojoQuery takes care of proper SQL quoting and schema prefixes for you.
+
+=== Why Use Curly Braces?
+
+When you write `{author.lastName}`, PojoQuery will:
+
+1. Recognize `author` as a table/join alias
+2. Quote everything properly for your database dialect (e.g., backticks for MySQL)
+3. Handle schema prefixes automatically
+
+This means you can write readable conditions without worrying about SQL syntax details!
+
+=== Using Curly Braces in WHERE Conditions
+
+[source,java]
+----
+// Simple field reference
+query.addWhere("{article.published} = ?", true);
+// Generates: WHERE `article`.`published` = ?
+
+// Reference fields from joined tables
+query.addWhere("{author.lastName} = ?", "Smith");
+// Generates: WHERE `author`.`lastName` = ?
+
+// Works with nested relationships too!
+query.addWhere("{articles.author.fullName} = ?", "Jane Doe");
+// Generates: WHERE `articles.author`.`fullName` = ?
+----
+
+=== Using Curly Braces in ORDER BY
+
+[source,java]
+----
+// Sort by a joined table's column
+query.addOrderBy("{author.lastName} ASC");
+query.addOrderBy("{article.publishDate} DESC");
+----
+
+=== Using Curly Braces in GROUP BY
+
+[source,java]
+----
+// Group by columns from different tables
+query.addGroupBy("{article.author_id}");
+query.addGroupBy("{category.name}");
+----
+
+=== Resolving Field Expressions
+
+The real magic happens when you have fields with custom `@Select` expressions. Curly braces will resolve to the actual SQL expression:
+
+[source,java]
+----
+@Table("person")
+public class Person {
+    @Id Long id;
+    String firstName;
+    String lastName;
+    
+    @Select("CONCAT({this}.firstName, ' ', {this}.lastName)")
+    String fullName;
+}
+
+// Now you can filter by the computed field!
+query.addWhere("{author.fullName} = ?", "Jane Doe");
+// Generates: WHERE CONCAT(`author`.firstName, ' ', `author`.lastName) = ?
+----
+
+TIP: Use `{this}` inside `@Select` annotations to reference the current table alias. This keeps your expressions portable.
+
 == Sorting Results (`ORDER BY`)
 
 Use `addOrderBy()` to specify sorting order. Multiple calls append sorting criteria.

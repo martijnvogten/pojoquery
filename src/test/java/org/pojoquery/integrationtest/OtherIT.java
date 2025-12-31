@@ -13,7 +13,7 @@ import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Other;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
 public class OtherIT {
@@ -71,7 +71,7 @@ public class OtherIT {
 	
 
 	private static DataSource initDatabase() {
-		DataSource db = TestDatabase.dropAndRecreate();
+		DataSource db = TestDatabaseProvider.getDataSource();
 		// BedRoom extends Room, so only pass BedRoom (Room table is created automatically)
 		SchemaGenerator.createTables(db, BedRoom.class);
 		// Add custom field 'area' as a column in the room table

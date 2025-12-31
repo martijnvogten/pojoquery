@@ -100,8 +100,8 @@ public interface DbContext {
 	public FieldMapping getFieldMapping(Field f);
 
 	// Schema generation methods
-	default String getDefaultVarcharLength() {
-		return "255";
+	default int getDefaultVarcharLength() {
+		return 255;
 	}
 
 	/**

@@ -96,12 +96,14 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
         <version>3.5.2</version>
-        <executions>
-          <execution>
-            <goals>
-            </goals>
-          </execution>
-        </executions>
+        <configuration>
+          <systemPropertyVariables>
+            <!-- Required for Docker 29+ compatibility with Testcontainers -->
+            <api.version>1.44</api.version>
+            <!-- Default to HSQLDB, can be overridden by profiles -->
+            <test.database>hsqldb</test.database>
+          </systemPropertyVariables>
+        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -216,6 +218,94 @@
     </pluginManagement>
   
   </build>
+  
+  <profiles>
+    <!-- Profile for running integration tests against PostgreSQL -->
+    <profile>
+      <id>postgres</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <configuration>
+              <systemPropertyVariables>
+                <test.database>postgres</test.database>
+                <api.version>1.44</api.version>
+              </systemPropertyVariables>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    
+    <!-- Profile for running integration tests against MySQL -->
+    <profile>
+      <id>mysql</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <configuration>
+              <systemPropertyVariables>
+                <test.database>mysql</test.database>
+                <api.version>1.44</api.version>
+              </systemPropertyVariables>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    
+    <!-- Profile for running integration tests against all databases -->
+    <profile>
+      <id>all-databases</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>postgres-integration-tests</id>
+                <goals>
+                  <goal>integration-test</goal>
+                </goals>
+                <configuration>
+                  <systemPropertyVariables>
+                    <test.database>postgres</test.database>
+                    <api.version>1.44</api.version>
+                  </systemPropertyVariables>
+                  <reportsDirectory>${project.build.directory}/failsafe-reports/postgres</reportsDirectory>
+                </configuration>
+              </execution>
+              <execution>
+                <id>mysql-integration-tests</id>
+                <goals>
+                  <goal>integration-test</goal>
+                </goals>
+                <configuration>
+                  <systemPropertyVariables>
+                    <test.database>mysql</test.database>
+                    <api.version>1.44</api.version>
+                  </systemPropertyVariables>
+                  <reportsDirectory>${project.build.directory}/failsafe-reports/mysql</reportsDirectory>
+                </configuration>
+              </execution>
+              <execution>
+                <id>verify-all</id>
+                <goals>
+                  <goal>verify</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+  
   <distributionManagement>
     <repository>
       <id>github</id>

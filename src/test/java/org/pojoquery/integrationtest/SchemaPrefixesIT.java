@@ -7,6 +7,7 @@ import javax.sql.DataSource;
 
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.pojoquery.DB;
@@ -14,14 +15,17 @@ import org.pojoquery.PojoQuery;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.db.TestDatabase;
+import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
 public class SchemaPrefixesIT {
 
 	@BeforeClass
 	public static void setupDbContext() {
-		TestDatabase.initDbContext();
+		TestDatabaseProvider.initDbContext();
+		// This test uses HSQLDB-specific CREATE SCHEMA syntax
+		Assume.assumeTrue("SchemaPrefixesIT only runs with HSQLDB", 
+			"hsqldb".equals(TestDatabaseProvider.getDatabaseName()));
 	}
 
 	private static String[] schemas = new String[]{
@@ -62,7 +66,7 @@ public class SchemaPrefixesIT {
 	}
 
 	@Test
-	// @Ignore("DB.insertOrUpdate uses MySQL-specific ON DUPLICATE KEY UPDATE syntax; needs HSQLDB MERGE support")
+	// @Ignore("DB.upsert uses MySQL-specific ON DUPLICATE KEY UPDATE syntax; needs HSQLDB MERGE support")
 	public void testCrud() {
 		List<Map<String, Object>> results;
 
@@ -80,7 +84,7 @@ public class SchemaPrefixesIT {
 		Assert.assertEquals(1, results.size());
 		// HSQLDB returns column names in uppercase
 		Assert.assertEquals("How to awesomize stuff", results.get(0).get("TITLE"));
-		// Use update instead of insertOrUpdate since we know the record exists
+		// Use update instead of upsert since we know the record exists
 		DB.update(
 			db,
 			"schema1",

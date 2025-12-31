@@ -212,7 +212,7 @@ public class DbContextBuilder {
         }
         
         @Override
-        public String getDefaultVarcharLength() {
+        public int getDefaultVarcharLength() {
             return base.getDefaultVarcharLength();
         }
     }

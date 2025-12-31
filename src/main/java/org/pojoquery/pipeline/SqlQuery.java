@@ -172,16 +172,33 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 	}
 
 	private SqlExpression resolveAliases(DbContext context, SqlExpression sql, String thisAlias) {
-		return new SqlExpression(CurlyMarkers.processMarkers(sql.getSql(), alias -> {
-			if ("this".equals(alias)) {
+		return new SqlExpression(CurlyMarkers.processMarkers(sql.getSql(), marker -> {
+			if ("this".equals(marker)) {
 				return context.quoteAlias(thisAlias);
 			}
 			for (SqlField field : fields) {
-				if (alias.equals(field.alias)) {
+				if (marker.equals(field.alias)) {
 					return resolveAliases(dbContext, field.expression, thisAlias).getSql();
 				}
 			}
-			return context.quoteAlias(alias);
+			// Check if marker is a known table/join alias (which may contain dots)
+			if (marker.equals(table)) {
+				return context.quoteAlias(marker);
+			}
+			for (SqlJoin j : joins) {
+				if (marker.equals(j.alias)) {
+					return context.quoteAlias(marker);
+				}
+			}
+			// Handle alias.column patterns (e.g., "events.festivalID" -> "events"."festivalID")
+			// Use last dot to split alias from column name since aliases can contain dots
+			int lastDotIndex = marker.lastIndexOf('.');
+			if (lastDotIndex > 0) {
+				String tableAlias = marker.substring(0, lastDotIndex);
+				String columnName = marker.substring(lastDotIndex + 1);
+				return context.quoteAlias(tableAlias) + "." + context.quoteObjectNames(columnName);
+			}
+			return context.quoteAlias(marker);
 		}), sql.getParameters());
 	}
 
