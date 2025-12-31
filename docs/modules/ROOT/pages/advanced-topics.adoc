@@ -154,28 +154,129 @@ PojoQuery.deleteById(dataSource, User.class, existingUser.getId()); // Delete by
 
 == Transactions
 
-Use `DB.runInTransaction()` for simple transaction management.
+PojoQuery provides transaction support through `DB.runInTransaction()`, which handles commit/rollback automatically.
+
+=== Basic Usage
 
 [source,java]
 ----
 import java.sql.Connection;
+import org.pojoquery.DB;
 
 DB.runInTransaction(dataSource, (Connection connection) -> {
-    // Operations within this lambda run in a single transaction
+    // All operations use the same connection = same transaction
     User user = new User();
-    user.setFirstName("Temp");
-    PojoQuery.insert(connection, user); // Use the provided connection
+    user.setFirstName("Alice");
+    PojoQuery.insert(connection, user);
 
     Account account = new Account();
     account.setUserId(user.getId());
     account.setBalance(BigDecimal.ZERO);
-    PojoQuery.insert(connection, account); // Use the provided connection
+    PojoQuery.insert(connection, account);
 
-    // If no exception is thrown, the transaction commits automatically.
-    // If an exception occurs, it rolls back automatically.
-    return true; // Return value from the transaction lambda
+    return true; // Return value from the transaction
 });
 ----
+
+=== How It Works
+
+* **Auto-commit disabled**: The connection's auto-commit is set to `false`
+* **Commit on success**: If the lambda completes without exception, the transaction commits
+* **Rollback on failure**: If any exception is thrown (checked or unchecked), the transaction rolls back
+* **Return values**: The lambda can return a value of any type
+
+=== Method Signatures
+
+There are two overloads available:
+
+[source,java]
+----
+// Using a DataSource - connection is obtained and closed automatically
+public static <T> T runInTransaction(DataSource dataSource, Transaction<T> transaction);
+
+// Using an existing Connection - you manage the connection lifecycle
+public static <T> T runInTransaction(Connection connection, Transaction<T> transaction);
+----
+
+=== Returning Values
+
+Use the return value to get results from your transaction:
+
+[source,java]
+----
+Order createdOrder = DB.runInTransaction(dataSource, connection -> {
+    Order order = new Order();
+    order.setCustomerId(customerId);
+    order.setOrderDate(LocalDate.now());
+    PojoQuery.insert(connection, order);
+    
+    for (CartItem item : cartItems) {
+        OrderLine line = new OrderLine();
+        line.setOrderId(order.getId());
+        line.setProductId(item.getProductId());
+        line.setQuantity(item.getQuantity());
+        PojoQuery.insert(connection, line);
+    }
+    
+    return order; // Return the created order with its generated ID
+});
+----
+
+=== Exception Handling
+
+When an exception occurs, the transaction rolls back and the exception propagates:
+
+[source,java]
+----
+try {
+    DB.runInTransaction(dataSource, connection -> {
+        PojoQuery.insert(connection, order);
+        PojoQuery.insert(connection, invalidOrderLine); // This fails
+        return null;
+    });
+} catch (DB.DatabaseException e) {
+    // Transaction was rolled back
+    // The cause contains the original SQLException
+    System.err.println("Transaction failed: " + e.getCause().getMessage());
+}
+----
+
+NOTE: Both `SQLException` and `RuntimeException` trigger a rollback. SQLExceptions are wrapped in `DB.DatabaseException`.
+
+=== Void Transactions
+
+If you don't need a return value, simply return `null` or any placeholder:
+
+[source,java]
+----
+DB.runInTransaction(dataSource, connection -> {
+    PojoQuery.delete(connection, oldRecord);
+    PojoQuery.insert(connection, newRecord);
+    return null; // No meaningful return value
+});
+----
+
+=== Nested Transactions
+
+PojoQuery does not support true nested transactions. If you call `runInTransaction()` with an existing connection that's already in a transaction, both blocks share the same transaction:
+
+[source,java]
+----
+DB.runInTransaction(dataSource, outerConn -> {
+    PojoQuery.insert(outerConn, record1);
+    
+    // This uses the same transaction - NOT a nested transaction
+    DB.runInTransaction(outerConn, innerConn -> {
+        PojoQuery.insert(innerConn, record2);
+        return null;
+    });
+    
+    return null;
+});
+// Both inserts commit or rollback together
+----
+
+TIP: For complex transaction scenarios requiring savepoints or isolation level control, obtain a `Connection` directly from your `DataSource` and use standard JDBC transaction APIs.
 
 == Optimistic Locking
 

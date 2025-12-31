@@ -324,10 +324,6 @@ public class SchemaGenerator {
         final String referencedColumn;
         final String referencedSchema;
         
-        InferredForeignKey(String columnName) {
-            this(columnName, null, null, null);
-        }
-        
         InferredForeignKey(String columnName, String referencedTable, String referencedColumn, String referencedSchema) {
             this.columnName = columnName;
             this.referencedTable = referencedTable;
