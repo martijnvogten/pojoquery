@@ -1,0 +1,1 @@
+../../../../../src/test/java/examples/bookstore/BookstoreExample.java
