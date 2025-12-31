@@ -65,64 +65,108 @@ PojoQuery allows you to focus on the data you need for each use case rather than
 
 == Quick Example
 
-Define your POJOs to represent the data structure you want to retrieve:
+This self-contained example demonstrates PojoQuery's core philosophy: POJOs define *what you want to retrieve*, not how data is stored. The `SchemaGenerator` creates tables from your POJOs, and then you can query them with automatic joins.
 
 [source,java]
 ----
-// Define the main entity, mapping to the 'article' table
-@Table("article")
-class Article {
-    @Id Long id;
-    String title;
-    String content;
-    User author; // Automatically joins with the 'user' table based on 'author_id'
-    List<Comment> comments; // Automatically joins with the 'comment' table based on 'article_id'
+import org.hsqldb.jdbc.JDBCDataSource;
+import org.pojoquery.*;
+import org.pojoquery.annotations.*;
+import org.pojoquery.schema.SchemaGenerator;
+import javax.sql.DataSource;
+import java.util.*;
 
-    // Getters and setters omitted for brevity
-}
+public class BookstoreExample {
 
-// Define the related 'user' entity
-@Table("user")
-class User {
-    @Id Long id;
-    String firstName;
-    String lastName;
-    String email;
+    // === Entity definitions (map to database tables) ===
+    
+    @Table("author")
+    static class Author {
+        @Id Long id;
+        String name;
+        String country;
+    }
 
-    // Getters and setters omitted for brevity
-}
+    @Table("book")
+    static class Book {
+        @Id Long id;
+        String title;
+        Integer year;
+        Author author;  // PojoQuery infers 'author_id' foreign key column
+    }
 
-// Define the related 'comment' entity
-@Table("comment")
-class Comment {
-    @Id Long id;
-    String comment;
-    Date submitdate;
-    User author; // Automatically joins with the 'user' table based on 'author_id'
+    @Table("review")
+    static class Review {
+        @Id Long id;
+        Book book;      // PojoQuery infers 'book_id' foreign key column
+        Integer rating;
+        String comment;
+    }
 
-    // Getters and setters omitted for brevity
+    // === Query definitions (shape of results you want) ===
+    
+    // A book with author AND all its reviews
+    static class BookDetail extends Book {
+        List<Review> reviews;
+    }
+
+    public static void main(String[] args) {
+        // 1. Create an in-memory database
+        DataSource db = createDatabase();
+
+        // 2. Generate tables from entity classes
+        SchemaGenerator.createTables(db, Author.class, Book.class, Review.class);
+
+        // 3. Insert test data
+        Author tolkien = new Author();
+        tolkien.name = "J.R.R. Tolkien";
+        tolkien.country = "UK";
+        tolkien.id = PojoQuery.insert(db, tolkien);
+
+        Book lotr = new Book();
+        lotr.title = "The Lord of the Rings";
+        lotr.year = 1954;
+        lotr.author = tolkien;
+        lotr.id = PojoQuery.insert(db, lotr);
+
+        Review r1 = new Review();
+        r1.book = lotr;
+        r1.rating = 5;
+        r1.comment = "A masterpiece!";
+        PojoQuery.insert(db, r1);
+
+        Review r2 = new Review();
+        r2.book = lotr;
+        r2.rating = 5;
+        r2.comment = "Epic fantasy at its finest.";
+        PojoQuery.insert(db, r2);
+
+        // 4. Query with automatic joins - the POJO shape defines what you get!
+        List<BookDetail> books = PojoQuery.build(BookDetail.class)
+            .addWhere("{author}.country = ?", "UK")
+            .execute(db);
+
+        for (BookDetail book : books) {
+            System.out.println(book.title + " by " + book.author.name);
+            System.out.println("Reviews: " + book.reviews.size());
+            for (Review review : book.reviews) {
+                System.out.println("  ★" + review.rating + " - " + review.comment);
+            }
+        }
+    }
+
+    static DataSource createDatabase() {
+        JDBCDataSource ds = new JDBCDataSource();
+        ds.setUrl("jdbc:hsqldb:mem:bookstore");
+        ds.setUser("SA");
+        ds.setPassword("");
+        DbContext.setDefault(DbContext.forDialect(DbContext.Dialect.HSQLDB));
+        return ds;
+    }
 }
 ----
 
-Build and execute the query using PojoQuery:
-
-[source,java]
-----
-// Assuming 'connection' is your active JDBC Connection
-List<Article> articles = PojoQuery.build(Article.class) // Start building a query for Article
-    .addWhere("article.id = ?", 123L) // Filter by article ID
-    .addOrderBy("comments.submitdate DESC") // Order comments by submission date
-    .execute(connection); // Execute the query against the database connection
-
-// Process the results
-for (Article article : articles) {
-    System.out.println("Article Title: " + article.getTitle());
-    System.out.println("Author: " + article.getAuthor().getFirstName());
-    System.out.println("Number of comments: " + article.getComments().size());
-}
-----
-
-This generates a predictable SQL query, joining `article`, `user` (for article author), `comment`, and `user` (for comment author) tables.
+*Key insight:* `BookDetail` and `BookWithAuthor` both map to the same `book` table, but produce different result shapes. The POJO structure tells PojoQuery which JOINs to generate—no XML configuration, no lazy loading surprises.
 
 == When to Use PojoQuery
 
