@@ -11,6 +11,7 @@ import java.util.Map;
 
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
+import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.pipeline.SimpleFieldMapping;
 
@@ -78,7 +79,10 @@ public class PostgresDbContext implements DbContext {
             return "BOOLEAN";
         }
         if (type == BigDecimal.class) {
-            return "NUMERIC(19,4)";
+            Column colAnn = field.getAnnotation(Column.class);
+            int precision = (colAnn != null) ? colAnn.precision() : 19;
+            int scale = (colAnn != null) ? colAnn.scale() : 4;
+            return "NUMERIC(" + precision + "," + scale + ")";
         }
         if (type == BigInteger.class) {
             return "BIGINT";
@@ -88,7 +92,9 @@ public class PostgresDbContext implements DbContext {
             if (field.getAnnotation(Lob.class) != null) {
                 return "TEXT";
             }
-            return "VARCHAR(" + getDefaultVarcharLength() + ")";
+            Column colAnn = field.getAnnotation(Column.class);
+            int length = (colAnn != null) ? colAnn.length() : getDefaultVarcharLength();
+            return "VARCHAR(" + length + ")";
         }
 
         if (type == Date.class || type == java.sql.Timestamp.class || type == LocalDateTime.class) {

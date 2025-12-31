@@ -9,6 +9,7 @@ import java.time.LocalTime;
 import java.util.Date;
 import java.util.Map;
 
+import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.dialects.HsqldbDbContext;
 import org.pojoquery.dialects.MysqlDbContext;
@@ -153,7 +154,10 @@ public interface DbContext {
 			return "TINYINT(1)";
 		}
 		if (type == BigDecimal.class) {
-			return "DECIMAL(19,4)";
+			Column colAnn = field.getAnnotation(Column.class);
+			int precision = (colAnn != null) ? colAnn.precision() : 19;
+			int scale = (colAnn != null) ? colAnn.scale() : 4;
+			return "DECIMAL(" + precision + "," + scale + ")";
 		}
 		if (type == BigInteger.class) {
 			return "BIGINT";
@@ -164,8 +168,9 @@ public interface DbContext {
 			if (field.getAnnotation(Lob.class) != null) {
 				return "CLOB";
 			}
-
-			return "VARCHAR(" + getDefaultVarcharLength() + ")";
+			Column colAnn = field.getAnnotation(Column.class);
+			int length = (colAnn != null) ? colAnn.length() : getDefaultVarcharLength();
+			return "VARCHAR(" + length + ")";
 		}
 
 		// Handle date/time types

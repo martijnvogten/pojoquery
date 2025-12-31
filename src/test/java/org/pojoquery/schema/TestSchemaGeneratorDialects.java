@@ -309,4 +309,102 @@ public class TestSchemaGeneratorDialects {
                 break;
         }
     }
+    
+    // Test entities for @NotNull, @Unique, and @Column annotations
+    @Table("accounts")
+    public static class Account {
+        @Id Long id;
+        
+        @org.pojoquery.annotations.NotNull
+        @org.pojoquery.annotations.Unique
+        String username;
+        
+        @org.pojoquery.annotations.Column(length = 100)
+        String email;
+        
+        @org.pojoquery.annotations.Column(precision = 10, scale = 2)
+        java.math.BigDecimal balance;
+    }
+    
+    @Test
+    public void testNotNullAndUniqueAnnotationsAcrossDialects() {
+        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class, dbContext);
+        String sql = String.join("\n", sqlList);
+        
+        System.out.println(dialect + " (NotNull/Unique):\n" + sql + "\n");
+        
+        // All dialects should have NOT NULL and UNIQUE constraints
+        assertTrue(dialect + " should have NOT NULL", sql.toUpperCase().contains("NOT NULL"));
+        assertTrue(dialect + " should have UNIQUE", sql.toUpperCase().contains("UNIQUE"));
+        
+        // username should have NOT NULL UNIQUE
+        switch (dialect) {
+            case MYSQL:
+                assertTrue("MySQL username should be NOT NULL UNIQUE", 
+                    sql.contains("`username` VARCHAR(255) NOT NULL UNIQUE"));
+                break;
+            case HSQLDB:
+                assertTrue("HSQLDB username should be NOT NULL UNIQUE", 
+                    sql.contains("username VARCHAR(255) NOT NULL UNIQUE"));
+                break;
+            case POSTGRES:
+                assertTrue("Postgres username should be NOT NULL UNIQUE", 
+                    sql.contains("\"username\" VARCHAR(255) NOT NULL UNIQUE"));
+                break;
+            default:
+                break;
+        }
+    }
+    
+    @Test
+    public void testColumnLengthAnnotationAcrossDialects() {
+        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class, dbContext);
+        String sql = String.join("\n", sqlList);
+        
+        System.out.println(dialect + " (Column length):\n" + sql + "\n");
+        
+        // email should have VARCHAR(100)
+        switch (dialect) {
+            case MYSQL:
+                assertTrue("MySQL email should be VARCHAR(100)", 
+                    sql.contains("`email` VARCHAR(100)"));
+                break;
+            case HSQLDB:
+                assertTrue("HSQLDB email should be VARCHAR(100)", 
+                    sql.contains("email VARCHAR(100)"));
+                break;
+            case POSTGRES:
+                assertTrue("Postgres email should be VARCHAR(100)", 
+                    sql.contains("\"email\" VARCHAR(100)"));
+                break;
+            default:
+                break;
+        }
+    }
+    
+    @Test
+    public void testColumnPrecisionScaleAcrossDialects() {
+        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class, dbContext);
+        String sql = String.join("\n", sqlList);
+        
+        System.out.println(dialect + " (Precision/Scale):\n" + sql + "\n");
+        
+        // balance should have DECIMAL(10,2) or NUMERIC(10,2)
+        switch (dialect) {
+            case MYSQL:
+                assertTrue("MySQL balance should be DECIMAL(10,2)", 
+                    sql.contains("`balance` DECIMAL(10,2)"));
+                break;
+            case HSQLDB:
+                assertTrue("HSQLDB balance should be DECIMAL(10,2)", 
+                    sql.contains("balance DECIMAL(10,2)"));
+                break;
+            case POSTGRES:
+                assertTrue("Postgres balance should be NUMERIC(10,2)", 
+                    sql.contains("\"balance\" NUMERIC(10,2)"));
+                break;
+            default:
+                break;
+        }
+    }
 }

@@ -878,4 +878,97 @@ public class TestSchemaGenerator {
         assertTrue("Should have FK constraint for friends_id (via ALTER TABLE)", 
             sql.contains("ALTER TABLE `person_friends` ADD FOREIGN KEY (`friends_id`) REFERENCES `person`(`id`)"));
     }
+    
+    // ========== Test entities for @NotNull, @Unique, and @Column annotations ==========
+    
+    @Table("accounts")
+    public static class Account {
+        @Id
+        Long id;
+        
+        @org.pojoquery.annotations.NotNull
+        @org.pojoquery.annotations.Unique
+        String username;
+        
+        @org.pojoquery.annotations.NotNull
+        @org.pojoquery.annotations.Unique
+        @org.pojoquery.annotations.Column(length = 100)
+        String email;
+        
+        @org.pojoquery.annotations.Column(length = 50)
+        String displayName;
+        
+        String bio;  // Nullable, default length
+    }
+    
+    @Table("prices")
+    public static class Price {
+        @Id
+        Long id;
+        
+        @org.pojoquery.annotations.Column(precision = 10, scale = 2)
+        BigDecimal amount;
+        
+        BigDecimal defaultPrecision;  // Default precision 19,4
+    }
+    
+    @Test
+    public void testNotNullAnnotation() {
+        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class);
+        String sql = String.join("\n", sqlList);
+        System.out.println("NotNull annotation test:\n" + sql);
+        
+        // username and email should have NOT NULL
+        assertTrue("username should be NOT NULL", sql.contains("`username` VARCHAR(255) NOT NULL"));
+        assertTrue("email should be NOT NULL", sql.contains("`email` VARCHAR(100) NOT NULL"));
+        
+        // displayName and bio should be nullable (no NOT NULL)
+        assertTrue("displayName should not have NOT NULL", sql.contains("`displayName` VARCHAR(50)") && 
+            !sql.contains("`displayName` VARCHAR(50) NOT NULL"));
+        assertTrue("bio should be nullable (default VARCHAR)", sql.contains("`bio` VARCHAR(255)") &&
+            !sql.contains("`bio` VARCHAR(255) NOT NULL"));
+    }
+    
+    @Test
+    public void testUniqueAnnotation() {
+        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class);
+        String sql = String.join("\n", sqlList);
+        System.out.println("Unique annotation test:\n" + sql);
+        
+        // username and email should have UNIQUE
+        assertTrue("username should be UNIQUE", sql.contains("`username` VARCHAR(255) NOT NULL UNIQUE"));
+        assertTrue("email should be UNIQUE", sql.contains("`email` VARCHAR(100) NOT NULL UNIQUE"));
+        
+        // displayName should not have UNIQUE
+        assertFalse("displayName should not have UNIQUE", sql.contains("`displayName`") && sql.contains("displayName` VARCHAR(50) UNIQUE"));
+    }
+    
+    @Test
+    public void testColumnLengthAnnotation() {
+        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class);
+        String sql = String.join("\n", sqlList);
+        System.out.println("Column length annotation test:\n" + sql);
+        
+        // email should be VARCHAR(100)
+        assertTrue("email should be VARCHAR(100)", sql.contains("`email` VARCHAR(100)"));
+        
+        // displayName should be VARCHAR(50)
+        assertTrue("displayName should be VARCHAR(50)", sql.contains("`displayName` VARCHAR(50)"));
+        
+        // bio should use default VARCHAR(255)
+        assertTrue("bio should use default VARCHAR(255)", sql.contains("`bio` VARCHAR(255)"));
+    }
+    
+    @Test
+    public void testColumnPrecisionScaleAnnotation() {
+        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Price.class);
+        String sql = String.join("\n", sqlList);
+        System.out.println("Column precision/scale annotation test:\n" + sql);
+        
+        // amount should be DECIMAL(10,2)
+        assertTrue("amount should be DECIMAL(10,2)", sql.contains("`amount` DECIMAL(10,2)"));
+        
+        // defaultPrecision should use default DECIMAL(19,4)
+        assertTrue("defaultPrecision should use default DECIMAL(19,4)", sql.contains("`defaultPrecision` DECIMAL(19,4)"));
+    }
 }

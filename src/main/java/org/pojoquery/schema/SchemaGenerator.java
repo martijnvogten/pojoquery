@@ -15,8 +15,10 @@ import org.pojoquery.DbContext;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
+import org.pojoquery.annotations.NotNull;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.annotations.Unique;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.CustomizableQueryBuilder;
 import org.pojoquery.pipeline.QueryBuilder;
@@ -746,6 +748,11 @@ public class SchemaGenerator {
         } else {
             sb.append(dbContext.mapJavaTypeToSql(field));
             
+            // Add NOT NULL constraint if @NotNull is present (and not already implied by auto-increment)
+            if (!autoIncrement && field != null && field.getAnnotation(NotNull.class) != null) {
+                sb.append(" NOT NULL");
+            }
+            
             if (autoIncrement) {
                 String autoIncrementSyntax = dbContext.getAutoIncrementSyntax();
                 if (!autoIncrementSyntax.isEmpty()) {
@@ -753,6 +760,11 @@ public class SchemaGenerator {
                     sb.append(autoIncrementSyntax);
                 }
             }
+        }
+        
+        // Add UNIQUE constraint if @Unique is present
+        if (field != null && field.getAnnotation(Unique.class) != null) {
+            sb.append(" UNIQUE");
         }
         
         return sb.toString();
@@ -775,12 +787,20 @@ public class SchemaGenerator {
         public final String sqlType;
         public final boolean autoIncrement;
         public final boolean isPrimaryKey;
+        public final boolean notNull;
+        public final boolean unique;
         
         public ColumnDefinition(String name, String sqlType, boolean autoIncrement, boolean isPrimaryKey) {
+            this(name, sqlType, autoIncrement, isPrimaryKey, false, false);
+        }
+        
+        public ColumnDefinition(String name, String sqlType, boolean autoIncrement, boolean isPrimaryKey, boolean notNull, boolean unique) {
             this.name = name;
             this.sqlType = sqlType;
             this.autoIncrement = autoIncrement;
             this.isPrimaryKey = isPrimaryKey;
+            this.notNull = notNull;
+            this.unique = unique;
         }
     }
     
@@ -936,6 +956,16 @@ public class SchemaGenerator {
             sb.append(col.sqlType);
             // Note: We don't add AUTO_INCREMENT for ALTER TABLE as that requires PRIMARY KEY changes
             
+            // Add NOT NULL constraint if specified
+            if (col.notNull) {
+                sb.append(" NOT NULL");
+            }
+            
+            // Add UNIQUE constraint if specified
+            if (col.unique) {
+                sb.append(" UNIQUE");
+            }
+            
             if (i < missingColumns.size() - 1) {
                 sb.append(",");
             }
@@ -1007,8 +1037,10 @@ public class SchemaGenerator {
             boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String sqlType = dbContext.mapJavaTypeToSql(field);
+            boolean notNull = !shouldAutoIncrement && field.getAnnotation(NotNull.class) != null;
+            boolean unique = field.getAnnotation(Unique.class) != null;
             
-            columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey));
+            columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey, notNull, unique));
             existingColumnNames.add(columnName.toLowerCase());
         }
         
@@ -1041,8 +1073,10 @@ public class SchemaGenerator {
             boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String sqlType = dbContext.mapJavaTypeToSql(field);
+            boolean notNull = !shouldAutoIncrement && field.getAnnotation(NotNull.class) != null;
+            boolean unique = field.getAnnotation(Unique.class) != null;
             
-            columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey));
+            columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey, notNull, unique));
             existingColumnNames.add(columnName.toLowerCase());
         }
     }
