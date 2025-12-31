@@ -1,7 +1,5 @@
 package org.pojoquery;
 
-import static org.pojoquery.util.Strings.implode;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -17,6 +15,8 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 import javax.sql.DataSource;
+
+import org.pojoquery.internal.SqlStatementBuilder;
 
 /**
  * The `DB` interface provides a set of utility methods for interacting with a database.
@@ -242,7 +242,22 @@ public interface DB {
      * @return the number of rows affected
      */
     public static int update(DataSource db, String schemaName, String tableName, Map<String, Object> values, Map<String, Object> ids) {
-        SqlExpression updateSql = buildUpdate(DbContext.getDefault(), schemaName, tableName, values, ids);
+        return update(DbContext.getDefault(), db, schemaName, tableName, values, ids);
+    }
+
+    /**
+     * Updates records in the database using a schema name with explicit DbContext.
+     * 
+     * @param context the database context
+     * @param db the data source
+     * @param schemaName the schema name
+     * @param tableName the name of the table
+     * @param values the values to update
+     * @param ids the identifiers of the records to update
+     * @return the number of rows affected
+     */
+    public static int update(DbContext context, DataSource db, String schemaName, String tableName, Map<String, Object> values, Map<String, Object> ids) {
+        SqlExpression updateSql = SqlStatementBuilder.buildUpdate(context, schemaName, tableName, values, ids);
         return (Integer)execute(db, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
     }
 
@@ -256,8 +271,21 @@ public interface DB {
      * @return the number of rows affected
      */
     public static int update(DataSource db, String tableName, Map<String, Object> values, Map<String, Object> ids) {
-        SqlExpression updateSql = buildUpdate(DbContext.getDefault(), null, tableName, values, ids);
-        return (Integer)execute(db, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
+        return update(DbContext.getDefault(), db, null, tableName, values, ids);
+    }
+
+    /**
+     * Updates records in the database without a schema name with explicit DbContext.
+     * 
+     * @param context the database context
+     * @param db the data source
+     * @param tableName the name of the table
+     * @param values the values to update
+     * @param ids the identifiers of the records to update
+     * @return the number of rows affected
+     */
+    public static int update(DbContext context, DataSource db, String tableName, Map<String, Object> values, Map<String, Object> ids) {
+        return update(context, db, null, tableName, values, ids);
     }
 	
 	/**
@@ -270,8 +298,21 @@ public interface DB {
      * @return the number of rows affected
      */
     public static int update(Connection connection, String tableName, Map<String, Object> values, Map<String, Object> ids) {
-        SqlExpression updateSql = buildUpdate(DbContext.getDefault(), null, tableName, values, ids);
-        return (Integer)execute(connection, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
+        return update(DbContext.getDefault(), connection, null, tableName, values, ids);
+    }
+
+    /**
+     * Updates records in the database using a connection without a schema name with explicit DbContext.
+     * 
+     * @param context the database context
+     * @param connection the database connection
+     * @param tableName the name of the table
+     * @param values the values to update
+     * @param ids the identifiers of the records to update
+     * @return the number of rows affected
+     */
+    public static int update(DbContext context, Connection connection, String tableName, Map<String, Object> values, Map<String, Object> ids) {
+        return update(context, connection, null, tableName, values, ids);
     }
 	
 	/**
@@ -285,7 +326,22 @@ public interface DB {
      * @return the number of rows affected
      */
     public static int update(Connection connection, String schemaName, String tableName, Map<String, Object> values, Map<String, Object> ids) {
-        SqlExpression updateSql = buildUpdate(DbContext.getDefault(), schemaName, tableName, values, ids);
+        return update(DbContext.getDefault(), connection, schemaName, tableName, values, ids);
+    }
+
+    /**
+     * Updates records in the database using a connection and schema name with explicit DbContext.
+     * 
+     * @param context the database context
+     * @param connection the database connection
+     * @param schemaName the schema name
+     * @param tableName the name of the table
+     * @param values the values to update
+     * @param ids the identifiers of the records to update
+     * @return the number of rows affected
+     */
+    public static int update(DbContext context, Connection connection, String schemaName, String tableName, Map<String, Object> values, Map<String, Object> ids) {
+        SqlExpression updateSql = SqlStatementBuilder.buildUpdate(context, schemaName, tableName, values, ids);
         return (Integer)execute(connection, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
     }
 
@@ -322,7 +378,22 @@ public interface DB {
 	 * @return the generated primary key
 	 */
 	public static <PK> PK insert(DataSource db, String schemaName, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsert(DbContext.getDefault(), schemaName, tableName, values);
+		return insert(DbContext.getDefault(), db, schemaName, tableName, values);
+	}
+
+	/**
+	 * Inserts a record into the database with explicit DbContext.
+	 * 
+	 * @param <PK> the type of the primary key
+	 * @param context the database context
+	 * @param db the data source
+	 * @param schemaName the schema name
+	 * @param tableName the name of the table
+	 * @param values the values to insert
+	 * @return the generated primary key
+	 */
+	public static <PK> PK insert(DbContext context, DataSource db, String schemaName, String tableName, Map<String, ? extends Object> values) {
+		SqlExpression insertSql = SqlStatementBuilder.buildInsert(context, schemaName, tableName, values);
 		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 
@@ -336,8 +407,21 @@ public interface DB {
 	 * @return           The primary key of the newly inserted record.
 	 */
 	public static <PK> PK insert(DataSource db, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsert(DbContext.getDefault(), null, tableName, values);
-		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
+		return insert(DbContext.getDefault(), db, null, tableName, values);
+	}
+
+	/**
+	 * Inserts a new record into the specified table in the database with explicit DbContext.
+	 *
+	 * @param <PK>       The type of the primary key that will be returned.
+	 * @param context    The database context.
+	 * @param db         The {@link DataSource} representing the database connection.
+	 * @param tableName  The name of the table where the record will be inserted.
+	 * @param values     A map containing the column names as keys and their corresponding values.
+	 * @return           The primary key of the newly inserted record.
+	 */
+	public static <PK> PK insert(DbContext context, DataSource db, String tableName, Map<String, ? extends Object> values) {
+		return insert(context, db, null, tableName, values);
 	}
 	
 	/**
@@ -351,7 +435,22 @@ public interface DB {
 	 * @return           The primary key of the newly inserted record.
 	 */
 	public static <PK> PK insert(Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsert(DbContext.getDefault(), schemaName, tableName, values);
+		return insert(DbContext.getDefault(), connection, schemaName, tableName, values);
+	}
+
+	/**
+	 * Inserts a new record into the specified table using a connection and schema name with explicit DbContext.
+	 *
+	 * @param <PK>       The type of the primary key that will be returned.
+	 * @param context    The database context.
+	 * @param connection The database connection.
+	 * @param schemaName The schema name.
+	 * @param tableName  The name of the table where the record will be inserted.
+	 * @param values     A map containing the column names as keys and their corresponding values.
+	 * @return           The primary key of the newly inserted record.
+	 */
+	public static <PK> PK insert(DbContext context, Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values) {
+		SqlExpression insertSql = SqlStatementBuilder.buildInsert(context, schemaName, tableName, values);
 		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
 	}
 	
@@ -365,8 +464,21 @@ public interface DB {
 	 * @return           The primary key of the newly inserted record.
 	 */
 	public static <PK> PK insert(Connection connection, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = buildInsert(DbContext.getDefault(), null, tableName, values);
-		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
+		return insert(DbContext.getDefault(), connection, null, tableName, values);
+	}
+
+	/**
+	 * Inserts a new record into the specified table using a connection with explicit DbContext.
+	 *
+	 * @param <PK>       The type of the primary key that will be returned.
+	 * @param context    The database context.
+	 * @param connection The database connection.
+	 * @param tableName  The name of the table where the record will be inserted.
+	 * @param values     A map containing the column names as keys and their corresponding values.
+	 * @return           The primary key of the newly inserted record.
+	 */
+	public static <PK> PK insert(DbContext context, Connection connection, String tableName, Map<String, ? extends Object> values) {
+		return insert(context, connection, null, tableName, values);
 	}
 	
 	/**
@@ -376,11 +488,26 @@ public interface DB {
      * @param db the data source
      * @param tableName the name of the table
      * @param values the values to insert or update
+     * @param idFields the names of the primary key columns used for conflict detection
      * @return the generated primary key or null if the operation didn't generate keys (e.g., update)
      */
-	public static <PK> PK upsert(DataSource db, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression upsertSql = buildUpsert(DbContext.getDefault(), null, tableName, values);
-		return execute(db, QueryType.INSERT, upsertSql.getSql(), upsertSql.getParameters(), null);
+	public static <PK> PK upsert(DataSource db, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
+		return upsert(DbContext.getDefault(), db, null, tableName, values, idFields);
+	}
+
+	/**
+     * Upserts (inserts or updates on conflict) a record in the database with explicit DbContext.
+     * 
+     * @param <PK> the type of the primary key
+     * @param context the database context
+     * @param db the data source
+     * @param tableName the name of the table
+     * @param values the values to insert or update
+     * @param idFields the names of the primary key columns used for conflict detection
+     * @return the generated primary key or null if the operation didn't generate keys (e.g., update)
+     */
+	public static <PK> PK upsert(DbContext context, DataSource db, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
+		return upsert(context, db, null, tableName, values, idFields);
 	}
 	
 	/**
@@ -391,10 +518,27 @@ public interface DB {
      * @param schemaName the schema name
      * @param tableName the name of the table
      * @param values the values to insert or update
+     * @param idFields the names of the primary key columns used for conflict detection
      * @return the generated primary key
      */
-    public static <PK> PK upsert(DataSource db, String schemaName, String tableName, Map<String, ? extends Object> values) {
-        SqlExpression upsertSql = buildUpsert(DbContext.getDefault(), schemaName, tableName, values);
+    public static <PK> PK upsert(DataSource db, String schemaName, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
+        return upsert(DbContext.getDefault(), db, schemaName, tableName, values, idFields);
+    }
+
+    /**
+     * Upserts (inserts or updates on conflict) a record in the database using a schema name with explicit DbContext.
+     * 
+     * @param <PK> the type of the primary key
+     * @param context the database context
+     * @param db the data source
+     * @param schemaName the schema name
+     * @param tableName the name of the table
+     * @param values the values to insert or update
+     * @param idFields the names of the primary key columns used for conflict detection
+     * @return the generated primary key
+     */
+    public static <PK> PK upsert(DbContext context, DataSource db, String schemaName, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
+        SqlExpression upsertSql = SqlStatementBuilder.buildUpsert(context, schemaName, tableName, values, idFields);
         return execute(db, QueryType.INSERT, upsertSql.getSql(), upsertSql.getParameters(), null);
     }
 
@@ -406,10 +550,27 @@ public interface DB {
      * @param schemaName the schema name
      * @param tableName the name of the table
      * @param values the values to insert or update
+     * @param idFields the names of the primary key columns used for conflict detection
      * @return the generated primary key
      */
-    public static <PK> PK upsert(Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values) {
-        SqlExpression upsertSql = buildUpsert(DbContext.getDefault(), schemaName, tableName, values);
+    public static <PK> PK upsert(Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
+        return upsert(DbContext.getDefault(), connection, schemaName, tableName, values, idFields);
+    }
+
+    /**
+     * Upserts (inserts or updates on conflict) a record in the database using a connection and schema name with explicit DbContext.
+     * 
+     * @param <PK> the type of the primary key
+     * @param context the database context
+     * @param connection the database connection
+     * @param schemaName the schema name
+     * @param tableName the name of the table
+     * @param values the values to insert or update
+     * @param idFields the names of the primary key columns used for conflict detection
+     * @return the generated primary key
+     */
+    public static <PK> PK upsert(DbContext context, Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
+        SqlExpression upsertSql = SqlStatementBuilder.buildUpsert(context, schemaName, tableName, values, idFields);
         return execute(connection, QueryType.INSERT, upsertSql.getSql(), upsertSql.getParameters(), null);
     }
 
@@ -420,159 +581,27 @@ public interface DB {
      * @param connection the database connection
      * @param tableName the name of the table
      * @param values the values to insert or update
+     * @param idFields the names of the primary key columns used for conflict detection
      * @return the generated primary key
      */
-    public static <PK> PK upsert(Connection connection, String tableName, Map<String, ? extends Object> values) {
-        SqlExpression upsertSql = buildUpsert(DbContext.getDefault(), null, tableName, values);
-        return execute(connection, QueryType.INSERT, upsertSql.getSql(), upsertSql.getParameters(), null);
+    public static <PK> PK upsert(Connection connection, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
+        return upsert(DbContext.getDefault(), connection, null, tableName, values, idFields);
     }
 
-	/**
-     * Builds an SQL expression for inserting a record.
+    /**
+     * Upserts (inserts or updates on conflict) a record in the database using a connection with explicit DbContext.
      * 
+     * @param <PK> the type of the primary key
      * @param context the database context
-     * @param schemaName the schema name (optional)
-     * @param tableName the table name
-     * @param values the values to insert
-     * @return the SQL expression
+     * @param connection the database connection
+     * @param tableName the name of the table
+     * @param values the values to insert or update
+     * @param idFields the names of the primary key columns used for conflict detection
+     * @return the generated primary key
      */
-	private static SqlExpression buildInsert(DbContext context, String schemaName, String tableName, Map<String, ? extends Object> values) {
-		String qualifiedTableName = prefixAndQuoteTableName(context, schemaName, tableName);
-		
-		// Handle empty values (e.g., when only auto-generated ID exists)
-		if (values.isEmpty()) {
-			String sql;
-			switch (context.getDialect()) {
-			case MYSQL:
-				sql = "INSERT INTO " + qualifiedTableName + " () VALUES ()";
-				break;
-			case POSTGRES:
-			case HSQLDB:
-			case ANSI:
-			default:
-				sql = "INSERT INTO " + qualifiedTableName + " DEFAULT VALUES";
-				break;
-			}
-			return new SqlExpression(sql, new ArrayList<>());
-		}
-		
-		List<String> qmarks = new ArrayList<String>();
-		List<String> quotedFields = new ArrayList<String>();
-		List<Object> params = new ArrayList<Object>();
-
-		for (String f : values.keySet()) {
-			qmarks.add("?");
-			quotedFields.add(context.quoteObjectNames(f));
-			params.add(values.get(f));
-		}
-		
-		String sql = "INSERT INTO " + qualifiedTableName + " (" + implode(",", quotedFields) + ")" 
-			+ " VALUES (" + implode(",", qmarks) + ")";
-		
-		return new SqlExpression(sql, params);
-	}
-
-	/**
-     * Builds an SQL expression for upserting (insert or update on conflict) a record.
-     * 
-     * @param context the database context
-     * @param schemaName the schema name (optional)
-     * @param tableName the table name
-     * @param values the values to upsert
-     * @return the SQL expression
-     */
-	private static SqlExpression buildUpsert(DbContext context, String schemaName, String tableName, Map<String, ? extends Object> values) {
-		String qualifiedTableName = prefixAndQuoteTableName(context, schemaName, tableName);
-		
-		// Handle empty values - upsert with no values doesn't make sense, fall back to plain insert
-		if (values.isEmpty()) {
-			return buildInsert(context, schemaName, tableName, values);
-		}
-		
-		// Detect primary key column - look for common patterns (id, *ID, *Id)
-		String pkColumn = detectPrimaryKeyColumn(values.keySet());
-		String quotedPkColumn = context.quoteObjectNames(pkColumn);
-		
-		List<String> qmarks = new ArrayList<String>();
-		List<String> quotedFields = new ArrayList<String>();
-		List<Object> params = new ArrayList<Object>();
-		List<String> updateList = new ArrayList<String>();
-
-		for (String f : values.keySet()) {
-			final String quotedField = context.quoteObjectNames(f);
-			qmarks.add("?");
-			quotedFields.add(quotedField);
-			params.add(values.get(f));
-			updateList.add(quotedField + "=?");
-		}
-		
-		String sql;
-		
-		switch (context.getDialect()) {
-		case MYSQL:
-			// MySQL: INSERT ... ON DUPLICATE KEY UPDATE
-			params.addAll(new ArrayList<Object>(params));
-			sql = "INSERT INTO " + qualifiedTableName + " (" + implode(",", quotedFields) + ")" 
-				+ " VALUES (" + implode(",", qmarks) + ")"
-				+ " ON DUPLICATE KEY UPDATE " + implode(",", updateList);
-			break;
-		case POSTGRES:
-			// PostgreSQL: INSERT ... ON CONFLICT (pk) DO UPDATE
-			params.addAll(new ArrayList<Object>(params));
-			sql = "INSERT INTO " + qualifiedTableName + " (" + implode(",", quotedFields) + ")"
-				+ " VALUES (" + implode(",", qmarks) + ")"
-				+ " ON CONFLICT (" + quotedPkColumn + ") DO UPDATE SET " + implode(",", updateList);
-			break;
-		case HSQLDB:
-			// HSQLDB: MERGE INTO ... USING ... ON ... WHEN MATCHED/NOT MATCHED
-			// Reference vals.column instead of new placeholders to avoid duplicate params
-			List<String> valsUpdateList = new ArrayList<String>();
-			List<String> valsFieldRefs = new ArrayList<String>();
-			for (String f : values.keySet()) {
-				final String quotedField = context.quoteObjectNames(f);
-				valsUpdateList.add(quotedField + "=vals." + quotedField);
-				valsFieldRefs.add("vals." + quotedField);
-			}
-			sql = "MERGE INTO " + qualifiedTableName + " t"
-				+ " USING (VALUES(" + implode(",", qmarks) + ")) AS vals(" + implode(",", quotedFields) + ")"
-				+ " ON t." + quotedPkColumn + " = vals." + quotedPkColumn
-				+ " WHEN MATCHED THEN UPDATE SET " + implode(",", valsUpdateList)
-				+ " WHEN NOT MATCHED THEN INSERT (" + implode(",", quotedFields) + ") VALUES (" + implode(",", valsFieldRefs) + ")";
-			break;
-		case ANSI:
-		default:
-			// Fallback: just do a plain INSERT (no upsert support)
-			sql = "INSERT INTO " + qualifiedTableName + " (" + implode(",", quotedFields) + ")" 
-				+ " VALUES (" + implode(",", qmarks) + ")";
-			break;
-		}
-		
-		return new SqlExpression(sql, params);
-	}
-	
-	/**
-	 * Detects the primary key column from a set of column names.
-	 * Looks for common patterns: "id", or columns ending with "ID" or "Id".
-	 * 
-	 * @param columns the column names
-	 * @return the detected primary key column name, defaults to "id" if none found
-	 */
-	private static String detectPrimaryKeyColumn(java.util.Set<String> columns) {
-		// First, check for exact "id" (case-insensitive)
-		for (String col : columns) {
-			if (col.equalsIgnoreCase("id")) {
-				return col;
-			}
-		}
-		// Then look for columns ending with "ID" or "Id" (e.g., productID, userId)
-		for (String col : columns) {
-			if (col.endsWith("ID") || col.endsWith("Id")) {
-				return col;
-			}
-		}
-		// Default to "id"
-		return "id";
-	}
+    public static <PK> PK upsert(DbContext context, Connection connection, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
+        return upsert(context, connection, null, tableName, values, idFields);
+    }
 
 	/**
      * Quotes and prefixes a table name with a schema name if provided.
@@ -583,42 +612,7 @@ public interface DB {
      * @return the fully qualified table name
      */
 	public static String prefixAndQuoteTableName(DbContext context, String schemaName, String tableName) {
-		if (schemaName == null) {
-			return context.quoteObjectNames(tableName);
-		}
-		return context.quoteObjectNames(schemaName, tableName);
-	}
-
-	/**
-	 * Builds and executes an SQL update statement.
-	 * 
-	 * @param context the database context
-	 * @param schemaName the schema name
-	 * @param tableName the table name
-	 * @param values the values to update
-	 * @param ids the identifiers of the records to update
-	 * @return the SQL expression for the update
-	 */
-	private static SqlExpression buildUpdate(DbContext context, String schemaName, String tableName, Map<String, ? extends Object> values, Map<String, ? extends Object> ids) {
-		List<String> qmarks = new ArrayList<String>();
-		List<String> assignments = new ArrayList<String>();
-		List<Object> params = new ArrayList<Object>();
-		List<String> wheres = new ArrayList<String>();
-
-		for (String f : values.keySet()) {
-			qmarks.add("?");
-			assignments.add(String.format("%s=?", context.quoteObjectNames(f)));
-			params.add(values.get(f));
-		}
-		
-		for (String idField : ids.keySet()) {
-			qmarks.add("?");
-			wheres.add(String.format("%s=?", context.quoteObjectNames(idField)));
-			params.add(ids.get(idField));
-		}
-		
-		String sql = "UPDATE " + prefixAndQuoteTableName(context, schemaName, tableName) + " SET " + implode(", ", assignments) + " WHERE " + implode(" AND ", wheres);
-		return new SqlExpression(sql, params);
+		return SqlStatementBuilder.prefixAndQuoteTableName(context, schemaName, tableName);
 	}
 
 	/**

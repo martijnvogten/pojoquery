@@ -52,7 +52,7 @@ public class UpsertsIT {
 			"id", 1,
 			"name", "Widget",
 			"price", 100
-		));
+		), List.of("id"));
 
 		List<Map<String, Object>> results = DB.queryRows(db, "SELECT * FROM product WHERE id=1");
 		Assert.assertEquals(1, results.size());
@@ -82,7 +82,7 @@ public class UpsertsIT {
 			"id", 1,
 			"name", "Super Widget",
 			"price", 150
-		));
+		), List.of("id"));
 
 		// Verify it was updated
 		results = DB.queryRows(db, "SELECT * FROM product WHERE id=1");
@@ -104,21 +104,21 @@ public class UpsertsIT {
 			"id", 1,
 			"name", "Widget A",
 			"price", 100
-		));
+		), List.of("id"));
 
 		// Insert second record
 		DB.upsert(db, "product", Map.of(
 			"id", 2,
 			"name", "Widget B",
 			"price", 200
-		));
+		), List.of("id"));
 
 		// Update first record
 		DB.upsert(db, "product", Map.of(
 			"id", 1,
 			"name", "Widget A Updated",
 			"price", 110
-		));
+		), List.of("id"));
 
 		// Verify both records
 		List<Map<String, Object>> results = DB.queryRows(db, "SELECT * FROM product ORDER BY id");
@@ -138,7 +138,7 @@ public class UpsertsIT {
 			"productID", 1,
 			"sku", "SKU-001",
 			"quantity", 50
-		));
+		), List.of("productID"));
 
 		// Use PojoQuery to query, which handles quoting correctly across databases
 		List<InventoryItem> items = PojoQuery.build(InventoryItem.class)
@@ -153,7 +153,7 @@ public class UpsertsIT {
 			"productID", 1,
 			"sku", "SKU-001-UPDATED",
 			"quantity", 75
-		));
+		), List.of("productID"));
 
 		// Verify it was updated
 		items = PojoQuery.build(InventoryItem.class)
