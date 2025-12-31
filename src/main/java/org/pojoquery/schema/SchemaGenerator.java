@@ -56,14 +56,34 @@ public class SchemaGenerator {
         Set<String> generatedTables = new HashSet<>();
         List<String> statements = new ArrayList<>();
         Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
-        generateCreateTableStatements(entityClass, dbContext, generatedTables, statements, inferredForeignKeys);
+        List<LinkTableInfo> linkTables = new ArrayList<>();
+        List<DeferredForeignKey> deferredForeignKeys = new ArrayList<>();
+        generateCreateTableStatements(entityClass, dbContext, generatedTables, statements, inferredForeignKeys, linkTables, deferredForeignKeys);
+        
+        // Generate link tables (without FK constraints)
+        for (LinkTableInfo linkTable : linkTables) {
+            String fullTableName = linkTable.schemaName != null && !linkTable.schemaName.isEmpty()
+                ? dbContext.quoteObjectNames(linkTable.schemaName) + "." + dbContext.quoteObjectNames(linkTable.tableName)
+                : dbContext.quoteObjectNames(linkTable.tableName);
+            if (!generatedTables.contains(fullTableName)) {
+                generatedTables.add(fullTableName);
+                statements.add(generateCreateLinkTable(linkTable, dbContext, deferredForeignKeys));
+            }
+        }
+        
+        // Generate ALTER TABLE statements for FK constraints (after all tables are created)
+        for (DeferredForeignKey dfk : deferredForeignKeys) {
+            statements.add(generateAlterTableAddForeignKey(dfk, dbContext));
+        }
+        
         return statements;
     }
     
     private static void generateCreateTableStatements(Class<?> entityClass, DbContext dbContext, 
-            Set<String> generatedTables, List<String> statements, Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys) {
+            Set<String> generatedTables, List<String> statements, Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys,
+            List<LinkTableInfo> linkTables, List<DeferredForeignKey> deferredForeignKeys) {
         // First, scan for collection fields that imply foreign keys in other tables
-        scanForInferredForeignKeys(entityClass, inferredForeignKeys);
+        scanForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
         
         List<TableMapping> tableMappings = QueryBuilder.determineTableMapping(entityClass);
         if (tableMappings.isEmpty()) {
@@ -80,14 +100,14 @@ public class SchemaGenerator {
             
             // Get inferred foreign keys for this class
             List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.clazz);
-            statements.add(generateCreateTableForMapping(mapping, dbContext, fks));
+            statements.add(generateCreateTableForMapping(mapping, dbContext, fks, deferredForeignKeys));
         }
         
         // Handle @SubClasses annotation for table-per-subclass inheritance
         SubClasses subClassesAnn = entityClass.getAnnotation(SubClasses.class);
         if (subClassesAnn != null) {
             for (Class<?> subClass : subClassesAnn.value()) {
-                generateCreateTableStatements(subClass, dbContext, generatedTables, statements, inferredForeignKeys);
+                generateCreateTableStatements(subClass, dbContext, generatedTables, statements, inferredForeignKeys, linkTables, deferredForeignKeys);
             }
         }
     }
@@ -96,30 +116,45 @@ public class SchemaGenerator {
      * Scans an entity class for fields that imply foreign keys:
      * 1. Collection fields (one-to-many) - FK goes in the referenced entity's table
      * 2. Single entity references with @Link(linkfield=...) - FK goes in the declaring class's table
+     * 3. Collection fields with linktable - generates link table with both FKs
      */
-    private static void scanForInferredForeignKeys(Class<?> entityClass, Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys) {
-        // Scan collection fields for one-to-many relationships
-        scanCollectionFieldsForInferredForeignKeys(entityClass, inferredForeignKeys);
+    private static void scanForInferredForeignKeys(Class<?> entityClass, Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys,
+            List<LinkTableInfo> linkTables) {
+        // Scan collection fields for one-to-many relationships and many-to-many link tables
+        scanCollectionFieldsForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
         
         // Scan single entity reference fields with @Link(linkfield=...)
         scanSingleEntityFieldsForInferredForeignKeys(entityClass, inferredForeignKeys);
     }
     
     /**
-     * Scans collection fields that imply foreign keys in the referenced entity.
+     * Scans collection fields that imply foreign keys in the referenced entity,
+     * or link tables for many-to-many relationships.
      */
-    private static void scanCollectionFieldsForInferredForeignKeys(Class<?> entityClass, Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys) {
+    private static void scanCollectionFieldsForInferredForeignKeys(Class<?> entityClass, 
+            Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys, List<LinkTableInfo> linkTables) {
         Collection<Field> fields = QueryBuilder.filterFields(entityClass);
+        TableMapping ownerMapping = QueryBuilder.determineTableMapping(entityClass).get(0);
+        List<Field> ownerIdFields = QueryBuilder.determineIdFields(entityClass);
+        String ownerIdColumn = ownerIdFields.isEmpty() ? "id" : QueryBuilder.determineSqlFieldName(ownerIdFields.get(0));
+        
         for (Field field : fields) {
             if (CustomizableQueryBuilder.isListOrArray(field.getType())) {
                 // Check if this is a many-to-many via linktable
                 Link linkAnn = field.getAnnotation(Link.class);
                 if (linkAnn != null && !Link.NONE.equals(linkAnn.linktable())) {
-                    // Many-to-many relationship, handled via link table
+                    // Many-to-many relationship - generate link table
+                    Class<?> componentType = getCollectionComponentType(field);
+                    if (componentType != null && CustomizableQueryBuilder.isLinkedClass(componentType)) {
+                        LinkTableInfo linkTableInfo = createLinkTableInfo(entityClass, ownerMapping, ownerIdColumn, field, linkAnn, componentType);
+                        if (linkTableInfo != null) {
+                            linkTables.add(linkTableInfo);
+                        }
+                    }
                     continue;
                 }
                 
-                // Get the component type of the collection
+                // One-to-many - Get the component type of the collection
                 Class<?> componentType = getCollectionComponentType(field);
                 if (componentType != null && CustomizableQueryBuilder.isLinkedClass(componentType)) {
                     // Determine the foreign key column name
@@ -129,12 +164,50 @@ public class SchemaGenerator {
                     // The FK should be added to the class that defines the root @Table
                     Class<?> rootTableClass = findRootTableClass(componentType);
                     if (rootTableClass != null) {
-                        inferredForeignKeys.computeIfAbsent(rootTableClass, k -> new ArrayList<>())
-                                .add(new InferredForeignKey(fkColumnName));
+                        // Create FK with reference to the owning table
+                        InferredForeignKey fk = new InferredForeignKey(fkColumnName, ownerMapping.tableName, ownerIdColumn, ownerMapping.schemaName);
+                        inferredForeignKeys.computeIfAbsent(rootTableClass, k -> new ArrayList<>()).add(fk);
                     }
                 }
             }
         }
+    }
+    
+    /**
+     * Creates a LinkTableInfo for a many-to-many relationship.
+     */
+    private static LinkTableInfo createLinkTableInfo(Class<?> entityClass, TableMapping ownerMapping, String ownerIdColumn,
+            Field field, Link linkAnn, Class<?> componentType) {
+        // Get foreign table info
+        List<TableMapping> foreignMappings = QueryBuilder.determineTableMapping(componentType);
+        if (foreignMappings.isEmpty()) {
+            return null;
+        }
+        TableMapping foreignMapping = foreignMappings.get(0);
+        List<Field> foreignIdFields = QueryBuilder.determineIdFields(componentType);
+        String foreignIdColumn = foreignIdFields.isEmpty() ? "id" : QueryBuilder.determineSqlFieldName(foreignIdFields.get(0));
+        
+        // Determine link table columns
+        String ownerColumn = !Link.NONE.equals(linkAnn.linkfield()) 
+            ? linkAnn.linkfield() 
+            : ownerMapping.tableName + "_id";
+        String foreignColumn = !Link.NONE.equals(linkAnn.foreignlinkfield())
+            ? linkAnn.foreignlinkfield()
+            : foreignMapping.tableName + "_id";
+        
+        // Handle self-referencing relationships (same table on both sides)
+        // If columns would clash, prefix the foreign column with the field name
+        if (ownerColumn.equalsIgnoreCase(foreignColumn)) {
+            // Use field name to disambiguate (e.g., "friends" -> "friends_id")
+            foreignColumn = field.getName() + "_id";
+        }
+        
+        return new LinkTableInfo(
+            linkAnn.linktable(),
+            linkAnn.linkschema().isEmpty() ? null : linkAnn.linkschema(),
+            ownerColumn, ownerMapping.tableName, ownerIdColumn, ownerMapping.schemaName,
+            foreignColumn, foreignMapping.tableName, foreignIdColumn, foreignMapping.schemaName
+        );
     }
     
     /**
@@ -171,12 +244,26 @@ public class SchemaGenerator {
                 // This field has an explicit linkfield - the FK column goes in the declaring class's table
                 String fkColumnName = linkAnn.linkfield();
                 
+                // Get reference table info from the linked type
+                Class<?> linkedType = field.getType();
+                List<TableMapping> linkedMappings = QueryBuilder.determineTableMapping(linkedType);
+                String refTable = null;
+                String refColumn = null;
+                String refSchema = null;
+                if (!linkedMappings.isEmpty()) {
+                    TableMapping linkedMapping = linkedMappings.get(0);
+                    refTable = linkedMapping.tableName;
+                    refSchema = linkedMapping.schemaName;
+                    List<Field> linkedIdFields = QueryBuilder.determineIdFields(linkedType);
+                    refColumn = linkedIdFields.isEmpty() ? "id" : QueryBuilder.determineSqlFieldName(linkedIdFields.get(0));
+                }
+                
                 // Find the table class where this FK should be placed
                 // For subclasses, this might be the parent table
                 Class<?> tableClass = findTableClass(entityClass);
                 if (tableClass != null) {
-                    inferredForeignKeys.computeIfAbsent(tableClass, k -> new ArrayList<>())
-                            .add(new InferredForeignKey(fkColumnName));
+                    InferredForeignKey fk = new InferredForeignKey(fkColumnName, refTable, refColumn, refSchema);
+                    inferredForeignKeys.computeIfAbsent(tableClass, k -> new ArrayList<>()).add(fk);
                 }
             }
         }
@@ -228,13 +315,80 @@ public class SchemaGenerator {
     }
     
     /**
-     * Represents an inferred foreign key column.
+     * Represents an inferred foreign key column with its reference information.
      */
     private static class InferredForeignKey {
         final String columnName;
+        final String referencedTable;
+        final String referencedColumn;
+        final String referencedSchema;
         
         InferredForeignKey(String columnName) {
+            this(columnName, null, null, null);
+        }
+        
+        InferredForeignKey(String columnName, String referencedTable, String referencedColumn, String referencedSchema) {
             this.columnName = columnName;
+            this.referencedTable = referencedTable;
+            this.referencedColumn = referencedColumn;
+            this.referencedSchema = referencedSchema;
+        }
+        
+        boolean hasReference() {
+            return referencedTable != null && referencedColumn != null;
+        }
+    }
+    
+    /**
+     * Represents a deferred foreign key constraint to be added via ALTER TABLE.
+     */
+    private static class DeferredForeignKey {
+        final String tableName;
+        final String tableSchema;
+        final String columnName;
+        final String referencedTable;
+        final String referencedColumn;
+        final String referencedSchema;
+        
+        DeferredForeignKey(String tableName, String tableSchema, String columnName, 
+                          String referencedTable, String referencedColumn, String referencedSchema) {
+            this.tableName = tableName;
+            this.tableSchema = tableSchema;
+            this.columnName = columnName;
+            this.referencedTable = referencedTable;
+            this.referencedColumn = referencedColumn;
+            this.referencedSchema = referencedSchema;
+        }
+    }
+    
+    /**
+     * Represents a link table for many-to-many relationships.
+     */
+    private static class LinkTableInfo {
+        final String tableName;
+        final String schemaName;
+        final String ownerColumn;
+        final String ownerTable;
+        final String ownerIdColumn;
+        final String ownerSchema;
+        final String foreignColumn;
+        final String foreignTable;
+        final String foreignIdColumn;
+        final String foreignSchema;
+        
+        LinkTableInfo(String tableName, String schemaName,
+                      String ownerColumn, String ownerTable, String ownerIdColumn, String ownerSchema,
+                      String foreignColumn, String foreignTable, String foreignIdColumn, String foreignSchema) {
+            this.tableName = tableName;
+            this.schemaName = schemaName;
+            this.ownerColumn = ownerColumn;
+            this.ownerTable = ownerTable;
+            this.ownerIdColumn = ownerIdColumn;
+            this.ownerSchema = ownerSchema;
+            this.foreignColumn = foreignColumn;
+            this.foreignTable = foreignTable;
+            this.foreignIdColumn = foreignIdColumn;
+            this.foreignSchema = foreignSchema;
         }
     }
     
@@ -259,17 +413,110 @@ public class SchemaGenerator {
         Set<String> generatedTables = new HashSet<>();
         List<String> statements = new ArrayList<>();
         Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
+        List<LinkTableInfo> linkTables = new ArrayList<>();
+        List<DeferredForeignKey> deferredForeignKeys = new ArrayList<>();
         
         // First pass: scan all classes for collection fields to build the inferred foreign keys map
         for (Class<?> entityClass : entityClasses) {
-            scanForInferredForeignKeys(entityClass, inferredForeignKeys);
+            scanForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
         }
         
-        // Second pass: generate CREATE TABLE statements
+        // Second pass: generate CREATE TABLE statements (without FK constraints)
         for (Class<?> entityClass : entityClasses) {
-            generateCreateTableStatements(entityClass, dbContext, generatedTables, statements, inferredForeignKeys);
+            generateCreateTableStatements(entityClass, dbContext, generatedTables, statements, inferredForeignKeys, linkTables, deferredForeignKeys);
         }
+        
+        // Generate link tables (without FK constraints)
+        for (LinkTableInfo linkTable : linkTables) {
+            String fullTableName = linkTable.schemaName != null && !linkTable.schemaName.isEmpty()
+                ? dbContext.quoteObjectNames(linkTable.schemaName) + "." + dbContext.quoteObjectNames(linkTable.tableName)
+                : dbContext.quoteObjectNames(linkTable.tableName);
+            if (!generatedTables.contains(fullTableName)) {
+                generatedTables.add(fullTableName);
+                statements.add(generateCreateLinkTable(linkTable, dbContext, deferredForeignKeys));
+            }
+        }
+        
+        // Generate ALTER TABLE statements for FK constraints (after all tables are created)
+        for (DeferredForeignKey dfk : deferredForeignKeys) {
+            statements.add(generateAlterTableAddForeignKey(dfk, dbContext));
+        }
+        
         return statements;
+    }
+    
+    /**
+     * Generates a CREATE TABLE statement for a link table (many-to-many relationship).
+     */
+    private static String generateCreateLinkTable(LinkTableInfo linkTable, DbContext dbContext, List<DeferredForeignKey> deferredForeignKeys) {
+        StringBuilder sb = new StringBuilder();
+        
+        // Table name
+        String tableName = linkTable.schemaName != null && !linkTable.schemaName.isEmpty()
+            ? dbContext.quoteObjectNames(linkTable.schemaName) + "." + dbContext.quoteObjectNames(linkTable.tableName)
+            : dbContext.quoteObjectNames(linkTable.tableName);
+        
+        sb.append("CREATE TABLE ");
+        sb.append(tableName).append(" (\n");
+        
+        // Owner column
+        sb.append("  ").append(dbContext.quoteObjectNames(linkTable.ownerColumn));
+        sb.append(" ").append(dbContext.getForeignKeyColumnType());
+        sb.append(",\n");
+        
+        // Foreign column
+        sb.append("  ").append(dbContext.quoteObjectNames(linkTable.foreignColumn));
+        sb.append(" ").append(dbContext.getForeignKeyColumnType());
+        sb.append(",\n");
+        
+        // Primary key (composite)
+        sb.append("  PRIMARY KEY (");
+        sb.append(dbContext.quoteObjectNames(linkTable.ownerColumn));
+        sb.append(", ");
+        sb.append(dbContext.quoteObjectNames(linkTable.foreignColumn));
+        sb.append(")\n");
+        
+        sb.append(")");
+        
+        // Add engine specification based on DbContext
+        String tableSuffix = dbContext.getCreateTableSuffix();
+        if (tableSuffix != null && !tableSuffix.isEmpty()) {
+            sb.append(tableSuffix);
+        }
+        
+        sb.append(";");
+        
+        // Defer FK constraints to be added later via ALTER TABLE
+        deferredForeignKeys.add(new DeferredForeignKey(
+            linkTable.tableName, linkTable.schemaName, linkTable.ownerColumn,
+            linkTable.ownerTable, linkTable.ownerIdColumn, linkTable.ownerSchema));
+        deferredForeignKeys.add(new DeferredForeignKey(
+            linkTable.tableName, linkTable.schemaName, linkTable.foreignColumn,
+            linkTable.foreignTable, linkTable.foreignIdColumn, linkTable.foreignSchema));
+        
+        return sb.toString();
+    }
+    
+    /**
+     * Generates an ALTER TABLE statement to add a foreign key constraint.
+     */
+    private static String generateAlterTableAddForeignKey(DeferredForeignKey dfk, DbContext dbContext) {
+        StringBuilder sb = new StringBuilder();
+        
+        String tableName = dfk.tableSchema != null && !dfk.tableSchema.isEmpty()
+            ? dbContext.quoteObjectNames(dfk.tableSchema) + "." + dbContext.quoteObjectNames(dfk.tableName)
+            : dbContext.quoteObjectNames(dfk.tableName);
+        
+        String refTableName = dfk.referencedSchema != null && !dfk.referencedSchema.isEmpty()
+            ? dbContext.quoteObjectNames(dfk.referencedSchema) + "." + dbContext.quoteObjectNames(dfk.referencedTable)
+            : dbContext.quoteObjectNames(dfk.referencedTable);
+        
+        sb.append("ALTER TABLE ").append(tableName);
+        sb.append(" ADD FOREIGN KEY (").append(dbContext.quoteObjectNames(dfk.columnName)).append(")");
+        sb.append(" REFERENCES ").append(refTableName);
+        sb.append("(").append(dbContext.quoteObjectNames(dfk.referencedColumn)).append(");");
+        
+        return sb.toString();
     }
     
     /**
@@ -285,7 +532,7 @@ public class SchemaGenerator {
         }
     }
     
-    private static String generateCreateTableForMapping(TableMapping mapping, DbContext dbContext, List<InferredForeignKey> inferredForeignKeys) {
+    private static String generateCreateTableForMapping(TableMapping mapping, DbContext dbContext, List<InferredForeignKey> inferredForeignKeys, List<DeferredForeignKey> deferredForeignKeys) {
         StringBuilder sb = new StringBuilder();
         
         String tableName = getFullTableName(mapping, dbContext);
@@ -297,6 +544,7 @@ public class SchemaGenerator {
         List<String> columnDefinitions = new ArrayList<>();
         List<String> primaryKeyColumns = new ArrayList<>();
         Set<String> existingColumnNames = new HashSet<>();
+        Set<String> existingFkColumns = new HashSet<>(); // Track FK columns to avoid duplicates
         
         // Determine if we have a composite key from the overall class hierarchy
         List<Field> idFields = QueryBuilder.determineIdFields(mapping.clazz);
@@ -345,6 +593,23 @@ public class SchemaGenerator {
                         columnDefinitions.add(columnDef);
                         existingColumnNames.add(columnName.toLowerCase());
                     }
+                    
+                    // Defer foreign key constraint for single entity references
+                    if (!existingFkColumns.contains(columnName.toLowerCase())) {
+                        Class<?> linkedType = field.getType();
+                        List<TableMapping> linkedMappings = QueryBuilder.determineTableMapping(linkedType);
+                        if (!linkedMappings.isEmpty()) {
+                            TableMapping linkedMapping = linkedMappings.get(0);
+                            List<Field> linkedIdFields = QueryBuilder.determineIdFields(linkedType);
+                            if (!linkedIdFields.isEmpty()) {
+                                String refColumn = QueryBuilder.determineSqlFieldName(linkedIdFields.get(0));
+                                deferredForeignKeys.add(new DeferredForeignKey(
+                                    mapping.tableName, mapping.schemaName, columnName,
+                                    linkedMapping.tableName, refColumn, linkedMapping.schemaName));
+                                existingFkColumns.add(columnName.toLowerCase());
+                            }
+                        }
+                    }
                 }
                 // Collections are handled via inferred foreign keys in the referenced table
                 continue;
@@ -372,13 +637,22 @@ public class SchemaGenerator {
                     columnDefinitions.add(columnDef);
                     existingColumnNames.add(fk.columnName.toLowerCase());
                 }
+                
+                // Defer foreign key constraint if reference information is available
+                if (fk.hasReference() && !existingFkColumns.contains(fk.columnName.toLowerCase())) {
+                    deferredForeignKeys.add(new DeferredForeignKey(
+                        mapping.tableName, mapping.schemaName, fk.columnName,
+                        fk.referencedTable, fk.referencedColumn, fk.referencedSchema));
+                    existingFkColumns.add(fk.columnName.toLowerCase());
+                }
             }
         }
         
         // Add column definitions
+        boolean hasMoreConstraints = !primaryKeyColumns.isEmpty();
         for (int i = 0; i < columnDefinitions.size(); i++) {
             sb.append("  ").append(columnDefinitions.get(i));
-            if (i < columnDefinitions.size() - 1 || !primaryKeyColumns.isEmpty()) {
+            if (i < columnDefinitions.size() - 1 || hasMoreConstraints) {
                 sb.append(",");
             }
             sb.append("\n");
@@ -537,23 +811,49 @@ public class SchemaGenerator {
         Set<String> processedTables = new HashSet<>();
         List<String> statements = new ArrayList<>();
         Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
+        List<LinkTableInfo> linkTables = new ArrayList<>();
+        List<DeferredForeignKey> deferredForeignKeys = new ArrayList<>();
         
         // First pass: scan all classes for collection fields to build the inferred foreign keys map
         for (Class<?> entityClass : entityClasses) {
-            scanForInferredForeignKeys(entityClass, inferredForeignKeys);
+            scanForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
         }
         
         // Second pass: generate DDL statements
         for (Class<?> entityClass : entityClasses) {
-            generateMigrationStatements(entityClass, schemaInfo, dbContext, processedTables, statements, inferredForeignKeys);
+            generateMigrationStatements(entityClass, schemaInfo, dbContext, processedTables, statements, inferredForeignKeys, linkTables, deferredForeignKeys);
         }
+        
+        // Generate link tables (without FK constraints)
+        for (LinkTableInfo linkTable : linkTables) {
+            String fullTableName = linkTable.schemaName != null && !linkTable.schemaName.isEmpty()
+                ? dbContext.quoteObjectNames(linkTable.schemaName) + "." + dbContext.quoteObjectNames(linkTable.tableName)
+                : dbContext.quoteObjectNames(linkTable.tableName);
+            if (!processedTables.contains(fullTableName)) {
+                // Check if link table exists
+                SchemaInfo.TableInfo existingTable = schemaInfo.getTable(
+                    linkTable.schemaName != null && !linkTable.schemaName.isEmpty() ? linkTable.schemaName : null,
+                    linkTable.tableName);
+                if (existingTable == null) {
+                    processedTables.add(fullTableName);
+                    statements.add(generateCreateLinkTable(linkTable, dbContext, deferredForeignKeys));
+                }
+            }
+        }
+        
+        // Generate ALTER TABLE statements for FK constraints (after all tables are created)
+        for (DeferredForeignKey dfk : deferredForeignKeys) {
+            statements.add(generateAlterTableAddForeignKey(dfk, dbContext));
+        }
+        
         return statements;
     }
     
     private static void generateMigrationStatements(Class<?> entityClass, SchemaInfo schemaInfo, DbContext dbContext,
-            Set<String> processedTables, List<String> statements, Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys) {
+            Set<String> processedTables, List<String> statements, Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys,
+            List<LinkTableInfo> linkTables, List<DeferredForeignKey> deferredForeignKeys) {
         // Scan for inferred foreign keys
-        scanForInferredForeignKeys(entityClass, inferredForeignKeys);
+        scanForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
         
         List<TableMapping> tableMappings = QueryBuilder.determineTableMapping(entityClass);
         if (tableMappings.isEmpty()) {
@@ -576,7 +876,7 @@ public class SchemaGenerator {
             
             if (existingTable == null) {
                 // Table doesn't exist - generate CREATE TABLE
-                statements.add(generateCreateTableForMapping(mapping, dbContext, fks));
+                statements.add(generateCreateTableForMapping(mapping, dbContext, fks, deferredForeignKeys));
             } else {
                 // Table exists - check for missing columns and generate ALTER TABLE
                 String alterStatement = generateAlterTableForMapping(mapping, existingTable, dbContext, fks);
@@ -590,7 +890,7 @@ public class SchemaGenerator {
         SubClasses subClassesAnn = entityClass.getAnnotation(SubClasses.class);
         if (subClassesAnn != null) {
             for (Class<?> subClass : subClassesAnn.value()) {
-                generateMigrationStatements(subClass, schemaInfo, dbContext, processedTables, statements, inferredForeignKeys);
+                generateMigrationStatements(subClass, schemaInfo, dbContext, processedTables, statements, inferredForeignKeys, linkTables, deferredForeignKeys);
             }
         }
     }

@@ -160,6 +160,17 @@ public class TestSchemaGenerator {
         @Link(foreignlinkfield="festivalID")
         List<EventSubclass> events;
     }
+    
+    // Test entity for self-referencing many-to-many relationship
+    @Table("person")
+    public static class Person {
+        @Id
+        Long id;
+        String name;
+        
+        @Link(linktable = "person_friends")
+        List<Person> friends;  // Self-referencing many-to-many
+    }
 
     @Test
     public void testSimpleEntity() {
@@ -210,14 +221,29 @@ public class TestSchemaGenerator {
     
     @Test
     public void testManyToManyDoesNotCreateColumn() {
+        // Article has @Link(linktable="article_tag") List<Tag> tags
+        // Creates: Article table, link table, 2 ALTER TABLE for FK constraints
         List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Article.class);
         String sql = String.join("\n", sqlList);
         System.out.println(sql);
         
         assertTrue(sql.contains("`id`"));
         assertTrue(sql.contains("`title`"));
-        // Should NOT contain a tags column since it's a collection
-        assertTrue(!sql.contains("tags"));
+        // Should NOT contain a tags column in the articles table since it's a collection
+        // But should generate a link table for many-to-many
+        String articlesTable = sqlList.stream()
+            .filter(s -> s.contains("CREATE TABLE") && s.contains("`articles`"))
+            .findFirst()
+            .orElse("");
+        assertTrue(!articlesTable.contains("tags")); // No tags column in articles table
+        
+        // Should generate: Article CREATE + link table CREATE + 2 ALTER TABLE for FKs
+        assertEquals("Should generate 4 statements (Article + link table + 2 FK constraints)", 4, sqlList.size());
+        String linkTable = sqlList.stream()
+            .filter(s -> s.contains("CREATE TABLE") && s.contains("`article_tag`"))
+            .findFirst()
+            .orElse("");
+        assertTrue("Link table should be article_tag", linkTable.contains("`article_tag`"));
     }
     
     @Test
@@ -436,6 +462,7 @@ public class TestSchemaGenerator {
     public void testInferredForeignKeyFromCollection() {
         // When generating tables for Author and Book together,
         // Book should have authors_id inferred from Author.books (using table name)
+        // Plus ALTER TABLE for FK constraint
         List<String> statements = SchemaGenerator.generateCreateTableStatements(Author.class, Book.class);
         System.out.println("Inferred FK test:");
         for (String stmt : statements) {
@@ -443,11 +470,12 @@ public class TestSchemaGenerator {
             System.out.println();
         }
         
-        assertEquals("Should generate 2 statements", 2, statements.size());
+        // 2 CREATE TABLEs + 1 ALTER TABLE for FK
+        assertEquals("Should generate 3 statements", 3, statements.size());
         
         // Find the books table statement
         String booksTable = statements.stream()
-            .filter(s -> s.contains("`books`"))
+            .filter(s -> s.contains("CREATE TABLE") && s.contains("`books`"))
             .findFirst()
             .orElse("");
         
@@ -459,6 +487,7 @@ public class TestSchemaGenerator {
     public void testInferredForeignKeyChain() {
         // Test a chain: Author -> Book -> Chapter
         // Book should have authors_id, Chapter should have books_id
+        // Plus 2 ALTER TABLE for FK constraints
         List<String> statements = SchemaGenerator.generateCreateTableStatements(Author.class, Book.class, Chapter.class);
         System.out.println("Inferred FK chain test:");
         for (String stmt : statements) {
@@ -466,14 +495,15 @@ public class TestSchemaGenerator {
             System.out.println();
         }
         
-        assertEquals("Should generate 3 statements", 3, statements.size());
+        // 3 CREATE TABLEs + 2 ALTER TABLEs for FKs
+        assertEquals("Should generate 5 statements", 5, statements.size());
         
         String booksTable = statements.stream()
-            .filter(s -> s.contains("`books`"))
+            .filter(s -> s.contains("CREATE TABLE") && s.contains("`books`"))
             .findFirst()
             .orElse("");
         String chaptersTable = statements.stream()
-            .filter(s -> s.contains("`chapters`"))
+            .filter(s -> s.contains("CREATE TABLE") && s.contains("`chapters`"))
             .findFirst()
             .orElse("");
         
@@ -507,7 +537,7 @@ public class TestSchemaGenerator {
         }
         
         String eventTable = statements.stream()
-            .filter(s -> s.contains("`event`"))
+            .filter(s -> s.contains("CREATE TABLE") && s.contains("`event`"))
             .findFirst()
             .orElse("");
         
@@ -519,6 +549,7 @@ public class TestSchemaGenerator {
     public void testInferredForeignKeyFromLinkField() {
         // When EventWithFestival has @Link(linkfield="festivalID") Festival festival,
         // the Event table (parent table) should have festivalID inferred
+        // Plus ALTER TABLE for FK constraint
         List<String> statements = SchemaGenerator.generateCreateTableStatements(EventWithFestival.class, Festival.class);
         System.out.println("Inferred FK from linkfield test:");
         for (String stmt : statements) {
@@ -526,10 +557,11 @@ public class TestSchemaGenerator {
             System.out.println();
         }
         
-        assertEquals("Should generate 2 statements", 2, statements.size());
+        // 2 CREATE TABLEs + 1 ALTER TABLE for FK
+        assertEquals("Should generate 3 statements", 3, statements.size());
         
         String eventTable = statements.stream()
-            .filter(s -> s.contains("`event`"))
+            .filter(s -> s.contains("CREATE TABLE") && s.contains("`event`"))
             .findFirst()
             .orElse("");
         
@@ -672,6 +704,7 @@ public class TestSchemaGenerator {
     public void testCompositeKeyWithLinkedEntitiesNoDuplicateColumns() {
         // When an entity has both @Id fields and linked entities that would
         // generate FK columns with the same name, the columns should not be duplicated
+        // Creates: event_person CREATE + 2 ALTER TABLEs for FKs
         List<String> statements = SchemaGenerator.generateCreateTableStatements(EventPersonLink.class);
         
         System.out.println("Composite key with linked entities test:");
@@ -680,8 +713,12 @@ public class TestSchemaGenerator {
             System.out.println();
         }
         
-        assertEquals("Should generate 1 statement", 1, statements.size());
-        String sql = statements.get(0);
+        // 1 CREATE TABLE + 2 ALTER TABLEs for FK constraints
+        assertEquals("Should generate 3 statements", 3, statements.size());
+        String sql = statements.stream()
+            .filter(s -> s.contains("CREATE TABLE"))
+            .findFirst()
+            .orElse("");
         
         // Count occurrences of column definitions (with BIGINT type) - should appear only once each
         int personIdColCount = countOccurrences(sql, "`person_id` BIGINT");
@@ -692,5 +729,153 @@ public class TestSchemaGenerator {
         
         // Should have composite primary key
         assertTrue("Should have composite PRIMARY KEY", sql.contains("PRIMARY KEY (`event_id`, `person_id`)"));
+    }
+    
+    // ========== Foreign Key Constraint Tests ==========
+    
+    @Test
+    public void testForeignKeyConstraintForLinkedEntity() {
+        // Order has a 'customer' field that references User - should generate FK constraint
+        // FK constraints are generated as separate ALTER TABLE statements for compatibility
+        List<String> statements = SchemaGenerator.generateCreateTableStatements(Order.class, User.class);
+        
+        System.out.println("FK constraint for linked entity test:");
+        for (String stmt : statements) {
+            System.out.println(stmt);
+            System.out.println();
+        }
+        
+        String ordersTable = statements.stream()
+            .filter(s -> s.contains("CREATE TABLE") && s.contains("`orders`"))
+            .findFirst()
+            .orElse("");
+        
+        // Should have FK column
+        assertTrue("Orders should have customer_id column", ordersTable.contains("`customer_id`"));
+        
+        // FK constraint should be in a separate ALTER TABLE statement
+        String sql = String.join("\n", statements);
+        assertTrue("Should have FK constraint referencing users (via ALTER TABLE)", 
+            sql.contains("ALTER TABLE `orders` ADD FOREIGN KEY (`customer_id`) REFERENCES `users`(`id`)"));
+    }
+    
+    @Test
+    public void testForeignKeyConstraintForInferredFK() {
+        // Author has Book[] books - Book should have inferred authors_id column with FK constraint
+        // FK constraints are generated as separate ALTER TABLE statements for compatibility
+        List<String> statements = SchemaGenerator.generateCreateTableStatements(Author.class, Book.class);
+        
+        System.out.println("FK constraint for inferred FK test:");
+        for (String stmt : statements) {
+            System.out.println(stmt);
+            System.out.println();
+        }
+        
+        String booksTable = statements.stream()
+            .filter(s -> s.contains("CREATE TABLE") && s.contains("`books`"))
+            .findFirst()
+            .orElse("");
+        
+        // Should have inferred FK column
+        assertTrue("Books should have authors_id column", booksTable.contains("`authors_id`"));
+        
+        // FK constraint should be in a separate ALTER TABLE statement
+        String sql = String.join("\n", statements);
+        assertTrue("Should have FK constraint referencing authors (via ALTER TABLE)", 
+            sql.contains("ALTER TABLE `books` ADD FOREIGN KEY (`authors_id`) REFERENCES `authors`(`id`)"));
+    }
+    
+    @Test
+    public void testLinkTableGeneration() {
+        // Article has @Link(linktable="article_tag") List<Tag> tags
+        // Should generate Article, Tag, article_tag link table, plus 2 ALTER TABLE for FK constraints
+        List<String> statements = SchemaGenerator.generateCreateTableStatements(Article.class, Tag.class);
+        
+        System.out.println("Link table generation test:");
+        for (String stmt : statements) {
+            System.out.println(stmt);
+            System.out.println();
+        }
+        
+        // Should generate: Article CREATE, Tag CREATE, link table CREATE, 2 ALTER TABLE for FKs
+        assertEquals("Should generate 5 statements (Article + Tag + link table + 2 FK constraints)", 5, statements.size());
+        
+        String linkTable = statements.stream()
+            .filter(s -> s.contains("CREATE TABLE") && s.contains("`article_tag`"))
+            .findFirst()
+            .orElse("");
+        
+        assertFalse("Link table should be generated", linkTable.isEmpty());
+        assertTrue("Link table should have articles_id column", linkTable.contains("`articles_id`"));
+        assertTrue("Link table should have tags_id column", linkTable.contains("`tags_id`"));
+        assertTrue("Link table should have composite primary key", 
+            linkTable.contains("PRIMARY KEY (`articles_id`, `tags_id`)"));
+        
+        // FK constraints should be in separate ALTER TABLE statements
+        String sql = String.join("\n", statements);
+        assertTrue("Should have FK constraint to articles (via ALTER TABLE)", 
+            sql.contains("ALTER TABLE `article_tag` ADD FOREIGN KEY (`articles_id`) REFERENCES `articles`(`id`)"));
+        assertTrue("Should have FK constraint to tags (via ALTER TABLE)", 
+            sql.contains("ALTER TABLE `article_tag` ADD FOREIGN KEY (`tags_id`) REFERENCES `tags`(`id`)"));
+    }
+    
+    @Test
+    public void testNoDuplicateFKConstraints() {
+        // When EventWithFestival has @Link(linkfield="festivalID") Festival festival
+        // and FestivalWithEvents has @Link(foreignlinkfield="festivalID") List<EventSubclass> events
+        // There should be only ONE FK constraint for festivalID (via ALTER TABLE)
+        List<String> statements = SchemaGenerator.generateCreateTableStatements(EventWithFestival.class, FestivalWithEvents.class);
+        
+        System.out.println("No duplicate FK constraints test:");
+        for (String stmt : statements) {
+            System.out.println(stmt);
+            System.out.println();
+        }
+        
+        // Count FK constraints for festivalID in all statements
+        String sql = String.join("\n", statements);
+        int fkCount = countOccurrences(sql, "FOREIGN KEY (`festivalID`)");
+        assertEquals("Should have exactly 1 FK constraint for festivalID", 1, fkCount);
+    }
+    
+    @Test
+    public void testSelfReferencingManyToMany() {
+        // Person has @Link(linktable="person_friends") List<Person> friends
+        // This is a self-referencing many-to-many relationship
+        // The link table should have two different column names to avoid name clash
+        // Creates: Person table, person_friends link table, 2 ALTER TABLE for FKs
+        List<String> statements = SchemaGenerator.generateCreateTableStatements(Person.class);
+        
+        System.out.println("Self-referencing many-to-many test:");
+        for (String stmt : statements) {
+            System.out.println(stmt);
+            System.out.println();
+        }
+        
+        // Should generate: Person CREATE, link table CREATE, 2 ALTER TABLE for FKs
+        assertEquals("Should generate 4 statements (Person + link table + 2 FK constraints)", 4, statements.size());
+        
+        String linkTable = statements.stream()
+            .filter(s -> s.contains("CREATE TABLE") && s.contains("`person_friends`"))
+            .findFirst()
+            .orElse("");
+        
+        assertFalse("Link table should be generated", linkTable.isEmpty());
+        
+        // The link table should have two DIFFERENT columns (not both person_id)
+        // It should use person_id for owner and friends_id for the field name
+        assertTrue("Link table should have person_id column", linkTable.contains("`person_id`"));
+        assertTrue("Link table should have friends_id column (from field name)", linkTable.contains("`friends_id`"));
+        
+        // Should have composite primary key with different columns
+        assertTrue("Link table should have composite primary key", 
+            linkTable.contains("PRIMARY KEY (`person_id`, `friends_id`)"));
+        
+        // FK constraints should be in separate ALTER TABLE statements
+        String sql = String.join("\n", statements);
+        assertTrue("Should have FK constraint to person for person_id (via ALTER TABLE)", 
+            sql.contains("ALTER TABLE `person_friends` ADD FOREIGN KEY (`person_id`) REFERENCES `person`(`id`)"));
+        assertTrue("Should have FK constraint for friends_id (via ALTER TABLE)", 
+            sql.contains("ALTER TABLE `person_friends` ADD FOREIGN KEY (`friends_id`) REFERENCES `person`(`id`)"));
     }
 }
