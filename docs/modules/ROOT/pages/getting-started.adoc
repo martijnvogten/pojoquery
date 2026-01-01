@@ -20,7 +20,7 @@ Add the PojoQuery dependency to your `pom.xml`:
 <dependency>
   <groupId>org.pojoquery</groupId>
   <artifactId>pojoquery</artifactId>
-  <version>3.0.0</version> <!-- Use the latest version -->
+  <version>4.0.0-BETA</version> <!-- Use the latest version -->
 </dependency>
 
 <!-- Add your JDBC driver dependency, e.g., for MySQL -->
@@ -39,7 +39,7 @@ Add the PojoQuery dependency to your `build.gradle` file:
 [source,groovy]
 ----
 dependencies {
-    implementation 'org.pojoquery:pojoquery:3.0.0' // Use the latest version
+    implementation 'org.pojoquery:pojoquery:4.0.0-BETA' // Use the latest version
 
     // Add your JDBC driver dependency, e.g., for MySQL
     runtimeOnly 'com.mysql:mysql-connector-j:8.0.33' // Use the appropriate version

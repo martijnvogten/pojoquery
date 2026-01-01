@@ -7,7 +7,7 @@ import java.lang.reflect.Type;
 public class Types {
 
 	/**
-	 * Gets the component type of a generic type (e.g., the String in List<String>).
+	 * Gets the component type of a generic type (e.g., the String in List&lt;String&gt;).
 	 */
 	public static Class<?> getComponentType(Type genericType) {
 		if (genericType instanceof ParameterizedType) {
