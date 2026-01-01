@@ -18,6 +18,7 @@ import org.pojoquery.schema.SchemaGenerator;
 
 public class EventsExample {
 	
+	// tag::many-to-many[]
 	public static class EventWithPersons extends Event {
 		@Link(linktable="event_person")
 		public List<Person> persons;
@@ -37,7 +38,9 @@ public class EventsExample {
 		}
 
 	}
+	// end::many-to-many[]
 	
+	// tag::link-entity[]
 	@Table("event_person")
 	public static class EventPersonLink {
 		@Id
@@ -49,23 +52,28 @@ public class EventsExample {
 		public Person person;
 		public Event event;
 	}
+	// end::link-entity[]
 	
 	public static void main(String[] args) {
 		DataSource db = TestDatabase.dropAndRecreate();
 		createTables(db);
 		insertData(db);
 
+		// tag::query-links[]
 		PojoQuery<EventPersonLink> links = PojoQuery.build(EventPersonLink.class);
 		for(EventPersonLink epl : links.execute(db)) {
 			System.out.println(epl.event.getTitle() + " is visited by " + epl.person.getFullName());
 		}
+		// end::query-links[]
 		
+		// tag::query-with-filter[]
 		PojoQuery<EventWithPersons> q = PojoQuery.build(EventWithPersons.class)
 					.addWhere("{persons}.firstname=?", "John");
 		
 		for(EventWithPersons event : q.execute(db)) {
 			System.out.println(event.persons.get(0).getEmailAddresses().get(0));
 		}
+		// end::query-with-filter[]
 	}
 
 	private static void insertData(DataSource db) {

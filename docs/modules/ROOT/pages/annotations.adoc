@@ -21,8 +21,7 @@ PojoQuery uses annotations to map POJOs to database structures and customize que
 | `@OrderBy` | Class | Default ORDER BY clause
 | `@Embedded` | Field | Flattens nested object into parent columns
 | `@Other` | Field | Maps prefixed columns to Map
-| `@SubClasses` | Class | Defines inheritance mapping
-| `@SubClass` | Annotation | Subclass discriminator mapping
+| `@SubClasses` | Class | Defines table-per-subclass inheritance
 | `@NoUpdate` | Field | Excludes field from UPDATE statements
 |===
 
@@ -153,39 +152,7 @@ public class Article {
 *Examples:*
 [source,java]
 ----
-@Table("event")
-public class EventWithParticipants {
-    @Id Long eventID;
-    String title;
-
-    // Multiple relationships to the same 'person' table, distinguished by role
-    @Link(linktable="event_person", linkfield="eventID", foreignlinkfield="personID")
-    @JoinCondition("{this}.eventID={linktable}.eventID AND {linktable}.role='visitor'")
-    List<Person> visitors;
-
-    @Link(linktable="event_person", linkfield="eventID", foreignlinkfield="personID")
-    @JoinCondition("{this}.eventID={linktable}.eventID AND {linktable}.role='organizer'")
-    List<Person> organizers;
-}
-
-@Table("employee")
-public class Employee {
-    @Id Long id;
-
-    // Custom join condition for one-to-one relationship
-    @JoinCondition("{this}.department_id = {department}.id")
-    Department department;
-}
-
-@Table("festival")
-public class Festival {
-    @Id Long festivalId;
-    String name;
-
-    // Join condition on a collection without @Link
-    @JoinCondition("{events}.festivalId = {this}.festivalId")
-    List<Event> events;
-}
+include::example$test/examples/docs/FilteredRelationshipExample.java[tag=event-with-participants,indent=0]
 ----
 
 == Query Customization Annotations
@@ -295,19 +262,12 @@ public class Product { ... }
 *Example:*
 [source,java]
 ----
-@Table("users")
-public class User {
-    @Id Long id;
-    @Embedded(prefix = "ship_") // Columns: ship_street, ship_city, ship_zip
-    Address shippingAddress;
-}
+include::example$test/examples/docs/EmbeddedExample.java[tag=address,indent=0]
+----
 
-// Address is NOT an entity, just a value object
-public class Address {
-    String street;
-    String city;
-    String zip;
-}
+[source,java]
+----
+include::example$test/examples/docs/EmbeddedExample.java[tag=customer,indent=0]
 ----
 
 === @Other
@@ -329,46 +289,14 @@ public class UserSettings {
 ----
 
 === @SubClasses
-*Description:* Defines an inheritance mapping strategy (currently supports single-table inheritance) for a base class. Used in conjunction with `@SubClass`.
+*Description:* Defines a table-per-subclass inheritance mapping for a base class. Each subclass has its own table that shares the same primary key with the base table.
 *Target:* `Class` (on the base class)
 *Parameters:*
-** `value` (SubClass[], required): An array of `@SubClass` annotations defining the subclasses.
-** `discriminator` (String, required): The name of the database column that holds the value identifying the specific subclass.
-*Example:* (See `@SubClass`)
-
-=== @SubClass
-*Description:* Defines a specific subclass within an inheritance hierarchy declared by `@SubClasses`.
-*Target:* Annotation (used within `@SubClasses`)
-*Parameters:*
-** `value` (Class<?>, required): The subclass `Class` object (e.g., `Employee.class`).
-** `discriminatorValue` (String, required): The value in the `discriminator` column that identifies rows belonging to this subclass.
+** `value` (Class<?>[], required): An array of subclass types that extend this base class.
 *Example:*
 [source,java]
 ----
-@Table("person") // Base table contains all columns
-@SubClasses(
-    discriminator = "person_type", // Column indicating the type
-    value = {
-        @SubClass(value = Employee.class, discriminatorValue = "EMP"),
-        @SubClass(value = Customer.class, discriminatorValue = "CUST")
-    }
-)
-public abstract class Person {
-    @Id Long id;
-    String name;
-    @FieldName("person_type") String type; // Mapped discriminator field
-}
-
-// Employee specific fields (columns must exist in 'person' table)
-public class Employee extends Person {
-    String department;
-    BigDecimal salary;
-}
-
-// Customer specific fields (columns must exist in 'person' table)
-public class Customer extends Person {
-    Integer loyaltyPoints;
-}
+include::example$test/examples/docs/TablePerSubclassInheritanceExample.java[tag=entities,indent=0]
 ----
 
 === @NoUpdate
