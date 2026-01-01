@@ -15,8 +15,49 @@ import org.pojoquery.dialects.HsqldbDbContext;
 import org.pojoquery.dialects.MysqlDbContext;
 import org.pojoquery.dialects.PostgresDbContext;
 
+/**
+ * Defines database-specific behavior for PojoQuery operations.
+ * 
+ * <p>DbContext handles dialect-specific SQL generation including identifier quoting,
+ * type mappings, and SQL syntax variations. PojoQuery provides built-in implementations
+ * for MySQL, PostgreSQL, and HSQLDB.</p>
+ * 
+ * <h2>Setting the Default Context</h2>
+ * <p>Set the default context at application startup:</p>
+ * <pre>{@code
+ * // For MySQL/MariaDB
+ * DbContext.setDefault(DbContext.forDialect(Dialect.MYSQL));
+ * 
+ * // For PostgreSQL
+ * DbContext.setDefault(DbContext.forDialect(Dialect.POSTGRES));
+ * 
+ * // For HSQLDB (testing)
+ * DbContext.setDefault(DbContext.forDialect(Dialect.HSQLDB));
+ * }</pre>
+ * 
+ * <h2>Custom DbContext</h2>
+ * <p>For custom type mappings or behavior, extend an existing implementation:</p>
+ * <pre>{@code
+ * public class MyDbContext extends PostgresDbContext {
+ *     @Override
+ *     public String mapJavaTypeToSql(Field field) {
+ *         if (field.getType() == UUID.class) {
+ *             return \"UUID\";
+ *         }
+ *         return super.mapJavaTypeToSql(field);
+ *     }
+ * }
+ * }</pre>
+ * 
+ * @see #forDialect(Dialect)
+ * @see #setDefault(DbContext)
+ * @see DbContextBuilder
+ */
 public interface DbContext {
 
+	/**
+	 * Defines how database identifiers (table and column names) are quoted.
+	 */
 	public enum QuoteStyle {
 		ANSI("\""),
 		MYSQL("`"),
@@ -37,15 +78,21 @@ public interface DbContext {
 	}
 
 	public enum Dialect {
+		/** MySQL and MariaDB databases */
 		MYSQL,
+		/** HSQLDB (HyperSQL) - commonly used for testing */
 		HSQLDB,
+		/** PostgreSQL databases */
 		POSTGRES,
+		/** Generic ANSI SQL (falls back to MySQL behavior) */
 		ANSI
 	}
 
 	/**
 	 * Returns the SQL dialect for this database context.
 	 * Used to generate dialect-specific SQL syntax (e.g., upsert statements).
+	 * 
+	 * @return the SQL dialect
 	 */
 	default Dialect getDialect() {
 		return Dialect.MYSQL;
@@ -58,6 +105,39 @@ public interface DbContext {
 
 	// Keep for backward compatibility - references DefaultHolder.instance
 	static DbContext DEFAULT = DefaultHolder.instance;
+
+	/**
+	 * Returns the current default DbContext.
+	 * 
+	 * @return the default DbContext
+	 */
+	static DbContext getDefault() {
+		return DefaultHolder.instance;
+	}
+
+	/**
+	 * Sets the default DbContext for all PojoQuery operations.
+	 * 
+	 * <p>Call this at application startup to configure for your database:</p>
+	 * <pre>{@code
+	 * DbContext.setDefault(DbContext.forDialect(Dialect.POSTGRES));
+	 * }</pre>
+	 * 
+	 * @param context the DbContext to use as the default
+	 */
+	static void setDefault(DbContext context) {
+		DefaultHolder.instance = context;
+	}
+
+	/**
+	 * Creates a DbContextBuilder for customizing context settings.
+	 * 
+	 * @return a new DbContextBuilder
+	 * @see DbContextBuilder
+	 */
+	static DbContextBuilder builder() {
+		return new DbContextBuilder();
+	}
 
 	/**
 	 * Creates a DbContext for the specified SQL dialect with sensible defaults.
@@ -92,10 +172,29 @@ public interface DbContext {
 		}
 	}
 
+	/**
+	 * Quotes database object names (tables, columns) using the appropriate quote style.
+	 * 
+	 * <p>Example: for MySQL, {@code quoteObjectNames("users", "name")} returns {@code `users`.`name`}</p>
+	 * 
+	 * @param names the object names to quote
+	 * @return the quoted and dot-joined names
+	 */
 	public String quoteObjectNames(String... names);
 
+	/**
+	 * Returns the quote style used for this database.
+	 * 
+	 * @return the quote style
+	 */
 	public QuoteStyle getQuoteStyle();
 
+	/**
+	 * Quotes a column or table alias.
+	 * 
+	 * @param alias the alias to quote
+	 * @return the quoted alias
+	 */
 	public String quoteAlias(String alias);
 
 	public FieldMapping getFieldMapping(Field f);
@@ -211,35 +310,20 @@ public interface DbContext {
 	 * Returns the fetch size to use for streaming result sets.
 	 * MySQL uses Integer.MIN_VALUE to enable streaming mode.
 	 * Other databases typically use a positive value like 100 or 0 for default.
+	 * 
+	 * @return the fetch size for streaming queries
 	 */
 	default int getStreamingFetchSize() {
 		return Integer.MIN_VALUE; // MySQL default
 	}
 
+	/**
+	 * Returns the suffix to append to CREATE TABLE statements.
+	 * For MySQL, this typically includes engine and charset settings.
+	 * 
+	 * @return the CREATE TABLE suffix
+	 */
 	default String getCreateTableSuffix() {
 		return " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-	}
-
-	public static DbContext getDefault() {
-		return DefaultHolder.instance;
-	}
-
-	/**
-	 * Sets the default DbContext. Useful for tests that need a different database
-	 * configuration.
-	 * 
-	 * @param context The DbContext to use as default
-	 */
-	public static void setDefault(DbContext context) {
-		DefaultHolder.instance = context;
-	}
-
-	/**
-	 * Creates a new DbContextBuilder for configuring a custom DbContext.
-	 * 
-	 * @return A new DbContextBuilder instance
-	 */
-	public static DbContextBuilder builder() {
-		return new DbContextBuilder();
 	}
 }

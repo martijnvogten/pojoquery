@@ -28,6 +28,68 @@ import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.SqlQuery.SqlField;
 import org.pojoquery.pipeline.SqlQuery.SqlJoin;
 
+/**
+ * The main entry point for building and executing type-safe SQL queries.
+ * 
+ * <p>PojoQuery uses POJOs (Plain Old Java Objects) to define query results, automatically
+ * generating SQL with proper joins based on field relationships. The result class defines
+ * <em>what you want to retrieve</em>, not how the data is stored.</p>
+ * 
+ * <h2>Basic Usage</h2>
+ * <pre>{@code
+ * // Define a result class
+ * @Table("user")
+ * public class User {
+ *     @Id Long id;
+ *     String name;
+ *     String email;
+ * }
+ * 
+ * // Build and execute a query
+ * List<User> users = PojoQuery.build(User.class)
+ *     .addWhere("{user}.name LIKE ?", "%John%")
+ *     .addOrderBy("{user}.name ASC")
+ *     .execute(dataSource);
+ * }</pre>
+ * 
+ * <h2>Alias Syntax</h2>
+ * <p>Use curly braces to reference table aliases in WHERE, ORDER BY, and other clauses.
+ * PojoQuery will automatically quote identifiers appropriately for your database:</p>
+ * <pre>{@code
+ * .addWhere("{user}.status = ?", "active")
+ * .addOrderBy("{user}.created_at DESC")
+ * }</pre>
+ * 
+ * <h2>Relationships</h2>
+ * <p>PojoQuery automatically handles relationships through fields referencing other entities:</p>
+ * <pre>{@code
+ * @Table("order")
+ * public class OrderWithCustomer {
+ *     @Id Long id;
+ *     Customer customer;  // Automatically joins to customer table
+ *     BigDecimal total;
+ * }
+ * }</pre>
+ * 
+ * <h2>Static CRUD Methods</h2>
+ * <p>For simple operations, use the static convenience methods:</p>
+ * <ul>
+ *   <li>{@link #insert(DataSource, Object)} - Insert a new entity</li>
+ *   <li>{@link #update(DataSource, Object)} - Update an existing entity</li>
+ *   <li>{@link #delete(DataSource, Object)} - Delete an entity</li>
+ * </ul>
+ * 
+ * <p>For finding by ID, build a query and use the instance method:</p>
+ * <pre>{@code
+ * User user = PojoQuery.build(User.class).findById(dataSource, 123L);
+ * }</pre>
+ * 
+ * @param <T> the type of the result class
+ * @see DbContext
+ * @see SqlExpression
+ * @see org.pojoquery.annotations.Table
+ * @see org.pojoquery.annotations.Id
+ */
 public class PojoQuery<T> {
 	private final QueryBuilder<T> queryBuilder; 
 	private final SqlQuery<DefaultSqlQuery> query;
