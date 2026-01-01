@@ -212,12 +212,29 @@ public class SchemaInfo {
     /**
      * Gets table information.
      * 
+     * <p>When schemaName is null, this method first tries to find a table with no schema,
+     * then falls back to searching across all schemas for a matching table name.
+     * 
      * @param schemaName the schema name (can be null for default schema)
      * @param tableName the table name
      * @return TableInfo or null if table doesn't exist
      */
     public TableInfo getTable(String schemaName, String tableName) {
-        return tables.get(makeKey(schemaName, tableName));
+        TableInfo result = tables.get(makeKey(schemaName, tableName));
+        
+        // If not found and no schema was specified, try to find the table in any schema
+        if (result == null && (schemaName == null || schemaName.isEmpty())) {
+            String lowerTableName = tableName.toLowerCase();
+            for (Map.Entry<String, TableInfo> entry : tables.entrySet()) {
+                String key = entry.getKey();
+                // Check if this key ends with the table name (after a dot, or is the table name itself)
+                if (key.equals(lowerTableName) || key.endsWith("." + lowerTableName)) {
+                    return entry.getValue();
+                }
+            }
+        }
+        
+        return result;
     }
     
     /**

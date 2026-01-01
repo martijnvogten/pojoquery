@@ -91,9 +91,11 @@ public class SchemaGeneratorInheritanceIT {
         
         // The schema should have UNIQUE on username because User has @Column(unique=true)
         // even though UserRef (listed first) does not have the annotation
+        // Check for various dialect formats: unquoted, double-quoted, or backtick-quoted
         assertTrue("Should have UNIQUE on username when User (with unique=true) is included, " +
             "regardless of class order. Generated SQL:\n" + sql, 
             sql.contains("username VARCHAR(255) UNIQUE") || 
-            sql.contains("username\" VARCHAR(255) UNIQUE"));
+            sql.contains("username\" VARCHAR(255) UNIQUE") ||
+            sql.contains("`username` VARCHAR(255) UNIQUE"));
     }
 }

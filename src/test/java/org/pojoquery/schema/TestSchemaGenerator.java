@@ -603,12 +603,14 @@ public class TestSchemaGenerator {
             System.out.println(stmt);
         }
         
-        assertEquals("Should generate 1 ALTER TABLE statement", 1, statements.size());
-        assertTrue("Should be ALTER TABLE", statements.get(0).startsWith("ALTER TABLE"));
-        assertTrue("Should contain ADD COLUMN for email_address", statements.get(0).contains("`email_address`"));
-        assertTrue("Should contain ADD COLUMN for age", statements.get(0).contains("`age`"));
-        assertTrue("Should contain ADD COLUMN for active", statements.get(0).contains("`active`"));
-        assertTrue("Should contain ADD COLUMN for createdAt", statements.get(0).contains("`createdAt`"));
+        // Each missing column gets its own ALTER TABLE statement for maximum database compatibility
+        assertEquals("Should generate 4 ALTER TABLE statements (one per missing column)", 4, statements.size());
+        String allStatements = String.join("\n", statements);
+        assertTrue("Should be ALTER TABLE statements", statements.get(0).startsWith("ALTER TABLE"));
+        assertTrue("Should contain ADD COLUMN for email_address", allStatements.contains("`email_address`"));
+        assertTrue("Should contain ADD COLUMN for age", allStatements.contains("`age`"));
+        assertTrue("Should contain ADD COLUMN for active", allStatements.contains("`active`"));
+        assertTrue("Should contain ADD COLUMN for createdAt", allStatements.contains("`createdAt`"));
     }
     
     @Test
@@ -648,15 +650,18 @@ public class TestSchemaGenerator {
             System.out.println();
         }
         
-        assertEquals("Should generate 2 statements", 2, statements.size());
+        // 4 ALTER TABLE for users (email_address, age, active, createdAt) + 1 CREATE TABLE for products
+        assertEquals("Should generate 5 statements (4 ALTER + 1 CREATE)", 5, statements.size());
         
-        // First should be ALTER TABLE for users (adding missing columns)
-        assertTrue("First should be ALTER TABLE", statements.get(0).startsWith("ALTER TABLE"));
-        assertTrue("Should be for users table", statements.get(0).contains("`users`"));
+        // First 4 should be ALTER TABLE for users (adding missing columns)
+        for (int i = 0; i < 4; i++) {
+            assertTrue("Statement " + i + " should be ALTER TABLE", statements.get(i).startsWith("ALTER TABLE"));
+            assertTrue("Statement " + i + " should be for users table", statements.get(i).contains("`users`"));
+        }
         
-        // Second should be CREATE TABLE for products
-        assertTrue("Second should be CREATE TABLE", statements.get(1).startsWith("CREATE TABLE"));
-        assertTrue("Should be for products table", statements.get(1).contains("`products`"));
+        // Last should be CREATE TABLE for products
+        assertTrue("Last should be CREATE TABLE", statements.get(4).startsWith("CREATE TABLE"));
+        assertTrue("Should be for products table", statements.get(4).contains("`products`"));
     }
     
     @Test
