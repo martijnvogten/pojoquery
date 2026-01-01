@@ -3,6 +3,7 @@
 * xref:features.adoc[Features]
 * xref:annotations.adoc[Annotations]
 * xref:query-building.adoc[Query Building]
+* xref:schema-migration.adoc[Schema Migration]
 * xref:database-support.adoc[Database Support]
 * xref:advanced-topics.adoc[Advanced Topics]
 * xref:examples.adoc[Examples]

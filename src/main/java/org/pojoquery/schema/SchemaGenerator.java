@@ -732,10 +732,8 @@ public class SchemaGenerator {
                 statements.add(generateCreateTableForMapping(mapping, dbContext, fks, deferredForeignKeys, null));
             } else {
                 // Table exists - check for missing columns and generate ALTER TABLE
-                String alterStatement = generateAlterTableForMapping(mapping, existingTable, dbContext, fks);
-                if (alterStatement != null) {
-                    statements.add(alterStatement);
-                }
+                List<String> alterStatements = generateAlterTableForMapping(mapping, existingTable, dbContext, fks);
+                statements.addAll(alterStatements);
             }
         }
         
@@ -749,15 +747,16 @@ public class SchemaGenerator {
     }
     
     /**
-     * Generates an ALTER TABLE statement to add missing columns to an existing table.
+     * Generates ALTER TABLE statements to add missing columns to an existing table.
+     * Each column gets its own ALTER TABLE statement for maximum database compatibility.
      * 
      * @param mapping the table mapping
      * @param existingTable information about the existing table
      * @param dbContext the database context
      * @param inferredForeignKeys inferred foreign keys to add
-     * @return ALTER TABLE statement, or null if no columns need to be added
+     * @return list of ALTER TABLE statements, or empty list if no columns need to be added
      */
-    private static String generateAlterTableForMapping(TableMapping mapping, SchemaInfo.TableInfo existingTable, 
+    private static List<String> generateAlterTableForMapping(TableMapping mapping, SchemaInfo.TableInfo existingTable, 
             DbContext dbContext, List<InferredForeignKey> inferredForeignKeys) {
         
         List<ColumnDefinition> requiredColumns = getRequiredColumns(mapping, dbContext, inferredForeignKeys);
@@ -770,20 +769,19 @@ public class SchemaGenerator {
         }
         
         if (missingColumns.isEmpty()) {
-            return null;
+            return new ArrayList<>();
         }
         
-        // Generate ALTER TABLE ADD COLUMN statement(s)
-        StringBuilder sb = new StringBuilder();
+        // Generate separate ALTER TABLE ADD COLUMN statement for each column
+        // This ensures compatibility across all databases (some don't support multiple ADD COLUMN in one statement)
+        List<String> statements = new ArrayList<>();
         String tableName = getFullTableName(mapping, dbContext);
         
-        sb.append("ALTER TABLE ");
-        sb.append(tableName);
-        sb.append("\n");
-        
-        for (int i = 0; i < missingColumns.size(); i++) {
-            ColumnDefinition col = missingColumns.get(i);
-            sb.append("  ADD COLUMN ");
+        for (ColumnDefinition col : missingColumns) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ALTER TABLE ");
+            sb.append(tableName);
+            sb.append(" ADD COLUMN ");
             sb.append(dbContext.quoteObjectNames(col.name));
             sb.append(" ");
             sb.append(col.sqlType);
@@ -799,15 +797,11 @@ public class SchemaGenerator {
                 sb.append(" UNIQUE");
             }
             
-            if (i < missingColumns.size() - 1) {
-                sb.append(",");
-            }
-            sb.append("\n");
+            sb.append(";");
+            statements.add(sb.toString());
         }
         
-        sb.append(";");
-        
-        return sb.toString();
+        return statements;
     }
     
     /**
