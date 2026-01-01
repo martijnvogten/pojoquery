@@ -401,19 +401,39 @@ public class PojoQuery<T> {
 		return insert(context, conn, null, type, o);
 	}
 
+	/**
+	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
+	 */
+	@Deprecated
 	public static <PK> PK insert(DataSource db, Class<?> type, Object o) {
 		return insert(DbContext.getDefault(), null, db, type, o);
 	}
 
+	/**
+	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
+	 */
+	@Deprecated
 	public static <PK> PK insert(DbContext context, DataSource db, Class<?> type, Object o) {
 		return insert(context, null, db, type, o);
 	}
 
+	/**
+	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
+	 */
+	@Deprecated
 	public static <PK> PK insert(DataSource db, Object o) {
 		Objects.requireNonNull(o, "entity must not be null");
 		return insert(DbContext.getDefault(), db, o.getClass(), o);
 	}
 
+	/**
+	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
+	 */
+	@Deprecated
 	public static <PK> PK insert(DbContext context, DataSource db, Object o) {
 		Objects.requireNonNull(o, "entity must not be null");
 		return insert(context, db, o.getClass(), o);
@@ -429,6 +449,7 @@ public class PojoQuery<T> {
 		return insert(context, connection, o.getClass(), o);
 	}
 
+	@SuppressWarnings("deprecation")
 	private static <PK> PK insert(DbContext context, Connection conn, DataSource db, Class<?> type, Object o) {
 		// If the class hierarchy contains multiple tables, create separate
 		// inserts
@@ -482,11 +503,21 @@ public class PojoQuery<T> {
 
 	}
 
+	/**
+	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
+	 */
+	@Deprecated
 	public static int update(DataSource db, Object object) {
 		Objects.requireNonNull(object, "entity must not be null");
 		return update(DbContext.getDefault(), null, db, object.getClass(), object);
 	}
 
+	/**
+	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
+	 */
+	@Deprecated
 	public static int update(DbContext context, DataSource db, Object object) {
 		Objects.requireNonNull(object, "entity must not be null");
 		return update(context, null, db, object.getClass(), object);
@@ -502,10 +533,20 @@ public class PojoQuery<T> {
 		return update(context, connection, null, object.getClass(), object);
 	}
 
+	/**
+	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
+	 */
+	@Deprecated
 	public static int update(DataSource db, Class<?> type, Object object) {
 		return update(DbContext.getDefault(), null, db, type, object);
 	}
 
+	/**
+	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
+	 */
+	@Deprecated
 	public static int update(DbContext context, DataSource db, Class<?> type, Object object) {
 		return update(context, null, db, type, object);
 	}
@@ -518,6 +559,7 @@ public class PojoQuery<T> {
 		return update(context, connection, null, type, object);
 	}
 
+	@SuppressWarnings("deprecation")
 	private static int update(DbContext context, Connection conn, DataSource db, Class<?> type, Object o) {
 		// If the class hierarchy contains multiple tables, create separate
 		// inserts
@@ -737,11 +779,21 @@ public class PojoQuery<T> {
 		delete(context, conn, null, entity);
 	}
 	
+	/**
+	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
+	 */
+	@Deprecated
 	public static void delete(DataSource db, Object entity) {
 		Objects.requireNonNull(entity, "entity must not be null");
 		delete(DbContext.getDefault(), db, entity);
 	}
 	
+	/**
+	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
+	 */
+	@Deprecated
 	public static void delete(DbContext context, DataSource db, Object entity) {
 		Objects.requireNonNull(entity, "entity must not be null");
 		delete(context, null, db, entity);
@@ -781,6 +833,7 @@ public class PojoQuery<T> {
 		}
 	}
 
+	@SuppressWarnings("deprecation")
 	private static void executeDelete(DbContext context, Connection conn, DataSource db, String tableName, List<SqlExpression> where) {
 		SqlExpression wheres = SqlExpression.implode(" AND ", where);
 		SqlExpression deleteStatement = new SqlExpression("DELETE FROM " + context.quoteObjectNames(tableName) + " WHERE " + wheres.getSql(), wheres.getParameters());

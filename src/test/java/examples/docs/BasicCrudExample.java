@@ -1,5 +1,7 @@
 package examples.docs;
 
+import java.sql.Connection;
+
 import javax.sql.DataSource;
 
 import org.hsqldb.jdbc.JDBCDataSource;
@@ -8,6 +10,7 @@ import org.pojoquery.DbContext;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.schema.SchemaGenerator;
 
 /**
  * Example demonstrating basic CRUD operations: Insert, Update, Delete.
@@ -15,7 +18,7 @@ import org.pojoquery.annotations.Table;
 public class BasicCrudExample {
 
     // tag::entity[]
-    @Table("user")
+    @Table("app_user")
     public static class User {
         @Id Long id;
         String firstName;
@@ -35,57 +38,43 @@ public class BasicCrudExample {
 
     public static void main(String[] args) {
         DataSource dataSource = createDatabase();
-        createTable(dataSource);
+        SchemaGenerator.createTables(dataSource, User.class);
 
-        // tag::insert[]
-        // --- Insert ---
-        User newUser = new User();
-        newUser.setFirstName("Jane");
-        newUser.setLastName("Doe");
-        newUser.setEmail("jane.doe@example.com");
-        PojoQuery.insert(dataSource, newUser);
-        // newUser.getId() is now populated if auto-generated
-        System.out.println("Inserted user with ID: " + newUser.getId());
-        // end::insert[]
+        // tag::crud[]
+        // Use runInTransaction to ensure all operations are atomic
+        DB.runInTransaction(dataSource, (Connection c) -> {
+            // --- Insert ---
+            User newUser = new User();
+            newUser.setFirstName("Jane");
+            newUser.setLastName("Doe");
+            newUser.setEmail("jane.doe@example.com");
+            PojoQuery.insert(c, newUser);
+            // newUser.getId() is now populated if auto-generated
+            System.out.println("Inserted user with ID: " + newUser.getId());
 
-        // tag::query[]
-        // --- Query ---
-        User existingUser = PojoQuery.build(User.class)
-            .addWhere("user.id = ?", newUser.getId())
-            .execute(dataSource)
-            .stream().findFirst().orElse(null);
-        // end::query[]
+            // --- Query ---
+            User existingUser = PojoQuery.build(User.class)
+                .addWhere("{app_user}.id = ?", newUser.getId())
+                .execute(c)
+                .stream().findFirst().orElse(null);
 
-        // tag::update[]
-        // --- Update ---
-        if (existingUser != null) {
-            existingUser.setEmail("jane.d@example.com");
-            int updatedRows = PojoQuery.update(dataSource, existingUser);
-            System.out.println("Updated rows: " + updatedRows);
-        }
-        // end::update[]
+            // --- Update ---
+            if (existingUser != null) {
+                existingUser.setEmail("jane.d@example.com");
+                int updatedRows = PojoQuery.update(c, existingUser);
+                System.out.println("Updated rows: " + updatedRows);
+            }
 
-        // tag::delete[]
-        // --- Delete ---
-        // Delete by entity instance
-        PojoQuery.delete(dataSource, existingUser);
-        
-        // Or delete by ID directly
-        // PojoQuery.deleteById(dataSource, User.class, existingUser.getId());
-        // end::delete[]
+            // --- Delete ---
+            // Delete by entity instance
+            PojoQuery.delete(c, existingUser);
+            
+            // Or delete by ID directly
+            // PojoQuery.deleteById(c, User.class, existingUser.getId());
+        });
+        // end::crud[]
 
         System.out.println("CRUD operations completed successfully");
-    }
-
-    private static void createTable(DataSource db) {
-        DB.executeDDL(db, """
-            CREATE TABLE user (
-                id BIGINT IDENTITY PRIMARY KEY,
-                first_name VARCHAR(255),
-                last_name VARCHAR(255),
-                email VARCHAR(255)
-            )
-            """);
     }
 
     private static DataSource createDatabase() {

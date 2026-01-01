@@ -1,6 +1,7 @@
 package examples.inheritance;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
 import java.util.List;
 
 import javax.sql.DataSource;
@@ -38,35 +39,38 @@ public class InheritanceExample {
 	public static void main(String[] args) {
 		DataSource db = TestDatabase.dropAndRecreate();
 		createTables(db);
-		insertData(db);
+		
+		DB.runInTransaction(db, (Connection c) -> {
+			BedRoom br = insertData(c);
 
-		// tag::query[]
-		PojoQuery<Room> q = PojoQuery.build(Room.class).addWhere("{room}.area > ?", 40.0);
-		System.out.println(q.toSql());
-		
-		List<Room> rooms = q.execute(db);
-		for(Room r : rooms) {
-			if (r instanceof BedRoom) {
-				BedRoom bedroom = (BedRoom)r;
-				System.out.println("Bedroom with " + bedroom.numberOfBeds + " beds.");
+			// tag::query[]
+			PojoQuery<Room> q = PojoQuery.build(Room.class).addWhere("{room}.area > ?", 40.0);
+			System.out.println(q.toSql());
+			
+			List<Room> rooms = q.execute(c);
+			for(Room r : rooms) {
+				if (r instanceof BedRoom) {
+					BedRoom bedroom = (BedRoom)r;
+					System.out.println("Bedroom with " + bedroom.numberOfBeds + " beds.");
+				}
 			}
-		}
-		// end::query[]
-		
-		// tag::find-by-id[]
-		BedRoom br = PojoQuery.build(BedRoom.class).findById(db, 1L);
-		System.out.println("Bedroom with " + br.numberOfBeds + " beds.");
-		// end::find-by-id[]
-		
-		PojoQuery.update(db, br);
+			// end::query[]
+			
+			// tag::find-by-id[]
+			BedRoom foundBr = PojoQuery.build(BedRoom.class).findById(c, 1L);
+			System.out.println("Bedroom with " + foundBr.numberOfBeds + " beds.");
+			// end::find-by-id[]
+			
+			PojoQuery.update(c, br);
+		});
 	}
 
-	private static BedRoom insertData(DataSource db) {
+	private static BedRoom insertData(Connection c) {
 		BedRoom br = new BedRoom();
 		br.area = BigDecimal.valueOf(100L);
 		br.numberOfBeds = 2;
 		
-		PojoQuery.insert(db, br);
+		PojoQuery.insert(c, br);
 		return br;
 	}
 	

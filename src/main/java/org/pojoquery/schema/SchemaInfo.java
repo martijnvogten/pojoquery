@@ -62,7 +62,7 @@ public class SchemaInfo {
      * @return SchemaInfo containing table and column information
      */
     public static SchemaInfo fromDataSource(DataSource dataSource) {
-        return DB.runInTransaction(dataSource, connection -> fromConnection(connection));
+        return DB.runInTransaction(dataSource, (DB.Transaction<SchemaInfo>) connection -> fromConnection(connection));
     }
     
     /**
@@ -112,7 +112,7 @@ public class SchemaInfo {
      * @return SchemaInfo containing table and column information for the specified schemas
      */
     public static SchemaInfo fromDataSource(DataSource dataSource, String... schemaNames) {
-        return DB.runInTransaction(dataSource, connection -> fromConnection(connection, schemaNames));
+        return DB.runInTransaction(dataSource, (DB.Transaction<SchemaInfo>) connection -> fromConnection(connection, schemaNames));
     }
     
     /**

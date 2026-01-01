@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Embedded;
@@ -296,9 +297,11 @@ public class SchemaGenerator {
      * @param classes the entity classes to create tables for
      */
     public static void createTables(javax.sql.DataSource db, Class<?>... classes) {
-        for (String ddl : generateCreateTableStatements(classes)) {
-            org.pojoquery.DB.executeDDL(db, ddl);
-        }
+        DB.runInTransaction(db, c -> {
+            for (String ddl : generateCreateTableStatements(classes)) {
+                org.pojoquery.DB.executeDDL(c, ddl);
+            }
+        });
     }
     
     private static String generateCreateTableForMapping(TableMapping mapping, DbContext dbContext, 

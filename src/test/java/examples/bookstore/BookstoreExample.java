@@ -5,6 +5,7 @@ import java.util.List;
 import javax.sql.DataSource;
 
 import org.hsqldb.jdbc.JDBCDataSource;
+import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
@@ -17,41 +18,35 @@ import org.pojoquery.schema.SchemaGenerator;
  */
 public class BookstoreExample {
 
-    // tag::entities[]
-    // === Entity definitions (map to database tables) ===
-    
     @Table("author")
     static class Author {
-        @Id Long id;
+        @Id
+        Long id;
         String name;
         String country;
     }
 
     @Table("book")
     static class Book {
-        @Id Long id;
+        @Id
+        Long id;
         String title;
         Integer year;
-        Author author;  // PojoQuery infers 'author_id' foreign key column
+        Author author;
     }
 
     @Table("review")
     static class Review {
-        @Id Long id;
-        Book book;      // PojoQuery infers 'book_id' foreign key column
+        @Id
+        Long id;
+        Book book;
         Integer rating;
         String comment;
     }
-    // end::entities[]
 
-    // tag::query-definitions[]
-    // === Query definitions (shape of results you want) ===
-    
-    // A book with author AND all its reviews
     static class BookDetail extends Book {
         List<Review> reviews;
     }
-    // end::query-definitions[]
 
     public static void main(String[] args) {
         // 1. Create an in-memory database
@@ -60,46 +55,44 @@ public class BookstoreExample {
         // 2. Generate tables from entity classes
         SchemaGenerator.createTables(db, Author.class, Book.class, Review.class);
 
-        // tag::insert[]
-        // 3. Insert test data
-        Author tolkien = new Author();
-        tolkien.name = "J.R.R. Tolkien";
-        tolkien.country = "UK";
-        tolkien.id = PojoQuery.insert(db, tolkien);
+        DB.runInTransaction(db, c -> {
+            // 3. Insert test data
+            Author tolkien = new Author();
+            tolkien.name = "J.R.R. Tolkien";
+            tolkien.country = "UK";
+            tolkien.id = PojoQuery.insert(c, tolkien);
 
-        Book lotr = new Book();
-        lotr.title = "The Lord of the Rings";
-        lotr.year = 1954;
-        lotr.author = tolkien;
-        lotr.id = PojoQuery.insert(db, lotr);
+            Book lotr = new Book();
+            lotr.title = "The Lord of the Rings";
+            lotr.year = 1954;
+            lotr.author = tolkien;
+            lotr.id = PojoQuery.insert(c, lotr);
 
-        Review r1 = new Review();
-        r1.book = lotr;
-        r1.rating = 5;
-        r1.comment = "A masterpiece!";
-        PojoQuery.insert(db, r1);
+            Review r1 = new Review();
+            r1.book = lotr;
+            r1.rating = 5;
+            r1.comment = "A masterpiece!";
+            PojoQuery.insert(c, r1);
 
-        Review r2 = new Review();
-        r2.book = lotr;
-        r2.rating = 5;
-        r2.comment = "Epic fantasy at its finest.";
-        PojoQuery.insert(db, r2);
-        // end::insert[]
+            Review r2 = new Review();
+            r2.book = lotr;
+            r2.rating = 5;
+            r2.comment = "Epic fantasy at its finest.";
+            PojoQuery.insert(c, r2);
 
-        // tag::query[]
-        // 4. Query with automatic joins - the POJO shape defines what you get!
-        List<BookDetail> books = PojoQuery.build(BookDetail.class)
-            .addWhere("{author}.country = ?", "UK")
-            .execute(db);
+            // 4. Query with automatic joins - the POJO shape defines what you get!
+            List<BookDetail> books = PojoQuery.build(BookDetail.class)
+                    .addWhere("{author}.country = ?", "UK")
+                    .execute(c);
 
-        for (BookDetail book : books) {
-            System.out.println(book.title + " by " + book.author.name);
-            System.out.println("Reviews: " + book.reviews.size());
-            for (Review review : book.reviews) {
-                System.out.println("  ★" + review.rating + " - " + review.comment);
+            for (BookDetail book : books) {
+                System.out.println(book.title + " by " + book.author.name);
+                System.out.println("Reviews: " + book.reviews.size());
+                for (Review review : book.reviews) {
+                    System.out.println("  ★" + review.rating + " - " + review.comment);
+                }
             }
-        }
-        // end::query[]
+        });
     }
 
     static DataSource createDatabase() {

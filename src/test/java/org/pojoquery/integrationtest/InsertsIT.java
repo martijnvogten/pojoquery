@@ -34,9 +34,11 @@ public class InsertsIT {
 	public void testInserts() {
 		DataSource db = initDatabase();
 		
-		User u = new User();
-		PojoQuery.insert(db, u);
-		Assert.assertEquals((Long)1L, u.id);
+		DB.runInTransaction(db, (Connection c) -> {
+			User u = new User();
+			PojoQuery.insert(c, u);
+			Assert.assertEquals((Long)1L, u.id);
+		});
 	}
 	
 	@Test

@@ -60,6 +60,13 @@ public interface DB {
 		public T run(Connection connection);
 	}
 
+	/**
+	 * Functional interface for transactions that don't return a value.
+	 */
+	public interface TransactionReturningVoid {
+		public void run(Connection connection);
+	}
+
 	public enum QueryType {
 		DDL, SELECT, UPDATE, INSERT
 	}
@@ -230,7 +237,10 @@ public interface DB {
      * @param values the values to update
      * @param ids the identifiers of the records to update
      * @return the number of rows affected
+     * @deprecated Use {@link #runInTransaction(DataSource, Transaction)} with the Connection-based overload instead.
+     *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
      */
+    @Deprecated
     public static int update(DataSource db, String schemaName, String tableName, Map<String, Object> values, Map<String, Object> ids) {
         return update(DbContext.getDefault(), db, schemaName, tableName, values, ids);
     }
@@ -245,7 +255,10 @@ public interface DB {
      * @param values the values to update
      * @param ids the identifiers of the records to update
      * @return the number of rows affected
+     * @deprecated Use {@link #runInTransaction(DataSource, Transaction)} with the Connection-based overload instead.
+     *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
      */
+    @Deprecated
     public static int update(DbContext context, DataSource db, String schemaName, String tableName, Map<String, Object> values, Map<String, Object> ids) {
         SqlExpression updateSql = SqlStatementBuilder.buildUpdate(context, schemaName, tableName, values, ids);
         return (Integer)execute(db, QueryType.UPDATE, updateSql.getSql(), updateSql.getParameters(), null);
@@ -259,7 +272,10 @@ public interface DB {
      * @param values the values to update
      * @param ids the identifiers of the records to update
      * @return the number of rows affected
+     * @deprecated Use {@link #runInTransaction(DataSource, Transaction)} with the Connection-based overload instead.
+     *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
      */
+    @Deprecated
     public static int update(DataSource db, String tableName, Map<String, Object> values, Map<String, Object> ids) {
         return update(DbContext.getDefault(), db, null, tableName, values, ids);
     }
@@ -273,7 +289,10 @@ public interface DB {
      * @param values the values to update
      * @param ids the identifiers of the records to update
      * @return the number of rows affected
+     * @deprecated Use {@link #runInTransaction(DataSource, Transaction)} with the Connection-based overload instead.
+     *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
      */
+    @Deprecated
     public static int update(DbContext context, DataSource db, String tableName, Map<String, Object> values, Map<String, Object> ids) {
         return update(context, db, null, tableName, values, ids);
     }
@@ -341,7 +360,10 @@ public interface DB {
      * @param db the data source
      * @param update the SQL expression for the update
      * @return the number of rows affected
+     * @deprecated Use {@link #runInTransaction(DataSource, Transaction)} with the Connection-based overload instead.
+     *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
      */
+    @Deprecated
     public static int update(DataSource db, SqlExpression update) {
         return (Integer)execute(db, QueryType.UPDATE, update.getSql(), update.getParameters(), null);
     }
@@ -366,7 +388,10 @@ public interface DB {
 	 * @param tableName the name of the table
 	 * @param values the values to insert
 	 * @return the generated primary key
+	 * @deprecated Use {@link #runInTransaction(DataSource, Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
 	 */
+	@Deprecated
 	public static <PK> PK insert(DataSource db, String schemaName, String tableName, Map<String, ? extends Object> values) {
 		return insert(DbContext.getDefault(), db, schemaName, tableName, values);
 	}
@@ -381,7 +406,10 @@ public interface DB {
 	 * @param tableName the name of the table
 	 * @param values the values to insert
 	 * @return the generated primary key
+	 * @deprecated Use {@link #runInTransaction(DataSource, Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
 	 */
+	@Deprecated
 	public static <PK> PK insert(DbContext context, DataSource db, String schemaName, String tableName, Map<String, ? extends Object> values) {
 		SqlExpression insertSql = SqlStatementBuilder.buildInsert(context, schemaName, tableName, values);
 		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
@@ -395,7 +423,10 @@ public interface DB {
 	 * @param tableName  The name of the table where the record will be inserted.
 	 * @param values     A map containing the column names as keys and their corresponding values.
 	 * @return           The primary key of the newly inserted record.
+	 * @deprecated Use {@link #runInTransaction(DataSource, Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
 	 */
+	@Deprecated
 	public static <PK> PK insert(DataSource db, String tableName, Map<String, ? extends Object> values) {
 		return insert(DbContext.getDefault(), db, null, tableName, values);
 	}
@@ -409,7 +440,10 @@ public interface DB {
 	 * @param tableName  The name of the table where the record will be inserted.
 	 * @param values     A map containing the column names as keys and their corresponding values.
 	 * @return           The primary key of the newly inserted record.
+	 * @deprecated Use {@link #runInTransaction(DataSource, Transaction)} with the Connection-based overload instead.
+	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
 	 */
+	@Deprecated
 	public static <PK> PK insert(DbContext context, DataSource db, String tableName, Map<String, ? extends Object> values) {
 		return insert(context, db, null, tableName, values);
 	}
@@ -480,7 +514,10 @@ public interface DB {
      * @param values the values to insert or update
      * @param idFields the names of the primary key columns used for conflict detection
      * @return the generated primary key or null if the operation didn't generate keys (e.g., update)
+     * @deprecated Use {@link #runInTransaction(DataSource, Transaction)} with the Connection-based overload instead.
+     *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
      */
+    @Deprecated
 	public static <PK> PK upsert(DataSource db, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
 		return upsert(DbContext.getDefault(), db, null, tableName, values, idFields);
 	}
@@ -495,7 +532,10 @@ public interface DB {
      * @param values the values to insert or update
      * @param idFields the names of the primary key columns used for conflict detection
      * @return the generated primary key or null if the operation didn't generate keys (e.g., update)
+     * @deprecated Use {@link #runInTransaction(DataSource, Transaction)} with the Connection-based overload instead.
+     *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
      */
+    @Deprecated
 	public static <PK> PK upsert(DbContext context, DataSource db, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
 		return upsert(context, db, null, tableName, values, idFields);
 	}
@@ -510,7 +550,10 @@ public interface DB {
      * @param values the values to insert or update
      * @param idFields the names of the primary key columns used for conflict detection
      * @return the generated primary key
+     * @deprecated Use {@link #runInTransaction(DataSource, Transaction)} with the Connection-based overload instead.
+     *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
      */
+    @Deprecated
     public static <PK> PK upsert(DataSource db, String schemaName, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
         return upsert(DbContext.getDefault(), db, schemaName, tableName, values, idFields);
     }
@@ -526,7 +569,10 @@ public interface DB {
      * @param values the values to insert or update
      * @param idFields the names of the primary key columns used for conflict detection
      * @return the generated primary key
+     * @deprecated Use {@link #runInTransaction(DataSource, Transaction)} with the Connection-based overload instead.
+     *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
      */
+    @Deprecated
     public static <PK> PK upsert(DbContext context, DataSource db, String schemaName, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
         SqlExpression upsertSql = SqlStatementBuilder.buildUpsert(context, schemaName, tableName, values, idFields);
         return execute(db, QueryType.INSERT, upsertSql.getSql(), upsertSql.getParameters(), null);
@@ -787,6 +833,34 @@ public interface DB {
 		} catch (SQLException e) {
 			throw new DatabaseException(e);
 		}
+	}
+
+	/**
+	 * Runs a transaction on the database using a connection.
+	 * Use this overload when the transaction doesn't need to return a value.
+	 * 
+	 * @param connection the database connection
+	 * @param transaction the transaction to execute
+	 */
+	public static void runInTransaction(Connection connection, TransactionReturningVoid transaction) {
+		runInTransaction(connection, c -> {
+			transaction.run(c);
+			return null;
+		});
+	}
+
+	/**
+	 * Runs a transaction on the database using a data source.
+	 * Use this overload when the transaction doesn't need to return a value.
+	 * 
+	 * @param dataSource the data source
+	 * @param transaction the transaction to execute
+	 */
+	public static void runInTransaction(DataSource dataSource, TransactionReturningVoid transaction) {
+		runInTransaction(dataSource, c -> {
+			transaction.run(c);
+			return null;
+		});
 	}
 
 	public static class Columns {

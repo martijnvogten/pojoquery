@@ -1,5 +1,6 @@
 package org.pojoquery.integrationtest;
 
+import java.sql.Connection;
 import java.util.List;
 import java.util.Map;
 
@@ -50,38 +51,44 @@ public class ForeignValueFieldsIT {
 	@Test
 	public void testUpdates() {
 		DataSource db = TestDatabaseProvider.getDataSource();
-		insertTestData(db);
+		SchemaGenerator.createTables(db, Poule.class, PouleWeightClass.class);
 		
-		PojoQuery<Poule> query = PojoQuery.build(Poule.class)
-				.addWhere("id = ? ", 1);
-		
-		List<Poule> result = query.execute(db);
-		Assert.assertEquals(1, result.size());
-		Assert.assertEquals(3, result.get(0).weightClasses.length);
+		DB.runInTransaction(db, (Connection c) -> {
+			insertTestData(c);
+			
+			PojoQuery<Poule> query = PojoQuery.build(Poule.class)
+					.addWhere("id = ? ", 1);
+			
+			List<Poule> result = query.execute(c);
+			Assert.assertEquals(1, result.size());
+			Assert.assertEquals(3, result.get(0).weightClasses.length);
+		});
 	}
 	
 	@Test
 	public void testJoinCondition() {
 		DataSource db = TestDatabaseProvider.getDataSource();
-		insertTestData(db);
+		SchemaGenerator.createTables(db, Poule.class, PouleWeightClass.class);
 		
-		PojoQuery<PouleWithHeavyWeights> query = PojoQuery.build(PouleWithHeavyWeights.class)
-				.addWhere("id = ? ", 1);
-		
-		List<PouleWithHeavyWeights> result = query.execute(db);
-		Assert.assertEquals(1, result.get(0).weightClasses.length);
+		DB.runInTransaction(db, (Connection c) -> {
+			insertTestData(c);
+			
+			PojoQuery<PouleWithHeavyWeights> query = PojoQuery.build(PouleWithHeavyWeights.class)
+					.addWhere("id = ? ", 1);
+			
+			List<PouleWithHeavyWeights> result = query.execute(c);
+			Assert.assertEquals(1, result.get(0).weightClasses.length);
+		});
 	}
 
-	private void insertTestData(DataSource db) {
-		SchemaGenerator.createTables(db, Poule.class, PouleWeightClass.class);
-
+	private void insertTestData(Connection c) {
 		Poule p = new Poule();
-		PojoQuery.insert(db, p);
+		PojoQuery.insert(c, p);
 		Assert.assertEquals((Long)1L, p.id);
 		
-		DB.insert(db, "poule_weightclass", Map.of("poule_id", 1, "weightclass", -30));
-		DB.insert(db, "poule_weightclass", Map.of("poule_id", 1, "weightclass", -32));
-		DB.insert(db, "poule_weightclass", Map.of("poule_id", 1, "weightclass", -34));
+		DB.insert(c, "poule_weightclass", Map.of("poule_id", 1, "weightclass", -30));
+		DB.insert(c, "poule_weightclass", Map.of("poule_id", 1, "weightclass", -32));
+		DB.insert(c, "poule_weightclass", Map.of("poule_id", 1, "weightclass", -34));
 	}
 	
 }
