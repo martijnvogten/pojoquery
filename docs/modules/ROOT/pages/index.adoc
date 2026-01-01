@@ -67,6 +67,8 @@ PojoQuery allows you to focus on the data you need for each use case rather than
 
 This self-contained example demonstrates PojoQuery's core philosophy: POJOs define *what you want to retrieve*, not how data is stored. The `SchemaGenerator` creates tables from your POJOs, and then you can query them with automatic joins.
 
+NOTE: Code examples use public fields for brevity. PojoQuery works equally well with private fields and JavaBean-style getters/setters.
+
 [source,java]
 ----
 include::example$test/examples/bookstore/BookstoreExample.java[]
