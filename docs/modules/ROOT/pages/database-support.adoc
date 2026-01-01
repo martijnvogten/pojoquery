@@ -12,7 +12,7 @@ PojoQuery provides built-in dialect support for:
 
 | **MySQL / MariaDB**
 | `Dialect.MYSQL`
-| Backticks (``` ` ```)
+| Backticks ( ` )
 
 | **PostgreSQL**
 | `Dialect.POSTGRES`
@@ -54,30 +54,6 @@ The dialect affects:
 * **Streaming fetch size** - Database-specific settings for result set streaming
 * **CREATE TABLE syntax** - Engine settings and charset configuration
 
-== Dialect-Specific Behavior
-
-=== MySQL / MariaDB
-
-* Uses backtick quoting: ``` `table`.`column` ```
-* Auto-increment: `BIGINT NOT NULL AUTO_INCREMENT`
-* Boolean mapped to `TINYINT(1)`
-* Default table suffix: `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
-* Streaming uses `Integer.MIN_VALUE` fetch size
-
-=== PostgreSQL
-
-* Uses ANSI double-quote quoting: `"table"."column"`
-* Auto-increment: `BIGSERIAL` type
-* Native `BOOLEAN` type support
-* Native `TIMESTAMP` (instead of `DATETIME`)
-* Streaming uses standard fetch size (100)
-
-=== HSQLDB
-
-* Uses ANSI double-quote quoting
-* Auto-increment: `BIGINT IDENTITY`
-* Good for unit testing and in-memory databases
-
 == Database-Specific Considerations
 
 *   **SQL Functions (`@Select`):** When using the `@Select` annotation with database functions (e.g., `CONCAT`, `YEAR`, `MAX`), ensure you use syntax compatible with your target database.
@@ -90,7 +66,7 @@ The dialect affects:
 
 PojoQuery interacts with the database solely through a standard `javax.sql.DataSource`. Configure your `DataSource` using your preferred connection pool (like HikariCP, c3p0, Tomcat JDBC Pool) or framework (like Spring Boot) and pass it to PojoQuery's execution methods (`execute`, `executeStreaming`, `findById`, etc.) or the static `DB` helper methods.
 
-== Custom DbContext
+== Custom DbContext 
 
 For advanced use cases, you can create a custom `DbContext` using the builder:
 
