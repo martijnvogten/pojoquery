@@ -69,7 +69,7 @@ This self-contained example demonstrates PojoQuery's core philosophy: POJOs defi
 
 [source,java]
 ----
-include::example$BookstoreExample.java[]
+include::example$test/examples/bookstore/BookstoreExample.java[]
 ----
 
 *Key insight:* `BookDetail` and `BookWithAuthor` both map to the same `book` table, but produce different result shapes. The POJO structure tells PojoQuery which JOINs to generate—no XML configuration, no lazy loading surprises.
