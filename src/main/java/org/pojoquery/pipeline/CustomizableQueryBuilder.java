@@ -42,6 +42,7 @@ import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.util.CurlyMarkers;
+import static org.pojoquery.util.Types.getCollectionComponentType;
 import org.pojoquery.util.Types;
 
 public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
@@ -248,7 +249,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 			Class<?> type = f.getType();
 			boolean isRoot = isRootOrSuperClassOfRoot(alias);
 			if (isListOrArray(type)) {
-				Class<?> componentType = type.isArray() ? type.getComponentType() : Types.getComponentType(f.getGenericType());
+				Class<?> componentType = getCollectionComponentType(f);
 				
 				Link linkAnn = f.getAnnotation(Link.class);
 				if (linkAnn != null) {
