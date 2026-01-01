@@ -1,8 +1,7 @@
 package org.pojoquery.pipeline;
 
 import static org.pojoquery.util.Strings.implode;
-
-import java.util.Objects;
+import static org.pojoquery.util.Types.getCollectionComponentType;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
@@ -17,8 +16,10 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import org.pojoquery.DbContext;
@@ -42,8 +43,6 @@ import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.util.CurlyMarkers;
-import static org.pojoquery.util.Types.getCollectionComponentType;
-import org.pojoquery.util.Types;
 
 public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	
@@ -872,7 +871,16 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 			fields.addAll(0, QueryBuilder.collectFieldsOfClass(clz, clz.getSuperclass()));
 			if (tableAnn != null) {
 				String name = tableAnn.value();
-				tables.add(0, new TableMapping(tableAnn.schema(), name, mappedClz, new ArrayList<Field>(fields)));
+				// Check if this is a redundant @Table annotation targeting the same table as an existing mapping
+				if (!tables.isEmpty() && tables.get(0).tableName.equals(name)) {
+					Logger.getLogger(CustomizableQueryBuilder.class.getName())
+						.warning("Redundant @Table(\"" + name + "\") annotation on " + 
+							tables.get(0).clazz.getName() + " - same table already mapped by parent " + clz.getName());
+					// Merge fields into existing mapping instead of creating a new one
+					tables.get(0).fields.addAll(0, fields);
+				} else {
+					tables.add(0, new TableMapping(tableAnn.schema(), name, mappedClz, new ArrayList<Field>(fields)));
+				}
 				fields.clear();
 				mappedClz = null;
 			}

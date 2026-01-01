@@ -2,6 +2,7 @@ package org.pojoquery.integrationtest;
 
 import static org.pojoquery.TestUtils.norm;
 
+import java.sql.Connection;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -128,7 +129,9 @@ public class JoinConditionsIT {
 		List<EventWithVisitorsAndOrganizers> events = q.execute(db);
 		Assert.assertEquals(0, events.size());
 		
-		insertTestData(db);
+		DB.runInTransaction(db, (Connection c) -> {
+			insertTestData(c);
+		});
 		
 		List<EventWithVisitorsAndOrganizers> eventList = q.execute(db);
 		Assert.assertEquals(1, eventList.get(0).visitors.size());
@@ -144,37 +147,39 @@ public class JoinConditionsIT {
 		PojoQuery.build(FestivalWithJoinConditionOnEvents.class).execute(db);
 	}
 
-	private void insertTestData(DataSource db) {
+	private void insertTestData(Connection c) {
 		Person jane = new Person();
 		jane.firstname = "Jane";
 		jane.lastname = "Doe";
-		PojoQuery.insert(db, jane);
+		PojoQuery.insert(c, jane);
 		
 		Person stella = new Person();
 		stella.firstname = "Stella";
 		stella.lastname = "Smith";
-		PojoQuery.insert(db, stella);
+		PojoQuery.insert(c, stella);
 		
 		Festival communic8 = new Festival();
 		communic8.name = "Communic8";
-		PojoQuery.insert(db, communic8);
+		PojoQuery.insert(c, communic8);
 		
 		// Event on programming
 		EventWithFestival conference = new EventWithFestival();
 		conference.date = LocalDateTime.of(2020, 5, 15, 0, 0);
 		conference.location = "Las Vegas";
 		conference.festival = communic8;
-		PojoQuery.insert(db, conference);
+		PojoQuery.insert(c, conference);
 		
 		// Jane is a visitor, Stella is the organizer
-		DB.insert(db, "event_person", Map.of("eventID", conference.eventID, "personID", jane.personID, "role", "visitor"));
-		DB.insert(db, "event_person", Map.of("eventID", conference.eventID, "personID", stella.personID, "role", "organizer"));
+		DB.insert(c, "event_person", Map.of("eventID", conference.eventID, "personID", jane.personID, "role", "visitor"));
+		DB.insert(c, "event_person", Map.of("eventID", conference.eventID, "personID", stella.personID, "role", "organizer"));
 	}
 	
 	@Test
 	public void testDeeper() {
 		DataSource db = initDatabase();
-		insertTestData(db);
+		DB.runInTransaction(db, (Connection c) -> {
+			insertTestData(c);
+		});
 		
 		PojoQuery<Festival> q = PojoQuery.build(Festival.class);
 		System.out.println(q.toSql());

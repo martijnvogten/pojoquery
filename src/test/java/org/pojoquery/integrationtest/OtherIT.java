@@ -1,5 +1,6 @@
 package org.pojoquery.integrationtest;
 
+import java.sql.Connection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -37,36 +38,40 @@ public class OtherIT {
 	public void testBasic() {
 		DataSource db = initDatabase();
 		
-		Room u = new Room();
-		u.specs = new HashMap<String,Object>();
-		u.specs.put("area", 25);
-		PojoQuery.insert(db, u);
-		Assert.assertEquals((Long)1L, u.id);
-		
-		PojoQuery<Room> build = PojoQuery.build(Room.class);
-		build.addField(SqlExpression.sql("{room}.area"), "room.area");
-		Room loaded = build.findById(db, u.id);
-		Assert.assertNotNull(loaded.specs);
-		Assert.assertEquals(25, loaded.specs.get("area"));
+		DB.runInTransaction(db, (Connection c) -> {
+			Room u = new Room();
+			u.specs = new HashMap<String,Object>();
+			u.specs.put("area", 25);
+			PojoQuery.insert(c, u);
+			Assert.assertEquals((Long)1L, u.id);
+			
+			PojoQuery<Room> build = PojoQuery.build(Room.class);
+			build.addField(SqlExpression.sql("{room}.area"), "room.area");
+			Room loaded = build.findById(c, u.id);
+			Assert.assertNotNull(loaded.specs);
+			Assert.assertEquals(25, loaded.specs.get("area"));
+		});
 	}
 	
 	@Test
 	public void testInheritance() {
 		DataSource db = initDatabase();
 		
-		BedRoom bedroom = new BedRoom();
-		bedroom.specs = new HashMap<String,Object>();
-		bedroom.specs.put("area", 25);
-		bedroom.numberOfBeds = 2;
-		PojoQuery.insert(db, bedroom);
-		
-		Assert.assertEquals((Long)1L, bedroom.id);
-		
-		PojoQuery<BedRoom> build = PojoQuery.build(BedRoom.class);
-		build.addField(SqlExpression.sql("{room}.area"), "bedroom.area");
-		Room loaded = build.findById(db, bedroom.id);
-		Assert.assertNotNull(loaded.specs);
-		Assert.assertEquals(25, loaded.specs.get("area"));
+		DB.runInTransaction(db, (Connection c) -> {
+			BedRoom bedroom = new BedRoom();
+			bedroom.specs = new HashMap<String,Object>();
+			bedroom.specs.put("area", 25);
+			bedroom.numberOfBeds = 2;
+			PojoQuery.insert(c, bedroom);
+			
+			Assert.assertEquals((Long)1L, bedroom.id);
+			
+			PojoQuery<BedRoom> build = PojoQuery.build(BedRoom.class);
+			build.addField(SqlExpression.sql("{room}.area"), "bedroom.area");
+			Room loaded = build.findById(c, bedroom.id);
+			Assert.assertNotNull(loaded.specs);
+			Assert.assertEquals(25, loaded.specs.get("area"));
+		});
 	}
 	
 

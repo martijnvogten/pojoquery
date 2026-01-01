@@ -84,36 +84,24 @@ List<ArticleWithCategory> techArticles = PojoQuery.build(ArticleWithCategory.cla
 
 == CRUD Operations
 
-PojoQuery provides static helpers for basic Insert, Update, Delete.
+PojoQuery provides static helpers for basic Insert, Update, Delete. Use `DB.runInTransaction()` to ensure all write operations are atomic:
 
-*   **Insert:** `PojoQuery.insert(dataSource, entity)` or `DB.insert(...)`
+*   **Insert:** `PojoQuery.insert(connection, entity)` or `DB.insert(...)`
     *   Handles single-table and multi-table inheritance inserts.
     *   Populates the `@Id` field if it's auto-generated.
-*   **Update:** `PojoQuery.update(dataSource, entity)` or `DB.update(...)`
+*   **Update:** `PojoQuery.update(connection, entity)` or `DB.update(...)`
     *   Updates based on the `@Id` field(s).
     *   Handles multi-table inheritance updates.
     *   Respects `@NoUpdate`.
     *   Can optionally handle optimistic locking if the entity implements `HasVersion`.
-*   **Delete:** `PojoQuery.delete(dataSource, entity)` or `PojoQuery.deleteById(dataSource, Class, id)`
+*   **Delete:** `PojoQuery.delete(connection, entity)` or `PojoQuery.deleteById(connection, Class, id)`
     *   Deletes based on the `@Id` field(s).
     *   Handles multi-table inheritance deletes (deletes from all mapped tables).
 
-*Insert:*
+*Example:*
 [source,java]
 ----
-include::example$test/examples/docs/BasicCrudExample.java[tag=insert,indent=0]
-----
-
-*Update:*
-[source,java]
-----
-include::example$test/examples/docs/BasicCrudExample.java[tag=update,indent=0]
-----
-
-*Delete:*
-[source,java]
-----
-include::example$test/examples/docs/BasicCrudExample.java[tag=delete,indent=0]
+include::example$test/examples/docs/BasicCrudExample.java[tag=crud,indent=0]
 ----
 
 == Transactions
@@ -313,18 +301,22 @@ Product productB = PojoQuery.build(Product.class)
     .get(0);
 // productB.getVersion() = 1
 
-// User A updates the product
-productA.setPrice(new BigDecimal("29.99"));
-PojoQuery.update(dataSource, productA); // Success! version becomes 2
+// User A updates the product within a transaction
+DB.runInTransaction(dataSource, (Connection c) -> {
+    productA.setPrice(new BigDecimal("29.99"));
+    PojoQuery.update(c, productA); // Success! version becomes 2
+});
 
 // User B tries to update the same product
-productB.setPrice(new BigDecimal("24.99"));
-try {
-    PojoQuery.update(dataSource, productB); // Fails! version mismatch
-} catch (StaleObjectException e) {
-    // Handle the conflict - typically refresh and retry, or notify user
-    System.out.println("Product was modified by another user. Please refresh.");
-}
+DB.runInTransaction(dataSource, (Connection c) -> {
+    productB.setPrice(new BigDecimal("24.99"));
+    try {
+        PojoQuery.update(c, productB); // Fails! version mismatch
+    } catch (StaleObjectException e) {
+        // Handle the conflict - typically refresh and retry, or notify user
+        System.out.println("Product was modified by another user. Please refresh.");
+    }
+});
 ----
 
 === Handling Stale Object Exceptions
@@ -335,14 +327,16 @@ public void updateProductPrice(Long productId, BigDecimal newPrice) {
     int maxRetries = 3;
     for (int attempt = 0; attempt < maxRetries; attempt++) {
         try {
-            Product product = PojoQuery.build(Product.class)
-                .addWhere("product.id = ?", productId)
-                .execute(dataSource)
-                .stream().findFirst()
-                .orElseThrow(() -> new RuntimeException("Product not found"));
-            
-            product.setPrice(newPrice);
-            PojoQuery.update(dataSource, product);
+            DB.runInTransaction(dataSource, (Connection c) -> {
+                Product product = PojoQuery.build(Product.class)
+                    .addWhere("product.id = ?", productId)
+                    .execute(c)
+                    .stream().findFirst()
+                    .orElseThrow(() -> new RuntimeException("Product not found"));
+                
+                product.setPrice(newPrice);
+                PojoQuery.update(c, product);
+            });
             return; // Success
             
         } catch (StaleObjectException e) {

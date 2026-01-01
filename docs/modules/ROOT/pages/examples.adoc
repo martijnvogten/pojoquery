@@ -194,14 +194,17 @@ Insert a new user record.
 *Operation:*
 [source,java]
 ----
-User newUser = new User();
-newUser.setFirstName("Alice");
-newUser.setLastName("Wonder");
-newUser.setEmail("alice@example.com");
+// Use runInTransaction for all write operations
+DB.runInTransaction(dataSource, (Connection c) -> {
+    User newUser = new User();
+    newUser.setFirstName("Alice");
+    newUser.setLastName("Wonder");
+    newUser.setEmail("alice@example.com");
 
-PojoQuery.insert(dataSource, newUser);
-// newUser.getId() is now populated if it was auto-generated
-System.out.println("New user ID: " + newUser.getId());
+    PojoQuery.insert(c, newUser);
+    // newUser.getId() is now populated if it was auto-generated
+    System.out.println("New user ID: " + newUser.getId());
+});
 ----
 
 == Example 7: Update Operation
@@ -213,10 +216,13 @@ Update an existing user's email.
 *Operation:*
 [source,java]
 ----
-// Assume 'userToUpdate' was fetched previously
-userToUpdate.setEmail("alice.w@example.com");
-int updatedRows = PojoQuery.update(dataSource, userToUpdate);
-System.out.println("Rows updated: " + updatedRows);
+// Use runInTransaction for all write operations
+DB.runInTransaction(dataSource, (Connection c) -> {
+    // Assume 'userToUpdate' was fetched previously
+    userToUpdate.setEmail("alice.w@example.com");
+    int updatedRows = PojoQuery.update(c, userToUpdate);
+    System.out.println("Rows updated: " + updatedRows);
+});
 ----
 == Example 8: Many-to-Many Relationship
 
@@ -426,21 +432,24 @@ Delete a record by entity or by ID.
 *Operations:*
 [source,java]
 ----
-// Delete by entity instance
-User userToDelete = repo.findById(123L);
-if (userToDelete != null) {
-    PojoQuery.delete(dataSource, userToDelete);
-    System.out.println("User deleted");
-}
+// Use runInTransaction for all write operations
+DB.runInTransaction(dataSource, (Connection c) -> {
+    // Delete by entity instance
+    User userToDelete = PojoQuery.build(User.class).findById(c, 123L);
+    if (userToDelete != null) {
+        PojoQuery.delete(c, userToDelete);
+        System.out.println("User deleted");
+    }
 
-// Delete by ID directly (more efficient - no need to fetch first)
-PojoQuery.deleteById(dataSource, User.class, 456L);
+    // Delete by ID directly (more efficient - no need to fetch first)
+    PojoQuery.deleteById(c, User.class, 456L);
 
-// Delete with raw SQL for bulk operations
-int deleted = DB.update(dataSource,
-    SqlExpression.sql("DELETE FROM session WHERE last_activity < ?", 
-        LocalDate.now().minusDays(30)));
-System.out.println("Cleaned up " + deleted + " old sessions");
+    // Delete with raw SQL for bulk operations
+    int deleted = DB.update(c,
+        SqlExpression.sql("DELETE FROM session WHERE last_activity < ?", 
+            LocalDate.now().minusDays(30)));
+    System.out.println("Cleaned up " + deleted + " old sessions");
+});
 ----
 
 == Example 14: Dynamic Columns with `@Other`

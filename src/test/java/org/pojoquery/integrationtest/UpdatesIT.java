@@ -1,5 +1,6 @@
 package org.pojoquery.integrationtest;
 
+import java.sql.Connection;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -56,15 +57,17 @@ public class UpdatesIT {
 		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, User.class);
 
-		User u = new User();
-		PojoQuery.insert(db, u);
-		Assert.assertEquals((Long)1L, u.id);
-		
-		u.username = "john";
-		PojoQuery.update(db, u);
-		
-		User loaded = PojoQuery.build(User.class).findById(db, u.id);
-		Assert.assertEquals("john", loaded.username);
+		DB.runInTransaction(db, (Connection c) -> {
+			User u = new User();
+			PojoQuery.insert(c, u);
+			Assert.assertEquals((Long)1L, u.id);
+			
+			u.username = "john";
+			PojoQuery.update(c, u);
+			
+			User loaded = PojoQuery.build(User.class).findById(c, u.id);
+			Assert.assertEquals("john", loaded.username);
+		});
 	}
 	
 	@Test
@@ -72,18 +75,20 @@ public class UpdatesIT {
 		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, User.class, Article.class);
 		
-		User u = new User();
-		u.username = "bob";
-		PojoQuery.insert(db, u);
-		Assert.assertEquals((Long)1L, u.id);
-		
-		Article a = new Article();
-		a.author = u;
-		a.title = "My life";
-		PojoQuery.insert(db, a);
-		
-		Article read = PojoQuery.build(Article.class).findById(db, a.id);
-		Assert.assertEquals(read.author.username, "bob");
+		DB.runInTransaction(db, (Connection c) -> {
+			User u = new User();
+			u.username = "bob";
+			PojoQuery.insert(c, u);
+			Assert.assertEquals((Long)1L, u.id);
+			
+			Article a = new Article();
+			a.author = u;
+			a.title = "My life";
+			PojoQuery.insert(c, a);
+			
+			Article read = PojoQuery.build(Article.class).findById(c, a.id);
+			Assert.assertEquals(read.author.username, "bob");
+		});
 	}
 	
 	@Test
@@ -91,26 +96,28 @@ public class UpdatesIT {
 		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, User.class, UserRoles.class);
 		
-		UserDetail u = new UserDetail();
-		u.roles.add(Role.EDITOR);
-		PojoQuery.insert(db, u);
-		Assert.assertEquals((Long)1L, u.id);
+		DB.runInTransaction(db, (Connection c) -> {
+			UserDetail u = new UserDetail();
+			u.roles.add(Role.EDITOR);
+			PojoQuery.insert(c, u);
+			Assert.assertEquals((Long)1L, u.id);
 
-		// Now query
-		UserDetail read = PojoQuery.build(UserDetail.class).findById(db, 1L);
-		Assert.assertEquals(0, read.roles.size()); // Correct, pojoquery does not update collections
-		
-		// Now insert the role
-		DB.insert(db, "user_roles", Map.of("user_id", u.id, "role", Role.EDITOR));
-		
-		UserDetail read1 = PojoQuery.build(UserDetail.class).findById(db, 1L);
-		Assert.assertEquals(1, read1.roles.size());
-		
-		u.username = "john";
-		PojoQuery.update(db, u);
-		
-		User loaded = PojoQuery.build(User.class).findById(db, u.id);
-		Assert.assertEquals("john", loaded.username);
+			// Now query
+			UserDetail read = PojoQuery.build(UserDetail.class).findById(c, 1L);
+			Assert.assertEquals(0, read.roles.size()); // Correct, pojoquery does not update collections
+			
+			// Now insert the role
+			DB.insert(c, "user_roles", Map.of("user_id", u.id, "role", Role.EDITOR));
+			
+			UserDetail read1 = PojoQuery.build(UserDetail.class).findById(c, 1L);
+			Assert.assertEquals(1, read1.roles.size());
+			
+			u.username = "john";
+			PojoQuery.update(c, u);
+			
+			User loaded = PojoQuery.build(User.class).findById(c, u.id);
+			Assert.assertEquals("john", loaded.username);
+		});
 	}
 	
 }

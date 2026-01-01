@@ -1,5 +1,6 @@
 package examples.events;
 
+import java.sql.Connection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -77,37 +78,32 @@ public class EventsExample {
 	}
 
 	private static void insertData(DataSource db) {
-		Event e = new Event();
-		e.setDate(new Date());
-		e.setTitle("My Event");
-		Long eventId = PojoQuery.insert(db, e);
-		
-		Event concert = new Event();
-		concert.setDate(new Date());
-		concert.setTitle("The concert");
-		Long concertId = PojoQuery.insert(db, concert);
-		
-		PersonRecord p = new PersonRecord();
-		p.setFirstname("John");
-		p.setLastname("Ewbank");
-		p.setAge(38);
-		Long personId = PojoQuery.insert(db, p);
-		
-		EmailAddress em = new EmailAddress();
-		em.setPerson_id(personId);
-		em.setName("John Ewbank");
-		em.setEmail("john.ewbank@endemol.nl");
-		PojoQuery.insert(db, em);
-		
-		DB.insert(db, "event_person", map("event_id", eventId, "person_id", personId));
-		DB.insert(db, "event_person", map("event_id", concertId, "person_id", personId));
-		
-//		Person marco = new Person();
-//		marco.setFirstname("Marco");
-//		marco.setLastname("Borsato");
-//		marco.setAge(38);
-//		Long marcoId = Query.insert(db, marco);
-//		DB.insert(db, "event_person", map("event_id", eventId, "person_id", marcoId));
+		DB.runInTransaction(db, (Connection c) -> {
+			Event e = new Event();
+			e.setDate(new Date());
+			e.setTitle("My Event");
+			Long eventId = PojoQuery.insert(c, e);
+			
+			Event concert = new Event();
+			concert.setDate(new Date());
+			concert.setTitle("The concert");
+			Long concertId = PojoQuery.insert(c, concert);
+			
+			PersonRecord p = new PersonRecord();
+			p.setFirstname("John");
+			p.setLastname("Ewbank");
+			p.setAge(38);
+			Long personId = PojoQuery.insert(c, p);
+			
+			EmailAddress em = new EmailAddress();
+			em.setPerson_id(personId);
+			em.setName("John Ewbank");
+			em.setEmail("john.ewbank@endemol.nl");
+			PojoQuery.insert(c, em);
+			
+			DB.insert(c, "event_person", map("event_id", eventId, "person_id", personId));
+			DB.insert(c, "event_person", map("event_id", concertId, "person_id", personId));
+		});
 	}
 
 	private static void createTables(DataSource db) {

@@ -1,11 +1,13 @@
 package org.pojoquery.integrationtest;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
 
 import javax.sql.DataSource;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Id;
@@ -86,7 +88,9 @@ public class ConstraintsIT {
         account.email = "test@example.com";
         
         try {
-            PojoQuery.insert(db, account);
+            DB.runInTransaction(db, (Connection c) -> {
+                PojoQuery.insert(c, account);
+            });
             Assert.fail("Should have thrown exception due to NOT NULL constraint on username");
         } catch (Exception e) {
             // Expected - NOT NULL constraint violated
@@ -98,19 +102,21 @@ public class ConstraintsIT {
     public void testNotNullConstraintAllowsNonNullInsert() {
         DataSource db = initAccountDatabase();
         
-        Account account = new Account();
-        account.username = "johndoe";
-        account.email = "john@example.com";
-        account.bio = null;  // This is OK - bio is nullable
-        
-        PojoQuery.insert(db, account);
-        Assert.assertNotNull("Account should be inserted with generated ID", account.id);
-        
-        // Verify it was saved correctly
-        Account loaded = PojoQuery.build(Account.class).findById(db, account.id);
-        Assert.assertEquals("johndoe", loaded.username);
-        Assert.assertEquals("john@example.com", loaded.email);
-        Assert.assertNull(loaded.bio);
+        DB.runInTransaction(db, (Connection c) -> {
+            Account account = new Account();
+            account.username = "johndoe";
+            account.email = "john@example.com";
+            account.bio = null;  // This is OK - bio is nullable
+            
+            PojoQuery.insert(c, account);
+            Assert.assertNotNull("Account should be inserted with generated ID", account.id);
+            
+            // Verify it was saved correctly
+            Account loaded = PojoQuery.build(Account.class).findById(c, account.id);
+            Assert.assertEquals("johndoe", loaded.username);
+            Assert.assertEquals("john@example.com", loaded.email);
+            Assert.assertNull(loaded.bio);
+        });
     }
     
     // ========== UNIQUE Constraint Tests ==========
@@ -120,10 +126,12 @@ public class ConstraintsIT {
         DataSource db = initAccountDatabase();
         
         // Insert first account
-        Account account1 = new Account();
-        account1.username = "uniqueuser";
-        account1.email = "unique1@example.com";
-        PojoQuery.insert(db, account1);
+        DB.runInTransaction(db, (Connection c) -> {
+            Account account1 = new Account();
+            account1.username = "uniqueuser";
+            account1.email = "unique1@example.com";
+            PojoQuery.insert(c, account1);
+        });
         
         // Try to insert second account with same username
         Account account2 = new Account();
@@ -131,7 +139,9 @@ public class ConstraintsIT {
         account2.email = "unique2@example.com";
         
         try {
-            PojoQuery.insert(db, account2);
+            DB.runInTransaction(db, (Connection c) -> {
+                PojoQuery.insert(c, account2);
+            });
             Assert.fail("Should have thrown exception due to UNIQUE constraint on username");
         } catch (Exception e) {
             // Expected - UNIQUE constraint violated
@@ -143,19 +153,21 @@ public class ConstraintsIT {
     public void testUniqueConstraintAllowsDifferentValues() {
         DataSource db = initAccountDatabase();
         
-        Account account1 = new Account();
-        account1.username = "user1";
-        account1.email = "user1@example.com";
-        PojoQuery.insert(db, account1);
-        
-        Account account2 = new Account();
-        account2.username = "user2";  // Different username - should succeed
-        account2.email = "user2@example.com";
-        PojoQuery.insert(db, account2);
-        
-        Assert.assertNotNull(account1.id);
-        Assert.assertNotNull(account2.id);
-        Assert.assertNotEquals(account1.id, account2.id);
+        DB.runInTransaction(db, (Connection c) -> {
+            Account account1 = new Account();
+            account1.username = "user1";
+            account1.email = "user1@example.com";
+            PojoQuery.insert(c, account1);
+            
+            Account account2 = new Account();
+            account2.username = "user2";  // Different username - should succeed
+            account2.email = "user2@example.com";
+            PojoQuery.insert(c, account2);
+            
+            Assert.assertNotNull(account1.id);
+            Assert.assertNotNull(account2.id);
+            Assert.assertNotEquals(account1.id, account2.id);
+        });
     }
     
     // ========== FOREIGN KEY Constraint Tests ==========
@@ -172,7 +184,9 @@ public class ConstraintsIT {
         product.category.id = 99999L;  // Non-existent category ID
         
         try {
-            PojoQuery.insert(db, product);
+            DB.runInTransaction(db, (Connection c) -> {
+                PojoQuery.insert(c, product);
+            });
             Assert.fail("Should have thrown exception due to FOREIGN KEY constraint");
         } catch (Exception e) {
             // Expected - FOREIGN KEY constraint violated
@@ -184,44 +198,48 @@ public class ConstraintsIT {
     public void testForeignKeyConstraintAllowsValidReference() {
         DataSource db = initProductDatabase();
         
-        // First insert a valid category
-        Category category = new Category();
-        category.name = "Electronics";
-        PojoQuery.insert(db, category);
-        Assert.assertNotNull(category.id);
-        
-        // Now insert product with valid category reference
-        Product product = new Product();
-        product.name = "Laptop";
-        product.price = new BigDecimal("999.99");
-        product.category = category;
-        
-        PojoQuery.insert(db, product);
-        Assert.assertNotNull(product.id);
-        
-        // Verify it was saved with correct FK
-        Product loaded = PojoQuery.build(Product.class).findById(db, product.id);
-        Assert.assertEquals("Laptop", loaded.name);
-        Assert.assertNotNull(loaded.category);
-        Assert.assertEquals(category.id, loaded.category.id);
+        DB.runInTransaction(db, (Connection c) -> {
+            // First insert a valid category
+            Category category = new Category();
+            category.name = "Electronics";
+            PojoQuery.insert(c, category);
+            Assert.assertNotNull(category.id);
+            
+            // Now insert product with valid category reference
+            Product product = new Product();
+            product.name = "Laptop";
+            product.price = new BigDecimal("999.99");
+            product.category = category;
+            
+            PojoQuery.insert(c, product);
+            Assert.assertNotNull(product.id);
+            
+            // Verify it was saved with correct FK
+            Product loaded = PojoQuery.build(Product.class).findById(c, product.id);
+            Assert.assertEquals("Laptop", loaded.name);
+            Assert.assertNotNull(loaded.category);
+            Assert.assertEquals(category.id, loaded.category.id);
+        });
     }
     
     @Test
     public void testForeignKeyAllowsNullReference() {
         DataSource db = initProductDatabase();
         
-        // Insert product without category (FK is nullable)
-        Product product = new Product();
-        product.name = "Uncategorized Product";
-        product.price = new BigDecimal("9.99");
-        product.category = null;
-        
-        PojoQuery.insert(db, product);
-        Assert.assertNotNull(product.id);
-        
-        // Verify it was saved
-        Product loaded = PojoQuery.build(Product.class).findById(db, product.id);
-        Assert.assertEquals("Uncategorized Product", loaded.name);
+        DB.runInTransaction(db, (Connection c) -> {
+            // Insert product without category (FK is nullable)
+            Product product = new Product();
+            product.name = "Uncategorized Product";
+            product.price = new BigDecimal("9.99");
+            product.category = null;
+            
+            PojoQuery.insert(c, product);
+            Assert.assertNotNull(product.id);
+            
+            // Verify it was saved
+            Product loaded = PojoQuery.build(Product.class).findById(c, product.id);
+            Assert.assertEquals("Uncategorized Product", loaded.name);
+        });
     }
     
     @Test
@@ -234,7 +252,9 @@ public class ConstraintsIT {
         item.quantity = 5;
         
         try {
-            PojoQuery.insert(db, item);
+            DB.runInTransaction(db, (Connection c) -> {
+                PojoQuery.insert(c, item);
+            });
             Assert.fail("Should have thrown exception due to NOT NULL on FK");
         } catch (Exception e) {
             // Expected - FK NOT NULL constraint violated
@@ -246,29 +266,31 @@ public class ConstraintsIT {
     public void testRequiredForeignKeyAllowsValidReference() {
         DataSource db = initOrderItemDatabase();
         
-        // First insert a valid category and product
-        Category category = new Category();
-        category.name = "Electronics";
-        PojoQuery.insert(db, category);
-        
-        Product product = new Product();
-        product.name = "Laptop";
-        product.price = new BigDecimal("999.99");
-        product.category = category;
-        PojoQuery.insert(db, product);
-        
-        // Now insert order item with valid product reference
-        OrderItem item = new OrderItem();
-        item.product = product;
-        item.quantity = 2;
-        
-        PojoQuery.insert(db, item);
-        Assert.assertNotNull(item.id);
-        
-        // Verify it was saved
-        OrderItem loaded = PojoQuery.build(OrderItem.class).findById(db, item.id);
-        Assert.assertEquals(2, loaded.quantity);
-        Assert.assertNotNull(loaded.product);
+        DB.runInTransaction(db, (Connection c) -> {
+            // First insert a valid category and product
+            Category category = new Category();
+            category.name = "Electronics";
+            PojoQuery.insert(c, category);
+            
+            Product product = new Product();
+            product.name = "Laptop";
+            product.price = new BigDecimal("999.99");
+            product.category = category;
+            PojoQuery.insert(c, product);
+            
+            // Now insert order item with valid product reference
+            OrderItem item = new OrderItem();
+            item.product = product;
+            item.quantity = 2;
+            
+            PojoQuery.insert(c, item);
+            Assert.assertNotNull(item.id);
+            
+            // Verify it was saved
+            OrderItem loaded = PojoQuery.build(OrderItem.class).findById(c, item.id);
+            Assert.assertEquals(2, loaded.quantity);
+            Assert.assertNotNull(loaded.product);
+        });
     }
     
     // ========== Column Definition Tests ==========
@@ -277,20 +299,22 @@ public class ConstraintsIT {
     public void testDecimalPrecisionScale() {
         DataSource db = initProductDatabase();
         
-        Category category = new Category();
-        category.name = "Test";
-        PojoQuery.insert(db, category);
-        
-        Product product = new Product();
-        product.name = "Precision Test";
-        product.price = new BigDecimal("12345678.99");  // Within DECIMAL(10,2)
-        product.category = category;
-        
-        PojoQuery.insert(db, product);
-        
-        Product loaded = PojoQuery.build(Product.class).findById(db, product.id);
-        // Compare with scale consideration
-        Assert.assertEquals(0, new BigDecimal("12345678.99").compareTo(loaded.price));
+        DB.runInTransaction(db, (Connection c) -> {
+            Category category = new Category();
+            category.name = "Test";
+            PojoQuery.insert(c, category);
+            
+            Product product = new Product();
+            product.name = "Precision Test";
+            product.price = new BigDecimal("12345678.99");  // Within DECIMAL(10,2)
+            product.category = category;
+            
+            PojoQuery.insert(c, product);
+            
+            Product loaded = PojoQuery.build(Product.class).findById(c, product.id);
+            // Compare with scale consideration
+            Assert.assertEquals(0, new BigDecimal("12345678.99").compareTo(loaded.price));
+        });
     }
     
     // ========== Combined Constraint Tests ==========
@@ -300,10 +324,12 @@ public class ConstraintsIT {
         DataSource db = initAccountDatabase();
         
         // First insert a valid account
-        Account account1 = new Account();
-        account1.username = "testuser";
-        account1.email = "test@example.com";
-        PojoQuery.insert(db, account1);
+        DB.runInTransaction(db, (Connection c) -> {
+            Account account1 = new Account();
+            account1.username = "testuser";
+            account1.email = "test@example.com";
+            PojoQuery.insert(c, account1);
+        });
         
         // Try to insert with null username (violates NOT NULL before UNIQUE is checked)
         Account account2 = new Account();
@@ -311,7 +337,9 @@ public class ConstraintsIT {
         account2.email = "another@example.com";
         
         try {
-            PojoQuery.insert(db, account2);
+            DB.runInTransaction(db, (Connection c) -> {
+                PojoQuery.insert(c, account2);
+            });
             Assert.fail("Should have thrown exception due to NOT NULL constraint");
         } catch (Exception e) {
             // Expected

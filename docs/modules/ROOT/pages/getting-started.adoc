@@ -1,13 +1,12 @@
 = Getting Started with PojoQuery
 
-This guide will walk you through setting up PojoQuery in your project and executing your first query.
+This guide walks you through setting up PojoQuery and executing your first queries.
 
 == Prerequisites
 
-* Java Development Kit (JDK) 17 or later.
-* A build tool like Maven or Gradle.
-* A JDBC-compliant database (e.g., MySQL, PostgreSQL, HSQLDB).
-* A JDBC `DataSource` configured for your database connection.
+* Java Development Kit (JDK) 17 or later
+* A build tool like Maven or Gradle
+* A JDBC-compliant database (e.g., MySQL, PostgreSQL, HSQLDB)
 
 == Installation
 
@@ -20,139 +19,136 @@ Add the PojoQuery dependency to your `pom.xml`:
 <dependency>
   <groupId>org.pojoquery</groupId>
   <artifactId>pojoquery</artifactId>
-  <version>4.0.0-BETA</version> <!-- Use the latest version -->
+  <version>4.0.0-BETA</version>
 </dependency>
 
-<!-- Add your JDBC driver dependency, e.g., for MySQL -->
+<!-- Add your JDBC driver, e.g., for MySQL -->
 <dependency>
     <groupId>com.mysql</groupId>
     <artifactId>mysql-connector-j</artifactId>
-    <version>8.0.33</version> <!-- Use the appropriate version -->
+    <version>8.0.33</version>
     <scope>runtime</scope>
 </dependency>
 ----
 
 === Gradle
 
-Add the PojoQuery dependency to your `build.gradle` file:
-
 [source,groovy]
 ----
 dependencies {
-    implementation 'org.pojoquery:pojoquery:4.0.0-BETA' // Use the latest version
-
-    // Add your JDBC driver dependency, e.g., for MySQL
-    runtimeOnly 'com.mysql:mysql-connector-j:8.0.33' // Use the appropriate version
+    implementation 'org.pojoquery:pojoquery:4.0.0-BETA'
+    runtimeOnly 'com.mysql:mysql-connector-j:8.0.33'
 }
 ----
 
-== Your First Query
+== Define Your Entities
 
-Let's assume you have a `user` table in your database.
-
-*Define the POJO:* Create a Java class representing the `user` table.
+Create Java classes representing your database tables. Note how relationships are modeled without cyclic references—the `DepartmentWithEmployees` subclass adds the collection:
 
 [source,java]
 ----
-import org.pojoquery.annotations.Table;
-import org.pojoquery.annotations.Id;
-
-@Table("user") // Maps this class to the 'user' table
-public class User {
-	@Id // Marks 'id' as the primary key
-	public Long id;
-
-	public String firstName;
-	public String lastName;
-	public String email;
-
-	// Optional: Add methods like getters/setters or helper methods
-	public String getFullName() {
-		return (firstName != null ? firstName : "")
-				+ " "
-				+ (lastName != null ? lastName : "");
-	}
-}
+include::example$test/examples/docs/GettingStartedExample.java[tag=entity]
 ----
 
-*Configure DataSource:* Obtain a `javax.sql.DataSource` instance connected to your database. How you do this depends on your application framework (e.g., Spring, HikariCP, basic JDBC).
+Key points:
+
+* `@Table` maps the class to a database table
+* `@Id` marks the primary key field
+* Entity references (like `department` in `Employee`) automatically create foreign key relationships
+* Use subclasses to add collections without creating cycles in your entity model
+
+== Setup
+
+Configure the database dialect and create your schema:
 
 [source,java]
 ----
-// Example using a simple DataSource (replace with your actual configuration)
-import javax.sql.DataSource;
-import com.mysql.cj.jdbc.MysqlDataSource; // Example for MySQL
-
-public class DatabaseConfig {
-	public static DataSource getDataSource() {
-		MysqlDataSource dataSource = new MysqlDataSource();
-		dataSource.setURL("jdbc:mysql://localhost:3306/mydatabase");
-		dataSource.setUser("username");
-		dataSource.setPassword("password");
-		return dataSource;
-	}
-}
+include::example$test/examples/docs/GettingStartedExample.java[tag=setup]
 ----
 
-*Build and Execute the Query:* Use `PojoQuery.build()` to create and run the query.
+The `SchemaGenerator` creates tables based on your entity classes—no manual SQL required.
+
+== Insert Records
+
+Insert entities using `PojoQuery.insert()`. The generated ID is automatically populated:
 
 [source,java]
 ----
-import org.pojoquery.PojoQuery;
-import javax.sql.DataSource;
-import java.util.List;
+include::example$test/examples/docs/GettingStartedExample.java[tag=insert]
+----
 
-public class UserRepository {
+== Query Records
 
-	private DataSource dataSource;
+=== Query All with Ordering
 
-	public UserRepository(DataSource dataSource) {
-		this.dataSource = dataSource;
-	}
+[source,java]
+----
+include::example$test/examples/docs/GettingStartedExample.java[tag=query-all]
+----
 
-	public User findById(Long userId) {
-		// Build the query for the User class
-		PojoQuery<User> query = PojoQuery.build(User.class)
-			// Add a WHERE clause. 'user.id' refers to the 'id' column in the 'user' table.
-			.addWhere("user.id = ?", userId);
+NOTE: Use `{employee}` syntax in WHERE and ORDER BY clauses—PojoQuery automatically quotes identifiers for your database.
 
-		// Execute the query and get the results
-		List<User> results = query.execute(dataSource);
+=== Query with Filters
 
-		// Return the first result, or null if not found
-		return results.isEmpty() ? null : results.get(0);
-	}
+[source,java]
+----
+include::example$test/examples/docs/GettingStartedExample.java[tag=query-filter]
+----
 
-	public List<User> findAll() {
-		return PojoQuery.build(User.class)
-			.addOrderBy("user.lastName ASC") // Optional: Add sorting
-			.execute(dataSource);
-	}
-}
+=== Find by ID
 
-// --- Usage Example ---
-public class MainApp {
-	public static void main(String[] args) {
-		DataSource ds = DatabaseConfig.getDataSource();
-		UserRepository repo = new UserRepository(ds);
+[source,java]
+----
+include::example$test/examples/docs/GettingStartedExample.java[tag=query-findbyid]
+----
 
-		User user = repo.findById(1L);
-		if (user != null) {
-			System.out.println("Found user: " + user.getFullName() + " (" + user.email + ")");
-		} else {
-			System.out.println("User not found.");
-		}
+== Update Records
 
-		List<User> allUsers = repo.findAll();
-		System.out.println("\nAll Users:");
-		allUsers.forEach(u -> System.out.println("- " + u.getFullName()));
-	}
-}
+[source,java]
+----
+include::example$test/examples/docs/GettingStartedExample.java[tag=update]
+----
+
+== Delete Records
+
+[source,java]
+----
+include::example$test/examples/docs/GettingStartedExample.java[tag=delete]
+----
+
+== Query with Collections
+
+Use a subclass to fetch an entity with its related collection. PojoQuery automatically performs the JOIN:
+
+[source,java]
+----
+include::example$test/examples/docs/GettingStartedExample.java[tag=query-with-collection]
+----
+
+== DataSource Configuration
+
+For this example, we use HSQLDB in-memory. In production, use a connection pool:
+
+[source,java]
+----
+include::example$test/examples/docs/GettingStartedExample.java[tag=datasource]
+----
+
+For MySQL or PostgreSQL, configure the appropriate dialect:
+
+[source,java]
+----
+// For MySQL
+DbContext.setDefault(DbContext.forDialect(DbContext.Dialect.MYSQL));
+
+// For PostgreSQL
+DbContext.setDefault(DbContext.forDialect(DbContext.Dialect.POSTGRES));
 ----
 
 == Next Steps
 
-*   Explore the xref:features.adoc[Core Features] of PojoQuery.
-*   Learn about the available xref:annotations.adoc[Annotations] for customization.
-*   See more complex xref:examples.adoc[Examples].
-*   Understand how to use the xref:query-building.adoc[Query Building API].
+* Explore the xref:features.adoc[Core Features] of PojoQuery
+* Learn about the available xref:annotations.adoc[Annotations] for customization
+* See more complex xref:examples.adoc[Examples] including relationships and inheritance
+* Understand the xref:query-building.adoc[Query Building API]
+* Configure xref:database-support.adoc[Database Support] for your database
