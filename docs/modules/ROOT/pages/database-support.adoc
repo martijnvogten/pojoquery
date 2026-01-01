@@ -1,40 +1,145 @@
 = Database Support
 
-PojoQuery is designed to work with relational databases that support standard SQL and provide a JDBC driver.
+PojoQuery is designed to work with relational databases that support standard SQL and provide a JDBC driver. Database-specific behavior is handled through the `DbContext` system.
 
-== Tested Databases
+== Supported Databases
 
-PojoQuery is regularly tested against:
+PojoQuery provides built-in dialect support for:
 
-*   **MySQL:** Versions 5.7 and 8.0+
-*   **PostgreSQL:** Versions 10+
-*   **HSQLDB:** Primarily for testing purposes.
+[cols="1,2,2"]
+|===
+| Database | Dialect | Identifier Quote Style
 
-== General Compatibility
+| **MySQL / MariaDB**
+| `Dialect.MYSQL`
+| Backticks (``` ` ```)
 
-PojoQuery should work with most modern relational databases, including:
+| **PostgreSQL**
+| `Dialect.POSTGRES`
+| Double quotes (`"`)
 
-*   SQL Server
-*   Oracle
-*   MariaDB
-*   SQLite (with appropriate JDBC driver)
+| **HSQLDB**
+| `Dialect.HSQLDB`
+| Double quotes (`"`)
+|===
 
-The core query generation relies on standard SQL syntax for `SELECT`, `FROM`, `JOIN`, `WHERE`, `GROUP BY`, `ORDER BY`, and `LIMIT`/`OFFSET`.
+NOTE: "Quote style" in this context refers to _identifier quoting_ — how table and column names are escaped in SQL (e.g., ``` `users` ``` or `"users"`). This is separate from string literal quoting, which always uses single quotes (`'value'`) across all databases.
+
+Other databases using standard ANSI SQL should work with the appropriate dialect configuration.
+
+== Configuring the Database Dialect
+
+Set the default `DbContext` for your database at application startup:
+
+[source,java]
+----
+import org.pojoquery.DbContext;
+import org.pojoquery.DbContext.Dialect;
+
+// For MySQL/MariaDB (this is the default)
+DbContext.setDefault(DbContext.forDialect(Dialect.MYSQL));
+
+// For PostgreSQL
+DbContext.setDefault(DbContext.forDialect(Dialect.POSTGRES));
+
+// For HSQLDB (typically used in tests)
+DbContext.setDefault(DbContext.forDialect(Dialect.HSQLDB));
+----
+
+The dialect affects:
+
+* **Identifier quoting** - How table and column names are quoted
+* **SQL type mapping** - How Java types map to database column types
+* **Auto-increment syntax** - `AUTO_INCREMENT` vs `SERIAL`/`BIGSERIAL`
+* **Streaming fetch size** - Database-specific settings for result set streaming
+* **CREATE TABLE syntax** - Engine settings and charset configuration
+
+== Dialect-Specific Behavior
+
+=== MySQL / MariaDB
+
+* Uses backtick quoting: ``` `table`.`column` ```
+* Auto-increment: `BIGINT NOT NULL AUTO_INCREMENT`
+* Boolean mapped to `TINYINT(1)`
+* Default table suffix: `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+* Streaming uses `Integer.MIN_VALUE` fetch size
+
+=== PostgreSQL
+
+* Uses ANSI double-quote quoting: `"table"."column"`
+* Auto-increment: `BIGSERIAL` type
+* Native `BOOLEAN` type support
+* Native `TIMESTAMP` (instead of `DATETIME`)
+* Streaming uses standard fetch size (100)
+
+=== HSQLDB
+
+* Uses ANSI double-quote quoting
+* Auto-increment: `BIGINT IDENTITY`
+* Good for unit testing and in-memory databases
 
 == Database-Specific Considerations
 
 *   **SQL Functions (`@Select`):** When using the `@Select` annotation with database functions (e.g., `CONCAT`, `YEAR`, `MAX`), ensure you use syntax compatible with your target database.
-*   **Quoting:** PojoQuery attempts to quote identifiers (table names, column names, aliases) correctly based on the `DbContext`. The default context uses backticks (` `` `) suitable for MySQL. You can create a custom `DbContext` for other quoting styles (e.g., double quotes `"` for PostgreSQL, SQL Server).
-    [source,java]
-    ----
-    // Example for PostgreSQL/Standard SQL quoting
-    DbContext pgContext = new DbContext(DbContext.QuoteStyle.DOUBLE_QUOTES);
-    PojoQuery<User> query = PojoQuery.build(pgContext, User.class);
-    ----
-*   **Generated Keys:** The mechanism for retrieving auto-generated keys after an `INSERT` relies on standard JDBC `Statement.RETURN_GENERATED_KEYS`. This is widely supported.
-*   **LIMIT/OFFSET Syntax:** PojoQuery generates the `LIMIT offset, rowCount` syntax. While common, some databases might use different syntax (e.g., `OFFSET offset FETCH NEXT rowCount ROWS ONLY` in SQL Server/Oracle). For maximum compatibility across databases not using `LIMIT offset, rowCount`, you might need to handle pagination outside of PojoQuery's `setLimit()` or use database-specific query modifications if necessary.
-*   **Data Types:** Ensure that the Java types used in your POJOs map correctly to the corresponding data types in your database according to your JDBC driver's behavior. PojoQuery performs basic handling for `LocalDate` and `Enum` types during parameter setting.
 
-== Configuration
+*   **Generated Keys:** The mechanism for retrieving auto-generated keys after an `INSERT` relies on standard JDBC `Statement.RETURN_GENERATED_KEYS`. This is widely supported.
+
+*   **Data Types:** Ensure that the Java types used in your POJOs map correctly to the corresponding data types in your database. PojoQuery handles common types including `LocalDate`, `LocalDateTime`, `BigDecimal`, and `Enum` types.
+
+== DataSource Configuration
 
 PojoQuery interacts with the database solely through a standard `javax.sql.DataSource`. Configure your `DataSource` using your preferred connection pool (like HikariCP, c3p0, Tomcat JDBC Pool) or framework (like Spring Boot) and pass it to PojoQuery's execution methods (`execute`, `executeStreaming`, `findById`, etc.) or the static `DB` helper methods.
+
+== Custom DbContext
+
+For advanced use cases, you can create a custom `DbContext` using the builder:
+
+[source,java]
+----
+DbContext customContext = DbContext.builder()
+    .dialect(Dialect.POSTGRES)
+    .quoteObjectNames(false)  // disable identifier quoting
+    .build();
+
+// Use with a specific query
+PojoQuery<User> query = PojoQuery.build(customContext, User.class);
+
+// Or set as default
+DbContext.setDefault(customContext);
+----
+
+== Custom Type Mapping
+
+To support custom Java types or override default type mappings, create a custom `DbContext` that overrides `mapJavaTypeToSql()`. This is useful for:
+
+* Supporting custom Java types (like `UUID`)
+* Using database-specific types (like PostgreSQL's `JSONB`, `INET`, etc.)
+* Overriding default type mappings for your application's needs
+
+Here's an example that adds native UUID support by extending an existing DbContext:
+
+[source,java]
+----
+include::example$test/examples/docs/CustomTypeMappingExample.java[tag=custom-dbcontext,indent=0]
+----
+
+With an entity that uses the UUID type:
+
+[source,java]
+----
+include::example$test/examples/docs/CustomTypeMappingExample.java[tag=entity,indent=0]
+----
+
+You can then insert and query records with UUID fields:
+
+[source,java]
+----
+include::example$test/examples/docs/CustomTypeMappingExample.java[tag=usage,indent=0]
+----
+
+The `SchemaGenerator` will use your custom `mapJavaTypeToSql()` when creating tables:
+
+[source,java]
+----
+include::example$test/examples/docs/CustomTypeMappingExample.java[tag=schema,indent=0]
+----

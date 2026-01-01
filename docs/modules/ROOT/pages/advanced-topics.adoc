@@ -12,7 +12,7 @@ PojoQuery supports table-per-subclass inheritance using the `@SubClasses` annota
 4.  The subclass table uses the same primary key as the base table (foreign key relationship).
 
 *Database Schema:*
-[source,sql]
+[source,java]
 ----
 include::example$test/examples/docs/TablePerSubclassInheritanceExample.java[tag=schema,indent=0]
 ----

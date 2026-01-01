@@ -279,7 +279,7 @@ for (ArticleWithTags article : articles) {
 Fetch events with separate lists for visitors and organizers from the same person table.
 
 *Database Schema:*
-[source,sql]
+[source,java]
 ----
 include::example$test/examples/docs/FilteredRelationshipExample.java[tag=schema,indent=0]
 ----
@@ -306,7 +306,7 @@ include::example$test/examples/docs/FilteredRelationshipExample.java[tag=query,i
 Map address fields from the same table into a nested object.
 
 *Database Schema:*
-[source,sql]
+[source,java]
 ----
 include::example$test/examples/docs/EmbeddedExample.java[tag=schema,indent=0]
 ----
