@@ -12,6 +12,7 @@ import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
 
 public class ArticleDetailExample {
 	
+	// tag::user-entity[]
 	@Table("user")
 	public static class User {
 		@Id
@@ -24,7 +25,9 @@ public class ArticleDetailExample {
 			return (firstName + " " + lastName).trim();
 		}
 	}
+	// end::user-entity[]
 	
+	// tag::comment-entity[]
 	@Table("comment")
 	public static class Comment {
 		@Id
@@ -38,7 +41,9 @@ public class ArticleDetailExample {
 	public static class CommentDetail extends Comment {
 		public User author;
 	}
+	// end::comment-entity[]
 	
+	// tag::article-entity[]
 	@Table("article")
 	public static class Article {
 		@Id
@@ -60,10 +65,12 @@ public class ArticleDetailExample {
 		public User author;
 		public CommentDetail[] comments;
 	}
+	// end::article-entity[]
 
 	public static void main(String[] args) {
 		DataSource db = BlogDb.create("localhost", "pojoquery_blog", "root", "");
 		
+		// tag::query[]
 		QueryBuilder<ArticleDetail> qb = QueryBuilder.from(ArticleDetail.class);
 		DefaultSqlQuery q = qb.getQuery()
 				.addWhere("{article}.id=?", 1L)
@@ -78,6 +85,7 @@ public class ArticleDetailExample {
 				}
 			}
 		}
+		// end::query[]
 		
 	}
 

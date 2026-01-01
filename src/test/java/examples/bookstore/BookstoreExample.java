@@ -17,6 +17,7 @@ import org.pojoquery.schema.SchemaGenerator;
  */
 public class BookstoreExample {
 
+    // tag::entities[]
     // === Entity definitions (map to database tables) ===
     
     @Table("author")
@@ -41,13 +42,16 @@ public class BookstoreExample {
         Integer rating;
         String comment;
     }
+    // end::entities[]
 
+    // tag::query-definitions[]
     // === Query definitions (shape of results you want) ===
     
     // A book with author AND all its reviews
     static class BookDetail extends Book {
         List<Review> reviews;
     }
+    // end::query-definitions[]
 
     public static void main(String[] args) {
         // 1. Create an in-memory database
@@ -56,6 +60,7 @@ public class BookstoreExample {
         // 2. Generate tables from entity classes
         SchemaGenerator.createTables(db, Author.class, Book.class, Review.class);
 
+        // tag::insert[]
         // 3. Insert test data
         Author tolkien = new Author();
         tolkien.name = "J.R.R. Tolkien";
@@ -79,7 +84,9 @@ public class BookstoreExample {
         r2.rating = 5;
         r2.comment = "Epic fantasy at its finest.";
         PojoQuery.insert(db, r2);
+        // end::insert[]
 
+        // tag::query[]
         // 4. Query with automatic joins - the POJO shape defines what you get!
         List<BookDetail> books = PojoQuery.build(BookDetail.class)
             .addWhere("{author}.country = ?", "UK")
@@ -92,6 +99,7 @@ public class BookstoreExample {
                 System.out.println("  ★" + review.rating + " - " + review.comment);
             }
         }
+        // end::query[]
     }
 
     static DataSource createDatabase() {

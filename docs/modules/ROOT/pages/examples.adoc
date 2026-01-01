@@ -281,58 +281,24 @@ Fetch events with separate lists for visitors and organizers from the same perso
 *Database Schema:*
 [source,sql]
 ----
-CREATE TABLE event (id BIGINT PRIMARY KEY, title VARCHAR(255));
-CREATE TABLE person (id BIGINT PRIMARY KEY, firstname VARCHAR(100), lastname VARCHAR(100));
-CREATE TABLE event_person (
-    event_id BIGINT,
-    person_id BIGINT,
-    role VARCHAR(20), -- 'visitor' or 'organizer'
-    PRIMARY KEY (event_id, person_id, role)
-);
+include::example$test/examples/docs/FilteredRelationshipExample.java[tag=schema,indent=0]
 ----
 
 *POJOs:*
 [source,java]
 ----
-@Table("event")
-public class EventWithParticipants {
-    @Id Long id;
-    String title;
+include::example$test/examples/docs/FilteredRelationshipExample.java[tag=person,indent=0]
+----
 
-    @Link(linktable = "event_person", linkfield = "event_id", foreignlinkfield = "person_id")
-    @JoinCondition("{this}.id = {linktable}.event_id AND {linktable}.role = 'visitor'")
-    List<Person> visitors;
-
-    @Link(linktable = "event_person", linkfield = "event_id", foreignlinkfield = "person_id")
-    @JoinCondition("{this}.id = {linktable}.event_id AND {linktable}.role = 'organizer'")
-    List<Person> organizers;
-
-    // Getters and setters omitted for brevity
-}
-
-@Table("person")
-public class Person {
-    @Id Long id;
-    String firstname;
-    String lastname;
-
-    // Getters and setters omitted for brevity
-}
+[source,java]
+----
+include::example$test/examples/docs/FilteredRelationshipExample.java[tag=event-with-participants,indent=0]
 ----
 
 *Query:*
 [source,java]
 ----
-EventWithParticipants event = PojoQuery.build(EventWithParticipants.class)
-    .addWhere("event.id = ?", 1L)
-    .execute(dataSource)
-    .stream().findFirst().orElse(null);
-
-if (event != null) {
-    System.out.println("Event: " + event.getTitle());
-    System.out.println("Visitors: " + event.getVisitors().size());
-    System.out.println("Organizers: " + event.getOrganizers().size());
-}
+include::example$test/examples/docs/FilteredRelationshipExample.java[tag=query,indent=0]
 ----
 
 == Example 10: Embedded Objects
@@ -342,59 +308,24 @@ Map address fields from the same table into a nested object.
 *Database Schema:*
 [source,sql]
 ----
-CREATE TABLE customer (
-    id BIGINT PRIMARY KEY,
-    name VARCHAR(255),
-    -- Shipping address columns with prefix
-    ship_street VARCHAR(255),
-    ship_city VARCHAR(100),
-    ship_zip VARCHAR(20),
-    -- Billing address columns with prefix
-    bill_street VARCHAR(255),
-    bill_city VARCHAR(100),
-    bill_zip VARCHAR(20)
-);
+include::example$test/examples/docs/EmbeddedExample.java[tag=schema,indent=0]
 ----
 
 *POJOs:*
 [source,java]
 ----
-// Value object (not an entity - no @Table)
-public class Address {
-    String street;
-    String city;
-    String zip;
+include::example$test/examples/docs/EmbeddedExample.java[tag=address,indent=0]
+----
 
-    // Getters and setters omitted for brevity
-}
-
-@Table("customer")
-public class Customer {
-    @Id Long id;
-    String name;
-
-    @Embedded(prefix = "ship_")
-    Address shippingAddress;
-
-    @Embedded(prefix = "bill_")
-    Address billingAddress;
-
-    // Getters and setters omitted for brevity
-}
+[source,java]
+----
+include::example$test/examples/docs/EmbeddedExample.java[tag=customer,indent=0]
 ----
 
 *Query:*
 [source,java]
 ----
-Customer customer = PojoQuery.build(Customer.class)
-    .addWhere("customer.id = ?", 100L)
-    .execute(dataSource)
-    .stream().findFirst().orElse(null);
-
-if (customer != null) {
-    System.out.println("Ship to: " + customer.getShippingAddress().getCity());
-    System.out.println("Bill to: " + customer.getBillingAddress().getCity());
-}
+include::example$test/examples/docs/EmbeddedExample.java[tag=query,indent=0]
 ----
 
 == Example 11: Streaming Large Result Sets

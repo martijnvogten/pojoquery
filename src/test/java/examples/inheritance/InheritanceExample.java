@@ -15,6 +15,7 @@ import org.pojoquery.schema.SchemaGenerator;
 
 public class InheritanceExample {
 	
+	// tag::entities[]
 	@Table("room")
 	@SubClasses({BedRoom.class, Kitchen.class})
 	static class Room {
@@ -32,12 +33,14 @@ public class InheritanceExample {
 	static class Kitchen extends Room {
 		Boolean hasDishWasher;
 	}
+	// end::entities[]
 
 	public static void main(String[] args) {
 		DataSource db = TestDatabase.dropAndRecreate();
 		createTables(db);
 		insertData(db);
 
+		// tag::query[]
 		PojoQuery<Room> q = PojoQuery.build(Room.class).addWhere("{room}.area > ?", 40.0);
 		System.out.println(q.toSql());
 		
@@ -48,9 +51,12 @@ public class InheritanceExample {
 				System.out.println("Bedroom with " + bedroom.numberOfBeds + " beds.");
 			}
 		}
+		// end::query[]
 		
+		// tag::find-by-id[]
 		BedRoom br = PojoQuery.build(BedRoom.class).findById(db, 1L);
 		System.out.println("Bedroom with " + br.numberOfBeds + " beds.");
+		// end::find-by-id[]
 		
 		PojoQuery.update(db, br);
 	}

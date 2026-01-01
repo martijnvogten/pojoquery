@@ -19,11 +19,14 @@ import org.pojoquery.schema.SchemaGenerator;
 
 public class UsersExample {
 
+	// tag::enum[]
 	public enum Role {
 		USER,
 		ADMIN
 	}
+	// end::enum[]
 
+	// tag::base-entity[]
 	public static class Entity {
 		@Id
 		public Long id;
@@ -32,7 +35,9 @@ public class UsersExample {
 		public Date modificationDate;
 		public Date creationDate;
 	}
+	// end::base-entity[]
 	
+	// tag::user-entity[]
 	@Table("user")
 	public static class User extends Entity {
 		public String firstName;
@@ -58,7 +63,9 @@ public class UsersExample {
 		public String lastName;
 		public String email;
 	}
+	// end::user-entity[]
 
+	// tag::role-entity[]
 	@Table("user_role")
 	public static class UserRole {
 		@Id
@@ -71,12 +78,14 @@ public class UsersExample {
 		@Link(linktable = "user_role", fetchColumn = "role")
 		public Set<Role> roles;
 	}
+	// end::role-entity[]
 	
 	public static void main(String[] args) throws SQLException {
 		DataSource db = TestDatabase.dropAndRecreate();
 		createTables(db);
 		
 		try (Connection con = db.getConnection()) {
+			// tag::insert-users[]
 			// Create regular user John
 			User john = new User();
 			john.firstName = "John";
@@ -99,12 +108,16 @@ public class UsersExample {
 			// Give Alice both USER and ADMIN roles
 			addRole(con, alice.getRef(), Role.USER);
 			addRole(con, alice.getRef(), Role.ADMIN);
+			// end::insert-users[]
 
+			// tag::update-user[]
 			// Alice modifies John's record
 			john.modifiedBy = alice.getRef();
 			john.modificationDate = new Date();
 			PojoQuery.update(con, john);
+			// end::update-user[]
 			
+			// tag::query-with-roles[]
 			// Query all users with their roles
 			PojoQuery<UserWithRoles> q = PojoQuery.build(UserWithRoles.class);
 			System.out.println(q.toSql());
@@ -118,6 +131,7 @@ public class UsersExample {
 					System.out.println("  Created by: " + u.createdBy.email);
 				}
 			}
+			// end::query-with-roles[]
 		}
 	}
 

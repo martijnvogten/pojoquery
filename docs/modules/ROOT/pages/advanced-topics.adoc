@@ -4,65 +4,35 @@ This section covers more advanced features and usage patterns in PojoQuery.
 
 == Inheritance Mapping
 
-PojoQuery supports single-table inheritance using the `@SubClasses` and `@SubClass` annotations.
+PojoQuery supports table-per-subclass inheritance using the `@SubClasses` annotation. Each subclass has its own table that extends the base table through a shared primary key.
 
-1.  Annotate the **base class** with `@Table` pointing to the table containing data for all subclasses.
-2.  Annotate the **base class** with `@SubClasses`, specifying the `discriminator` column name and an array of `@SubClass` definitions.
-3.  Each `@SubClass` annotation links a specific subclass (`value`) to its corresponding `discriminatorValue`.
-4.  Define the subclasses extending the base class. Fields specific to subclasses must correspond to columns present in the single base table.
+1.  Annotate the **base class** with `@Table` pointing to the base table.
+2.  Annotate the **base class** with `@SubClasses`, listing all subclass types.
+3.  Each subclass extends the base class and has its own `@Table` annotation.
+4.  The subclass table uses the same primary key as the base table (foreign key relationship).
 
+*Database Schema:*
+[source,sql]
+----
+include::example$test/examples/docs/TablePerSubclassInheritanceExample.java[tag=schema,indent=0]
+----
+
+*POJOs:*
 [source,java]
 ----
-// Base class mapped to the 'person' table
-@Table("person")
-@SubClasses(
-    discriminator = "person_type", // Discriminator column in 'person' table
-    value = {
-        @SubClass(value = Employee.class, discriminatorValue = "EMP"), // 'EMP' identifies Employee rows
-        @SubClass(value = Customer.class, discriminatorValue = "CUST") // 'CUST' identifies Customer rows
-    }
-)
-public abstract class Person {
-    @Id Long id;
-    String name;
-    @FieldName("person_type") String type; // Field mapping to the discriminator column
+include::example$test/examples/docs/TablePerSubclassInheritanceExample.java[tag=entities,indent=0]
+----
 
-    // Getters and setters omitted for brevity
-}
+*Querying:*
+[source,java]
+----
+include::example$test/examples/docs/TablePerSubclassInheritanceExample.java[tag=query-base,indent=0]
+----
 
-// Employee subclass - fields map to columns in 'person' table
-public class Employee extends Person {
-    String department;
-    BigDecimal salary;
-
-    // Getters and setters omitted for brevity
-}
-
-// Customer subclass - fields map to columns in 'person' table
-public class Customer extends Person {
-    Integer loyaltyPoints;
-
-    // Getters and setters omitted for brevity
-}
-
-// --- Querying ---
-// Querying for the base class fetches instances of the correct subclass
-List<Person> persons = PojoQuery.build(Person.class).execute(dataSource);
-
-for (Person p : persons) {
-    if (p instanceof Employee) {
-        Employee emp = (Employee) p;
-        System.out.println("Employee: " + emp.getName() + ", Dept: " + emp.getDepartment());
-    } else if (p instanceof Customer) {
-        Customer cust = (Customer) p;
-        System.out.println("Customer: " + cust.getName() + ", Points: " + cust.getLoyaltyPoints());
-    }
-}
-
-// You can also query directly for a subclass
-List<Employee> employees = PojoQuery.build(Employee.class)
-    .addWhere("employee.department = ?", "Sales") // Note: Alias might be 'employee' or 'person' depending on context
-    .execute(dataSource);
+You can also query directly for a subclass:
+[source,java]
+----
+include::example$test/examples/docs/TablePerSubclassInheritanceExample.java[tag=query-subclass,indent=0]
 ----
 
 == Streaming Large Result Sets
@@ -128,28 +98,22 @@ PojoQuery provides static helpers for basic Insert, Update, Delete.
     *   Deletes based on the `@Id` field(s).
     *   Handles multi-table inheritance deletes (deletes from all mapped tables).
 
+*Insert:*
 [source,java]
 ----
-// --- Insert ---
-User newUser = new User();
-newUser.setFirstName("Jane");
-newUser.setLastName("Doe");
-newUser.setEmail("jane.doe@example.com");
-PojoQuery.insert(dataSource, newUser); // newUser.getId() will be populated if auto-generated
-System.out.println("Inserted user with ID: " + newUser.getId());
+include::example$test/examples/docs/BasicCrudExample.java[tag=insert,indent=0]
+----
 
-// --- Update ---
-User existingUser = repo.findById(newUser.getId()); // Fetch first
-if (existingUser != null) {
-    existingUser.setEmail("jane.d@example.com");
-    int updatedRows = PojoQuery.update(dataSource, existingUser);
-    System.out.println("Updated rows: " + updatedRows);
-}
+*Update:*
+[source,java]
+----
+include::example$test/examples/docs/BasicCrudExample.java[tag=update,indent=0]
+----
 
-// --- Delete ---
-PojoQuery.delete(dataSource, existingUser); // Delete by entity instance
-// OR
-PojoQuery.deleteById(dataSource, User.class, existingUser.getId()); // Delete by ID
+*Delete:*
+[source,java]
+----
+include::example$test/examples/docs/BasicCrudExample.java[tag=delete,indent=0]
 ----
 
 == Transactions
