@@ -6,8 +6,8 @@ import java.util.List;
 
 import javax.sql.DataSource;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.SqlExpression;
@@ -63,17 +63,17 @@ public class FieldAliasesInWhereIT {
 			room.area = new BigDecimal(25);
 			room.house = h;
 			PojoQuery.insert(c, room);
-			Assert.assertEquals((Long)1L, room.id);
+			Assertions.assertEquals((Long)1L, room.id);
 			
 			Room loaded = PojoQuery.build(Room.class).findById(c, room.id);
-			Assert.assertNotNull(loaded.house);
+			Assertions.assertNotNull(loaded.house);
 			
 			{
 				List<Room> results = PojoQuery.build(Room.class)
 					.addWhere(SqlExpression.sql("{house.owner}.name = ?", "John Lennon"))
 					.execute(c);
 				
-				Assert.assertEquals(1, results.size());
+				Assertions.assertEquals(1, results.size());
 			}
 			
 			{
@@ -81,7 +81,7 @@ public class FieldAliasesInWhereIT {
 						.addWhere(SqlExpression.sql("{house.owner.name} = ?", "John Lennon"))
 						.execute(c);
 				
-				Assert.assertEquals(1, results.size());
+				Assertions.assertEquals(1, results.size());
 			}
 		});
 	}

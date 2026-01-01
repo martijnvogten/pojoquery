@@ -3,8 +3,8 @@ package org.pojoquery;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.annotations.GroupBy;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Table;
@@ -23,7 +23,7 @@ public class TestGroupBy {
 	@Test
 	public void testSql() {
 		PojoQuery<WordCount> q = PojoQuery.build(WordCount.class);
-		Assert.assertEquals(TestUtils.norm("""
+		Assertions.assertEquals(TestUtils.norm("""
 			SELECT
 			 `wordindex`.`word` AS `wordindex.word`,
 			 COUNT(*) AS `wordindex.wordCount`
@@ -38,6 +38,6 @@ public class TestGroupBy {
 		     );
 
 		List<WordCount> rows = q.processRows(result);
-		Assert.assertEquals(2, rows.size());
+		Assertions.assertEquals(2, rows.size());
 	}
 }

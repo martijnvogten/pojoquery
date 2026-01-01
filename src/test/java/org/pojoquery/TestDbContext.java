@@ -1,7 +1,7 @@
 package org.pojoquery;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.pojoquery.TestUtils.norm;
 
 import java.util.HashMap;
@@ -9,9 +9,9 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
@@ -25,12 +25,12 @@ public class TestDbContext {
 	// Save and restore default context to avoid polluting global state for other tests
 	private static DbContext originalDefault;
 	
-	@BeforeClass
+	@BeforeAll
 	public static void saveDefaultContext() {
 		originalDefault = DbContext.getDefault();
 	}
 	
-	@AfterClass
+	@AfterAll
 	public static void restoreDefaultContext() {
 		DbContext.setDefault(originalDefault);
 	}
@@ -98,8 +98,8 @@ public class TestDbContext {
 		p.price = 100;
 		Long id = PojoQuery.insert(hsqldbContext, db, p);
 		
-		assertNotNull("Insert should return generated ID", id);
-		assertEquals("ID should be set on object", id, p.id);
+		assertNotNull(id, "Insert should return generated ID");
+		assertEquals(id, p.id, "ID should be set on object");
 	}
 	
 	@Test
@@ -119,7 +119,7 @@ public class TestDbContext {
 		p.price = 75;
 		int affected = PojoQuery.update(hsqldbContext, db, p);
 		
-		assertEquals("Should affect 1 row", 1, affected);
+		assertEquals(1, affected, "Should affect 1 row");
 		
 		// Verify the update via query
 		Product loaded = PojoQuery.build(hsqldbContext, Product.class)
@@ -146,7 +146,7 @@ public class TestDbContext {
 		// Verify deletion
 		Product loaded = PojoQuery.build(hsqldbContext, Product.class)
 				.findById(db, p.id);
-		assertEquals("Should return null for deleted entity", null, loaded);
+		assertEquals(null, loaded, "Should return null for deleted entity");
 	}
 	
 	@Test 
@@ -161,7 +161,7 @@ public class TestDbContext {
 		values.put("price", 200);
 		Long id = DB.insert(hsqldbContext, db, "product", values);
 		
-		assertNotNull("Insert should return generated ID", id);
+		assertNotNull(id, "Insert should return generated ID");
 	}
 	
 	@Test
@@ -184,6 +184,6 @@ public class TestDbContext {
 		ids.put("id", id);
 		
 		int affected = DB.update(hsqldbContext, db, "product", updateValues, ids);
-		assertEquals("Should affect 1 row", 1, affected);
+		assertEquals(1, affected, "Should affect 1 row");
 	}
 }

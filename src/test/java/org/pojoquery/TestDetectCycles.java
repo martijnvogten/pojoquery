@@ -2,8 +2,8 @@ package org.pojoquery;
 
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.MappingException;
@@ -32,7 +32,7 @@ public class TestDetectCycles {
 	public void testIt() {
 		try {
 			QueryBuilder.from(Department.class).toStatement().getSql();
-			Assert.fail();
+			Assertions.fail();
 		} catch (MappingException e) {
 		}
 	}

@@ -1,7 +1,7 @@
 package org.pojoquery;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.pipeline.QueryBuilder;
@@ -40,7 +40,7 @@ public class TestExceptions {
 		} catch (MappingException me) {
 			caught = true;
 		}
-		Assert.assertTrue(caught);
+		Assertions.assertTrue(caught);
 	}
 	
 }

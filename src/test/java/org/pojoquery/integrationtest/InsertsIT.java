@@ -5,8 +5,8 @@ import java.util.List;
 
 import javax.sql.DataSource;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.DB.Transaction;
@@ -37,7 +37,7 @@ public class InsertsIT {
 		DB.runInTransaction(db, (Connection c) -> {
 			User u = new User();
 			PojoQuery.insert(c, u);
-			Assert.assertEquals((Long)1L, u.id);
+			Assertions.assertEquals((Long)1L, u.id);
 		});
 	}
 	
@@ -51,7 +51,7 @@ public class InsertsIT {
 				public Void run(Connection connection) {
 					User u = new User();
 					PojoQuery.insert(connection, u);
-					Assert.assertEquals((Long)1L, u.id);
+					Assertions.assertEquals((Long)1L, u.id);
 					throw new RuntimeException("error");
 				}
 			});
@@ -59,7 +59,7 @@ public class InsertsIT {
 			
 		}
 		List<User> users = PojoQuery.build(User.class).execute(db);
-		Assert.assertEquals(0, users.size());
+		Assertions.assertEquals(0, users.size());
 	}
 
 	private static DataSource initDatabase() {

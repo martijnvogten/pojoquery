@@ -1,22 +1,24 @@
 package org.pojoquery.parser;
 
-import org.junit.Assert;
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import org.junit.jupiter.api.Test;
 
 public class TestParser {
 	@Test
 	public void testSimpleParse() {
-		Assert.assertEquals("[[?]]", findParams("?"));
-		Assert.assertEquals("'?'", findParams("'?'"));
+		assertEquals("[[?]]", findParams("?"));
+		assertEquals("'?'", findParams("'?'"));
 		
-		Assert.assertEquals("'?' [[?]]", findParams("'?' ?"));
-		Assert.assertEquals("'?\\'\\r\r\n' [[?]]", findParams("'?\\'\\r\r\n' ?"));
+		assertEquals("'?' [[?]]", findParams("'?' ?"));
+		assertEquals("'?\\'\\r\r\n' [[?]]", findParams("'?\\'\\r\r\n' ?"));
 		
-		Assert.assertEquals("[[:jantje]]", findParams(":jantje"));
-		Assert.assertEquals("':a' [[:a]]", findParams("':a' :a"));
-		Assert.assertEquals("':a' [[:locale_id]],[[?]]", findParams("':a' :locale_id,?"));
-		Assert.assertEquals("':a' [[:locale_id]],'?'", findParams("':a' :locale_id,'?'"));
-		Assert.assertEquals("':a' [[:locale_id]],[[?]]", findParams("':a' :locale_id,?"));
+		assertEquals("[[:jantje]]", findParams(":jantje"));
+		assertEquals("':a' [[:a]]", findParams("':a' :a"));
+		assertEquals("':a' [[:locale_id]],[[?]]", findParams("':a' :locale_id,?"));
+		assertEquals("':a' [[:locale_id]],'?'", findParams("':a' :locale_id,'?'"));
+		assertEquals("':a' [[:locale_id]],[[?]]", findParams("':a' :locale_id,?"));
 	}
 	
 	private String findParams(String sql) {
@@ -32,13 +34,13 @@ public class TestParser {
 
 	@Test
 	public void testColons() {
-		Assert.assertEquals(": :,:", findParams(": :,:"));
-		Assert.assertEquals("SELECT 1 :: int", findParams("SELECT 1 :: int"));
+		assertEquals(": :,:", findParams(": :,:"));
+		assertEquals("SELECT 1 :: int", findParams("SELECT 1 :: int"));
 	}
 	
-	@Test(expected=RuntimeException.class)
+	@Test
 	public void testUnclosedLiteral() {
-		findParams("'");
+		assertThrows(RuntimeException.class, () -> findParams("'"));
 	}
 
 }

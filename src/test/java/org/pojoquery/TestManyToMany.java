@@ -5,8 +5,8 @@ import static org.pojoquery.TestUtils.norm;
 import java.util.Date;
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
@@ -73,7 +73,7 @@ public class TestManyToMany {
 		PojoQuery<EventWithPersons> q = PojoQuery.build(EventWithPersons.class)
 				.addWhere("{persons.firstname}=?", "John");
 		
-		Assert.assertEquals(
+		Assertions.assertEquals(
 			norm(
 				"""
 					SELECT

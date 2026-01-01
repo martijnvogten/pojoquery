@@ -6,8 +6,8 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.SqlExpression;
@@ -43,13 +43,13 @@ public class OtherIT {
 			u.specs = new HashMap<String,Object>();
 			u.specs.put("area", 25);
 			PojoQuery.insert(c, u);
-			Assert.assertEquals((Long)1L, u.id);
+			Assertions.assertEquals((Long)1L, u.id);
 			
 			PojoQuery<Room> build = PojoQuery.build(Room.class);
 			build.addField(SqlExpression.sql("{room}.area"), "room.area");
 			Room loaded = build.findById(c, u.id);
-			Assert.assertNotNull(loaded.specs);
-			Assert.assertEquals(25, loaded.specs.get("area"));
+			Assertions.assertNotNull(loaded.specs);
+			Assertions.assertEquals(25, loaded.specs.get("area"));
 		});
 	}
 	
@@ -64,13 +64,13 @@ public class OtherIT {
 			bedroom.numberOfBeds = 2;
 			PojoQuery.insert(c, bedroom);
 			
-			Assert.assertEquals((Long)1L, bedroom.id);
+			Assertions.assertEquals((Long)1L, bedroom.id);
 			
 			PojoQuery<BedRoom> build = PojoQuery.build(BedRoom.class);
 			build.addField(SqlExpression.sql("{room}.area"), "bedroom.area");
 			Room loaded = build.findById(c, bedroom.id);
-			Assert.assertNotNull(loaded.specs);
-			Assert.assertEquals(25, loaded.specs.get("area"));
+			Assertions.assertNotNull(loaded.specs);
+			Assertions.assertEquals(25, loaded.specs.get("area"));
 		});
 	}
 	

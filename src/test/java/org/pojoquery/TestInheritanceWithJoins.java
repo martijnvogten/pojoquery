@@ -1,15 +1,15 @@
 package org.pojoquery;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.pojoquery.TestUtils.norm;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
@@ -68,17 +68,17 @@ public class TestInheritanceWithJoins {
 		// When querying a superclasses, we want a list of all tables
 		// and fields per table
 		List<TableMapping> mapping = QueryBuilder.determineTableMapping(Room.class);
-		Assert.assertEquals(1, mapping.size());
-		Assert.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area"), Room.class.getDeclaredField("house")), mapping.get(0).fields);
+		Assertions.assertEquals(1, mapping.size());
+		Assertions.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area"), Room.class.getDeclaredField("house")), mapping.get(0).fields);
 		
 		List<TableMapping> bedroom = QueryBuilder.determineTableMapping(BedRoom.class);
-		Assert.assertEquals(2, bedroom.size());
-		Assert.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area"), Room.class.getDeclaredField("house")), bedroom.get(0).fields);
-		Assert.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds")), bedroom.get(1).fields);
+		Assertions.assertEquals(2, bedroom.size());
+		Assertions.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area"), Room.class.getDeclaredField("house")), bedroom.get(0).fields);
+		Assertions.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds")), bedroom.get(1).fields);
 		
 		List<TableMapping> luxury = QueryBuilder.determineTableMapping(LuxuryBedRoom.class);
-		Assert.assertEquals(2, luxury.size());
-		Assert.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds"), LuxuryBedRoom.class.getDeclaredField("tvScreenSize")), luxury.get(1).fields);
+		Assertions.assertEquals(2, luxury.size());
+		Assertions.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds"), LuxuryBedRoom.class.getDeclaredField("tvScreenSize")), luxury.get(1).fields);
 	}
 	
 	@Test
@@ -141,12 +141,12 @@ public class TestInheritanceWithJoins {
 			     1L,           100.0,          1                    ,  1L       , "Unity Street 1");
 		
 		List<BedRoom> list = QueryBuilder.from(BedRoom.class).processRows(result);
-		Assert.assertEquals(1, list.size());
+		Assertions.assertEquals(1, list.size());
 		BedRoom bedroom = list.get(0);
-		Assert.assertTrue(bedroom instanceof BedRoom);
-		Assert.assertEquals(100.0F, bedroom.area, 0.1F);
-		Assert.assertEquals((Integer)1, bedroom.numberOfBeds);
-		Assert.assertEquals("Unity Street 1", bedroom.house.address);
+		Assertions.assertTrue(bedroom instanceof BedRoom);
+		Assertions.assertEquals(100.0F, bedroom.area, 0.1F);
+		Assertions.assertEquals((Integer)1, bedroom.numberOfBeds);
+		Assertions.assertEquals("Unity Street 1", bedroom.house.address);
 	}
 	
 	@Test
@@ -200,11 +200,11 @@ public class TestInheritanceWithJoins {
 		List<Apartment> list = qb.processRows(result);
 		
 		Room[] rooms = list.get(0).rooms;
-		Assert.assertEquals(1, rooms.length);
-		Assert.assertTrue(rooms[0] instanceof BedRoom);
+		Assertions.assertEquals(1, rooms.length);
+		Assertions.assertTrue(rooms[0] instanceof BedRoom);
 		BedRoom bedroom = (BedRoom) rooms[0];
-		Assert.assertEquals((Double)100.0, bedroom.area);
-		Assert.assertEquals((Integer)2, bedroom.numberOfBeds);
+		Assertions.assertEquals((Double)100.0, bedroom.area);
+		Assertions.assertEquals((Integer)2, bedroom.numberOfBeds);
 		
 	}
 	

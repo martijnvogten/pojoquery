@@ -9,9 +9,9 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.TestUtils;
@@ -24,7 +24,7 @@ import org.pojoquery.schema.SchemaGenerator;
 
 public class JoinConditionsIT {
 
-	@BeforeClass
+	@BeforeAll
 	public static void setupDbContext() {
 		// Trigger TestDatabaseProvider static initialization to set DbContext
 		TestDatabaseProvider.initDbContext();
@@ -110,7 +110,7 @@ public class JoinConditionsIT {
 	public void testSimpleDepartmentEmployeeJoinCondition() {
 		PojoQuery<Employee> q = PojoQuery.build(Employee.class);
 		String sql = q.toSql();
-		Assert.assertEquals(TestUtils.norm("""
+		Assertions.assertEquals(TestUtils.norm("""
 			SELECT
 			 "employee".id AS "employee.id",
 			 "department".id AS "department.id",
@@ -127,18 +127,18 @@ public class JoinConditionsIT {
 		
 		PojoQuery<EventWithVisitorsAndOrganizers> q = PojoQuery.build(EventWithVisitorsAndOrganizers.class);
 		List<EventWithVisitorsAndOrganizers> events = q.execute(db);
-		Assert.assertEquals(0, events.size());
+		Assertions.assertEquals(0, events.size());
 		
 		DB.runInTransaction(db, (Connection c) -> {
 			insertTestData(c);
 		});
 		
 		List<EventWithVisitorsAndOrganizers> eventList = q.execute(db);
-		Assert.assertEquals(1, eventList.get(0).visitors.size());
-		Assert.assertEquals("Jane", eventList.get(0).visitors.get(0).firstname);
+		Assertions.assertEquals(1, eventList.get(0).visitors.size());
+		Assertions.assertEquals("Jane", eventList.get(0).visitors.get(0).firstname);
 		
-		Assert.assertEquals(1, eventList.get(0).organizers.size());
-		Assert.assertEquals("Stella", eventList.get(0).organizers.get(0).firstname);
+		Assertions.assertEquals(1, eventList.get(0).organizers.size());
+		Assertions.assertEquals("Stella", eventList.get(0).organizers.get(0).firstname);
 	}
 	
 	@Test
@@ -186,7 +186,7 @@ public class JoinConditionsIT {
 		List<Festival> festivals = q.execute(db);
 		
 		List<EventWithVisitorsAndOrganizers> events = festivals.get(0).events;
-		Assert.assertEquals(1, events.size());
+		Assertions.assertEquals(1, events.size());
 		
 	}
 	

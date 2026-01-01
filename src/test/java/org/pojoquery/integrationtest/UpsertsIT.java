@@ -6,8 +6,8 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
@@ -57,9 +57,9 @@ public class UpsertsIT {
 			), List.of("id"));
 
 			List<Map<String, Object>> results = DB.queryRows(c, "SELECT * FROM product WHERE id=1");
-			Assert.assertEquals(1, results.size());
-			Assert.assertEquals("Widget", getValue(results.get(0), "name"));
-			Assert.assertEquals(100, getValue(results.get(0), "price"));
+			Assertions.assertEquals(1, results.size());
+			Assertions.assertEquals("Widget", getValue(results.get(0), "name"));
+			Assertions.assertEquals(100, getValue(results.get(0), "price"));
 		});
 	}
 
@@ -77,9 +77,9 @@ public class UpsertsIT {
 
 			// Verify it was inserted
 			List<Map<String, Object>> results = DB.queryRows(c, "SELECT * FROM product WHERE id=1");
-			Assert.assertEquals(1, results.size());
-			Assert.assertEquals("Widget", getValue(results.get(0), "name"));
-			Assert.assertEquals(100, getValue(results.get(0), "price"));
+			Assertions.assertEquals(1, results.size());
+			Assertions.assertEquals("Widget", getValue(results.get(0), "name"));
+			Assertions.assertEquals(100, getValue(results.get(0), "price"));
 
 			// Now use upsert to update the existing record
 			DB.upsert(c, "product", Map.of(
@@ -90,13 +90,13 @@ public class UpsertsIT {
 
 			// Verify it was updated
 			results = DB.queryRows(c, "SELECT * FROM product WHERE id=1");
-			Assert.assertEquals(1, results.size());
-			Assert.assertEquals("Super Widget", getValue(results.get(0), "name"));
-			Assert.assertEquals(150, getValue(results.get(0), "price"));
+			Assertions.assertEquals(1, results.size());
+			Assertions.assertEquals("Super Widget", getValue(results.get(0), "name"));
+			Assertions.assertEquals(150, getValue(results.get(0), "price"));
 
 			// Make sure we still only have one record
 			results = DB.queryRows(c, "SELECT COUNT(*) AS cnt FROM product");
-			Assert.assertEquals(1L, getValue(results.get(0), "cnt"));
+			Assertions.assertEquals(1L, getValue(results.get(0), "cnt"));
 		});
 	}
 
@@ -128,11 +128,11 @@ public class UpsertsIT {
 
 			// Verify both records
 			List<Map<String, Object>> results = DB.queryRows(c, "SELECT * FROM product ORDER BY id");
-			Assert.assertEquals(2, results.size());
-			Assert.assertEquals("Widget A Updated", getValue(results.get(0), "name"));
-			Assert.assertEquals(110, getValue(results.get(0), "price"));
-			Assert.assertEquals("Widget B", getValue(results.get(1), "name"));
-			Assert.assertEquals(200, getValue(results.get(1), "price"));
+			Assertions.assertEquals(2, results.size());
+			Assertions.assertEquals("Widget A Updated", getValue(results.get(0), "name"));
+			Assertions.assertEquals(110, getValue(results.get(0), "price"));
+			Assertions.assertEquals("Widget B", getValue(results.get(1), "name"));
+			Assertions.assertEquals(200, getValue(results.get(1), "price"));
 		});
 	}
 
@@ -152,9 +152,9 @@ public class UpsertsIT {
 			List<InventoryItem> items = PojoQuery.build(InventoryItem.class)
 				.addWhere("{inventory_item.productID} = ?", 1L)
 				.execute(c);
-			Assert.assertEquals(1, items.size());
-			Assert.assertEquals("SKU-001", items.get(0).sku);
-			Assert.assertEquals(Integer.valueOf(50), items.get(0).quantity);
+			Assertions.assertEquals(1, items.size());
+			Assertions.assertEquals("SKU-001", items.get(0).sku);
+			Assertions.assertEquals(Integer.valueOf(50), items.get(0).quantity);
 
 			// Now update the existing record
 			DB.upsert(c, "inventory_item", Map.of(
@@ -167,13 +167,13 @@ public class UpsertsIT {
 			items = PojoQuery.build(InventoryItem.class)
 				.addWhere("{inventory_item.productID} = ?", 1L)
 				.execute(c);
-			Assert.assertEquals(1, items.size());
-			Assert.assertEquals("SKU-001-UPDATED", items.get(0).sku);
-			Assert.assertEquals(Integer.valueOf(75), items.get(0).quantity);
+			Assertions.assertEquals(1, items.size());
+			Assertions.assertEquals("SKU-001-UPDATED", items.get(0).sku);
+			Assertions.assertEquals(Integer.valueOf(75), items.get(0).quantity);
 
 			// Make sure we still only have one record
 			List<Map<String, Object>> results = DB.queryRows(c, "SELECT COUNT(*) AS cnt FROM inventory_item");
-			Assert.assertEquals(1L, getValue(results.get(0), "cnt"));
+			Assertions.assertEquals(1L, getValue(results.get(0), "cnt"));
 		});
 	}
 

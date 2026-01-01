@@ -5,8 +5,8 @@ import java.sql.Connection;
 
 import javax.sql.DataSource;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Column;
@@ -91,7 +91,7 @@ public class ConstraintsIT {
             DB.runInTransaction(db, (Connection c) -> {
                 PojoQuery.insert(c, account);
             });
-            Assert.fail("Should have thrown exception due to NOT NULL constraint on username");
+            Assertions.fail("Should have thrown exception due to NOT NULL constraint on username");
         } catch (Exception e) {
             // Expected - NOT NULL constraint violated
             assertConstraintViolation(e, "username", "NOT NULL");
@@ -109,13 +109,13 @@ public class ConstraintsIT {
             account.bio = null;  // This is OK - bio is nullable
             
             PojoQuery.insert(c, account);
-            Assert.assertNotNull("Account should be inserted with generated ID", account.id);
+            Assertions.assertNotNull(account.id, "Account should be inserted with generated ID");
             
             // Verify it was saved correctly
             Account loaded = PojoQuery.build(Account.class).findById(c, account.id);
-            Assert.assertEquals("johndoe", loaded.username);
-            Assert.assertEquals("john@example.com", loaded.email);
-            Assert.assertNull(loaded.bio);
+            Assertions.assertEquals("johndoe", loaded.username);
+            Assertions.assertEquals("john@example.com", loaded.email);
+            Assertions.assertNull(loaded.bio);
         });
     }
     
@@ -142,7 +142,7 @@ public class ConstraintsIT {
             DB.runInTransaction(db, (Connection c) -> {
                 PojoQuery.insert(c, account2);
             });
-            Assert.fail("Should have thrown exception due to UNIQUE constraint on username");
+            Assertions.fail("Should have thrown exception due to UNIQUE constraint on username");
         } catch (Exception e) {
             // Expected - UNIQUE constraint violated
             assertConstraintViolation(e, "username", "UNIQUE");
@@ -164,9 +164,9 @@ public class ConstraintsIT {
             account2.email = "user2@example.com";
             PojoQuery.insert(c, account2);
             
-            Assert.assertNotNull(account1.id);
-            Assert.assertNotNull(account2.id);
-            Assert.assertNotEquals(account1.id, account2.id);
+            Assertions.assertNotNull(account1.id);
+            Assertions.assertNotNull(account2.id);
+            Assertions.assertNotEquals(account1.id, account2.id);
         });
     }
     
@@ -187,7 +187,7 @@ public class ConstraintsIT {
             DB.runInTransaction(db, (Connection c) -> {
                 PojoQuery.insert(c, product);
             });
-            Assert.fail("Should have thrown exception due to FOREIGN KEY constraint");
+            Assertions.fail("Should have thrown exception due to FOREIGN KEY constraint");
         } catch (Exception e) {
             // Expected - FOREIGN KEY constraint violated
             assertConstraintViolation(e, "category", "FOREIGN KEY");
@@ -203,7 +203,7 @@ public class ConstraintsIT {
             Category category = new Category();
             category.name = "Electronics";
             PojoQuery.insert(c, category);
-            Assert.assertNotNull(category.id);
+            Assertions.assertNotNull(category.id);
             
             // Now insert product with valid category reference
             Product product = new Product();
@@ -212,13 +212,13 @@ public class ConstraintsIT {
             product.category = category;
             
             PojoQuery.insert(c, product);
-            Assert.assertNotNull(product.id);
+            Assertions.assertNotNull(product.id);
             
             // Verify it was saved with correct FK
             Product loaded = PojoQuery.build(Product.class).findById(c, product.id);
-            Assert.assertEquals("Laptop", loaded.name);
-            Assert.assertNotNull(loaded.category);
-            Assert.assertEquals(category.id, loaded.category.id);
+            Assertions.assertEquals("Laptop", loaded.name);
+            Assertions.assertNotNull(loaded.category);
+            Assertions.assertEquals(category.id, loaded.category.id);
         });
     }
     
@@ -234,11 +234,11 @@ public class ConstraintsIT {
             product.category = null;
             
             PojoQuery.insert(c, product);
-            Assert.assertNotNull(product.id);
+            Assertions.assertNotNull(product.id);
             
             // Verify it was saved
             Product loaded = PojoQuery.build(Product.class).findById(c, product.id);
-            Assert.assertEquals("Uncategorized Product", loaded.name);
+            Assertions.assertEquals("Uncategorized Product", loaded.name);
         });
     }
     
@@ -255,7 +255,7 @@ public class ConstraintsIT {
             DB.runInTransaction(db, (Connection c) -> {
                 PojoQuery.insert(c, item);
             });
-            Assert.fail("Should have thrown exception due to NOT NULL on FK");
+            Assertions.fail("Should have thrown exception due to NOT NULL on FK");
         } catch (Exception e) {
             // Expected - FK NOT NULL constraint violated
             assertConstraintViolation(e, "product_id", "NOT NULL");
@@ -284,12 +284,12 @@ public class ConstraintsIT {
             item.quantity = 2;
             
             PojoQuery.insert(c, item);
-            Assert.assertNotNull(item.id);
+            Assertions.assertNotNull(item.id);
             
             // Verify it was saved
             OrderItem loaded = PojoQuery.build(OrderItem.class).findById(c, item.id);
-            Assert.assertEquals(2, loaded.quantity);
-            Assert.assertNotNull(loaded.product);
+            Assertions.assertEquals(2, loaded.quantity);
+            Assertions.assertNotNull(loaded.product);
         });
     }
     
@@ -313,7 +313,7 @@ public class ConstraintsIT {
             
             Product loaded = PojoQuery.build(Product.class).findById(c, product.id);
             // Compare with scale consideration
-            Assert.assertEquals(0, new BigDecimal("12345678.99").compareTo(loaded.price));
+            Assertions.assertEquals(0, new BigDecimal("12345678.99").compareTo(loaded.price));
         });
     }
     
@@ -340,7 +340,7 @@ public class ConstraintsIT {
             DB.runInTransaction(db, (Connection c) -> {
                 PojoQuery.insert(c, account2);
             });
-            Assert.fail("Should have thrown exception due to NOT NULL constraint");
+            Assertions.fail("Should have thrown exception due to NOT NULL constraint");
         } catch (Exception e) {
             // Expected
             assertConstraintViolation(e, "username", "NOT NULL");
@@ -388,10 +388,10 @@ public class ConstraintsIT {
             message.contains("violation") ||
             message.contains("integrity");
         
-        Assert.assertTrue(
+        Assertions.assertTrue(
+            isConstraintViolation,
             "Expected constraint violation for " + constraintType + " on " + fieldHint + 
-            ", but got: " + e.getMessage(),
-            isConstraintViolation
+            ", but got: " + e.getMessage()
         );
     }
     

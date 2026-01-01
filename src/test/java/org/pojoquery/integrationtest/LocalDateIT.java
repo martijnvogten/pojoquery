@@ -5,8 +5,8 @@ import java.time.LocalDate;
 
 import javax.sql.DataSource;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
@@ -31,10 +31,10 @@ public class LocalDateIT {
 			User u = new User();
 			u.dateOfBirth = LocalDate.of(2015, 4, 15);
 			PojoQuery.insert(c, u);
-			Assert.assertEquals((Long)1L, u.id);
+			Assertions.assertEquals((Long)1L, u.id);
 			
 			User loaded = PojoQuery.build(User.class).findById(c, u.id);
-			Assert.assertEquals(LocalDate.of(2015, 4, 15), loaded.dateOfBirth);
+			Assertions.assertEquals(LocalDate.of(2015, 4, 15), loaded.dateOfBirth);
 		});
 	}
 	

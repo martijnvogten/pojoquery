@@ -1,26 +1,23 @@
 package org.pojoquery.integrationtest;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
+import java.util.stream.Stream;
 
 import javax.sql.DataSource;
 
 import org.hsqldb.jdbc.JDBCDataSource;
-import org.junit.After;
-import org.junit.Assume;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.DbContext.Dialect;
@@ -43,16 +40,21 @@ import org.postgresql.ds.PGSimpleDataSource;
  * <p>HSQLDB tests always run. MySQL and PostgreSQL tests require Docker.</p>
  * <p>If Docker is not available, MySQL/PostgreSQL tests are skipped.</p>
  */
-@Ignore("Disabled: takes too long to run with Docker containers")
-@RunWith(Parameterized.class)
+@Disabled("Disabled: takes too long to run with Docker containers")
 public class MultiDialectIT {
 
     // Testcontainers - lazily initialized only when Docker is available
     private static MySQLContainer<?> mysql;
     private static PostgreSQLContainer<?> postgres;
     private static boolean dockerAvailable = false;
+    
+    // Instance variables for test state
+    private DataSource dataSource;
+    private DbContext dbContext;
+    private Dialect dialect;
+    private static int hsqldbCounter = 0;
 
-    @BeforeClass
+    @BeforeAll
     public static void checkDocker() {
         try {
             // Try starting MySQL container - this will fail if Docker is not available
@@ -111,29 +113,15 @@ public class MultiDialectIT {
         }
     }
 
-    @Parameters(name = "{0}")
-    public static Collection<Object[]> dialects() {
-        return Arrays.asList(new Object[][] {
-            { Dialect.HSQLDB },
-            { Dialect.MYSQL },
-            { Dialect.POSTGRES }
-        });
+    static Stream<Dialect> dialects() {
+        return Stream.of(Dialect.HSQLDB, Dialect.MYSQL, Dialect.POSTGRES);
     }
 
-    private final Dialect dialect;
-    private DataSource dataSource;
-    private DbContext dbContext;
-    private static int hsqldbCounter = 0;
-
-    public MultiDialectIT(Dialect dialect) {
+    void setUp(Dialect dialect) {
         this.dialect = dialect;
-    }
-
-    @Before
-    public void setUp() {
         // Skip MySQL/PostgreSQL tests if Docker is not available
         if (dialect == Dialect.MYSQL || dialect == Dialect.POSTGRES) {
-            Assume.assumeTrue("Docker is not available - skipping " + dialect + " tests", dockerAvailable);
+            assumeTrue(dockerAvailable, "Docker is not available - skipping " + dialect + " tests");
         }
         
         dbContext = DbContext.forDialect(dialect);
@@ -157,7 +145,7 @@ public class MultiDialectIT {
         createTables();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         // Drop tables to ensure clean state
         dropTables();
@@ -203,23 +191,27 @@ public class MultiDialectIT {
         }
     }
 
-    @Test
-    public void testInsertAndSelect() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dialects")
+    public void testInsertAndSelect(Dialect dialect) {
+        setUp(dialect);
         User user = new User("alice", "alice@example.com");
         PojoQuery.insert(dataSource, user);
         
-        assertNotNull("User should have an ID after insert", user.id);
-        assertTrue("User ID should be positive", user.id > 0);
+        assertNotNull(user.id, "User should have an ID after insert");
+        assertTrue(user.id > 0, "User ID should be positive");
         
         User loaded = PojoQuery.build(User.class).findById(dataSource, user.id);
-        assertNotNull("User should be found", loaded);
+        assertNotNull(loaded, "User should be found");
         assertEquals("alice", loaded.username);
         assertEquals("alice@example.com", loaded.email);
         assertEquals(Boolean.TRUE, loaded.active);
     }
 
-    @Test
-    public void testUpdate() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dialects")
+    public void testUpdate(Dialect dialect) {
+        setUp(dialect);
         User user = new User("bob", "bob@example.com");
         PojoQuery.insert(dataSource, user);
         
@@ -232,8 +224,10 @@ public class MultiDialectIT {
         assertEquals(Boolean.FALSE, loaded.active);
     }
 
-    @Test
-    public void testDelete() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dialects")
+    public void testDelete(Dialect dialect) {
+        setUp(dialect);
         User user = new User("charlie", "charlie@example.com");
         PojoQuery.insert(dataSource, user);
         Long id = user.id;
@@ -241,11 +235,13 @@ public class MultiDialectIT {
         PojoQuery.delete(dataSource, user);
         
         User loaded = PojoQuery.build(User.class).findById(dataSource, id);
-        assertNull("User should be deleted", loaded);
+        assertNull(loaded, "User should be deleted");
     }
 
-    @Test
-    public void testSelectAll() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dialects")
+    public void testSelectAll(Dialect dialect) {
+        setUp(dialect);
         PojoQuery.insert(dataSource, new User("user1", "user1@example.com"));
         PojoQuery.insert(dataSource, new User("user2", "user2@example.com"));
         PojoQuery.insert(dataSource, new User("user3", "user3@example.com"));
@@ -254,8 +250,10 @@ public class MultiDialectIT {
         assertEquals(3, users.size());
     }
 
-    @Test
-    public void testWhereClause() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dialects")
+    public void testWhereClause(Dialect dialect) {
+        setUp(dialect);
         PojoQuery.insert(dataSource, new User("active1", "a1@example.com"));
         User inactive = new User("inactive1", "i1@example.com");
         inactive.active = false;
@@ -269,8 +267,10 @@ public class MultiDialectIT {
         assertEquals(2, activeUsers.size());
     }
 
-    @Test
-    public void testLobField() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dialects")
+    public void testLobField(Dialect dialect) {
+        setUp(dialect);
         // Create a large content string
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 1000; i++) {
@@ -281,16 +281,18 @@ public class MultiDialectIT {
         Article article = new Article("Test Article", largeContent);
         PojoQuery.insert(dataSource, article);
         
-        assertNotNull("Article should have an ID", article.id);
+        assertNotNull(article.id, "Article should have an ID");
         
         Article loaded = PojoQuery.build(Article.class).findById(dataSource, article.id);
-        assertNotNull("Article should be found", loaded);
+        assertNotNull(loaded, "Article should be found");
         assertEquals("Test Article", loaded.title);
         assertEquals(largeContent, loaded.content);
     }
 
-    @Test
-    public void testLobUpdate() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dialects")
+    public void testLobUpdate(Dialect dialect) {
+        setUp(dialect);
         Article article = new Article("Original Title", "Original content");
         PojoQuery.insert(dataSource, article);
         
@@ -304,8 +306,10 @@ public class MultiDialectIT {
         assertEquals(updatedContent, loaded.content);
     }
 
-    @Test
-    public void testNullValues() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dialects")
+    public void testNullValues(Dialect dialect) {
+        setUp(dialect);
         User user = new User();
         user.username = "nulltest";
         // email and active are null
@@ -313,16 +317,18 @@ public class MultiDialectIT {
         
         User loaded = PojoQuery.build(User.class).findById(dataSource, user.id);
         assertEquals("nulltest", loaded.username);
-        assertNull("Email should be null", loaded.email);
-        assertNull("Active should be null", loaded.active);
+        assertNull(loaded.email, "Email should be null");
+        assertNull(loaded.active, "Active should be null");
     }
 
-    @Test
-    public void testMultipleInserts() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dialects")
+    public void testMultipleInserts(Dialect dialect) {
+        setUp(dialect);
         for (int i = 0; i < 100; i++) {
             User user = new User("user" + i, "user" + i + "@example.com");
             PojoQuery.insert(dataSource, user);
-            assertEquals("Each user should get a unique ID", Long.valueOf(i + 1), user.id);
+            assertEquals(Long.valueOf(i + 1), user.id, "Each user should get a unique ID");
         }
         
         List<User> users = PojoQuery.build(User.class).execute(dataSource);

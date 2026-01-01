@@ -6,8 +6,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.pipeline.Alias;
 import org.pojoquery.pipeline.QueryBuilder;
@@ -45,7 +45,7 @@ public class TestCustomFields {
 			}
 		}
 		
-		Assert.assertEquals(norm("""
+		Assertions.assertEquals(norm("""
 			SELECT
 			 `user`.`id` AS `user.id`,
 			 `user`.`email` AS `user.email`,
@@ -58,7 +58,7 @@ public class TestCustomFields {
 				  1L,       "john@ewbank.nl", "http://www.linkedin.com/123456");
 		
 		List<User> users = p.processRows(resultSet);
-		Assert.assertEquals("http://www.linkedin.com/123456", users.get(0).getCustomValue("linkedInUrl"));
+		Assertions.assertEquals("http://www.linkedin.com/123456", users.get(0).getCustomValue("linkedInUrl"));
 	}
 
 }

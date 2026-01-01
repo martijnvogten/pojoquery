@@ -1,7 +1,7 @@
 package org.pojoquery;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext.QuoteStyle;
 
 public class TestHelperMethods {
@@ -11,20 +11,20 @@ public class TestHelperMethods {
 
 	@Test
 	public void testPrefixAndQuoteTableName() {
-		Assert.assertEquals("\"foo\"", DB.prefixAndQuoteTableName(ANSI_DB, null, "foo"));
-		Assert.assertEquals("\"bar\".\"foo\"", DB.prefixAndQuoteTableName(ANSI_DB, "bar", "foo"));
+		Assertions.assertEquals("\"foo\"", DB.prefixAndQuoteTableName(ANSI_DB, null, "foo"));
+		Assertions.assertEquals("\"bar\".\"foo\"", DB.prefixAndQuoteTableName(ANSI_DB, "bar", "foo"));
 	
-		Assert.assertEquals("`foo`", DB.prefixAndQuoteTableName(MYSQL_DB, null, "foo"));
-		Assert.assertEquals("`bar`.`foo`", DB.prefixAndQuoteTableName(MYSQL_DB, "bar", "foo"));
+		Assertions.assertEquals("`foo`", DB.prefixAndQuoteTableName(MYSQL_DB, null, "foo"));
+		Assertions.assertEquals("`bar`.`foo`", DB.prefixAndQuoteTableName(MYSQL_DB, "bar", "foo"));
 	}
 
 	@Test
 	public void testQuoteObjectNames() {
-		Assert.assertEquals("", ANSI_DB.quoteObjectNames());
-		Assert.assertEquals("\"foo\"", ANSI_DB.quoteObjectNames("foo"));
-		Assert.assertEquals("\"foo\".\"bar\".\"baz\"", ANSI_DB.quoteObjectNames("foo", "bar", "baz"));
+		Assertions.assertEquals("", ANSI_DB.quoteObjectNames());
+		Assertions.assertEquals("\"foo\"", ANSI_DB.quoteObjectNames("foo"));
+		Assertions.assertEquals("\"foo\".\"bar\".\"baz\"", ANSI_DB.quoteObjectNames("foo", "bar", "baz"));
 
-		Assert.assertEquals("`foo`", MYSQL_DB.quoteObjectNames("foo"));
-		Assert.assertEquals("`foo`.`bar`.`baz`", MYSQL_DB.quoteObjectNames("foo", "bar", "baz"));
+		Assertions.assertEquals("`foo`", MYSQL_DB.quoteObjectNames("foo"));
+		Assertions.assertEquals("`foo`.`bar`.`baz`", MYSQL_DB.quoteObjectNames("foo", "bar", "baz"));
 	}
 }

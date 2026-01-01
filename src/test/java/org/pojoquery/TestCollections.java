@@ -1,14 +1,14 @@
 package org.pojoquery;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
@@ -75,7 +75,7 @@ public class TestCollections {
 		
 		List<User> users = QueryBuilder.from(User.class).processRows(result);
 		assertEquals(1, users.size());
-		Assert.assertTrue(users.get(0).roles.contains(Role.ADMIN));
+		Assertions.assertTrue(users.get(0).roles.contains(Role.ADMIN));
 	}
 	
 	@Test
@@ -109,7 +109,7 @@ public class TestCollections {
 				));
 			
 		List<UserDetail> users = pq.processRows(result);
-		Assert.assertEquals(1, users.get(0).articles.size());
+		Assertions.assertEquals(1, users.get(0).articles.size());
 	}
 	
 	@Test
@@ -143,7 +143,7 @@ public class TestCollections {
 				));
 			
 		List<UserWithTasks> users = pq.processRows(result);
-		Assert.assertEquals(HashSet.class, users.get(0).tasks.getClass());
-		Assert.assertEquals(1, users.get(0).tasks.size());
+		Assertions.assertEquals(HashSet.class, users.get(0).tasks.getClass());
+		Assertions.assertEquals(1, users.get(0).tasks.size());
 	}
 }

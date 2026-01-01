@@ -6,8 +6,8 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
@@ -60,8 +60,8 @@ public class ForeignValueFieldsIT {
 					.addWhere("id = ? ", 1);
 			
 			List<Poule> result = query.execute(c);
-			Assert.assertEquals(1, result.size());
-			Assert.assertEquals(3, result.get(0).weightClasses.length);
+			Assertions.assertEquals(1, result.size());
+			Assertions.assertEquals(3, result.get(0).weightClasses.length);
 		});
 	}
 	
@@ -77,14 +77,14 @@ public class ForeignValueFieldsIT {
 					.addWhere("id = ? ", 1);
 			
 			List<PouleWithHeavyWeights> result = query.execute(c);
-			Assert.assertEquals(1, result.get(0).weightClasses.length);
+			Assertions.assertEquals(1, result.get(0).weightClasses.length);
 		});
 	}
 
 	private void insertTestData(Connection c) {
 		Poule p = new Poule();
 		PojoQuery.insert(c, p);
-		Assert.assertEquals((Long)1L, p.id);
+		Assertions.assertEquals((Long)1L, p.id);
 		
 		DB.insert(c, "poule_weightclass", Map.of("poule_id", 1, "weightclass", -30));
 		DB.insert(c, "poule_weightclass", Map.of("poule_id", 1, "weightclass", -32));

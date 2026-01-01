@@ -7,8 +7,8 @@ import java.util.Set;
 
 import javax.sql.DataSource;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
@@ -60,13 +60,13 @@ public class UpdatesIT {
 		DB.runInTransaction(db, (Connection c) -> {
 			User u = new User();
 			PojoQuery.insert(c, u);
-			Assert.assertEquals((Long)1L, u.id);
+			Assertions.assertEquals((Long)1L, u.id);
 			
 			u.username = "john";
 			PojoQuery.update(c, u);
 			
 			User loaded = PojoQuery.build(User.class).findById(c, u.id);
-			Assert.assertEquals("john", loaded.username);
+			Assertions.assertEquals("john", loaded.username);
 		});
 	}
 	
@@ -79,7 +79,7 @@ public class UpdatesIT {
 			User u = new User();
 			u.username = "bob";
 			PojoQuery.insert(c, u);
-			Assert.assertEquals((Long)1L, u.id);
+			Assertions.assertEquals((Long)1L, u.id);
 			
 			Article a = new Article();
 			a.author = u;
@@ -87,7 +87,7 @@ public class UpdatesIT {
 			PojoQuery.insert(c, a);
 			
 			Article read = PojoQuery.build(Article.class).findById(c, a.id);
-			Assert.assertEquals(read.author.username, "bob");
+			Assertions.assertEquals(read.author.username, "bob");
 		});
 	}
 	
@@ -100,23 +100,23 @@ public class UpdatesIT {
 			UserDetail u = new UserDetail();
 			u.roles.add(Role.EDITOR);
 			PojoQuery.insert(c, u);
-			Assert.assertEquals((Long)1L, u.id);
+			Assertions.assertEquals((Long)1L, u.id);
 
 			// Now query
 			UserDetail read = PojoQuery.build(UserDetail.class).findById(c, 1L);
-			Assert.assertEquals(0, read.roles.size()); // Correct, pojoquery does not update collections
+			Assertions.assertEquals(0, read.roles.size()); // Correct, pojoquery does not update collections
 			
 			// Now insert the role
 			DB.insert(c, "user_roles", Map.of("user_id", u.id, "role", Role.EDITOR));
 			
 			UserDetail read1 = PojoQuery.build(UserDetail.class).findById(c, 1L);
-			Assert.assertEquals(1, read1.roles.size());
+			Assertions.assertEquals(1, read1.roles.size());
 			
 			u.username = "john";
 			PojoQuery.update(c, u);
 			
 			User loaded = PojoQuery.build(User.class).findById(c, u.id);
-			Assert.assertEquals("john", loaded.username);
+			Assertions.assertEquals("john", loaded.username);
 		});
 	}
 	

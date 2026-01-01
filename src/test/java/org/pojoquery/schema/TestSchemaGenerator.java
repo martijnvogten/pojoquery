@@ -1,14 +1,14 @@
 package org.pojoquery.schema;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext;
 import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.annotations.Embedded;
@@ -238,12 +238,12 @@ public class TestSchemaGenerator {
         assertTrue(!articlesTable.contains("tags")); // No tags column in articles table
         
         // Should generate: Article CREATE + link table CREATE + 2 ALTER TABLE for FKs
-        assertEquals("Should generate 4 statements (Article + link table + 2 FK constraints)", 4, sqlList.size());
+        assertEquals(4, sqlList.size(), "Should generate 4 statements (Article + link table + 2 FK constraints)");
         String linkTable = sqlList.stream()
             .filter(s -> s.contains("CREATE TABLE") && s.contains("`article_tag`"))
             .findFirst()
             .orElse("");
-        assertTrue("Link table should be article_tag", linkTable.contains("`article_tag`"));
+        assertTrue(linkTable.contains("`article_tag`"), "Link table should be article_tag");
     }
     
     @Test
@@ -402,9 +402,9 @@ public class TestSchemaGenerator {
         int kitchenCount = countOccurrences(sql, "`kitchen`");
         
         // Each table should be created exactly once (table name appears once in CREATE TABLE)
-        assertTrue("Room table should be created once", roomCount == 1);
-        assertTrue("Bedroom table should be created once", bedroomCount == 1);
-        assertTrue("Kitchen table should be created once", kitchenCount == 1);
+        assertTrue(roomCount == 1, "Room table should be created once");
+        assertTrue(bedroomCount == 1, "Bedroom table should be created once");
+        assertTrue(kitchenCount == 1, "Kitchen table should be created once");
     }
     
     private int countOccurrences(String text, String pattern) {
@@ -428,7 +428,7 @@ public class TestSchemaGenerator {
         }
         
         // Room with subclasses should generate 3 statements
-        assertEquals("Should generate 3 statements (Room, BedRoom, Kitchen)", 3, statements.size());
+        assertEquals(3, statements.size(), "Should generate 3 statements (Room, BedRoom, Kitchen)");
         
         // First statement should be Room
         assertTrue(statements.get(0).contains("`room`"));
@@ -442,7 +442,7 @@ public class TestSchemaGenerator {
     public void testGenerateCreateTableStatementsListForMultipleEntities() {
         List<String> statements = SchemaGenerator.generateCreateTableStatements(User.class, Product.class, Tag.class);
         
-        assertEquals("Should generate 3 statements", 3, statements.size());
+        assertEquals(3, statements.size(), "Should generate 3 statements");
         assertTrue(statements.get(0).contains("`users`"));
         assertTrue(statements.get(1).contains("`products`"));
         assertTrue(statements.get(2).contains("`tags`"));
@@ -471,7 +471,7 @@ public class TestSchemaGenerator {
         }
         
         // 2 CREATE TABLEs + 1 ALTER TABLE for FK
-        assertEquals("Should generate 3 statements", 3, statements.size());
+        assertEquals(3, statements.size(), "Should generate 3 statements");
         
         // Find the books table statement
         String booksTable = statements.stream()
@@ -480,7 +480,7 @@ public class TestSchemaGenerator {
             .orElse("");
         
         // Book table should have authors_id column inferred from Author.books (table name + "_id")
-        assertTrue("Book table should have authors_id column", booksTable.contains("`authors_id`"));
+        assertTrue(booksTable.contains("`authors_id`"), "Book table should have authors_id column");
     }
     
     @Test
@@ -496,7 +496,7 @@ public class TestSchemaGenerator {
         }
         
         // 3 CREATE TABLEs + 2 ALTER TABLEs for FKs
-        assertEquals("Should generate 5 statements", 5, statements.size());
+        assertEquals(5, statements.size(), "Should generate 5 statements");
         
         String booksTable = statements.stream()
             .filter(s -> s.contains("CREATE TABLE") && s.contains("`books`"))
@@ -507,8 +507,8 @@ public class TestSchemaGenerator {
             .findFirst()
             .orElse("");
         
-        assertTrue("Book table should have authors_id column", booksTable.contains("`authors_id`"));
-        assertTrue("Chapter table should have books_id column", chaptersTable.contains("`books_id`"));
+        assertTrue(booksTable.contains("`authors_id`"), "Book table should have authors_id column");
+        assertTrue(chaptersTable.contains("`books_id`"), "Chapter table should have books_id column");
     }
     
     @Test
@@ -522,7 +522,7 @@ public class TestSchemaGenerator {
             .orElse("");
         
         // Tags should NOT have article_id since Article.tags uses a linktable
-        assertTrue("Tags table should not have article_id for many-to-many", !tagsTable.contains("article_id"));
+        assertTrue(!tagsTable.contains("article_id"), "Tags table should not have article_id for many-to-many");
     }
     
     @Test
@@ -542,7 +542,7 @@ public class TestSchemaGenerator {
             .orElse("");
         
         // Event table should have festivalID column inferred from FestivalWithEvents.events
-        assertTrue("Event table should have festivalID column", eventTable.contains("`festivalID`"));
+        assertTrue(eventTable.contains("`festivalID`"), "Event table should have festivalID column");
     }
     
     @Test
@@ -558,7 +558,7 @@ public class TestSchemaGenerator {
         }
         
         // 2 CREATE TABLEs + 1 ALTER TABLE for FK
-        assertEquals("Should generate 3 statements", 3, statements.size());
+        assertEquals(3, statements.size(), "Should generate 3 statements");
         
         String eventTable = statements.stream()
             .filter(s -> s.contains("CREATE TABLE") && s.contains("`event`"))
@@ -566,7 +566,7 @@ public class TestSchemaGenerator {
             .orElse("");
         
         // Event table should have festivalID column inferred from EventWithFestival.festival
-        assertTrue("Event table should have festivalID column", eventTable.contains("`festivalID`"));
+        assertTrue(eventTable.contains("`festivalID`"), "Event table should have festivalID column");
     }
     
     // ========== Migration Tests ==========
@@ -582,9 +582,9 @@ public class TestSchemaGenerator {
             System.out.println(stmt);
         }
         
-        assertEquals("Should generate 1 CREATE TABLE statement", 1, statements.size());
-        assertTrue("Should be CREATE TABLE", statements.get(0).startsWith("CREATE TABLE"));
-        assertTrue("Should contain users table", statements.get(0).contains("`users`"));
+        assertEquals(1, statements.size(), "Should generate 1 CREATE TABLE statement");
+        assertTrue(statements.get(0).startsWith("CREATE TABLE"), "Should be CREATE TABLE");
+        assertTrue(statements.get(0).contains("`users`"), "Should contain users table");
     }
     
     @Test
@@ -603,12 +603,12 @@ public class TestSchemaGenerator {
             System.out.println(stmt);
         }
         
-        assertEquals("Should generate 1 ALTER TABLE statement", 1, statements.size());
-        assertTrue("Should be ALTER TABLE", statements.get(0).startsWith("ALTER TABLE"));
-        assertTrue("Should contain ADD COLUMN for email_address", statements.get(0).contains("`email_address`"));
-        assertTrue("Should contain ADD COLUMN for age", statements.get(0).contains("`age`"));
-        assertTrue("Should contain ADD COLUMN for active", statements.get(0).contains("`active`"));
-        assertTrue("Should contain ADD COLUMN for createdAt", statements.get(0).contains("`createdAt`"));
+        assertEquals(1, statements.size(), "Should generate 1 ALTER TABLE statement");
+        assertTrue(statements.get(0).startsWith("ALTER TABLE"), "Should be ALTER TABLE");
+        assertTrue(statements.get(0).contains("`email_address`"), "Should contain ADD COLUMN for email_address");
+        assertTrue(statements.get(0).contains("`age`"), "Should contain ADD COLUMN for age");
+        assertTrue(statements.get(0).contains("`active`"), "Should contain ADD COLUMN for active");
+        assertTrue(statements.get(0).contains("`createdAt`"), "Should contain ADD COLUMN for createdAt");
     }
     
     @Test
@@ -628,7 +628,7 @@ public class TestSchemaGenerator {
         System.out.println("Migration with complete table:");
         System.out.println("Statements: " + statements.size());
         
-        assertEquals("Should generate 0 statements (table is up-to-date)", 0, statements.size());
+        assertEquals(0, statements.size(), "Should generate 0 statements (table is up-to-date)");
     }
     
     @Test
@@ -648,15 +648,15 @@ public class TestSchemaGenerator {
             System.out.println();
         }
         
-        assertEquals("Should generate 2 statements", 2, statements.size());
+        assertEquals(2, statements.size(), "Should generate 2 statements");
         
         // First should be ALTER TABLE for users (adding missing columns)
-        assertTrue("First should be ALTER TABLE", statements.get(0).startsWith("ALTER TABLE"));
-        assertTrue("Should be for users table", statements.get(0).contains("`users`"));
+        assertTrue(statements.get(0).startsWith("ALTER TABLE"), "First should be ALTER TABLE");
+        assertTrue(statements.get(0).contains("`users`"), "Should be for users table");
         
         // Second should be CREATE TABLE for products
-        assertTrue("Second should be CREATE TABLE", statements.get(1).startsWith("CREATE TABLE"));
-        assertTrue("Should be for products table", statements.get(1).contains("`products`"));
+        assertTrue(statements.get(1).startsWith("CREATE TABLE"), "Second should be CREATE TABLE");
+        assertTrue(statements.get(1).contains("`products`"), "Should be for products table");
     }
     
     @Test
@@ -677,12 +677,12 @@ public class TestSchemaGenerator {
             .orElse("");
         
         // The FK column (festivalID) should use BIGINT, not BIGSERIAL
-        assertTrue("Event table should have festivalID column", eventTable.contains("\"festivalID\""));
-        assertTrue("FK column festivalID should use BIGINT", eventTable.contains("\"festivalID\" BIGINT"));
-        assertFalse("FK column festivalID should NOT use BIGSERIAL", eventTable.contains("\"festivalID\" BIGSERIAL"));
+        assertTrue(eventTable.contains("\"festivalID\""), "Event table should have festivalID column");
+        assertTrue(eventTable.contains("\"festivalID\" BIGINT"), "FK column festivalID should use BIGINT");
+        assertFalse(eventTable.contains("\"festivalID\" BIGSERIAL"), "FK column festivalID should NOT use BIGSERIAL");
         
         // But the PK column (eventID) should use BIGSERIAL for auto-increment
-        assertTrue("PK column eventID should use BIGSERIAL", eventTable.contains("\"eventID\" BIGSERIAL"));
+        assertTrue(eventTable.contains("\"eventID\" BIGSERIAL"), "PK column eventID should use BIGSERIAL");
     }
     
     // Test entity for composite key with linked entities (like EventPersonLink)
@@ -714,7 +714,7 @@ public class TestSchemaGenerator {
         }
         
         // 1 CREATE TABLE + 2 ALTER TABLEs for FK constraints
-        assertEquals("Should generate 3 statements", 3, statements.size());
+        assertEquals(3, statements.size(), "Should generate 3 statements");
         String sql = statements.stream()
             .filter(s -> s.contains("CREATE TABLE"))
             .findFirst()
@@ -722,13 +722,13 @@ public class TestSchemaGenerator {
         
         // Count occurrences of column definitions (with BIGINT type) - should appear only once each
         int personIdColCount = countOccurrences(sql, "`person_id` BIGINT");
-        assertEquals("person_id column definition should appear exactly once", 1, personIdColCount);
+        assertEquals(1, personIdColCount, "person_id column definition should appear exactly once");
         
         int eventIdColCount = countOccurrences(sql, "`event_id` BIGINT");
-        assertEquals("event_id column definition should appear exactly once", 1, eventIdColCount);
+        assertEquals(1, eventIdColCount, "event_id column definition should appear exactly once");
         
         // Should have composite primary key
-        assertTrue("Should have composite PRIMARY KEY", sql.contains("PRIMARY KEY (`event_id`, `person_id`)"));
+        assertTrue(sql.contains("PRIMARY KEY (`event_id`, `person_id`)"), "Should have composite PRIMARY KEY");
     }
     
     // ========== Foreign Key Constraint Tests ==========
@@ -751,12 +751,12 @@ public class TestSchemaGenerator {
             .orElse("");
         
         // Should have FK column
-        assertTrue("Orders should have customer_id column", ordersTable.contains("`customer_id`"));
+        assertTrue(ordersTable.contains("`customer_id`"), "Orders should have customer_id column");
         
         // FK constraint should be in a separate ALTER TABLE statement
         String sql = String.join("\n", statements);
-        assertTrue("Should have FK constraint referencing users (via ALTER TABLE)", 
-            sql.contains("ALTER TABLE `orders` ADD FOREIGN KEY (`customer_id`) REFERENCES `users`(`id`)"));
+        assertTrue(sql.contains("ALTER TABLE `orders` ADD FOREIGN KEY (`customer_id`) REFERENCES `users`(`id`)"), 
+            "Should have FK constraint referencing users (via ALTER TABLE)");
     }
     
     @Test
@@ -777,12 +777,12 @@ public class TestSchemaGenerator {
             .orElse("");
         
         // Should have inferred FK column
-        assertTrue("Books should have authors_id column", booksTable.contains("`authors_id`"));
+        assertTrue(booksTable.contains("`authors_id`"), "Books should have authors_id column");
         
         // FK constraint should be in a separate ALTER TABLE statement
         String sql = String.join("\n", statements);
-        assertTrue("Should have FK constraint referencing authors (via ALTER TABLE)", 
-            sql.contains("ALTER TABLE `books` ADD FOREIGN KEY (`authors_id`) REFERENCES `authors`(`id`)"));
+        assertTrue(sql.contains("ALTER TABLE `books` ADD FOREIGN KEY (`authors_id`) REFERENCES `authors`(`id`)"), 
+            "Should have FK constraint referencing authors (via ALTER TABLE)");
     }
     
     @Test
@@ -798,25 +798,25 @@ public class TestSchemaGenerator {
         }
         
         // Should generate: Article CREATE, Tag CREATE, link table CREATE, 2 ALTER TABLE for FKs
-        assertEquals("Should generate 5 statements (Article + Tag + link table + 2 FK constraints)", 5, statements.size());
+        assertEquals(5, statements.size(), "Should generate 5 statements (Article + Tag + link table + 2 FK constraints)");
         
         String linkTable = statements.stream()
             .filter(s -> s.contains("CREATE TABLE") && s.contains("`article_tag`"))
             .findFirst()
             .orElse("");
         
-        assertFalse("Link table should be generated", linkTable.isEmpty());
-        assertTrue("Link table should have articles_id column", linkTable.contains("`articles_id`"));
-        assertTrue("Link table should have tags_id column", linkTable.contains("`tags_id`"));
-        assertTrue("Link table should have composite primary key", 
-            linkTable.contains("PRIMARY KEY (`articles_id`, `tags_id`)"));
+        assertFalse(linkTable.isEmpty(), "Link table should be generated");
+        assertTrue(linkTable.contains("`articles_id`"), "Link table should have articles_id column");
+        assertTrue(linkTable.contains("`tags_id`"), "Link table should have tags_id column");
+        assertTrue(linkTable.contains("PRIMARY KEY (`articles_id`, `tags_id`)"), 
+            "Link table should have composite primary key");
         
         // FK constraints should be in separate ALTER TABLE statements
         String sql = String.join("\n", statements);
-        assertTrue("Should have FK constraint to articles (via ALTER TABLE)", 
-            sql.contains("ALTER TABLE `article_tag` ADD FOREIGN KEY (`articles_id`) REFERENCES `articles`(`id`)"));
-        assertTrue("Should have FK constraint to tags (via ALTER TABLE)", 
-            sql.contains("ALTER TABLE `article_tag` ADD FOREIGN KEY (`tags_id`) REFERENCES `tags`(`id`)"));
+        assertTrue(sql.contains("ALTER TABLE `article_tag` ADD FOREIGN KEY (`articles_id`) REFERENCES `articles`(`id`)"), 
+            "Should have FK constraint to articles (via ALTER TABLE)");
+        assertTrue(sql.contains("ALTER TABLE `article_tag` ADD FOREIGN KEY (`tags_id`) REFERENCES `tags`(`id`)"), 
+            "Should have FK constraint to tags (via ALTER TABLE)");
     }
     
     @Test
@@ -835,7 +835,7 @@ public class TestSchemaGenerator {
         // Count FK constraints for festivalID in all statements
         String sql = String.join("\n", statements);
         int fkCount = countOccurrences(sql, "FOREIGN KEY (`festivalID`)");
-        assertEquals("Should have exactly 1 FK constraint for festivalID", 1, fkCount);
+        assertEquals(1, fkCount, "Should have exactly 1 FK constraint for festivalID");
     }
     
     @Test
@@ -853,30 +853,30 @@ public class TestSchemaGenerator {
         }
         
         // Should generate: Person CREATE, link table CREATE, 2 ALTER TABLE for FKs
-        assertEquals("Should generate 4 statements (Person + link table + 2 FK constraints)", 4, statements.size());
+        assertEquals(4, statements.size(), "Should generate 4 statements (Person + link table + 2 FK constraints)");
         
         String linkTable = statements.stream()
             .filter(s -> s.contains("CREATE TABLE") && s.contains("`person_friends`"))
             .findFirst()
             .orElse("");
         
-        assertFalse("Link table should be generated", linkTable.isEmpty());
+        assertFalse(linkTable.isEmpty(), "Link table should be generated");
         
         // The link table should have two DIFFERENT columns (not both person_id)
         // It should use person_id for owner and friends_id for the field name
-        assertTrue("Link table should have person_id column", linkTable.contains("`person_id`"));
-        assertTrue("Link table should have friends_id column (from field name)", linkTable.contains("`friends_id`"));
+        assertTrue(linkTable.contains("`person_id`"), "Link table should have person_id column");
+        assertTrue(linkTable.contains("`friends_id`"), "Link table should have friends_id column (from field name)");
         
         // Should have composite primary key with different columns
-        assertTrue("Link table should have composite primary key", 
-            linkTable.contains("PRIMARY KEY (`person_id`, `friends_id`)"));
+        assertTrue(linkTable.contains("PRIMARY KEY (`person_id`, `friends_id`)"), 
+            "Link table should have composite primary key");
         
         // FK constraints should be in separate ALTER TABLE statements
         String sql = String.join("\n", statements);
-        assertTrue("Should have FK constraint to person for person_id (via ALTER TABLE)", 
-            sql.contains("ALTER TABLE `person_friends` ADD FOREIGN KEY (`person_id`) REFERENCES `person`(`id`)"));
-        assertTrue("Should have FK constraint for friends_id (via ALTER TABLE)", 
-            sql.contains("ALTER TABLE `person_friends` ADD FOREIGN KEY (`friends_id`) REFERENCES `person`(`id`)"));
+        assertTrue(sql.contains("ALTER TABLE `person_friends` ADD FOREIGN KEY (`person_id`) REFERENCES `person`(`id`)"), 
+            "Should have FK constraint to person for person_id (via ALTER TABLE)");
+        assertTrue(sql.contains("ALTER TABLE `person_friends` ADD FOREIGN KEY (`friends_id`) REFERENCES `person`(`id`)"), 
+            "Should have FK constraint for friends_id (via ALTER TABLE)");
     }
     
     // ========== Test entities for @Column(nullable, unique, length, precision, scale) ==========
@@ -916,14 +916,14 @@ public class TestSchemaGenerator {
         System.out.println("Column nullable=false test:\n" + sql);
         
         // username and email should have NOT NULL
-        assertTrue("username should be NOT NULL", sql.contains("`username` VARCHAR(255) NOT NULL"));
-        assertTrue("email should be NOT NULL", sql.contains("`email` VARCHAR(100) NOT NULL"));
+        assertTrue(sql.contains("`username` VARCHAR(255) NOT NULL"), "username should be NOT NULL");
+        assertTrue(sql.contains("`email` VARCHAR(100) NOT NULL"), "email should be NOT NULL");
         
         // displayName and bio should be nullable (no NOT NULL)
-        assertTrue("displayName should not have NOT NULL", sql.contains("`displayName` VARCHAR(50)") && 
-            !sql.contains("`displayName` VARCHAR(50) NOT NULL"));
-        assertTrue("bio should be nullable (default VARCHAR)", sql.contains("`bio` VARCHAR(255)") &&
-            !sql.contains("`bio` VARCHAR(255) NOT NULL"));
+        assertTrue(sql.contains("`displayName` VARCHAR(50)") && 
+            !sql.contains("`displayName` VARCHAR(50) NOT NULL"), "displayName should not have NOT NULL");
+        assertTrue(sql.contains("`bio` VARCHAR(255)") &&
+            !sql.contains("`bio` VARCHAR(255) NOT NULL"), "bio should be nullable (default VARCHAR)");
     }
     
     @Test
@@ -933,11 +933,11 @@ public class TestSchemaGenerator {
         System.out.println("Column unique=true test:\n" + sql);
         
         // username and email should have UNIQUE
-        assertTrue("username should be UNIQUE", sql.contains("`username` VARCHAR(255) NOT NULL UNIQUE"));
-        assertTrue("email should be UNIQUE", sql.contains("`email` VARCHAR(100) NOT NULL UNIQUE"));
+        assertTrue(sql.contains("`username` VARCHAR(255) NOT NULL UNIQUE"), "username should be UNIQUE");
+        assertTrue(sql.contains("`email` VARCHAR(100) NOT NULL UNIQUE"), "email should be UNIQUE");
         
         // displayName should not have UNIQUE
-        assertFalse("displayName should not have UNIQUE", sql.contains("`displayName`") && sql.contains("displayName` VARCHAR(50) UNIQUE"));
+        assertFalse(sql.contains("`displayName`") && sql.contains("displayName` VARCHAR(50) UNIQUE"), "displayName should not have UNIQUE");
     }
     
     @Test
@@ -947,13 +947,13 @@ public class TestSchemaGenerator {
         System.out.println("Column length annotation test:\n" + sql);
         
         // email should be VARCHAR(100)
-        assertTrue("email should be VARCHAR(100)", sql.contains("`email` VARCHAR(100)"));
+        assertTrue(sql.contains("`email` VARCHAR(100)"), "email should be VARCHAR(100)");
         
         // displayName should be VARCHAR(50)
-        assertTrue("displayName should be VARCHAR(50)", sql.contains("`displayName` VARCHAR(50)"));
+        assertTrue(sql.contains("`displayName` VARCHAR(50)"), "displayName should be VARCHAR(50)");
         
         // bio should use default VARCHAR(255)
-        assertTrue("bio should use default VARCHAR(255)", sql.contains("`bio` VARCHAR(255)"));
+        assertTrue(sql.contains("`bio` VARCHAR(255)"), "bio should use default VARCHAR(255)");
     }
     
     @Test
@@ -963,9 +963,9 @@ public class TestSchemaGenerator {
         System.out.println("Column precision/scale annotation test:\n" + sql);
         
         // amount should be DECIMAL(10,2)
-        assertTrue("amount should be DECIMAL(10,2)", sql.contains("`amount` DECIMAL(10,2)"));
+        assertTrue(sql.contains("`amount` DECIMAL(10,2)"), "amount should be DECIMAL(10,2)");
         
         // defaultPrecision should use default DECIMAL(19,4)
-        assertTrue("defaultPrecision should use default DECIMAL(19,4)", sql.contains("`defaultPrecision` DECIMAL(19,4)"));
+        assertTrue(sql.contains("`defaultPrecision` DECIMAL(19,4)"), "defaultPrecision should use default DECIMAL(19,4)");
     }
 }

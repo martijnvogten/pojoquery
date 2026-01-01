@@ -1,10 +1,10 @@
 package org.pojoquery.integrationtest;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext;
 import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Id;
@@ -91,9 +91,9 @@ public class SchemaGeneratorInheritanceIT {
         
         // The schema should have UNIQUE on username because User has @Column(unique=true)
         // even though UserRef (listed first) does not have the annotation
-        assertTrue("Should have UNIQUE on username when User (with unique=true) is included, " +
-            "regardless of class order. Generated SQL:\n" + sql, 
-            sql.contains("username VARCHAR(255) UNIQUE") || 
-            sql.contains("username\" VARCHAR(255) UNIQUE"));
+        assertTrue(sql.contains("username VARCHAR(255) UNIQUE") || 
+            sql.contains("username\" VARCHAR(255) UNIQUE"), 
+            "Should have UNIQUE on username when User (with unique=true) is included, " +
+            "regardless of class order. Generated SQL:\n" + sql);
     }
 }
