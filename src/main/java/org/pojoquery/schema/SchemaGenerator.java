@@ -22,6 +22,8 @@ import org.pojoquery.schema.ForeignKeyInfo.DeferredForeignKey;
 import org.pojoquery.schema.ForeignKeyInfo.InferredForeignKey;
 import org.pojoquery.schema.ForeignKeyInfo.LinkTableInfo;
 import org.pojoquery.schema.ForeignKeyInfo.MergedColumnAnnotations;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Generates CREATE TABLE statements based on entity classes annotated with PojoQuery annotations.
@@ -32,6 +34,8 @@ import org.pojoquery.schema.ForeignKeyInfo.MergedColumnAnnotations;
  * </pre>
  */
 public class SchemaGenerator {
+    
+    private static final Logger LOG = LoggerFactory.getLogger(SchemaGenerator.class);
 
     /**
      * Generates a list of CREATE TABLE statements for the given entity class using default DbContext.
@@ -55,6 +59,7 @@ public class SchemaGenerator {
      * @throws IllegalArgumentException if the class does not have a @Table annotation
      */
     public static List<String> generateCreateTableStatements(Class<?> entityClass, DbContext dbContext) {
+        LOG.debug("Generating CREATE TABLE statements for {}", entityClass.getName());
         Set<String> generatedTables = new HashSet<>();
         List<String> statements = new ArrayList<>();
         Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
@@ -171,8 +176,10 @@ public class SchemaGenerator {
             String fullTableName = getFullTableName(mapping, dbContext);
             // Skip if we've already generated this table
             if (generatedTables.contains(fullTableName)) {
+                LOG.trace("Skipping already generated table: {}", fullTableName);
                 continue;
             }
+            LOG.debug("Generating CREATE TABLE for: {}", fullTableName);
             generatedTables.add(fullTableName);
             
             // Get inferred foreign keys for this class

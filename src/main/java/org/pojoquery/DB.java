@@ -17,6 +17,8 @@ import java.util.function.Consumer;
 import javax.sql.DataSource;
 
 import org.pojoquery.internal.SqlStatementBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The `DB` interface provides a set of utility methods for interacting with a database.
@@ -47,6 +49,8 @@ import org.pojoquery.internal.SqlStatementBuilder;
  * and {@code SqlExpression} for encapsulating SQL queries and their parameters.</p>
  */
 public interface DB {
+	Logger LOG = LoggerFactory.getLogger(DB.class);
+	
 	public static final class DatabaseException extends RuntimeException {
 		private static final long serialVersionUID = 1L;
 
@@ -122,7 +126,16 @@ public interface DB {
      * @param rowCallback the callback to process each row
      */
     public static void queryRowsStreaming(Connection conn, SqlExpression queryStatement, Consumer<Map<String,Object>> rowCallback) {
-        try (PreparedStatement stmt = conn.prepareStatement(queryStatement.getSql());) {
+        String sql = queryStatement.getSql();
+        String connId = null;
+        if (LOG.isDebugEnabled()) {
+            connId = getConnectionId(conn);
+            LOG.debug("[{}] SELECT (streaming): {}", connId, sql.replace("\n", " ").replaceAll("\\s+", " ").trim());
+            if (LOG.isTraceEnabled()) {
+                LOG.trace("[{}] Parameters: {}", connId, queryStatement.getParameters());
+            }
+        }
+        try (PreparedStatement stmt = conn.prepareStatement(sql);) {
 			applyParameters(queryStatement.getParameters(), stmt);
 			int fetchSize = DbContext.getDefault().getStreamingFetchSize();
 			if (fetchSize != 0) {
@@ -657,6 +670,16 @@ public interface DB {
      */
 	@SuppressWarnings("unchecked")
 	public static <T> T execute(Connection connection, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
+		long startTime = 0;
+		String connId = null;
+		if (LOG.isDebugEnabled()) {
+			connId = getConnectionId(connection);
+			LOG.debug("[{}] {}: {}", connId, type, sql.replace("\n", " ").replaceAll("\\s+", " ").trim());
+			if (params != null && LOG.isTraceEnabled()) {
+				LOG.trace("[{}] Parameters: {}", connId, params);
+			}
+			startTime = System.nanoTime();
+		}
 		try (PreparedStatement stmt = connection.prepareStatement(
 				sql,
 				type == QueryType.INSERT
@@ -700,13 +723,17 @@ public interface DB {
 					return (T) affectedRows;
 				}
 			} finally {
+				if (LOG.isDebugEnabled() && success) {
+					long duration = (System.nanoTime() - startTime) / 1_000_000;
+					LOG.debug("[{}] {} completed in {} ms", connId, type, duration);
+				}
 				if (!success) {
-					System.err.println("QUERY FAILED: " + sql);
+					LOG.error("Query failed: {}", sql);
 				}
 			}
 			return null;
 		} catch (SQLException e) {
-			System.err.println(e.getMessage());
+			LOG.error("SQL error: {}", e.getMessage());
 			throw new DatabaseException(e);
 		}
 	}
@@ -740,6 +767,33 @@ public interface DB {
 			fieldNames.add(metaData.getColumnLabel(i + 1));
 		}
 		return fieldNames;
+	}
+
+	/**
+	 * Extracts a meaningful connection identifier for logging.
+	 * Uses the connection's toString() which typically includes driver-specific
+	 * identifiers (e.g., HikariProxyConnection@xxx, PgConnection@xxx).
+	 * Falls back to identity hash code if toString() is not informative.
+	 */
+	private static String getConnectionId(Connection connection) {
+		String str = connection.toString();
+		// Extract class name and hash from typical toString() format: "ClassName@hexhash"
+		int atIndex = str.lastIndexOf('@');
+		if (atIndex > 0 && atIndex < str.length() - 1) {
+			// Get simple class name
+			String className = str.substring(0, atIndex);
+			int dotIndex = className.lastIndexOf('.');
+			if (dotIndex >= 0) {
+				className = className.substring(dotIndex + 1);
+			}
+			// Truncate long class names (e.g., HikariProxyConnection -> HikariProxy)
+			if (className.length() > 12) {
+				className = className.substring(0, 12);
+			}
+			return className + str.substring(atIndex);
+		}
+		// Fallback to identity hash code
+		return String.format("conn@%08x", System.identityHashCode(connection));
 	}
 
 	/**

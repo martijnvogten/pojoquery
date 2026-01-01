@@ -27,6 +27,8 @@ import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.SqlQuery.SqlField;
 import org.pojoquery.pipeline.SqlQuery.SqlJoin;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The main entry point for building and executing type-safe SQL queries.
@@ -91,6 +93,8 @@ import org.pojoquery.pipeline.SqlQuery.SqlJoin;
  * @see org.pojoquery.annotations.Id
  */
 public class PojoQuery<T> {
+	private static final Logger LOG = LoggerFactory.getLogger(PojoQuery.class);
+	
 	private final QueryBuilder<T> queryBuilder; 
 	private final SqlQuery<DefaultSqlQuery> query;
 	private Class<T> resultClass;
@@ -365,7 +369,9 @@ public class PojoQuery<T> {
 	 * @return the list of results
 	 */
 	public List<T> execute(DataSource db) {
-		return queryBuilder.processRows(DB.queryRows(db, query.toStatement()));
+		SqlExpression stmt = query.toStatement();
+		LOG.debug("Executing query: {}", stmt.getSql());
+		return queryBuilder.processRows(DB.queryRows(db, stmt));
 	}
 
 	/**
@@ -375,7 +381,9 @@ public class PojoQuery<T> {
 	 * @return the list of results
 	 */
 	public List<T> execute(Connection connection) {
-		return queryBuilder.processRows(DB.queryRows(connection, query.toStatement()));
+		SqlExpression stmt = query.toStatement();
+		LOG.debug("Executing query: {}", stmt.getSql());
+		return queryBuilder.processRows(DB.queryRows(connection, stmt));
 	}
 
 	/**
