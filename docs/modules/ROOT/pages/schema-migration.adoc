@@ -2,8 +2,6 @@
 
 PojoQuery's `SchemaGenerator` creates and updates database tables based on your entity classes.
 
-NOTE: The `SchemaGenerator` is designed for development and prototyping. For production, use a migration tool like https://flywaydb.org/[Flyway] or https://www.liquibase.org/[Liquibase].
-
 == Creating Tables
 
 [source,java]

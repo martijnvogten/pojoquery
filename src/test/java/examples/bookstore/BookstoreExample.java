@@ -52,21 +52,22 @@ public class BookstoreExample {
         // 1. Create an in-memory database
         DataSource db = createDatabase();
 
-        // 2. Generate tables from entity classes
-        SchemaGenerator.createTables(db, Author.class, Book.class, Review.class);
+        // 2. Generate tables (and foreign keys) from the joint set of all 
+        //    fields and associations of the POJOs
+        SchemaGenerator.createTables(db, Author.class, Book.class, BookDetail.class, Review.class);
 
         DB.runInTransaction(db, c -> {
             // 3. Insert test data
             Author tolkien = new Author();
             tolkien.name = "J.R.R. Tolkien";
             tolkien.country = "UK";
-            tolkien.id = PojoQuery.insert(c, tolkien);
+            PojoQuery.insert(c, tolkien);
 
             Book lotr = new Book();
             lotr.title = "The Lord of the Rings";
             lotr.year = 1954;
             lotr.author = tolkien;
-            lotr.id = PojoQuery.insert(c, lotr);
+            PojoQuery.insert(c, lotr);
 
             Review r1 = new Review();
             r1.book = lotr;
