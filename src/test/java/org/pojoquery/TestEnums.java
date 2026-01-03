@@ -6,6 +6,7 @@ import static org.pojoquery.TestUtils.norm;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
@@ -13,6 +14,11 @@ import org.pojoquery.annotations.Table;
 import org.pojoquery.pipeline.QueryBuilder;
 
 public class TestEnums {
+
+	@BeforeEach
+	public void setUp() {
+		DbContext.setDefault(DbContext.forDialect(DbContext.Dialect.MYSQL));
+	}
 
 	@Table("user")
 	static class User {

@@ -7,6 +7,7 @@ import static org.pojoquery.TestUtils.norm;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.annotations.Embedded;
@@ -16,6 +17,11 @@ import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.schema.SchemaGenerator;
 
 public class TestEmbedded {
+
+	@BeforeEach
+	public void setUp() {
+		DbContext.setDefault(DbContext.forDialect(DbContext.Dialect.MYSQL));
+	}
 	
 	@Table("country")
 	static class Country {
@@ -198,6 +204,63 @@ public class TestEmbedded {
 			"@Embedded should use shipping prefix without the underscore. Generated SQL:\n" + sql);
 		assertTrue(sql.contains("shippingcity"),
 			"@Embedded should use shipping prefix without the underscore. Generated SQL:\n" + sql);
+	}
+
+	// ========== Embedded with JoinColumn Tests ==========
+
+	@Table("region")
+	static class Region {
+		@Id
+		Long id;
+		String name;
+	}
+
+	static class AddressWithRegion {
+		String street;
+		String city;
+
+		@jakarta.persistence.JoinColumn(name = "region_id")
+		Region region;
+	}
+
+	@Table("store")
+	static class StoreWithEmbeddedAddress {
+		@Id
+		Long id;
+
+		String name;
+
+		@Embedded(prefix = "location_")
+		AddressWithRegion location;
+	}
+
+	@Test
+	public void testEmbeddedWithJoinColumnInSchemaGenerator() {
+		DbContext dbContext = DbContext.builder()
+			.withQuoteStyle(QuoteStyle.NONE)
+			.build();
+
+		List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, StoreWithEmbeddedAddress.class);
+		String sql = String.join("\n", statements);
+
+		// Embedded fields should have prefix
+		assertTrue(sql.contains("location_street"),
+			"Embedded street should have prefix. Generated SQL:\n" + sql);
+		assertTrue(sql.contains("location_city"),
+			"Embedded city should have prefix. Generated SQL:\n" + sql);
+
+		// @JoinColumn inside embedded should use the specified name with prefix
+		assertTrue(sql.contains("location_region_id"),
+			"@JoinColumn inside embedded should use prefix + specified name. Generated SQL:\n" + sql);
+	}
+
+	@Test
+	public void testEmbeddedWithJoinColumnInQueryBuilder() {
+		String sql = QueryBuilder.from(StoreWithEmbeddedAddress.class).getQuery().toStatement().getSql();
+
+		// @JoinColumn inside embedded should use the specified name with prefix
+		assertTrue(sql.contains("location_region_id"),
+			"@JoinColumn inside embedded should use prefix + specified name in query. Generated SQL:\n" + sql);
 	}
 
 }

@@ -3,6 +3,7 @@ package org.pojoquery;
 import static org.pojoquery.TestUtils.norm;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import org.pojoquery.annotations.Id;
@@ -11,6 +12,11 @@ import org.pojoquery.annotations.Table;
 import org.pojoquery.pipeline.QueryBuilder;
 
 public class TestJoinsAndAliases {
+
+	@BeforeEach
+	public void setUp() {
+		DbContext.setDefault(DbContext.forDialect(DbContext.Dialect.MYSQL));
+	}
 
 	@Table("article")
 	static class Article {

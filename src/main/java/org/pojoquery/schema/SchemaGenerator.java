@@ -654,6 +654,22 @@ public class SchemaGenerator {
                 continue;
             }
 
+            // Handle linked fields (foreign keys) inside embedded
+            if (isLinkedField(field)) {
+                // For single entity references, add a foreign key column
+                if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
+                    String fkColumnName = determineForeignKeyColumnName(field);
+                    String columnName = prefix + fkColumnName;
+                    if (!existingColumnNames.contains(columnName.toLowerCase())) {
+                        String columnDef = formatForeignKeyColumnDefinition(columnName, dbContext, field);
+                        columnDefinitions.add(columnDef);
+                        existingColumnNames.add(columnName.toLowerCase());
+                    }
+                }
+                // Collections are handled via inferred foreign keys in the referenced table
+                continue;
+            }
+
             String columnName = prefix + QueryBuilder.determineSqlFieldName(field);
             boolean isPrimaryKey = AnnotationHelper.isId(field);
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
