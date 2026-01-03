@@ -26,6 +26,16 @@ public class SimpleFieldMapping implements FieldMapping {
 	@Override
 	public void apply(Object targetEntity, Object value) {
 		try {
+			// Skip if no field is associated (e.g., discriminator column)
+			if (f == null) {
+				return;
+			}
+
+			// For single table inheritance, skip fields that don't belong to this entity's class
+			if (!f.getDeclaringClass().isAssignableFrom(targetEntity.getClass())) {
+				return;
+			}
+
 			if (value instanceof String && f.getType().isEnum()) {
 				value = QueryBuilder.enumValueOf(f.getType(), (String)value);
 			}

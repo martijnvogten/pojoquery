@@ -2,6 +2,7 @@ package org.pojoquery.pipeline;
 
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Map;
 
 public class Alias {
 
@@ -15,6 +16,9 @@ public class Alias {
 	private boolean isLinkedValue;
 	private boolean isASubClass = false;
 	private boolean isEmbedded = false;
+	private boolean isSingleTableInheritance = false;
+	private String discriminatorColumn;
+	private Map<String, Class<?>> discriminatorValues;
 
 	public Alias(String alias, Class<?> resultClass, String parentAlias, Field linkField, List<Field> idFields) {
 		this.alias = alias;
@@ -105,5 +109,29 @@ public class Alias {
 	public void setIsEmbedded(boolean isEmbedded) {
 		this.isEmbedded = isEmbedded;
 	}
-	
+
+	public boolean isSingleTableInheritance() {
+		return isSingleTableInheritance;
+	}
+
+	public void setSingleTableInheritance(boolean isSingleTableInheritance) {
+		this.isSingleTableInheritance = isSingleTableInheritance;
+	}
+
+	public String getDiscriminatorColumn() {
+		return discriminatorColumn;
+	}
+
+	public void setDiscriminatorColumn(String discriminatorColumn) {
+		this.discriminatorColumn = discriminatorColumn;
+	}
+
+	public Map<String, Class<?>> getDiscriminatorValues() {
+		return discriminatorValues;
+	}
+
+	public void setDiscriminatorValues(Map<String, Class<?>> discriminatorValues) {
+		this.discriminatorValues = discriminatorValues;
+	}
+
 }

@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
 import org.pojoquery.SqlExpression;
+import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.GroupBy;
@@ -186,30 +187,59 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		
 		SubClasses subClassesAnn = clz.getAnnotation(SubClasses.class);
 		if (subClassesAnn != null) {
-			TableMapping thisMapping = tableMappings.get(tableMappings.size() - 1);
-			Field thisIdField = QueryBuilder.determineIdField(thisMapping.clazz);
-			List<String> subClassesAdded = new ArrayList<String>();
-			for (Class<?> subClass : subClassesAnn.value()) {
-				List<TableMapping> mappings = QueryBuilder.determineTableMapping(subClass);
-				TableMapping mapping = mappings.get(mappings.size() - 1);
-				
-				String linkAlias = alias + "." + mapping.tableName;
-				String idField = QueryBuilder.determineIdField(mapping.clazz).getName();
-				
-				query.addJoin(JoinType.LEFT, mapping.schemaName, mapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + dbContext.quoteObjectNames(idField) + " = {" + alias + "}." + dbContext.quoteObjectNames(idField)));
-				Alias subClassAlias = new Alias(linkAlias, mapping.clazz, alias, thisIdField, QueryBuilder.determineIdFields(mapping.clazz));
-				subClassAlias.setIsASubClass(true);
-				aliases.put(linkAlias, subClassAlias);
-				subClasses.put(linkAlias, subClassAlias);
-				
-				// Also add the idfield of the linked alias, so we have at least one
-				addField(new SqlExpression("{" + linkAlias + "}." + dbContext.quoteObjectNames(idField)), linkAlias + "." + idField, thisIdField);
-				
-				addFields(linkAlias, mapping.clazz, thisMapping.clazz);
-				
-				subClassesAdded.add(linkAlias);
+			DiscriminatorColumn discAnn = clz.getAnnotation(DiscriminatorColumn.class);
+
+			if (discAnn != null) {
+				// Single table inheritance: all subclasses in same table with discriminator column
+				String discriminatorColumnName = discAnn.name();
+
+				// Add discriminator column to SELECT
+				addField(new SqlExpression("{" + alias + "}." + dbContext.quoteObjectNames(discriminatorColumnName)),
+						alias + "." + discriminatorColumnName, null);
+
+				// Build discriminator values map
+				Map<String, Class<?>> discriminatorValues = new HashMap<>();
+				discriminatorValues.put(clz.getSimpleName(), clz);
+
+				// Add fields for all subclasses (from same table, no JOINs)
+				for (Class<?> subClass : subClassesAnn.value()) {
+					discriminatorValues.put(subClass.getSimpleName(), subClass);
+					// Add subclass-specific fields from the same table
+					addFieldsForSingleTableInheritance(alias, subClass, clz);
+				}
+
+				// Store STI info in the alias
+				Alias aliasObj = aliases.get(alias);
+				aliasObj.setSingleTableInheritance(true);
+				aliasObj.setDiscriminatorColumn(alias + "." + discriminatorColumnName);
+				aliasObj.setDiscriminatorValues(discriminatorValues);
+			} else {
+				// Table-per-subclass inheritance: each subclass in its own table with JOINs
+				TableMapping thisMapping = tableMappings.get(tableMappings.size() - 1);
+				Field thisIdField = QueryBuilder.determineIdField(thisMapping.clazz);
+				List<String> subClassesAdded = new ArrayList<String>();
+				for (Class<?> subClass : subClassesAnn.value()) {
+					List<TableMapping> mappings = QueryBuilder.determineTableMapping(subClass);
+					TableMapping mapping = mappings.get(mappings.size() - 1);
+
+					String linkAlias = alias + "." + mapping.tableName;
+					String idField = QueryBuilder.determineIdField(mapping.clazz).getName();
+
+					query.addJoin(JoinType.LEFT, mapping.schemaName, mapping.tableName, linkAlias, new SqlExpression("{" + linkAlias + "}." + dbContext.quoteObjectNames(idField) + " = {" + alias + "}." + dbContext.quoteObjectNames(idField)));
+					Alias subClassAlias = new Alias(linkAlias, mapping.clazz, alias, thisIdField, QueryBuilder.determineIdFields(mapping.clazz));
+					subClassAlias.setIsASubClass(true);
+					aliases.put(linkAlias, subClassAlias);
+					subClasses.put(linkAlias, subClassAlias);
+
+					// Also add the idfield of the linked alias, so we have at least one
+					addField(new SqlExpression("{" + linkAlias + "}." + dbContext.quoteObjectNames(idField)), linkAlias + "." + idField, thisIdField);
+
+					addFields(linkAlias, mapping.clazz, thisMapping.clazz);
+
+					subClassesAdded.add(linkAlias);
+				}
+				aliases.get(alias).setSubClassAliases(subClassesAdded);
 			}
-			aliases.get(alias).setSubClassAliases(subClassesAdded);
 		}
 
 	}
@@ -457,6 +487,39 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		});
 	}
 
+	/**
+	 * Adds fields for a subclass in single table inheritance mode.
+	 * These fields come from the same table as the parent, so we use the parent alias.
+	 */
+	private void addFieldsForSingleTableInheritance(String alias, Class<?> subClass, Class<?> parentClass) {
+		// Collect only the fields declared in the subclass (not inherited from parent)
+		for (Field f : QueryBuilder.collectFieldsOfClass(subClass, parentClass)) {
+			f.setAccessible(true);
+
+			// Skip complex types - only simple fields are supported in STI
+			Class<?> type = f.getType();
+			if (isListOrArray(type) || isLinkedClass(type)) {
+				continue;
+			}
+
+			// Skip @Transient, @Id (already added from parent), and @Other fields
+			if (f.getAnnotation(Transient.class) != null ||
+				f.getAnnotation(Id.class) != null ||
+				f.getAnnotation(Other.class) != null) {
+				continue;
+			}
+
+			String fieldName = f.getName();
+			FieldName fieldNameAnn = f.getAnnotation(FieldName.class);
+			if (fieldNameAnn != null) {
+				fieldName = fieldNameAnn.value();
+			}
+
+			addField(new SqlExpression("{" + alias + "}." + dbContext.quoteObjectNames(fieldName)),
+					alias + "." + f.getName(), f);
+		}
+	}
+
 	private void addField(SqlExpression expression, String fieldAlias, Field f) {
 		fieldMappings.put(fieldAlias, dbContext.getFieldMapping(f));
 		query.addField(expression, fieldAlias);
@@ -549,20 +612,32 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 					// Merge subclass values into the values for this entity
 					Values merged = new Values(values);
 					Class<?> entityClass = resultClass;
-					if (a.getSubClassAliases() != null) {
+
+					if (a.isSingleTableInheritance()) {
+						// Single table inheritance: use discriminator column to determine type
+						String discriminatorColumn = a.getDiscriminatorColumn();
+						Object discriminatorValue = values.get(discriminatorColumn);
+						if (discriminatorValue != null) {
+							Class<?> resolvedClass = a.getDiscriminatorValues().get(discriminatorValue.toString());
+							if (resolvedClass != null) {
+								entityClass = resolvedClass;
+							}
+						}
+					} else if (a.getSubClassAliases() != null) {
+						// Table-per-subclass: check which subclass table has data
 						for(String subClassAlias : a.getSubClassAliases()) {
-							Values subClassValues = onThisRow.get(subClassAlias); 
+							Values subClassValues = onThisRow.get(subClassAlias);
 							if (subClassValues == null || allNulls(subClassValues)) {
 								continue;
 							}
-							
+
 							merged.putAll(onThisRow.get(subClassAlias));
-							
+
 							subClassId = createId(subClassAlias, merged, a.getIdFields());
 							entityClass = aliases.get(subClassAlias).getResultClass();
 						}
 					}
-					
+
 					Object entity = buildEntity(entityClass, merged, a.getOtherField());
 					allEntities.put(id, entity);
 					allEntities.put(subClassId, entity);
@@ -611,22 +686,33 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 					putValueIntoField(parent, a.getLinkField(), value);
 				} else {
 					Class<?> entityClass = a.getResultClass();
-					if (a.getSubClassAliases() != null) {
+
+					if (a.isSingleTableInheritance()) {
+						// Single table inheritance: use discriminator column to determine type
+						String discriminatorColumn = a.getDiscriminatorColumn();
+						Object discriminatorValue = values.get(discriminatorColumn);
+						if (discriminatorValue != null) {
+							Class<?> resolvedClass = a.getDiscriminatorValues().get(discriminatorValue.toString());
+							if (resolvedClass != null) {
+								entityClass = resolvedClass;
+							}
+						}
+					} else if (a.getSubClassAliases() != null) {
+						// Table-per-subclass: check which subclass table has data
 						Values merged = new Values();
 						merged.putAll(onThisRow.get(a.getAlias()));
 						for(String subClassAlias : a.getSubClassAliases()) {
-							Values subClassValues = onThisRow.get(subClassAlias); 
+							Values subClassValues = onThisRow.get(subClassAlias);
 							if (subClassValues == null || allNulls(subClassValues)) {
 								continue;
 							}
-							
+
 							merged.putAll(onThisRow.get(subClassAlias));
 							id = createId(subClassAlias, merged, a.getIdFields());
 							entityClass = aliases.get(subClassAlias).getResultClass();
 							values = merged;
 						}
 					}
-					
 
 					// Linked entity
 					Object entity = allEntities.get(id);
