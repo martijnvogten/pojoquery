@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 import javax.sql.DataSource;
 
@@ -386,19 +387,64 @@ public class PojoQuery<T> {
 		return queryBuilder.processRows(DB.queryRows(connection, stmt));
 	}
 
+
 	/**
-	 * Executes the query in streaming mode using the specified DataSource.
+	 * Executes the query in streaming mode, calling the consumer for each completed entity.
+	 * 
+	 * <p>This method processes rows one at a time and emits entities as soon as they are complete
+	 * (when all rows belonging to an entity have been processed). This is useful for processing
+	 * large result sets without loading everything into memory.</p>
+	 * 
+	 * <p><strong>Ordering behavior:</strong> Your ORDER BY clause is respected, and the primary
+	 * entity's ID is automatically appended as a tiebreaker to ensure all rows for the same entity
+	 * stay grouped together.</p>
+	 * 
+	 * <p><strong>Restriction:</strong> ORDER BY clauses must only reference fields from the primary
+	 * entity (root table). Ordering by fields from joined tables (e.g., a collection relationship)
+	 * is not supported and will throw a {@link org.pojoquery.internal.MappingException}.</p>
+	 * 
+	 * <p>Example usage:</p>
+	 * <pre>{@code
+	 * PojoQuery.build(Order.class)
+	 *     .addWhere("{order}.status = ?")
+	 *     .addOrderBy("{order}.createdAt DESC")  // OK: ordering by primary entity field
+	 *     .executeStreaming(dataSource, order -> {
+	 *         processOrder(order);  // Called as each Order is complete
+	 *     });
+	 * }</pre>
 	 *
 	 * @param db the DataSource
-	 * @return the list of results
+	 * @param consumer the consumer to receive each completed entity
+	 * @throws org.pojoquery.internal.MappingException if ORDER BY references a joined table
 	 */
-	public List<T> executeStreaming(DataSource db) {
-		List<T> result = new ArrayList<>();
-		Map<Object, Object> allEntities = new HashMap<>();
-		DB.queryRowsStreaming(db, query.toStatement(), row -> {
-			queryBuilder.processRow(result, allEntities, row);
-		});
-		return result;
+	public void executeStreaming(DataSource db, Consumer<T> consumer) {
+		executeStreamingImpl(consumer, rowConsumer -> DB.queryRowsStreaming(db, query.toStatement(), rowConsumer));
+	}
+
+	/**
+	 * Executes the query in streaming mode using the specified Connection, calling the consumer 
+	 * for each completed entity.
+	 * 
+	 * <p>This method processes rows one at a time and emits entities as soon as they are complete
+	 * (when all rows belonging to an entity have been processed). This is useful for processing
+	 * large result sets without loading everything into memory.</p>
+	 * 
+	 * <p><strong>Restriction:</strong> ORDER BY clauses must only reference fields from the primary
+	 * entity. See {@link #executeStreaming(DataSource, Consumer)} for details.</p>
+	 *
+	 * @param connection the database connection
+	 * @param consumer the consumer to receive each completed entity
+	 * @throws org.pojoquery.internal.MappingException if ORDER BY references a joined table
+	 */
+	public void executeStreaming(Connection connection, Consumer<T> consumer) {
+		executeStreamingImpl(consumer, rowConsumer -> DB.queryRowsStreaming(connection, query.toStatement(), rowConsumer));
+	}
+
+	private void executeStreamingImpl(Consumer<T> consumer, Consumer<Consumer<Map<String, Object>>> queryExecutor) {
+		queryBuilder.ensureOrderByPrimaryId();
+		var handler = queryBuilder.createStreamingRowHandler(consumer);
+		queryExecutor.accept(handler);
+		handler.flush();
 	}
 
 	public static <PK> PK insert(Connection conn, Class<?> type, Object o) {
@@ -774,7 +820,7 @@ public class PojoQuery<T> {
 	 */
 	public T findById(DataSource db, Object id) {
 		query.getWheres().addAll(QueryBuilder.buildIdCondition(dbContext, resultClass, id));
-		return returnSingleRow(executeStreaming(db));
+		return returnSingleRow(execute(db));
 	}
 
 	public static void delete(Connection conn, Object entity) {
@@ -905,5 +951,4 @@ public class PojoQuery<T> {
 		List<Map<String, Object>> rows = DB.queryRows(db, stmt);
 		return ((Long) rows.get(0).values().iterator().next()).intValue();
 	}
-
 }

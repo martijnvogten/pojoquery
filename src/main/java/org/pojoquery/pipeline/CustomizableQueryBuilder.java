@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -45,6 +46,8 @@ import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.util.CurlyMarkers;
 
 public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
+	
+	private static final java.util.regex.Pattern ALIAS_PATTERN = java.util.regex.Pattern.compile("\\{([a-zA-Z0-9_\\.]+)\\}");
 	
 	@SuppressWarnings("serial")
 	public static class Values extends HashMap<String,Object> {
@@ -484,6 +487,150 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		return !type.isPrimitive() && QueryBuilder.determineTableMapping(type).size() > 0;
 	}
 	
+	/**
+	 * Creates a row consumer for streaming mode that emits completed entities to the given consumer.
+	 * 
+	 * <p>The returned consumer processes rows one at a time. When the primary entity's ID changes,
+	 * the previously built entity is emitted. After all rows have been processed, call
+	 * {@link Runnable#run()} on the returned flush action to emit the final entity.</p>
+	 * 
+	 * <p><strong>Important:</strong> The query must be ordered by the primary entity's ID fields
+	 * to ensure all rows for an entity are processed consecutively.</p>
+	 * 
+	 * @param entityConsumer the consumer to receive completed entities
+	 * @return a pair: the row consumer to process each row, and a flush action to emit the final entity
+	 */
+	@SuppressWarnings("unchecked")
+	public StreamingRowHandler<T> createStreamingRowHandler(Consumer<T> entityConsumer) {
+		return new StreamingRowHandler<>(entityConsumer, this);
+	}
+	
+	/**
+	 * Handles streaming row processing, emitting completed entities when the primary ID changes.
+	 */
+	public static class StreamingRowHandler<T> implements Consumer<Map<String, Object>> {
+		private final Consumer<T> entityConsumer;
+		private final CustomizableQueryBuilder<?, T> queryBuilder;
+		private Object currentPrimaryId = null;
+		private T currentEntity = null;
+		private Map<Object, Object> entityCache = new HashMap<>();
+		
+		StreamingRowHandler(Consumer<T> entityConsumer, CustomizableQueryBuilder<?, T> queryBuilder) {
+			this.entityConsumer = entityConsumer;
+			this.queryBuilder = queryBuilder;
+		}
+		
+		@Override
+		@SuppressWarnings("unchecked")
+		public void accept(Map<String, Object> row) {
+			if (queryBuilder.keysByAlias.size() == 0) {
+				queryBuilder.keysByAlias = groupKeysByAlias(row.keySet());
+			}
+			Map<String, Values> onThisRow = queryBuilder.collectValuesByAlias(row, queryBuilder.keysByAlias);
+			onThisRow = queryBuilder.remapSubClasses(onThisRow);
+			
+			// Find the primary ID for this row
+			Object primaryId = null;
+			for (Alias a : queryBuilder.aliases.values()) {
+				if (a.getParentAlias() == null) {
+					Values values = onThisRow.get(a.getAlias());
+					if (values != null && !allNulls(values)) {
+						primaryId = queryBuilder.createId(a.getAlias(), values, a.getIdFields());
+					}
+					break;
+				}
+			}
+			
+			// If primary ID changed, emit the current entity and clear cache
+			if (primaryId != null && currentPrimaryId != null && !primaryId.equals(currentPrimaryId)) {
+				emitCurrentEntity();
+			}
+			
+			// Process the row
+			final Object finalPrimaryId = primaryId;
+			queryBuilder.processRowInternal(onThisRow, entityCache, (id, entity) -> {
+				currentPrimaryId = finalPrimaryId;
+				currentEntity = (T) entity;
+			});
+		}
+		
+		/**
+		 * Emits the final entity after all rows have been processed.
+		 * Must be called after the last row to ensure the final entity is emitted.
+		 */
+		public void flush() {
+			emitCurrentEntity();
+		}
+		
+		private void emitCurrentEntity() {
+			if (currentEntity != null) {
+				entityConsumer.accept(currentEntity);
+				entityCache.clear();
+				currentEntity = null;
+				currentPrimaryId = null;
+			}
+		}
+	}
+	
+	/**
+	 * Ensures that the query is ordered by the primary entity's ID fields.
+	 * This is required for streaming mode to work correctly, as it ensures
+	 * all rows belonging to the same entity are consecutive in the result set.
+	 * 
+	 * <p>The primary ID fields are appended to the ORDER BY clause as a tiebreaker
+	 * to ensure entity grouping while preserving the user's primary ordering.</p>
+	 * 
+	 * @throws MappingException if any ORDER BY clause references a non-root alias (joined table)
+	 */
+	public void ensureOrderByPrimaryId() {
+		List<Field> idFields = QueryBuilder.determineIdFields(resultClass);
+		String tableName = query.getTable();
+		List<String> currentOrderBy = new ArrayList<>(query.getOrderBy());
+		
+		// Validate that ORDER BY clauses only reference the root alias
+		validateOrderByAliases(currentOrderBy);
+		
+		// Append ID fields to the ORDER BY (if not already present) as a tiebreaker
+		// Use curly brace syntax for alias + quoted field name
+		for (Field idField : idFields) {
+			String quotedFieldRef = "{" + tableName + "}." + dbContext.quoteObjectNames(idField.getName());
+			boolean alreadyPresent = currentOrderBy.stream()
+				.anyMatch(o -> o.toUpperCase().contains(tableName.toUpperCase() + "}." + idField.getName().toUpperCase()));
+			if (!alreadyPresent) {
+				currentOrderBy.add(quotedFieldRef);
+			}
+		}
+		query.setOrderBy(currentOrderBy);
+	}
+	
+	/**
+	 * Validates that all ORDER BY clauses only reference the root alias.
+	 * Ordering by fields from joined tables would cause rows from different entities
+	 * to interleave, breaking streaming mode.
+	 * 
+	 * @param orderByClauses the ORDER BY clauses to validate
+	 * @throws MappingException if any clause references a non-root alias
+	 */
+	private void validateOrderByAliases(List<String> orderByClauses) {
+		for (String clause : orderByClauses) {
+			java.util.regex.Matcher matcher = ALIAS_PATTERN.matcher(clause);
+			while (matcher.find()) {
+				String alias = matcher.group(1);
+				// Extract just the table/alias part (before the dot if there's a field reference)
+				String tableAlias = alias.contains(".") ? alias.substring(0, alias.indexOf('.')) : alias;
+				
+				if (!tableAlias.equals(rootAlias)) {
+					throw new MappingException(
+						"executeStreaming with consumer does not support ORDER BY on joined tables. " +
+						"Found ORDER BY clause '" + clause + "' referencing alias '" + tableAlias + "', " +
+						"but only the root alias '" + rootAlias + "' is allowed. " +
+						"Ordering by joined table fields would cause incomplete entities. " +
+						"Use executeStreaming() without consumer or execute() if you need this ordering.");
+				}
+			}
+		}
+	}
+	
 	public List<T> processRowsStreaming(Callable<Map<String,Object>> rowProvider) {
 		
 		return new ArrayList<>();
@@ -533,10 +680,24 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 			keysByAlias = groupKeysByAlias(row.keySet());
 		}
 		Map<String, Values> onThisRow = collectValuesByAlias(row, keysByAlias);
-		
 		onThisRow = remapSubClasses(onThisRow);
 		
-		for(Alias a : aliases.values()) {
+		processRowInternal(onThisRow, allEntities, (id, entity) -> {
+			result.add((T) entity);
+		});
+	}
+	
+	/**
+	 * Internal method that processes a single row's alias values and populates the allEntities map.
+	 * When a new primary entity is created, the onNewPrimaryEntity callback is invoked.
+	 * 
+	 * @param onThisRow the values for each alias in this row
+	 * @param allEntities map of all entities seen so far (keyed by their ID)
+	 * @param onNewPrimaryEntity callback invoked when a new primary entity is created, receives (id, entity)
+	 */
+	private void processRowInternal(Map<String, Values> onThisRow, Map<Object, Object> allEntities, 
+			java.util.function.BiConsumer<Object, Object> onNewPrimaryEntity) {
+		for (Alias a : aliases.values()) {
 			Values values = onThisRow.get(a.getAlias());
 			if (values == null || allNulls(values)) {
 				continue;
@@ -550,14 +711,12 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 					Values merged = new Values(values);
 					Class<?> entityClass = resultClass;
 					if (a.getSubClassAliases() != null) {
-						for(String subClassAlias : a.getSubClassAliases()) {
-							Values subClassValues = onThisRow.get(subClassAlias); 
+						for (String subClassAlias : a.getSubClassAliases()) {
+							Values subClassValues = onThisRow.get(subClassAlias);
 							if (subClassValues == null || allNulls(subClassValues)) {
 								continue;
 							}
-							
 							merged.putAll(onThisRow.get(subClassAlias));
-							
 							subClassId = createId(subClassAlias, merged, a.getIdFields());
 							entityClass = aliases.get(subClassAlias).getResultClass();
 						}
@@ -566,10 +725,9 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 					Object entity = buildEntity(entityClass, merged, a.getOtherField());
 					allEntities.put(id, entity);
 					allEntities.put(subClassId, entity);
-					result.add((T) entity);
+					onNewPrimaryEntity.accept(id, entity);
 				}
 			} else {
-				
 				if (a.getIsASubClass()) {
 					// Subclasses are handled when the superclass is processed
 					continue;
@@ -580,8 +738,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 				String parentAlias = a.getParentAlias();
 				Object parentId = null;
 				Object parent = null;
-				if (parentValues == null || parentValues.size() == 0) {
-				} else {
+				if (parentValues != null && parentValues.size() > 0) {
 					parentId = createId(parentAlias, parentValues, aliases.get(parentAlias).getIdFields());
 					parent = allEntities.get(parentId);
 				}
@@ -590,7 +747,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 					Alias parentAliasObject = aliases.get(a.getParentAlias());
 					List<String> subs = parentAliasObject.getSubClassAliases();
 					if (subs != null && subs.size() > 0) {
-						for(String sub : subs) {
+						for (String sub : subs) {
 							parentValues = onThisRow.get(sub);
 							if (parentValues != null && parentValues.size() > 0) {
 								parentAlias = sub;
@@ -606,7 +763,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 					// Linked value
 					Object value = values.values().iterator().next();
 					if (a.getResultClass().isEnum()) {
-						value = enumValueOf(a.getResultClass(), (String)value);
+						value = enumValueOf(a.getResultClass(), (String) value);
 					}
 					putValueIntoField(parent, a.getLinkField(), value);
 				} else {
@@ -614,12 +771,11 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 					if (a.getSubClassAliases() != null) {
 						Values merged = new Values();
 						merged.putAll(onThisRow.get(a.getAlias()));
-						for(String subClassAlias : a.getSubClassAliases()) {
-							Values subClassValues = onThisRow.get(subClassAlias); 
+						for (String subClassAlias : a.getSubClassAliases()) {
+							Values subClassValues = onThisRow.get(subClassAlias);
 							if (subClassValues == null || allNulls(subClassValues)) {
 								continue;
 							}
-							
 							merged.putAll(onThisRow.get(subClassAlias));
 							id = createId(subClassAlias, merged, a.getIdFields());
 							entityClass = aliases.get(subClassAlias).getResultClass();
@@ -627,7 +783,6 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 						}
 					}
 					
-
 					// Linked entity
 					Object entity = allEntities.get(id);
 					if (entity == null) {
