@@ -3,6 +3,7 @@ package org.pojoquery.dialects;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -105,13 +106,13 @@ public class HsqldbDbContext implements DbContext {
             return "VARCHAR(" + length + ")";
         }
 
-        if (type == Date.class || type == LocalDateTime.class) {
+        if (type == Date.class || type == LocalDateTime.class || type == Instant.class || type == java.sql.Timestamp.class) {
             return "TIMESTAMP";
         }
-        if (type == LocalDate.class) {
+        if (type == LocalDate.class || type == java.sql.Date.class) {
             return "DATE";
         }
-        if (type == LocalTime.class) {
+        if (type == LocalTime.class || type == java.sql.Time.class) {
             return "TIME";
         }
 
