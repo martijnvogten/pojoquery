@@ -81,6 +81,8 @@ public class UsersExample {
 	// end::role-entity[]
 	
 	public static void main(String[] args) throws SQLException {
+		// Ensure HSQLDB context is set (may have been changed by other tests)
+		TestDatabase.initDbContext();
 		DataSource db = TestDatabase.dropAndRecreate();
 		createTables(db);
 		

@@ -34,10 +34,10 @@ public class EmbeddedExample {
         @Id Long id;
         String name;
 
-        @Embedded(prefix = "ship_")
+        @Embedded(prefix = "ship")
         Address shippingAddress;
 
-        @Embedded(prefix = "bill_")
+        @Embedded(prefix = "bill")
         Address billingAddress;
 
         public Long getId() { return id; }
@@ -54,7 +54,7 @@ public class EmbeddedExample {
 
         // tag::query[]
         Customer customer = PojoQuery.build(Customer.class)
-            .addWhere("customer.id = ?", 1L)
+            .addWhere("{customer}.id = ?", 1L)
             .execute(dataSource)
             .stream().findFirst().orElse(null);
 
