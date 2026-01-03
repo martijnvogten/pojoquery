@@ -199,6 +199,24 @@ public class TestJpaAnnotations {
     }
 
     @Test
+    public void testSchemaGeneratorJpaJoinColumnAnnotation() {
+        DbContext dbContext = DbContext.builder()
+            .withQuoteStyle(QuoteStyle.NONE)
+            .build();
+
+        // Test SchemaGenerator with JPA @JoinColumn
+        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaOrder.class);
+        String sql = String.join("\n", statements);
+
+        // Should use the column name from JPA @JoinColumn(name="customer_id")
+        assertTrue(sql.contains("customer_id"),
+            "SchemaGenerator should use column name from JPA @JoinColumn. Generated SQL:\n" + sql);
+        // Should NOT use default fieldName_id
+        assertTrue(!sql.contains("customer_id_id") && !sql.contains("customer BIGINT"),
+            "SchemaGenerator should not use default naming when @JoinColumn is present. Generated SQL:\n" + sql);
+    }
+
+    @Test
     public void testJpaEmbeddedAnnotation() {
         DbContext dbContext = DbContext.builder()
             .withQuoteStyle(QuoteStyle.NONE)

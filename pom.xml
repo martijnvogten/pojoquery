@@ -5,7 +5,7 @@
 
   <groupId>org.pojoquery</groupId>
   <artifactId>pojoquery</artifactId>
-  <version>4.1.0-BETA</version>
+  <version>4.1.0-BETA-2</version>
 
   <name>pojoquery</name>
   <description>Model-driven ORM library for Java</description>
