@@ -71,6 +71,7 @@ public class TestJpaAnnotations {
 
         String name;
 
+        // JPA @Embedded with no prefix - true JPA semantics (no column prefix)
         @Embedded
         JpaAddress address;
     }
@@ -206,13 +207,13 @@ public class TestJpaAnnotations {
         List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaCompany.class);
         String sql = String.join("\n", statements);
 
-        // Embedded fields should be included in the table
-        assertTrue(sql.contains("street"),
-            "JPA @Embedded fields should be included. Generated SQL:\n" + sql);
-        assertTrue(sql.contains("city"),
-            "JPA @Embedded fields should be included. Generated SQL:\n" + sql);
-        assertTrue(sql.contains("zipCode"),
-            "JPA @Embedded fields should be included. Generated SQL:\n" + sql);
+        // JPA @Embedded uses NO prefix - fields use their original names (true JPA semantics)
+        assertTrue(sql.contains("street VARCHAR"),
+            "JPA @Embedded should use original field names (no prefix). Generated SQL:\n" + sql);
+        assertTrue(sql.contains("city VARCHAR"),
+            "JPA @Embedded should use original field names (no prefix). Generated SQL:\n" + sql);
+        assertTrue(sql.contains("zipCode VARCHAR"),
+            "JPA @Embedded should use original field names (no prefix). Generated SQL:\n" + sql);
     }
 
     @Test
@@ -260,9 +261,9 @@ public class TestJpaAnnotations {
         List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaCompany.class);
         String sql = String.join("\n", statements);
 
-        // Embedded fields should be in the same table
-        assertTrue(sql.contains("jpa_company") && sql.contains("street"),
-            "JPA @Embedded fields should be in parent table. Generated SQL:\n" + sql);
+        // JPA @Embedded fields should be in parent table with NO prefix
+        assertTrue(sql.contains("jpa_company") && sql.contains("street VARCHAR"),
+            "JPA @Embedded fields should be in parent table without prefix. Generated SQL:\n" + sql);
     }
 
     @Test
@@ -280,5 +281,23 @@ public class TestJpaAnnotations {
         // Related entity fields should be included
         assertTrue(sql.contains("customer") && sql.contains("user_name"),
             "Query should include related entity fields. Generated SQL:\n" + sql);
+    }
+
+    @Test
+    public void testJpaEmbeddedNoPrefix() {
+        DbContext dbContext = DbContext.builder()
+            .withQuoteStyle(QuoteStyle.NONE)
+            .build();
+
+        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaCompany.class);
+        String sql = String.join("\n", statements);
+
+        // JPA @Embedded should NOT add any prefix - true JPA semantics
+        assertTrue(sql.contains("street VARCHAR") && !sql.contains("address_street") && !sql.contains("addressstreet"),
+            "JPA @Embedded should use original field names without any prefix. Generated SQL:\n" + sql);
+        assertTrue(sql.contains("city VARCHAR"),
+            "JPA @Embedded should use original field names without any prefix. Generated SQL:\n" + sql);
+        assertTrue(sql.contains("zipCode VARCHAR"),
+            "JPA @Embedded should use original field names without any prefix. Generated SQL:\n" + sql);
     }
 }

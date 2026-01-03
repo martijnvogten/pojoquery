@@ -1099,16 +1099,16 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		String prefix;
 		Embedded embeddedAnn = f.getAnnotation(Embedded.class);
 		if (embeddedAnn != null) {
+			// PojoQuery @Embedded annotation
 			prefix = embeddedAnn.prefix();
 			if (prefix.equals(Embedded.DEFAULT)) {
-				prefix = f.getName();
+				// PojoQuery @Embedded with no explicit prefix - use field name with underscore
+				prefix = f.getName() + "_";
 			}
+			// If prefix was explicitly set, use it as-is (user controls whether to include underscore)
 		} else {
-			// JPA @Embedded - use field name as prefix (similar to PojoQuery default)
-			prefix = f.getName();
-		}
-		if (!prefix.isEmpty()) {
-			prefix = prefix + "_";
+			// JPA @Embedded without PojoQuery annotation - true JPA semantics (no prefix)
+			prefix = "";
 		}
 		return prefix;
 	}

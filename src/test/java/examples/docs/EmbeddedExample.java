@@ -34,10 +34,10 @@ public class EmbeddedExample {
         @Id Long id;
         String name;
 
-        @Embedded(prefix = "ship")
+        @Embedded(prefix = "ship_")
         Address shippingAddress;
 
-        @Embedded(prefix = "bill")
+        @Embedded(prefix = "bill_")
         Address billingAddress;
 
         public Long getId() { return id; }

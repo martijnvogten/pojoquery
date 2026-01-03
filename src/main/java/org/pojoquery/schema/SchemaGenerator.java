@@ -402,10 +402,6 @@ public class SchemaGenerator {
             // Handle embedded fields
             if (AnnotationHelper.isEmbedded(field)) {
                 String prefix = QueryBuilder.determinePrefix(field);
-                // Remove trailing underscore for column prefix (determinePrefix adds it)
-                if (prefix.endsWith("_")) {
-                    prefix = prefix.substring(0, prefix.length() - 1);
-                }
                 addEmbeddedColumns(field.getType(), prefix, columnDefinitions, primaryKeyColumns,
                     existingColumnNames, dbContext, isCompositeKey, mergedAnnotations);
                 continue;
@@ -653,10 +649,6 @@ public class SchemaGenerator {
             // Recursively handle nested embedded
             if (AnnotationHelper.isEmbedded(field)) {
                 String nestedPrefix = prefix + QueryBuilder.determinePrefix(field);
-                // Remove trailing underscore (determinePrefix adds it but we want to concatenate)
-                if (nestedPrefix.endsWith("_")) {
-                    nestedPrefix = nestedPrefix.substring(0, nestedPrefix.length() - 1);
-                }
                 addEmbeddedColumns(field.getType(), nestedPrefix, columnDefinitions, primaryKeyColumns,
                     existingColumnNames, dbContext, isCompositeKey, mergedAnnotations);
                 continue;
