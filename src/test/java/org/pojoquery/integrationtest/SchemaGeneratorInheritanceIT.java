@@ -6,10 +6,10 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext;
+import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
 /**
@@ -80,20 +80,21 @@ public class SchemaGeneratorInheritanceIT {
      */
     @Test
     public void testUserRefAndUserTogetherResolvesToUnique() {
-        DbContext dbContext = TestDatabaseProvider.getDbContext();
-        
+        // Use unquoted identifiers for simpler assertions
+        DbContext dbContext = DbContext.builder()
+            .withQuoteStyle(QuoteStyle.NONE)
+            .build();
+
         // UserRef is listed FIRST (has no unique constraint on username)
         // User is listed SECOND (has unique=true on username)
         List<String> sqlStatements = SchemaGenerator.generateCreateTableStatements(
             dbContext, UserRef.class, User.class);
         String sql = String.join("\n", sqlStatements);
         System.out.println("UserRef + User CREATE TABLE:\n" + sql);
-        
+
         // The schema should have UNIQUE on username because User has @Column(unique=true)
         // even though UserRef (listed first) does not have the annotation
-        // Check for various dialect formats: unquoted, double-quoted, or backtick-quoted
-        assertTrue(sql.contains("username VARCHAR(255) UNIQUE") || 
-            sql.contains("username\" VARCHAR(255) UNIQUE"), 
+        assertTrue(sql.contains("username VARCHAR(255) UNIQUE"),
             "Should have UNIQUE on username when User (with unique=true) is included, " +
             "regardless of class order. Generated SQL:\n" + sql);
     }
