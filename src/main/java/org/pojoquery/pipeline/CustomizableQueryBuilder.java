@@ -22,6 +22,7 @@ import java.util.concurrent.Callable;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
+import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
 import org.pojoquery.SqlExpression;
@@ -312,8 +313,8 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 				String parent = fieldNamePrefix == null ? alias : fieldsAlias;
 				String linkAlias = joinOne(parent, query, f, type, fieldNamePrefix);
 				addClass(type, linkAlias, parent, f);
-			} else if (f.getAnnotation(Embedded.class) != null) {
-				
+			} else if (AnnotationHelper.isEmbedded(f)) {
+
 				String prefix = QueryBuilder.determinePrefix(f);
 				String embedAlias = (isRoot && fieldNamePrefix == null) ? f.getName() : fieldsAlias + "." + f.getName();
 				Alias newAlias = new Alias(embedAlias, f.getType(), fieldsAlias, f, Collections.emptyList());
@@ -346,11 +347,8 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 
 	public static String determineSqlFieldName(Field f) {
 		Objects.requireNonNull(f, "field must not be null");
-		String fieldName = f.getName();
-		if (f.getAnnotation(FieldName.class) != null) {
-			fieldName = f.getAnnotation(FieldName.class).value();
-		}
-		return fieldName;
+		String columnName = AnnotationHelper.getColumnName(f);
+		return columnName != null ? columnName : f.getName();
 	}
 
 	private String joinMany(String alias, SqlQuery<?> result, Field f, Class<?> componentType) {
@@ -467,11 +465,15 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	}
 	
 	private static String linkFieldName(Field f) {
-		if (f.getAnnotation(FieldName.class) != null) {
-			return f.getAnnotation(FieldName.class).value();
+		// Check for @JoinColumn or @Link(linkfield) first
+		String joinColumnName = AnnotationHelper.getJoinColumnName(f);
+		if (joinColumnName != null) {
+			return joinColumnName;
 		}
-		if (f.getAnnotation(Link.class) != null) {
-			return f.getAnnotation(Link.class).linkfield();
+		// Fall back to @FieldName or @Column(name)
+		String columnName = AnnotationHelper.getColumnName(f);
+		if (columnName != null) {
+			return columnName;
 		}
 		return f.getName() + "_id";
 	}
@@ -849,8 +851,15 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	}
 
 	public static String determinePrefix(Field f) {
-		String prefix = f.getAnnotation(Embedded.class).prefix();
-		if (prefix.equals(Embedded.DEFAULT)) {
+		String prefix;
+		Embedded embeddedAnn = f.getAnnotation(Embedded.class);
+		if (embeddedAnn != null) {
+			prefix = embeddedAnn.prefix();
+			if (prefix.equals(Embedded.DEFAULT)) {
+				prefix = f.getName();
+			}
+		} else {
+			// JPA @Embedded - use field name as prefix (similar to PojoQuery default)
 			prefix = f.getName();
 		}
 		if (!prefix.isEmpty()) {
@@ -867,19 +876,19 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 			if (mappedClz == null) {
 				mappedClz = clz;
 			}
-			Table tableAnn = clz.getAnnotation(Table.class);
+			AnnotationHelper.TableInfo tableInfo = AnnotationHelper.getTableInfo(clz);
 			fields.addAll(0, QueryBuilder.collectFieldsOfClass(clz, clz.getSuperclass()));
-			if (tableAnn != null) {
-				String name = tableAnn.value();
+			if (tableInfo != null) {
+				String name = tableInfo.name;
 				// Check if this is a redundant @Table annotation targeting the same table as an existing mapping
 				if (!tables.isEmpty() && tables.get(0).tableName.equals(name)) {
 					Logger.getLogger(CustomizableQueryBuilder.class.getName())
-						.warning("Redundant @Table(\"" + name + "\") annotation on " + 
+						.warning("Redundant @Table(\"" + name + "\") annotation on " +
 							tables.get(0).clazz.getName() + " - same table already mapped by parent " + clz.getName());
 					// Merge fields into existing mapping instead of creating a new one
 					tables.get(0).fields.addAll(0, fields);
 				} else {
-					tables.add(0, new TableMapping(tableAnn.schema(), name, mappedClz, new ArrayList<Field>(fields)));
+					tables.add(0, new TableMapping(tableInfo.schema, name, mappedClz, new ArrayList<Field>(fields)));
 				}
 				fields.clear();
 				mappedClz = null;
@@ -909,7 +918,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 			if ((f.getModifiers() & Modifier.TRANSIENT) > 0) {
 				continue;
 			}
-			if (f.getAnnotation(Transient.class) != null) {
+			if (AnnotationHelper.isTransient(f)) {
 				continue;
 			}
 			result.add(f);
@@ -934,7 +943,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		Iterable<Field> fields = collectFieldsOfClass(clz);
 		ArrayList<Field> result = new ArrayList<Field>();
 		for (Field f : fields) {
-			if (f.getAnnotation(Id.class) != null) {
+			if (AnnotationHelper.isId(f)) {
 				result.add(f);
 			}
 		}

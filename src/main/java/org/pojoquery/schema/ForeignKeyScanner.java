@@ -6,8 +6,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import org.pojoquery.AnnotationHelper;
 import org.pojoquery.annotations.Link;
-import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.CustomizableQueryBuilder;
 import org.pojoquery.pipeline.QueryBuilder;
@@ -174,7 +174,7 @@ class ForeignKeyScanner {
         Class<?> rootTableClass = null;
         Class<?> current = clazz;
         while (current != null) {
-            if (current.getAnnotation(Table.class) != null) {
+            if (AnnotationHelper.hasTableAnnotation(current)) {
                 rootTableClass = current;
             }
             current = current.getSuperclass();
