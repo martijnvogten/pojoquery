@@ -10,6 +10,7 @@ import examples.docs.CustomTypeMappingExample;
 import examples.docs.EmbeddedExample;
 import examples.docs.FilteredRelationshipExample;
 import examples.docs.GettingStartedExample;
+import examples.docs.JpaAnnotationsExample;
 import examples.docs.TablePerSubclassInheritanceExample;
 import examples.events.EventsExample;
 import examples.inheritance.InheritanceExample;
@@ -59,6 +60,11 @@ public class TestAllExamples {
 	@Test
 	void gettingStartedExample() {
 		GettingStartedExample.main(new String[0]);
+	}
+
+	@Test
+	void jpaAnnotationsExample() {
+		JpaAnnotationsExample.main(new String[0]);
 	}
 
 	@Test

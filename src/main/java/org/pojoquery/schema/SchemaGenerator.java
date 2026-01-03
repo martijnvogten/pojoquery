@@ -690,9 +690,10 @@ public class SchemaGenerator {
     }
     
     private static String determineForeignKeyColumnName(Field field) {
-        Link linkAnn = field.getAnnotation(Link.class);
-        if (linkAnn != null && !Link.NONE.equals(linkAnn.linkfield())) {
-            return linkAnn.linkfield();
+        // First check @Link(linkfield=...) then JPA @JoinColumn(name=...)
+        String columnName = AnnotationHelper.getJoinColumnName(field);
+        if (columnName != null) {
+            return columnName;
         }
         return field.getName() + "_id";
     }

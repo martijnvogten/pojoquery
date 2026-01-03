@@ -78,6 +78,20 @@ public class TestJpaAnnotations {
     // ========== Tests ==========
 
     @Test
+    public void testJpaIdAnnotation() {
+        DbContext dbContext = DbContext.builder()
+            .withQuoteStyle(QuoteStyle.NONE)
+            .build();
+
+        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaUser.class);
+        String sql = String.join("\n", statements);
+
+        // Should use @Id field as primary key
+        assertTrue(sql.contains("PRIMARY KEY (id)"),
+            "Should use JPA @Id field as primary key. Generated SQL:\n" + sql);
+    }
+
+    @Test
     public void testJpaTableAnnotation() {
         DbContext dbContext = DbContext.builder()
             .withQuoteStyle(QuoteStyle.NONE)
@@ -220,5 +234,51 @@ public class TestJpaAnnotations {
         // Transient field should be excluded
         assertTrue(!sql.contains("temporaryField"),
             "JPA @Transient field should be excluded from query. Generated SQL:\n" + sql);
+    }
+
+    @Test
+    public void testQueryJpaLobAnnotation() {
+        DbContext dbContext = DbContext.builder()
+            .withQuoteStyle(QuoteStyle.NONE)
+            .build();
+
+        String sql = PojoQuery.build(dbContext, JpaUser.class).toSql();
+
+        // @Lob field should be included in query selection
+        assertTrue(sql.contains("biography"),
+            "JPA @Lob field should be included in query. Generated SQL:\n" + sql);
+    }
+
+    @Test
+    public void testQueryJpaEmbeddedAnnotation() {
+        DbContext dbContext = DbContext.builder()
+            .withQuoteStyle(QuoteStyle.NONE)
+            .build();
+
+        // For embedded, the fields are inlined - tested via SchemaGenerator
+        // QueryBuilder treats @Embedded fields as part of the parent table
+        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaCompany.class);
+        String sql = String.join("\n", statements);
+
+        // Embedded fields should be in the same table
+        assertTrue(sql.contains("jpa_company") && sql.contains("street"),
+            "JPA @Embedded fields should be in parent table. Generated SQL:\n" + sql);
+    }
+
+    @Test
+    public void testQueryJpaJoinColumnWithRelation() {
+        DbContext dbContext = DbContext.builder()
+            .withQuoteStyle(QuoteStyle.NONE)
+            .build();
+
+        String sql = PojoQuery.build(dbContext, JpaOrder.class).toSql();
+
+        // Query should join using @JoinColumn name
+        assertTrue(sql.contains("customer_id"),
+            "Query should use JPA @JoinColumn name for join. Generated SQL:\n" + sql);
+
+        // Related entity fields should be included
+        assertTrue(sql.contains("customer") && sql.contains("user_name"),
+            "Query should include related entity fields. Generated SQL:\n" + sql);
     }
 }

@@ -6,6 +6,7 @@ import org.hsqldb.jdbc.JDBCDataSource;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.PojoQuery;
+import org.pojoquery.schema.SchemaGenerator;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Id;
@@ -33,7 +34,6 @@ public class JpaAnnotationsExample {
         @Column(unique = true)
         String email;
 
-        @Lob
         String biography;
 
         @Transient
@@ -77,7 +77,6 @@ public class JpaAnnotationsExample {
         @org.pojoquery.annotations.Column(unique = true)
         String email;
 
-        @org.pojoquery.annotations.Lob
         String biography;
 
         @org.pojoquery.annotations.Transient
@@ -102,7 +101,7 @@ public class JpaAnnotationsExample {
 
         // Both JPA and PojoQuery annotated entities work identically
         Customer customer = PojoQuery.build(Customer.class)
-            .addWhere("customers.id = ?", 1L)
+            .addWhere("{customers}.id = ?", 1L)
             .execute(dataSource)
             .stream().findFirst().orElse(null);
 
@@ -116,33 +115,21 @@ public class JpaAnnotationsExample {
     }
 
     private static void createTables(DataSource db) {
-        DB.executeDDL(db, """
-            CREATE TABLE addresses (
-                id BIGINT IDENTITY PRIMARY KEY,
-                street VARCHAR(255),
-                city VARCHAR(100)
-            )
-            """);
-        DB.executeDDL(db, """
-            CREATE TABLE customers (
-                id BIGINT IDENTITY PRIMARY KEY,
-                full_name VARCHAR(100) NOT NULL,
-                email VARCHAR(255) UNIQUE,
-                biography CLOB,
-                primary_address_id BIGINT,
-                FOREIGN KEY (primary_address_id) REFERENCES addresses(id)
-            )
-            """);
+        SchemaGenerator.createTables(db, Address.class, Customer.class);
     }
 
     private static void insertTestData(DataSource db) {
-        DB.executeDDL(db, """
-            INSERT INTO addresses (street, city) VALUES ('123 Main St', 'Springfield')
-            """);
-        DB.executeDDL(db, """
-            INSERT INTO customers (full_name, email, biography, primary_address_id)
-            VALUES ('John Doe', 'john@example.com', 'A software developer.', 1)
-            """);
+        Address address = new Address();
+        address.street = "123 Main St";
+        address.city = "Springfield";
+        PojoQuery.insert(db, address);
+
+        Customer customer = new Customer();
+        customer.name = "John Doe";
+        customer.email = "john@example.com";
+        customer.biography = "A software developer.";
+        customer.primaryAddress = address;
+        PojoQuery.insert(db, customer);
     }
 
     private static DataSource createDatabase() {
