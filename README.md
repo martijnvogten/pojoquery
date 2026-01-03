@@ -14,6 +14,7 @@ PojoQuery is a lightweight utility for working with relational databases in Java
 * Support for table-per-subclass inheritance mapping (`@SubClasses`)
 * Support for embedded objects (`@Embedded`)
 * Handling of dynamic columns (`@Other`)
+* JPA annotation compatibility (`jakarta.persistence` and `javax.persistence`)
 
 ## Rationale
 
@@ -95,4 +96,21 @@ To build PojoQuery from the source code:
     *   On Windows: `mvnw.cmd clean install`
 
 This will compile the code, run tests, and install the artifact into your local Maven repository.
+
+## JPA Annotation Compatibility
+
+PojoQuery supports JPA annotations (`jakarta.persistence` and `javax.persistence`) as alternatives to its native annotations. This allows you to use existing JPA-annotated entities with PojoQuery without modification.
+
+| PojoQuery Annotation | JPA Equivalent | Notes |
+|---------------------|----------------|-------|
+| `@Table` | `@Table` | Table name and schema |
+| `@Id` | `@Id` | Primary key field |
+| `@FieldName` | `@Column(name=...)` | Custom column name |
+| `@Column` | `@Column` | length, precision, scale, nullable, unique |
+| `@Transient` | `@Transient` | Exclude field from persistence |
+| `@Embedded` | `@Embedded` | Embed value object |
+| `@Lob` | `@Lob` | Large object (CLOB/BLOB) |
+| `@Link(linkfield=...)` | `@JoinColumn(name=...)` | Foreign key column name |
+
+PojoQuery annotations always take precedence over JPA annotations when both are present.
 

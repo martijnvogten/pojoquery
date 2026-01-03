@@ -9,10 +9,9 @@ import java.time.LocalTime;
 import java.util.Date;
 import java.util.Map;
 
+import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
-import org.pojoquery.annotations.Column;
-import org.pojoquery.annotations.Lob;
 import org.pojoquery.pipeline.SimpleFieldMapping;
 
 /**
@@ -88,9 +87,9 @@ public class HsqldbDbContext implements DbContext {
             return "BOOLEAN";
         }
         if (type == BigDecimal.class) {
-            Column colAnn = field.getAnnotation(Column.class);
-            int precision = (colAnn != null) ? colAnn.precision() : 19;
-            int scale = (colAnn != null) ? colAnn.scale() : 4;
+            AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);
+            int precision = (colMeta != null) ? colMeta.precision : 19;
+            int scale = (colMeta != null) ? colMeta.scale : 4;
             return "DECIMAL(" + precision + "," + scale + ")";
         }
         if (type == BigInteger.class) {
@@ -98,11 +97,11 @@ public class HsqldbDbContext implements DbContext {
         }
 
         if (type == String.class) {
-            if (field.getAnnotation(Lob.class) != null) {
+            if (AnnotationHelper.isLob(field)) {
                 return "CLOB";
             }
-            Column colAnn = field.getAnnotation(Column.class);
-            int length = (colAnn != null) ? colAnn.length() : getDefaultVarcharLength();
+            AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);
+            int length = (colMeta != null) ? colMeta.length : getDefaultVarcharLength();
             return "VARCHAR(" + length + ")";
         }
 

@@ -15,6 +15,7 @@ import java.util.function.Consumer;
 
 import javax.sql.DataSource;
 
+import org.pojoquery.AnnotationHelper;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
@@ -707,7 +708,7 @@ public class PojoQuery<T> {
 				}
 
 				Object val = f.get(o);
-				if (f.getAnnotation(Embedded.class) != null) {
+				if (AnnotationHelper.isEmbedded(f)) {
 					if (val != null) {
 						Map<String, Object> embeddedVals = extractValues(f.getType(), val);
 						String prefix = QueryBuilder.determinePrefix(f);
@@ -725,11 +726,9 @@ public class PojoQuery<T> {
 				} else if (Collection.class.isAssignableFrom(f.getType())) {
 				} else if (QueryBuilder.isLinkedClass(f.getType())) {
 					// Linked entity.
-					String linkfieldName = f.getName() + "_id";
-					if (f.getAnnotation(Link.class) != null) {
-						if (!Link.NONE.equals(f.getAnnotation(Link.class).linkfield())) {
-							linkfieldName = f.getAnnotation(Link.class).linkfield();
-						}
+					String linkfieldName = AnnotationHelper.getJoinColumnName(f);
+					if (linkfieldName == null) {
+						linkfieldName = f.getName() + "_id";
 					}
 					if (val == null) {
 						values.put(linkfieldName, null);
@@ -739,7 +738,7 @@ public class PojoQuery<T> {
 						Object idValue = idField.get(val);
 						values.put(linkfieldName, idValue);
 					}
-                } else if (f.getAnnotation(Id.class) != null && val == null) {
+                } else if (AnnotationHelper.isId(f) && val == null) {
                 	// Skip auto-generated ID field when value is null (for INSERT)
                 } else {
                 	values.put(QueryBuilder.determineSqlFieldName(f), val);

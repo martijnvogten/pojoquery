@@ -9,12 +9,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Embedded;
-import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.internal.TableMapping;
@@ -266,8 +266,8 @@ public class SchemaGenerator {
                 for (Field field : mapping.fields) {
                     String columnName = QueryBuilder.determineSqlFieldName(field).toLowerCase();
                     MergedColumnAnnotations merged = columnMap.computeIfAbsent(columnName, k -> new MergedColumnAnnotations());
-                    Column columnAnn = field.getAnnotation(Column.class);
-                    merged.mergeWith(columnAnn);
+                    AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
+                    merged.mergeWith(columnMeta);
                 }
             }
         }
@@ -379,7 +379,7 @@ public class SchemaGenerator {
         // In table-per-subclass, the subclass table needs the ID field from parent as FK/PK
         boolean hasIdFieldInThisMapping = false;
         for (Field field : mapping.fields) {
-            if (field.getAnnotation(Id.class) != null) {
+            if (AnnotationHelper.isId(field)) {
                 hasIdFieldInThisMapping = true;
                 break;
             }
@@ -400,10 +400,13 @@ public class SchemaGenerator {
         
         for (Field field : mapping.fields) {
             // Handle embedded fields
-            if (field.getAnnotation(Embedded.class) != null) {
-                Embedded embedded = field.getAnnotation(Embedded.class);
-                String prefix = Embedded.DEFAULT.equals(embedded.prefix()) ? "" : embedded.prefix();
-                addEmbeddedColumns(field.getType(), prefix, columnDefinitions, primaryKeyColumns, 
+            if (AnnotationHelper.isEmbedded(field)) {
+                String prefix = QueryBuilder.determinePrefix(field);
+                // Remove trailing underscore for column prefix (determinePrefix adds it)
+                if (prefix.endsWith("_")) {
+                    prefix = prefix.substring(0, prefix.length() - 1);
+                }
+                addEmbeddedColumns(field.getType(), prefix, columnDefinitions, primaryKeyColumns,
                     existingColumnNames, dbContext, isCompositeKey, mergedAnnotations);
                 continue;
             }
@@ -442,18 +445,18 @@ public class SchemaGenerator {
             }
             
             String columnName = QueryBuilder.determineSqlFieldName(field);
-            boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
+            boolean isPrimaryKey = AnnotationHelper.isId(field);
             // Only auto-increment if single primary key (not composite) and it's in this mapping
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext, field, mergedAnnotations);
             columnDefinitions.add(columnDef);
             existingColumnNames.add(columnName.toLowerCase());
-            
+
             if (isPrimaryKey) {
                 primaryKeyColumns.add(dbContext.quoteObjectNames(columnName));
             }
         }
-        
+
         // Add inferred foreign key columns from collection fields in other entities
         if (inferredForeignKeys != null) {
             for (InferredForeignKey fk : inferredForeignKeys) {
@@ -568,7 +571,7 @@ public class SchemaGenerator {
             }
 
             String columnName = QueryBuilder.determineSqlFieldName(field);
-            boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
+            boolean isPrimaryKey = AnnotationHelper.isId(field);
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext, field, mergedAnnotations);
             columnDefinitions.add(columnDef);
@@ -641,28 +644,31 @@ public class SchemaGenerator {
         return sb.toString();
     }
 
-    private static void addEmbeddedColumns(Class<?> embeddedClass, String prefix, 
-            List<String> columnDefinitions, List<String> primaryKeyColumns, Set<String> existingColumnNames, 
+    private static void addEmbeddedColumns(Class<?> embeddedClass, String prefix,
+            List<String> columnDefinitions, List<String> primaryKeyColumns, Set<String> existingColumnNames,
             DbContext dbContext, boolean isCompositeKey, Map<String, MergedColumnAnnotations> mergedAnnotations) {
         // Use QueryBuilder's filterFields which already handles static, transient, and @Transient
         Collection<Field> fields = QueryBuilder.filterFields(embeddedClass);
         for (Field field : fields) {
             // Recursively handle nested embedded
-            if (field.getAnnotation(Embedded.class) != null) {
-                Embedded nested = field.getAnnotation(Embedded.class);
-                String nestedPrefix = prefix + (Embedded.DEFAULT.equals(nested.prefix()) ? "" : nested.prefix());
-                addEmbeddedColumns(field.getType(), nestedPrefix, columnDefinitions, primaryKeyColumns, 
+            if (AnnotationHelper.isEmbedded(field)) {
+                String nestedPrefix = prefix + QueryBuilder.determinePrefix(field);
+                // Remove trailing underscore (determinePrefix adds it but we want to concatenate)
+                if (nestedPrefix.endsWith("_")) {
+                    nestedPrefix = nestedPrefix.substring(0, nestedPrefix.length() - 1);
+                }
+                addEmbeddedColumns(field.getType(), nestedPrefix, columnDefinitions, primaryKeyColumns,
                     existingColumnNames, dbContext, isCompositeKey, mergedAnnotations);
                 continue;
             }
-            
+
             String columnName = prefix + QueryBuilder.determineSqlFieldName(field);
-            boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
+            boolean isPrimaryKey = AnnotationHelper.isId(field);
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext, field, mergedAnnotations);
             columnDefinitions.add(columnDef);
             existingColumnNames.add(columnName.toLowerCase());
-            
+
             if (isPrimaryKey) {
                 primaryKeyColumns.add(dbContext.quoteObjectNames(columnName));
             }
@@ -739,12 +745,12 @@ public class SchemaGenerator {
             sb.append(dbContext.getAutoIncrementKeyColumnType());
         } else {
             sb.append(dbContext.mapJavaTypeToSql(field));
-            
+
             // Add NOT NULL constraint - check both field annotation and merged annotations
             if (!autoIncrement && field != null) {
                 boolean isNotNull = false;
-                Column columnAnn = field.getAnnotation(Column.class);
-                if (columnAnn != null && !columnAnn.nullable()) {
+                AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
+                if (columnMeta != null && !columnMeta.nullable) {
                     isNotNull = true;
                 }
                 if (merged != null && merged.notNull) {
@@ -754,7 +760,7 @@ public class SchemaGenerator {
                     sb.append(" NOT NULL");
                 }
             }
-            
+
             if (autoIncrement) {
                 String autoIncrementSyntax = dbContext.getAutoIncrementSyntax();
                 if (!autoIncrementSyntax.isEmpty()) {
@@ -763,12 +769,12 @@ public class SchemaGenerator {
                 }
             }
         }
-        
+
         // Add UNIQUE constraint - check both field annotation and merged annotations
         if (field != null) {
             boolean isUnique = false;
-            Column columnAnn = field.getAnnotation(Column.class);
-            if (columnAnn != null && columnAnn.unique()) {
+            AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
+            if (columnMeta != null && columnMeta.unique) {
                 isUnique = true;
             }
             if (merged != null && merged.unique) {
@@ -778,7 +784,7 @@ public class SchemaGenerator {
                 sb.append(" UNIQUE");
             }
         }
-        
+
         return sb.toString();
     }
     
@@ -1003,12 +1009,12 @@ public class SchemaGenerator {
         // Check if this is a subclass table
         boolean hasIdFieldInThisMapping = false;
         for (Field field : mapping.fields) {
-            if (field.getAnnotation(Id.class) != null) {
+            if (AnnotationHelper.isId(field)) {
                 hasIdFieldInThisMapping = true;
                 break;
             }
         }
-        
+
         // Add ID fields if needed (for subclass tables)
         if (!hasIdFieldInThisMapping && !idFields.isEmpty()) {
             for (Field idField : idFields) {
@@ -1018,17 +1024,20 @@ public class SchemaGenerator {
                 existingColumnNames.add(columnName.toLowerCase());
             }
         }
-        
+
         // Process fields
         for (Field field : mapping.fields) {
             // Handle embedded fields
-            if (field.getAnnotation(Embedded.class) != null) {
-                Embedded embedded = field.getAnnotation(Embedded.class);
-                String prefix = Embedded.DEFAULT.equals(embedded.prefix()) ? "" : embedded.prefix();
+            if (AnnotationHelper.isEmbedded(field)) {
+                String prefix = QueryBuilder.determinePrefix(field);
+                // Remove trailing underscore
+                if (prefix.endsWith("_")) {
+                    prefix = prefix.substring(0, prefix.length() - 1);
+                }
                 addEmbeddedColumnsToList(field.getType(), prefix, columns, existingColumnNames, dbContext, isCompositeKey);
                 continue;
             }
-            
+
             // Handle linked fields
             if (isLinkedField(field)) {
                 if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
@@ -1046,15 +1055,15 @@ public class SchemaGenerator {
                 }
                 continue;
             }
-            
+
             String columnName = QueryBuilder.determineSqlFieldName(field);
-            boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
+            boolean isPrimaryKey = AnnotationHelper.isId(field);
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String sqlType = dbContext.mapJavaTypeToSql(field);
-            Column columnAnn = field.getAnnotation(Column.class);
-            boolean notNull = !shouldAutoIncrement && columnAnn != null && !columnAnn.nullable();
-            boolean unique = columnAnn != null && columnAnn.unique();
-            
+            AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
+            boolean notNull = !shouldAutoIncrement && columnMeta != null && !columnMeta.nullable;
+            boolean unique = columnMeta != null && columnMeta.unique;
+
             columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey, notNull, unique));
             existingColumnNames.add(columnName.toLowerCase());
         }
@@ -1073,25 +1082,26 @@ public class SchemaGenerator {
         return columns;
     }
     
-    private static void addEmbeddedColumnsToList(Class<?> embeddedClass, String prefix, 
+    private static void addEmbeddedColumnsToList(Class<?> embeddedClass, String prefix,
             List<ColumnDefinition> columns, Set<String> existingColumnNames, DbContext dbContext, boolean isCompositeKey) {
         Collection<Field> fields = QueryBuilder.filterFields(embeddedClass);
         for (Field field : fields) {
-            if (field.getAnnotation(Embedded.class) != null) {
+            if (AnnotationHelper.isEmbedded(field)) {
+                // Get prefix from PojoQuery @Embedded if present, otherwise use empty string (JPA @Embedded has no prefix)
                 Embedded nested = field.getAnnotation(Embedded.class);
-                String nestedPrefix = prefix + (Embedded.DEFAULT.equals(nested.prefix()) ? "" : nested.prefix());
+                String nestedPrefix = prefix + (nested != null && !Embedded.DEFAULT.equals(nested.prefix()) ? nested.prefix() : "");
                 addEmbeddedColumnsToList(field.getType(), nestedPrefix, columns, existingColumnNames, dbContext, isCompositeKey);
                 continue;
             }
-            
+
             String columnName = prefix + QueryBuilder.determineSqlFieldName(field);
-            boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
+            boolean isPrimaryKey = AnnotationHelper.isId(field);
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String sqlType = dbContext.mapJavaTypeToSql(field);
-            Column columnAnn = field.getAnnotation(Column.class);
-            boolean notNull = !shouldAutoIncrement && columnAnn != null && !columnAnn.nullable();
-            boolean unique = columnAnn != null && columnAnn.unique();
-            
+            AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
+            boolean notNull = !shouldAutoIncrement && columnMeta != null && !columnMeta.nullable;
+            boolean unique = columnMeta != null && columnMeta.unique;
+
             columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey, notNull, unique));
             existingColumnNames.add(columnName.toLowerCase());
         }
