@@ -71,7 +71,7 @@ public class TablePerSubclassInheritanceExample {
         // tag::query-subclass[]
         // You can also query directly for a subclass
         List<Employee> employees = PojoQuery.build(Employee.class)
-            .addWhere("employee.department = ?", "Sales")
+            .addWhere("{employee}.department = ?", "Sales")
             .execute(db);
         
         for (Employee emp : employees) {
@@ -98,7 +98,7 @@ public class TablePerSubclassInheritanceExample {
         DB.executeDDL(db, """
             CREATE TABLE customer (
                 id BIGINT PRIMARY KEY REFERENCES person(id),
-                loyalty_points INT
+                loyaltyPoints INT
             )
             """);
     }
@@ -114,10 +114,10 @@ public class TablePerSubclassInheritanceExample {
         
         // Insert customers (person + customer tables)
         DB.executeDDL(db, "INSERT INTO person (id, name) VALUES (3, 'Carol')");
-        DB.executeDDL(db, "INSERT INTO customer (id, loyalty_points) VALUES (3, 500)");
-        
+        DB.executeDDL(db, "INSERT INTO customer (id, loyaltyPoints) VALUES (3, 500)");
+
         DB.executeDDL(db, "INSERT INTO person (id, name) VALUES (4, 'Dave')");
-        DB.executeDDL(db, "INSERT INTO customer (id, loyalty_points) VALUES (4, 1200)");
+        DB.executeDDL(db, "INSERT INTO customer (id, loyaltyPoints) VALUES (4, 1200)");
     }
 
     private static DataSource createDatabase() {

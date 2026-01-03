@@ -72,7 +72,7 @@ public class FilteredRelationshipExample {
 
         // tag::query[]
         EventWithParticipants event = PojoQuery.build(EventWithParticipants.class)
-            .addWhere("event.id = ?", 1L)
+            .addWhere("{event}.id = ?", 1L)
             .execute(dataSource)
             .stream().findFirst().orElse(null);
 
