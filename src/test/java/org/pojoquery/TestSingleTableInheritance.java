@@ -12,7 +12,6 @@ import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.schema.SchemaGenerator;
 
 /**

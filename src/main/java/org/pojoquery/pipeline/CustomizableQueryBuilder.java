@@ -40,7 +40,6 @@ import org.pojoquery.annotations.OrderBy;
 import org.pojoquery.annotations.Other;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.SubClasses;
-import org.pojoquery.annotations.Table;
 import org.pojoquery.annotations.Transient;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
@@ -565,7 +564,6 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	 * @param entityConsumer the consumer to receive completed entities
 	 * @return a pair: the row consumer to process each row, and a flush action to emit the final entity
 	 */
-	@SuppressWarnings("unchecked")
 	public StreamingRowHandler<T> createStreamingRowHandler(Consumer<T> entityConsumer) {
 		return new StreamingRowHandler<>(entityConsumer, this);
 	}
