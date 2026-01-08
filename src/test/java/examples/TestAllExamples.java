@@ -14,6 +14,8 @@ import examples.docs.JpaAnnotationsExample;
 import examples.docs.TablePerSubclassInheritanceExample;
 import examples.events.EventsExample;
 import examples.inheritance.InheritanceExample;
+import examples.typedquery.RelationshipQueryExample;
+import examples.typedquery.TypedQueryExample;
 import examples.users.UsersExample;
 
 /**
@@ -85,5 +87,15 @@ public class TestAllExamples {
 	@Test
 	void usersExample() throws Exception {
 		UsersExample.main(new String[0]);
+	}
+
+	@Test
+	void typedQueryExample() {
+		TypedQueryExample.main(new String[0]);
+	}
+
+	@Test
+	void relationshipQueryExample() {
+		RelationshipQueryExample.main(new String[0]);
 	}
 }
