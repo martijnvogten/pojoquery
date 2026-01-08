@@ -77,13 +77,16 @@ public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> implements Where
 
     /**
      * Maps a single row from the ResultSet to an entity.
-     * Generated implementations read columns directly without reflection.
+     * Override this for simple entities without relationships.
+     * For entities with relationships, override {@link #list(Connection)} instead.
      *
      * @param rs the ResultSet positioned at the current row
      * @return the mapped entity
      * @throws SQLException if a database access error occurs
      */
-    protected abstract E mapRow(ResultSet rs) throws SQLException;
+    protected E mapRow(ResultSet rs) throws SQLException {
+        throw new UnsupportedOperationException("Use list() for entity graph mapping");
+    }
 
     /**
      * Returns the entity class this query operates on.
