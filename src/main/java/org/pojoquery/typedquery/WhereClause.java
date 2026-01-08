@@ -8,14 +8,14 @@ import org.pojoquery.SqlExpression;
  * Builder for type-safe WHERE clause conditions.
  *
  * <p>This class provides a fluent API for building WHERE conditions with
- * type safety. It's returned by {@code TypedQuery.where(field)} and allows
+ * type safety. It's returned by {@code query.where(field)} and allows
  * chaining conditions.
  *
  * @param <E> the entity type
  * @param <T> the field type
  * @param <Q> the query type (for fluent chaining)
  */
-public class WhereClause<E, T, Q extends TypedQuery<E, Q>> {
+public class WhereClause<E, T, Q extends WhereTarget<Q>> {
 
     private final Q query;
     private final QueryField<E, T> field;

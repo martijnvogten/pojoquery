@@ -31,7 +31,7 @@ import org.pojoquery.pipeline.SqlQuery;
  * @param <E> the entity type this query returns
  * @param <Q> the query type itself (for fluent chaining)
  */
-public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> {
+public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> implements WhereTarget<Q> {
 
     protected final SqlQuery<?> query;
     protected final DbContext dbContext;
@@ -118,6 +118,7 @@ public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> {
      * @param params the parameters
      * @return this query for chaining
      */
+    @Override
     public Q addWhere(String sql, Object... params) {
         query.addWhere(sql, params);
         return self();
@@ -129,6 +130,7 @@ public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> {
      * @param expression the SQL expression
      * @return this query for chaining
      */
+    @Override
     public Q addWhere(SqlExpression expression) {
         query.addWhere(expression);
         return self();

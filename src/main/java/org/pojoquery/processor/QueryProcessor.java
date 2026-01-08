@@ -31,18 +31,33 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
 
+import org.pojoquery.DbContext;
+import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.GenerateQuery;
 import org.pojoquery.annotations.Id;
+import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.annotations.Transient;
+import org.pojoquery.pipeline.SqlQuery.JoinType;
+import org.pojoquery.processor.QueryMetadata.AliasMetadata;
+import org.pojoquery.processor.QueryMetadata.FieldMetadata;
+import org.pojoquery.processor.RecordingSqlQuery.RecordedField;
+import org.pojoquery.processor.RecordingSqlQuery.RecordedJoin;
 
 /**
  * Annotation processor that generates type-safe query builders for PojoQuery entities.
- * Supports entity relationships (one-to-one, one-to-many).
+ *
+ * <p>This processor attempts two strategies:
+ * <ol>
+ *   <li>If the entity class is already compiled (e.g., during test-compile), invoke
+ *       CustomizableQueryBuilder to extract real metadata and generate explicit code.</li>
+ *   <li>Otherwise, use the element model to gather information and delegate to
+ *       CustomizableQueryBuilder at runtime.</li>
+ * </ol>
  */
 @SupportedAnnotationTypes("org.pojoquery.annotations.GenerateQuery")
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
@@ -74,51 +89,504 @@ public class QueryProcessor extends AbstractProcessor {
             TypeElement typeElement = (TypeElement) element;
             try {
                 processEntity(typeElement);
-            } catch (IOException e) {
+            } catch (Exception e) {
                 messager.printMessage(Diagnostic.Kind.ERROR,
-                    "Failed to generate query classes: " + e.getMessage(), element);
+                    "Failed to generate query classes: " + e.getMessage() +
+                    " (" + e.getClass().getSimpleName() + ")", element);
             }
         }
         return true;
     }
 
-    private void processEntity(TypeElement entity) throws IOException {
-        GenerateQuery annotation = entity.getAnnotation(GenerateQuery.class);
+    private void processEntity(TypeElement typeElement) throws IOException {
+        GenerateQuery annotation = typeElement.getAnnotation(GenerateQuery.class);
         String querySuffix = annotation.querySuffix();
         String fieldsSuffix = annotation.fieldsSuffix();
 
-        String packageName = getPackageName(entity);
-        String entityName = entity.getSimpleName().toString();
+        String packageName = getPackageName(typeElement);
+        String entityName = typeElement.getSimpleName().toString();
+        String qualifiedName = typeElement.getQualifiedName().toString();
         String fieldsClassName = entityName + fieldsSuffix;
         String queryClassName = entityName + querySuffix;
 
-        Table tableAnnotation = entity.getAnnotation(Table.class);
+        Table tableAnnotation = typeElement.getAnnotation(Table.class);
         if (tableAnnotation == null) {
             messager.printMessage(Diagnostic.Kind.ERROR,
-                "@GenerateQuery requires @Table annotation", entity);
+                "@GenerateQuery requires @Table annotation", typeElement);
             return;
         }
         String tableName = tableAnnotation.value();
-        String tableSchema = tableAnnotation.schema();
 
-        // Collect entity info including relationships
-        EntityInfo entityInfo = new EntityInfo(tableName, tableSchema, entityName,
-            entity.getQualifiedName().toString());
-        collectEntityInfo(entity, entityInfo, tableName, new HashSet<>());
+        // Try to load the class and extract real metadata
+        QueryMetadata metadata = tryExtractMetadata(qualifiedName);
 
-        // Generate classes
-        generateFieldsClass(packageName, entityName, fieldsClassName, entityInfo);
-        generateQueryClass(packageName, entityName, queryClassName, fieldsClassName, entityInfo);
+        if (metadata != null) {
+            // Success! Generate code using real metadata from CustomizableQueryBuilder
+            messager.printMessage(Diagnostic.Kind.NOTE,
+                "Using compile-time metadata for " + qualifiedName +
+                " (" + metadata.getAliases().size() + " aliases, " +
+                metadata.getFields().size() + " fields)", typeElement);
+
+            generateFieldsClassFromMetadata(packageName, entityName, fieldsClassName, tableName, metadata);
+            generateQueryClassFromMetadata(packageName, entityName, qualifiedName, queryClassName,
+                fieldsClassName, tableName, metadata);
+        } else {
+            // Fall back to element model approach
+            messager.printMessage(Diagnostic.Kind.NOTE,
+                "Using element model fallback for " + qualifiedName +
+                " (class not yet compiled)", typeElement);
+
+            processEntityWithElementModel(typeElement, packageName, entityName, qualifiedName,
+                fieldsClassName, queryClassName, tableName);
+        }
     }
 
-    private void collectEntityInfo(TypeElement typeElement, EntityInfo entityInfo,
-                                   String alias, Set<String> visitedTypes) {
-        // Prevent infinite recursion
+    /**
+     * Attempts to load the entity class and extract metadata using CustomizableQueryBuilder.
+     * Returns null if the class is not yet compiled.
+     */
+    private QueryMetadata tryExtractMetadata(String qualifiedName) {
+        try {
+            Class<?> entityClass = Class.forName(qualifiedName);
+            return QueryMetadata.forClass(entityClass);
+        } catch (ClassNotFoundException e) {
+            // Class not yet compiled - this is expected during main compile
+            return null;
+        } catch (Exception e) {
+            // Other error - log and fall back
+            messager.printMessage(Diagnostic.Kind.NOTE,
+                "Could not extract metadata: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // === Code generation from real metadata ===
+
+    private void generateFieldsClassFromMetadata(String packageName, String entityName,
+            String className, String tableName, QueryMetadata metadata) throws IOException {
+
+        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
+        JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
+
+        try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
+            if (!packageName.isEmpty()) {
+                out.println("package " + packageName + ";");
+                out.println();
+            }
+
+            out.println("import org.pojoquery.typedquery.QueryField;");
+            out.println();
+            out.println("/**");
+            out.println(" * Generated field references for {@link " + entityName + "}.");
+            out.println(" * <p>Generated from CustomizableQueryBuilder metadata:");
+            out.println(" * <ul>");
+            out.println(" *   <li>" + metadata.getAliases().size() + " aliases</li>");
+            out.println(" *   <li>" + metadata.getFields().size() + " fields</li>");
+            out.println(" * </ul>");
+            out.println(" */");
+            out.println("public final class " + className + " {");
+            out.println();
+            out.println("    public static final String TABLE = \"" + tableName + "\";");
+            out.println();
+
+            // Group fields by alias
+            Map<String, List<FieldMetadata>> fieldsByAlias = new LinkedHashMap<>();
+            for (FieldMetadata field : metadata.getFields()) {
+                String alias = field.getAliasPrefix();
+                fieldsByAlias.computeIfAbsent(alias, k -> new ArrayList<>()).add(field);
+            }
+
+            // Generate main entity fields
+            List<FieldMetadata> mainFields = fieldsByAlias.getOrDefault(tableName, List.of());
+            for (FieldMetadata field : mainFields) {
+                String typeName = simplifyTypeName(field.getFieldTypeName());
+                out.println("    public static final QueryField<" + entityName + ", " +
+                    typeName + "> " + field.getFieldName() + " = new QueryField<>(TABLE, \"" +
+                    field.getFieldName() + "\", \"" + field.getFieldName() + "\", " +
+                    typeName + ".class);");
+            }
+            out.println();
+
+            // Generate nested classes for relationships
+            for (AliasMetadata alias : metadata.getAliases()) {
+                if (alias.isPrimaryAlias()) continue;
+                if (alias.isSubClass()) continue;
+
+                List<FieldMetadata> aliasFields = fieldsByAlias.get(alias.getAlias());
+                if (aliasFields == null || aliasFields.isEmpty()) continue;
+
+                String innerClassName = capitalize(getLastPart(alias.getAlias()));
+                out.println("    /** Fields for the {@code " + alias.getAlias() + "} relationship */");
+                out.println("    public static final class " + innerClassName + " {");
+                out.println("        public static final String ALIAS = \"" + alias.getAlias() + "\";");
+                out.println();
+
+                for (FieldMetadata field : aliasFields) {
+                    String typeName = simplifyTypeName(field.getFieldTypeName());
+                    String fieldPath = alias.getAlias() + "." + field.getFieldName();
+                    out.println("        public static final QueryField<" + entityName + ", " +
+                        typeName + "> " + field.getFieldName() +
+                        " = new QueryField<>(ALIAS, \"" + field.getFieldName() + "\", \"" +
+                        fieldPath.substring(tableName.length() + 1) + "\", " + typeName + ".class);");
+                }
+
+                out.println("        private " + innerClassName + "() {}");
+                out.println("    }");
+                out.println();
+            }
+
+            out.println("    private " + className + "() {}");
+            out.println("}");
+        }
+    }
+
+    private void generateQueryClassFromMetadata(String packageName, String entityName,
+            String qualifiedEntityName, String className, String fieldsClassName,
+            String tableName, QueryMetadata metadata) throws IOException {
+
+        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
+        JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
+
+        // Find ID field for the root entity
+        String idFieldName = null;
+        String idFieldType = null;
+        AliasMetadata rootAlias = metadata.getAlias(tableName);
+        if (rootAlias != null && !rootAlias.getIdFieldNames().isEmpty()) {
+            String firstIdField = rootAlias.getIdFieldNames().get(0);
+            for (FieldMetadata field : metadata.getFields()) {
+                if (field.getAliasPrefix().equals(tableName) && field.getFieldName().equals(firstIdField)) {
+                    idFieldName = field.getFieldName();
+                    idFieldType = simplifyTypeName(field.getFieldTypeName());
+                    break;
+                }
+            }
+        }
+
+        try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
+            if (!packageName.isEmpty()) {
+                out.println("package " + packageName + ";");
+                out.println();
+            }
+
+            out.println("import java.lang.reflect.Field;");
+            out.println("import java.sql.Connection;");
+            out.println("import java.sql.ResultSet;");
+            out.println("import java.sql.SQLException;");
+            out.println("import java.util.ArrayList;");
+            out.println("import java.util.HashMap;");
+            out.println("import java.util.List;");
+            out.println("import java.util.Map;");
+            out.println();
+            out.println("import javax.sql.DataSource;");
+            out.println();
+            out.println("import org.pojoquery.DB;");
+            out.println("import org.pojoquery.DbContext;");
+            out.println("import org.pojoquery.FieldMapping;");
+            out.println("import org.pojoquery.SqlExpression;");
+            out.println("import org.pojoquery.typedquery.TypedQuery;");
+            out.println();
+            out.println("/**");
+            out.println(" * Generated type-safe query builder for {@link " + entityName + "}.");
+            out.println(" * <p>Generated from CustomizableQueryBuilder metadata at compile time:");
+            out.println(" * <ul>");
+            out.println(" *   <li>" + metadata.getAliases().size() + " aliases</li>");
+            out.println(" *   <li>" + metadata.getFields().size() + " field mappings</li>");
+            out.println(" * </ul>");
+            out.println(" */");
+            out.println("public class " + className + " extends TypedQuery<" + entityName + ", " + className + "> {");
+            out.println();
+
+            // Constructor
+            out.println("    public " + className + "() {");
+            out.println("        super(\"" + tableName + "\");");
+            out.println("    }");
+            out.println();
+            out.println("    public " + className + "(DbContext dbContext) {");
+            out.println("        super(dbContext, null, \"" + tableName + "\");");
+            out.println("    }");
+            out.println();
+
+            // initializeQuery - set up fields and joins from metadata
+            generateInitializeQuery(out, tableName, metadata);
+
+            // mapRow - single row mapping (for simple entities without collections)
+            out.println("    @Override");
+            out.println("    protected " + entityName + " mapRow(ResultSet rs) throws SQLException {");
+            out.println("        throw new UnsupportedOperationException(\"Use list() for entity graph mapping\");");
+            out.println("    }");
+            out.println();
+
+            // getEntityClass
+            out.println("    @Override");
+            out.println("    protected Class<" + entityName + "> getEntityClass() {");
+            out.println("        return " + entityName + ".class;");
+            out.println("    }");
+            out.println();
+
+            // Generate explicit list() with result processing
+            generateListMethod(out, entityName, tableName, metadata);
+
+            // Generate helper methods for result processing
+            generateHelperMethods(out, metadata);
+
+            // findById if ID field exists
+            if (idFieldName != null) {
+                out.println("    public " + entityName + " findById(DataSource dataSource, " + idFieldType + " id) {");
+                out.println("        return where(" + fieldsClassName + "." + idFieldName + ").is(id).first(dataSource);");
+                out.println("    }");
+                out.println();
+                out.println("    public " + entityName + " findById(Connection connection, " + idFieldType + " id) {");
+                out.println("        return where(" + fieldsClassName + "." + idFieldName + ").is(id).first(connection);");
+                out.println("    }");
+            }
+
+            out.println("}");
+        }
+    }
+
+    private void generateInitializeQuery(PrintWriter out, String tableName, QueryMetadata metadata) {
+        out.println("    @Override");
+        out.println("    protected void initializeQuery() {");
+        out.println("        // Query structure captured at compile time from CustomizableQueryBuilder");
+        out.println();
+
+        // Generate joins first
+        for (QueryMetadata.JoinMetadata join : metadata.getJoins()) {
+            String schemaArg = join.getSchemaName() == null ? "null" : "\"" + escapeJava(join.getSchemaName()) + "\"";
+            String conditionArg = join.getJoinConditionSql() == null ? "null" :
+                "SqlExpression.sql(\"" + escapeJava(join.getJoinConditionSql()) + "\")";
+            out.println("        query.addJoin(org.pojoquery.pipeline.SqlQuery.JoinType." + join.getJoinType() +
+                ", " + schemaArg + ", \"" + escapeJava(join.getTableName()) +
+                "\", \"" + escapeJava(join.getAlias()) + "\", " + conditionArg + ");");
+        }
+
+        if (!metadata.getJoins().isEmpty()) {
+            out.println();
+        }
+
+        // Generate fields
+        for (QueryMetadata.SqlFieldMetadata field : metadata.getSqlFields()) {
+            out.println("        query.addField(SqlExpression.sql(\"" + escapeJava(field.getExpressionSql()) +
+                "\"), \"" + escapeJava(field.getAlias()) + "\");");
+        }
+
+        out.println("    }");
+        out.println();
+    }
+
+    private void generateListMethod(PrintWriter out, String entityName, String tableName, QueryMetadata metadata) {
+        out.println("    @Override");
+        out.println("    public List<" + entityName + "> list(Connection connection) {");
+        out.println("        SqlExpression stmt = query.toStatement();");
+        out.println("        List<Map<String, Object>> rows = DB.queryRows(connection, stmt);");
+        out.println("        try {");
+        out.println("            return processRows(rows);");
+        out.println("        } catch (NoSuchFieldException | IllegalAccessException e) {");
+        out.println("            throw new RuntimeException(e);");
+        out.println("        }");
+        out.println("    }");
+        out.println();
+
+        // Generate the processRows method
+        generateProcessRowsMethod(out, entityName, tableName, metadata);
+    }
+
+    private void generateProcessRowsMethod(PrintWriter out, String entityName, String tableName, QueryMetadata metadata) {
+        out.println("    @SuppressWarnings(\"unchecked\")");
+        out.println("    private List<" + entityName + "> processRows(List<Map<String, Object>> rows) throws NoSuchFieldException, IllegalAccessException {");
+        out.println();
+
+        // Group fields by alias for code generation
+        Map<String, List<FieldMetadata>> fieldsByAlias = new LinkedHashMap<>();
+        for (FieldMetadata field : metadata.getFields()) {
+            String alias = field.getAliasPrefix();
+            fieldsByAlias.computeIfAbsent(alias, k -> new ArrayList<>()).add(field);
+        }
+
+        // Generate field mapping lookups for each alias
+        for (AliasMetadata alias : metadata.getAliases()) {
+            if (alias.isSubClass()) continue;
+
+            String aliasName = alias.getAlias();
+            String varPrefix = "fm" + capitalize(sanitizeVarName(aliasName));
+            String className = getSimpleClassName(alias.getResultClassName());
+
+            List<FieldMetadata> aliasFields = fieldsByAlias.get(aliasName);
+            if (aliasFields != null) {
+                out.println("        // " + className + " field mappings");
+                for (FieldMetadata field : aliasFields) {
+                    String varName = varPrefix + capitalize(field.getFieldName());
+                    out.println("        FieldMapping " + varName + " = dbContext.getFieldMapping(" +
+                        className + ".class.getDeclaredField(\"" + field.getFieldName() + "\"));");
+                }
+                out.println();
+            }
+
+            // For relationship fields (link fields), we need the Field directly for collection handling
+            if (alias.getLinkFieldName() != null && !alias.isPrimaryAlias()) {
+                String parentClassName = null;
+                AliasMetadata parentAlias = metadata.getAlias(alias.getParentAlias());
+                if (parentAlias != null) {
+                    parentClassName = getSimpleClassName(parentAlias.getResultClassName());
+                }
+                if (parentClassName != null) {
+                    String linkFieldVar = "f" + capitalize(sanitizeVarName(alias.getParentAlias())) + capitalize(alias.getLinkFieldName());
+                    out.println("        // Link field: " + alias.getParentAlias() + "." + alias.getLinkFieldName());
+                    out.println("        Field " + linkFieldVar + " = " + parentClassName + ".class.getDeclaredField(\"" + alias.getLinkFieldName() + "\");");
+                    out.println("        " + linkFieldVar + ".setAccessible(true);");
+                    out.println();
+                }
+            }
+        }
+
+        // Generate entity maps for deduplication
+        out.println("        // Entity deduplication maps");
+        out.println("        List<" + entityName + "> result = new ArrayList<>();");
+        for (AliasMetadata alias : metadata.getAliases()) {
+            if (alias.isSubClass() || alias.isEmbedded()) continue;
+            String varName = sanitizeVarName(alias.getAlias()) + "ById";
+            String className = getSimpleClassName(alias.getResultClassName());
+            out.println("        Map<Object, " + className + "> " + varName + " = new HashMap<>();");
+        }
+        out.println();
+
+        // Generate row processing loop
+        out.println("        for (Map<String, Object> row : rows) {");
+
+        // Process root entity
+        AliasMetadata rootAlias = metadata.getAlias(tableName);
+        if (rootAlias != null && !rootAlias.getIdFieldNames().isEmpty()) {
+            String idField = rootAlias.getIdFieldNames().get(0);
+            String rootVarPrefix = "fm" + capitalize(sanitizeVarName(tableName));
+
+            out.println("            // Process root entity: " + entityName);
+            out.println("            Object " + sanitizeVarName(tableName) + "Id = row.get(\"" + tableName + "." + idField + "\");");
+            out.println("            if (" + sanitizeVarName(tableName) + "Id == null) continue;");
+            out.println();
+            out.println("            " + entityName + " " + sanitizeVarName(tableName) + " = " + sanitizeVarName(tableName) + "ById.get(" + sanitizeVarName(tableName) + "Id);");
+            out.println("            if (" + sanitizeVarName(tableName) + " == null) {");
+            out.println("                " + sanitizeVarName(tableName) + " = new " + entityName + "();");
+
+            // Apply field mappings for root entity
+            List<FieldMetadata> rootFields = fieldsByAlias.get(tableName);
+            if (rootFields != null) {
+                for (FieldMetadata field : rootFields) {
+                    String fmVar = rootVarPrefix + capitalize(field.getFieldName());
+                    out.println("                " + fmVar + ".apply(" + sanitizeVarName(tableName) + ", row.get(\"" + field.getFieldAlias() + "\"));");
+                }
+            }
+
+            out.println("                " + sanitizeVarName(tableName) + "ById.put(" + sanitizeVarName(tableName) + "Id, " + sanitizeVarName(tableName) + ");");
+            out.println("                result.add(" + sanitizeVarName(tableName) + ");");
+            out.println("            }");
+        }
+
+        // Process related aliases
+        for (AliasMetadata alias : metadata.getAliases()) {
+            if (alias.isPrimaryAlias() || alias.isSubClass() || alias.isEmbedded()) continue;
+
+            String aliasName = alias.getAlias();
+            String parentAliasName = alias.getParentAlias();
+            String linkFieldName = alias.getLinkFieldName();
+            String className = getSimpleClassName(alias.getResultClassName());
+
+            if (parentAliasName != null && linkFieldName != null && !alias.getIdFieldNames().isEmpty()) {
+                String idField = alias.getIdFieldNames().get(0);
+                String aliasVarPrefix = "fm" + capitalize(sanitizeVarName(aliasName));
+                String entityVar = sanitizeVarName(aliasName);
+                String byIdVar = sanitizeVarName(aliasName) + "ById";
+                String parentVar = sanitizeVarName(parentAliasName);
+                String linkFieldVar = "f" + capitalize(sanitizeVarName(parentAliasName)) + capitalize(linkFieldName);
+
+                out.println();
+                out.println("            // Process relationship: " + aliasName + " (" + className + ")");
+                out.println("            Object " + entityVar + "Id = row.get(\"" + aliasName + "." + idField + "\");");
+                out.println("            if (" + entityVar + "Id != null && !" + byIdVar + ".containsKey(" + entityVar + "Id)) {");
+                out.println("                " + className + " " + entityVar + " = new " + className + "();");
+
+                // Apply field mappings for this alias
+                List<FieldMetadata> aliasFields = fieldsByAlias.get(aliasName);
+                if (aliasFields != null) {
+                    for (FieldMetadata field : aliasFields) {
+                        String fmVar = aliasVarPrefix + capitalize(field.getFieldName());
+                        out.println("                " + fmVar + ".apply(" + entityVar + ", row.get(\"" + field.getFieldAlias() + "\"));");
+                    }
+                }
+
+                out.println("                " + byIdVar + ".put(" + entityVar + "Id, " + entityVar + ");");
+                out.println();
+                out.println("                // Link to parent");
+                out.println("                if (List.class.isAssignableFrom(" + linkFieldVar + ".getType())) {");
+                out.println("                    List<" + className + "> coll = (List<" + className + ">) " + linkFieldVar + ".get(" + parentVar + ");");
+                out.println("                    if (coll == null) {");
+                out.println("                        coll = new ArrayList<>();");
+                out.println("                        " + linkFieldVar + ".set(" + parentVar + ", coll);");
+                out.println("                    }");
+                out.println("                    coll.add(" + entityVar + ");");
+                out.println("                } else {");
+                out.println("                    " + linkFieldVar + ".set(" + parentVar + ", " + entityVar + ");");
+                out.println("                }");
+                out.println("            }");
+            }
+        }
+
+        out.println("        }");
+        out.println();
+        out.println("        return result;");
+        out.println("    }");
+        out.println();
+    }
+
+    private String getSimpleClassName(String qualifiedName) {
+        int lastDot = qualifiedName.lastIndexOf('.');
+        return lastDot >= 0 ? qualifiedName.substring(lastDot + 1) : qualifiedName;
+    }
+
+    private void generateHelperMethods(PrintWriter out, QueryMetadata metadata) {
+        // No helper methods needed - all logic is generated inline
+    }
+
+    private String sanitizeVarName(String alias) {
+        return alias.replace(".", "_").replace("-", "_");
+    }
+
+    // === Fallback: Element model approach ===
+
+    private void processEntityWithElementModel(TypeElement typeElement, String packageName,
+            String entityName, String qualifiedName, String fieldsClassName,
+            String queryClassName, String tableName) throws IOException {
+
+        // Create recording SqlQuery to capture operations
+        RecordingSqlQuery recorder = new RecordingSqlQuery(DbContext.getDefault());
+        recorder.setTable(null, tableName);
+
+        // Build up the query mimicking CustomizableQueryBuilder
+        Map<String, AliasInfo> aliases = new LinkedHashMap<>();
+        aliases.put(tableName, new AliasInfo(tableName, typeElement, null, null));
+
+        buildQuery(typeElement, tableName, tableName, recorder, aliases, new HashSet<>());
+
+        // Find ID field
+        FieldInfo idField = findIdField(typeElement, tableName);
+
+        // Generate the classes from recorded data
+        generateFieldsClassFromElementModel(packageName, entityName, fieldsClassName, tableName,
+            recorder.getRecordedFields(), aliases);
+        generateQueryClassFromElementModel(packageName, entityName, qualifiedName, queryClassName,
+            fieldsClassName, tableName, recorder, idField, aliases);
+    }
+
+    /**
+     * Builds the query by walking the entity structure and recording all operations.
+     */
+    private void buildQuery(TypeElement typeElement, String alias, String fieldsAlias,
+            RecordingSqlQuery recorder, Map<String, AliasInfo> aliases, Set<String> visited) {
+
         String typeName = typeElement.getQualifiedName().toString();
-        if (visitedTypes.contains(typeName)) {
+        if (visited.contains(typeName) || typeName.equals("java.lang.Object")) {
             return;
         }
-        visitedTypes.add(typeName);
+        visited.add(typeName);
 
         // Process superclass first
         TypeMirror superclass = typeElement.getSuperclass();
@@ -126,243 +594,545 @@ public class QueryProcessor extends AbstractProcessor {
             Element superElement = typeUtils.asElement(superclass);
             if (superElement instanceof TypeElement) {
                 TypeElement superType = (TypeElement) superElement;
-                if (!superType.getQualifiedName().toString().equals("java.lang.Object")) {
-                    collectEntityInfo(superType, entityInfo, alias, visitedTypes);
+                Table superTable = superType.getAnnotation(Table.class);
+                if (superTable != null) {
+                    String superTableName = superTable.value();
+                    FieldInfo superId = findIdField(superType, superTableName);
+                    if (superId != null) {
+                        String superAlias = alias.equals(recorder.getRecordedTable())
+                            ? superTableName
+                            : alias + "." + superTableName;
+                        JoinType joinType = alias.equals(recorder.getRecordedTable())
+                            ? JoinType.INNER
+                            : JoinType.LEFT;
+
+                        recorder.addJoin(joinType, null, superTableName, superAlias,
+                            SqlExpression.sql("{" + superAlias + "}." + superId.columnName +
+                                " = {" + alias + "}." + superId.columnName));
+
+                        aliases.put(superAlias, new AliasInfo(superAlias, superType, alias, null));
+                    }
                 }
+                addFields(superType, alias, fieldsAlias, recorder, aliases, null);
             }
         }
 
-        // Process fields
-        for (Element enclosedElement : typeElement.getEnclosedElements()) {
-            if (enclosedElement.getKind() != ElementKind.FIELD) {
-                continue;
-            }
+        addFields(typeElement, alias, fieldsAlias, recorder, aliases, null);
+    }
 
-            VariableElement field = (VariableElement) enclosedElement;
+    private void addFields(TypeElement typeElement, String alias, String fieldsAlias,
+            RecordingSqlQuery recorder, Map<String, AliasInfo> aliases, String fieldNamePrefix) {
+
+        String rootAlias = recorder.getRecordedTable();
+        boolean isRoot = alias.equals(rootAlias);
+
+        for (Element enclosed : typeElement.getEnclosedElements()) {
+            if (enclosed.getKind() != ElementKind.FIELD) continue;
+            VariableElement field = (VariableElement) enclosed;
 
             if (field.getModifiers().contains(Modifier.STATIC)) continue;
             if (field.getAnnotation(Transient.class) != null) continue;
-            if (field.getAnnotation(Select.class) != null) continue;
 
-            // Handle @Embedded
-            Embedded embedded = field.getAnnotation(Embedded.class);
-            if (embedded != null) {
-                TypeElement embeddedType = getTypeElement(field.asType());
-                if (embeddedType != null) {
-                    String prefix = embedded.prefix();
-                    collectEmbeddedFields(embeddedType, entityInfo, alias, prefix);
-                }
-                continue;
-            }
-
-            // Check for relationships
             TypeMirror fieldType = field.asType();
-            Link linkAnn = field.getAnnotation(Link.class);
+            String fieldName = field.getSimpleName().toString();
 
             if (isCollectionType(fieldType)) {
-                // One-to-many relationship
                 TypeMirror componentType = getCollectionComponentType(fieldType);
                 if (componentType != null && hasTableAnnotation(componentType)) {
-                    RelationshipInfo rel = createOneToManyRelationship(field, componentType, alias, linkAnn);
-                    if (rel != null) {
-                        entityInfo.relationships.add(rel);
-                        // Recursively collect related entity fields
-                        TypeElement relatedType = getTypeElement(componentType);
-                        if (relatedType != null) {
-                            collectRelatedEntityInfo(relatedType, rel, visitedTypes);
+                    TypeElement relatedType = (TypeElement) typeUtils.asElement(componentType);
+                    Table relatedTable = relatedType.getAnnotation(Table.class);
+                    if (relatedTable != null) {
+                        String linkAlias = isRoot ? fieldName : (alias + "." + fieldName);
+
+                        String linkField = getLinkFieldName(typeElement);
+                        Link linkAnn = field.getAnnotation(Link.class);
+                        if (linkAnn != null && !Link.NONE.equals(linkAnn.foreignlinkfield())) {
+                            linkField = linkAnn.foreignlinkfield();
+                        }
+
+                        FieldInfo idField = findIdField(typeElement, alias);
+                        String joinConditionStr = null;
+                        JoinCondition joinConditionAnn = field.getAnnotation(JoinCondition.class);
+                        if (joinConditionAnn != null) {
+                            joinConditionStr = resolveAliases(joinConditionAnn.value(), alias, linkAlias);
+                        } else if (idField != null) {
+                            joinConditionStr = "{" + alias + "}." + idField.columnName +
+                                " = {" + linkAlias + "}." + linkField;
+                        }
+
+                        if (joinConditionStr != null) {
+                            recorder.addJoin(JoinType.LEFT, null, relatedTable.value(), linkAlias,
+                                SqlExpression.sql(joinConditionStr));
+                            aliases.put(linkAlias, new AliasInfo(linkAlias, relatedType, alias, field));
+                            buildQuery(relatedType, linkAlias, linkAlias, recorder, aliases, new HashSet<>());
                         }
                     }
                 }
-                continue;
-            }
+            } else if (hasTableAnnotation(fieldType)) {
+                TypeElement relatedType = (TypeElement) typeUtils.asElement(fieldType);
+                Table relatedTable = relatedType.getAnnotation(Table.class);
+                if (relatedTable != null) {
+                    String linkAlias = isRoot ? fieldName : (alias + "." + fieldName);
 
-            if (hasTableAnnotation(fieldType)) {
-                // One-to-one relationship
-                RelationshipInfo rel = createOneToOneRelationship(field, fieldType, alias, linkAnn);
-                if (rel != null) {
-                    entityInfo.relationships.add(rel);
-                    // Recursively collect related entity fields
-                    TypeElement relatedType = getTypeElement(fieldType);
-                    if (relatedType != null) {
-                        collectRelatedEntityInfo(relatedType, rel, visitedTypes);
+                    FieldInfo relatedId = findIdField(relatedType, linkAlias);
+                    String fkField = getForeignKeyField(field, relatedType);
+
+                    if (relatedId != null) {
+                        String joinCondition = "{" + alias + "}." + fkField +
+                            " = {" + linkAlias + "}." + relatedId.columnName;
+
+                        recorder.addJoin(JoinType.LEFT, null, relatedTable.value(), linkAlias,
+                            SqlExpression.sql(joinCondition));
+                        aliases.put(linkAlias, new AliasInfo(linkAlias, relatedType, alias, field));
+                        buildQuery(relatedType, linkAlias, linkAlias, recorder, aliases, new HashSet<>());
                     }
                 }
-                continue;
-            }
+            } else if (isEmbedded(field)) {
+                TypeElement embeddedType = (TypeElement) typeUtils.asElement(fieldType);
+                if (embeddedType != null) {
+                    String prefix = getEmbeddedPrefix(field);
+                    String embedAlias = (isRoot && fieldNamePrefix == null)
+                        ? fieldName
+                        : fieldsAlias + "." + fieldName;
 
-            // Regular field
-            String fieldName = field.getSimpleName().toString();
-            String columnName = getColumnName(field);
-            String javaType = getJavaType(fieldType);
-            String boxedType = getBoxedType(fieldType);
-            boolean isId = field.getAnnotation(Id.class) != null;
+                    aliases.put(embedAlias, new AliasInfo(embedAlias, embeddedType, fieldsAlias, field, true));
+                    String combinedPrefix = (fieldNamePrefix == null ? "" : fieldNamePrefix) + prefix;
+                    addFields(embeddedType, alias, embedAlias, recorder, aliases, combinedPrefix);
+                }
+            } else {
+                String columnName = getColumnName(field);
+                String fullColumnName = (fieldNamePrefix == null ? "" : fieldNamePrefix) + columnName;
 
-            FieldInfo fieldInfo = new FieldInfo(fieldName, columnName, javaType, boxedType,
-                isId, fieldType, alias);
-            entityInfo.fields.add(fieldInfo);
+                Select selectAnn = field.getAnnotation(Select.class);
+                String selectExpr;
+                if (selectAnn != null) {
+                    selectExpr = resolveAliases(selectAnn.value(), alias, null);
+                } else {
+                    selectExpr = "{" + alias + "}." + fullColumnName;
+                }
 
-            if (isId) {
-                entityInfo.idField = fieldInfo;
+                String fieldAlias = fieldsAlias + "." + fieldName;
+                recorder.addField(SqlExpression.sql(selectExpr), fieldAlias);
             }
         }
     }
 
-    private void collectEmbeddedFields(TypeElement embeddedType, EntityInfo entityInfo,
-                                       String alias, String prefix) {
-        for (Element enclosedElement : embeddedType.getEnclosedElements()) {
-            if (enclosedElement.getKind() != ElementKind.FIELD) continue;
+    private void generateFieldsClassFromElementModel(String packageName, String entityName,
+            String className, String tableName, List<RecordedField> fields,
+            Map<String, AliasInfo> aliases) throws IOException {
 
-            VariableElement field = (VariableElement) enclosedElement;
-            if (field.getModifiers().contains(Modifier.STATIC)) continue;
-            if (field.getAnnotation(Transient.class) != null) continue;
+        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
+        JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
 
-            String fieldName = field.getSimpleName().toString();
-            String columnName = prefix + getColumnName(field);
-            TypeMirror fieldType = field.asType();
+        try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
+            if (!packageName.isEmpty()) {
+                out.println("package " + packageName + ";");
+                out.println();
+            }
 
-            FieldInfo fieldInfo = new FieldInfo(fieldName, columnName, getJavaType(fieldType),
-                getBoxedType(fieldType), false, fieldType, alias);
-            entityInfo.fields.add(fieldInfo);
+            out.println("import org.pojoquery.typedquery.QueryField;");
+            out.println();
+            out.println("/**");
+            out.println(" * Generated field references for {@link " + entityName + "}.");
+            out.println(" * <p>Generated from element model (class not yet compiled).");
+            out.println(" */");
+            out.println("public final class " + className + " {");
+            out.println();
+            out.println("    public static final String TABLE = \"" + tableName + "\";");
+            out.println();
+
+            Map<String, List<RecordedField>> fieldsByPrefix = new LinkedHashMap<>();
+            for (RecordedField field : fields) {
+                String alias = field.alias;
+                int lastDot = alias.lastIndexOf('.');
+                String prefix = lastDot > 0 ? alias.substring(0, lastDot) : tableName;
+                fieldsByPrefix.computeIfAbsent(prefix, k -> new ArrayList<>()).add(field);
+            }
+
+            List<RecordedField> mainFields = fieldsByPrefix.getOrDefault(tableName, List.of());
+            for (RecordedField field : mainFields) {
+                String fieldName = extractFieldName(field.alias);
+                out.println("    public static final QueryField<" + entityName + ", Object> " +
+                    fieldName + " = new QueryField<>(TABLE, \"" +
+                    extractColumnName(field.expression) + "\", \"" + fieldName + "\", Object.class);");
+            }
+            out.println();
+
+            for (Map.Entry<String, List<RecordedField>> entry : fieldsByPrefix.entrySet()) {
+                String prefix = entry.getKey();
+                if (prefix.equals(tableName)) continue;
+
+                List<RecordedField> relFields = entry.getValue();
+                String innerClassName = capitalize(extractFieldName(prefix));
+
+                out.println("    /** Fields for the {@code " + extractFieldName(prefix) + "} relationship */");
+                out.println("    public static final class " + innerClassName + " {");
+                out.println("        public static final String ALIAS = \"" + prefix + "\";");
+                out.println();
+
+                for (RecordedField field : relFields) {
+                    String fieldName = extractFieldName(field.alias);
+                    String relFieldPath = field.alias.startsWith(tableName + ".")
+                        ? field.alias.substring(tableName.length() + 1)
+                        : field.alias;
+                    out.println("        public static final QueryField<" + entityName + ", Object> " +
+                        fieldName + " = new QueryField<>(ALIAS, \"" +
+                        extractColumnName(field.expression) + "\", \"" + relFieldPath + "\", Object.class);");
+                }
+
+                out.println("        private " + innerClassName + "() {}");
+                out.println("    }");
+                out.println();
+            }
+
+            out.println("    private " + className + "() {}");
+            out.println("}");
         }
     }
 
-    private void collectRelatedEntityInfo(TypeElement relatedType, RelationshipInfo rel,
-                                          Set<String> visitedTypes) {
-        String typeName = relatedType.getQualifiedName().toString();
-        if (visitedTypes.contains(typeName)) {
-            return;
-        }
+    private void generateQueryClassFromElementModel(String packageName, String entityName,
+            String qualifiedEntityName, String className, String fieldsClassName, String tableName,
+            RecordingSqlQuery recorder, FieldInfo idField, Map<String, AliasInfo> aliases) throws IOException {
 
-        // Find ID field and collect fields
-        for (Element enclosedElement : relatedType.getEnclosedElements()) {
-            if (enclosedElement.getKind() != ElementKind.FIELD) continue;
+        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
+        JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
 
-            VariableElement field = (VariableElement) enclosedElement;
-            if (field.getModifiers().contains(Modifier.STATIC)) continue;
-            if (field.getAnnotation(Transient.class) != null) continue;
-            if (field.getAnnotation(Select.class) != null) continue;
+        List<RecordedField> fields = recorder.getRecordedFields();
+        List<RecordedJoin> joins = recorder.getRecordedJoins();
 
-            // Skip relationships in related entities (only one level deep for now)
-            TypeMirror fieldType = field.asType();
-            if (isCollectionType(fieldType) || hasTableAnnotation(fieldType)) {
-                continue;
+        try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
+            if (!packageName.isEmpty()) {
+                out.println("package " + packageName + ";");
+                out.println();
             }
 
-            String fieldName = field.getSimpleName().toString();
-            String columnName = getColumnName(field);
-            String javaType = getJavaType(fieldType);
-            String boxedType = getBoxedType(fieldType);
-            boolean isId = field.getAnnotation(Id.class) != null;
+            out.println("import java.lang.reflect.Field;");
+            out.println("import java.sql.Connection;");
+            out.println("import java.sql.ResultSet;");
+            out.println("import java.sql.SQLException;");
+            out.println("import java.util.ArrayList;");
+            out.println("import java.util.HashMap;");
+            out.println("import java.util.List;");
+            out.println("import java.util.Map;");
+            out.println();
+            out.println("import javax.sql.DataSource;");
+            out.println();
+            out.println("import org.pojoquery.DB;");
+            out.println("import org.pojoquery.DbContext;");
+            out.println("import org.pojoquery.FieldMapping;");
+            out.println("import org.pojoquery.SqlExpression;");
+            out.println("import org.pojoquery.typedquery.TypedQuery;");
+            out.println();
+            out.println("/**");
+            out.println(" * Generated type-safe query builder for {@link " + entityName + "}.");
+            out.println(" * <p>Generated from element model:");
+            out.println(" * <ul>");
+            out.println(" *   <li>" + fields.size() + " fields</li>");
+            out.println(" *   <li>" + joins.size() + " joins</li>");
+            out.println(" * </ul>");
+            out.println(" */");
+            out.println("public class " + className + " extends TypedQuery<" + entityName + ", " + className + "> {");
+            out.println();
 
-            FieldInfo fieldInfo = new FieldInfo(fieldName, columnName, javaType, boxedType,
-                isId, fieldType, rel.alias);
-            rel.fields.add(fieldInfo);
+            out.println("    public " + className + "() {");
+            out.println("        super(\"" + tableName + "\");");
+            out.println("    }");
+            out.println();
+            out.println("    public " + className + "(DbContext dbContext) {");
+            out.println("        super(dbContext, null, \"" + tableName + "\");");
+            out.println("    }");
+            out.println();
 
-            if (isId) {
-                rel.idField = fieldInfo;
+            out.println("    @Override");
+            out.println("    protected void initializeQuery() {");
+            // Generate joins
+            for (RecordedJoin join : joins) {
+                String schemaArg = join.schema == null ? "null" : "\"" + escapeJava(join.schema) + "\"";
+                String conditionArg = join.joinCondition == null ? "null" :
+                    "SqlExpression.sql(\"" + escapeJava(join.joinCondition) + "\")";
+                out.println("        query.addJoin(org.pojoquery.pipeline.SqlQuery.JoinType." + join.joinType.name() +
+                    ", " + schemaArg + ", \"" + escapeJava(join.table) +
+                    "\", \"" + escapeJava(join.alias) + "\", " + conditionArg + ");");
+            }
+            // Generate fields
+            for (RecordedField field : fields) {
+                out.println("        query.addField(SqlExpression.sql(\"" + escapeJava(field.expression) +
+                    "\"), \"" + escapeJava(field.alias) + "\");");
+            }
+            out.println("    }");
+            out.println();
+
+            out.println("    @Override");
+            out.println("    protected " + entityName + " mapRow(ResultSet rs) throws SQLException {");
+            out.println("        throw new UnsupportedOperationException(\"Use list() for entity graph mapping\");");
+            out.println("    }");
+            out.println();
+
+            out.println("    @Override");
+            out.println("    protected Class<" + entityName + "> getEntityClass() {");
+            out.println("        return " + entityName + ".class;");
+            out.println("    }");
+            out.println();
+
+            out.println("    @Override");
+            out.println("    public List<" + entityName + "> list(Connection connection) {");
+            out.println("        SqlExpression stmt = query.toStatement();");
+            out.println("        List<Map<String, Object>> rows = DB.queryRows(connection, stmt);");
+            out.println("        try {");
+            out.println("            return processRows(rows);");
+            out.println("        } catch (NoSuchFieldException | IllegalAccessException e) {");
+            out.println("            throw new RuntimeException(e);");
+            out.println("        }");
+            out.println("    }");
+            out.println();
+
+            // Generate processRows method from element model data
+            generateProcessRowsFromElementModel(out, entityName, tableName, fields, aliases);
+
+            if (idField != null) {
+                out.println("    public " + entityName + " findById(DataSource dataSource, " + idField.boxedType + " id) {");
+                out.println("        return where(" + fieldsClassName + "." + idField.fieldName + ").is(id).first(dataSource);");
+                out.println("    }");
+                out.println();
+                out.println("    public " + entityName + " findById(Connection connection, " + idField.boxedType + " id) {");
+                out.println("        return where(" + fieldsClassName + "." + idField.fieldName + ").is(id).first(connection);");
+                out.println("    }");
+            }
+
+            out.println("}");
+        }
+    }
+
+    private void generateProcessRowsFromElementModel(PrintWriter out, String entityName, String tableName,
+            List<RecordedField> fields, Map<String, AliasInfo> aliases) {
+        out.println("    @SuppressWarnings(\"unchecked\")");
+        out.println("    private List<" + entityName + "> processRows(List<Map<String, Object>> rows) throws NoSuchFieldException, IllegalAccessException {");
+        out.println();
+
+        // Group fields by alias
+        Map<String, List<RecordedField>> fieldsByAlias = new LinkedHashMap<>();
+        for (RecordedField field : fields) {
+            String alias = extractAliasFromFieldAlias(field.alias);
+            fieldsByAlias.computeIfAbsent(alias, k -> new ArrayList<>()).add(field);
+        }
+
+        // Generate field mapping lookups for each alias
+        for (Map.Entry<String, AliasInfo> entry : aliases.entrySet()) {
+            String aliasName = entry.getKey();
+            AliasInfo aliasInfo = entry.getValue();
+            if (aliasInfo.isEmbedded) continue;
+
+            String className = aliasInfo.typeElement.getSimpleName().toString();
+            String varPrefix = "fm" + capitalize(sanitizeVarName(aliasName));
+
+            List<RecordedField> aliasFields = fieldsByAlias.get(aliasName);
+            if (aliasFields != null) {
+                out.println("        // " + className + " field mappings");
+                for (RecordedField field : aliasFields) {
+                    String fieldName = extractFieldNameFromAlias(field.alias);
+                    String varName = varPrefix + capitalize(fieldName);
+                    out.println("        FieldMapping " + varName + " = dbContext.getFieldMapping(" +
+                        className + ".class.getDeclaredField(\"" + fieldName + "\"));");
+                }
+                out.println();
+            }
+
+            // For relationship fields (link fields), we need the Field directly for collection handling
+            if (aliasInfo.linkField != null && aliasInfo.parentAlias != null) {
+                AliasInfo parentInfo = aliases.get(aliasInfo.parentAlias);
+                if (parentInfo != null) {
+                    String parentClassName = parentInfo.typeElement.getSimpleName().toString();
+                    String linkFieldName = aliasInfo.linkField.getSimpleName().toString();
+                    String linkFieldVar = "f" + capitalize(sanitizeVarName(aliasInfo.parentAlias)) + capitalize(linkFieldName);
+                    out.println("        // Link field: " + aliasInfo.parentAlias + "." + linkFieldName);
+                    out.println("        Field " + linkFieldVar + " = " + parentClassName + ".class.getDeclaredField(\"" + linkFieldName + "\");");
+                    out.println("        " + linkFieldVar + ".setAccessible(true);");
+                    out.println();
+                }
             }
         }
 
-        // Process superclass
-        TypeMirror superclass = relatedType.getSuperclass();
+        // Generate entity maps for deduplication
+        out.println("        // Entity deduplication maps");
+        out.println("        List<" + entityName + "> result = new ArrayList<>();");
+        for (Map.Entry<String, AliasInfo> entry : aliases.entrySet()) {
+            AliasInfo aliasInfo = entry.getValue();
+            if (aliasInfo.isEmbedded) continue;
+            String varName = sanitizeVarName(entry.getKey()) + "ById";
+            String className = aliasInfo.typeElement.getSimpleName().toString();
+            out.println("        Map<Object, " + className + "> " + varName + " = new HashMap<>();");
+        }
+        out.println();
+
+        // Generate row processing loop
+        out.println("        for (Map<String, Object> row : rows) {");
+
+        // Process root entity first
+        AliasInfo rootAliasInfo = aliases.get(tableName);
+        if (rootAliasInfo != null) {
+            FieldInfo rootIdField = findIdField(rootAliasInfo.typeElement, tableName);
+            if (rootIdField != null) {
+                String rootVarPrefix = "fm" + capitalize(sanitizeVarName(tableName));
+                String idFieldName = rootIdField.fieldName;
+
+                out.println("            // Process root entity: " + entityName);
+                out.println("            Object " + sanitizeVarName(tableName) + "Id = row.get(\"" + tableName + "." + idFieldName + "\");");
+                out.println("            if (" + sanitizeVarName(tableName) + "Id == null) continue;");
+                out.println();
+                out.println("            " + entityName + " " + sanitizeVarName(tableName) + " = " + sanitizeVarName(tableName) + "ById.get(" + sanitizeVarName(tableName) + "Id);");
+                out.println("            if (" + sanitizeVarName(tableName) + " == null) {");
+                out.println("                " + sanitizeVarName(tableName) + " = new " + entityName + "();");
+
+                // Apply field mappings for root entity
+                List<RecordedField> rootFields = fieldsByAlias.get(tableName);
+                if (rootFields != null) {
+                    for (RecordedField field : rootFields) {
+                        String fieldName = extractFieldNameFromAlias(field.alias);
+                        String fmVar = rootVarPrefix + capitalize(fieldName);
+                        out.println("                " + fmVar + ".apply(" + sanitizeVarName(tableName) + ", row.get(\"" + field.alias + "\"));");
+                    }
+                }
+
+                out.println("                " + sanitizeVarName(tableName) + "ById.put(" + sanitizeVarName(tableName) + "Id, " + sanitizeVarName(tableName) + ");");
+                out.println("                result.add(" + sanitizeVarName(tableName) + ");");
+                out.println("            }");
+            }
+        }
+
+        // Process related aliases
+        for (Map.Entry<String, AliasInfo> entry : aliases.entrySet()) {
+            String aliasName = entry.getKey();
+            AliasInfo aliasInfo = entry.getValue();
+
+            if (aliasName.equals(tableName) || aliasInfo.isEmbedded) continue;
+            if (aliasInfo.parentAlias == null || aliasInfo.linkField == null) continue;
+
+            String className = aliasInfo.typeElement.getSimpleName().toString();
+            FieldInfo aliasIdField = findIdField(aliasInfo.typeElement, aliasName);
+            if (aliasIdField == null) continue;
+
+            String idFieldName = aliasIdField.fieldName;
+            String aliasVarPrefix = "fm" + capitalize(sanitizeVarName(aliasName));
+            String entityVar = sanitizeVarName(aliasName);
+            String byIdVar = sanitizeVarName(aliasName) + "ById";
+            String parentVar = sanitizeVarName(aliasInfo.parentAlias);
+            String linkFieldName = aliasInfo.linkField.getSimpleName().toString();
+            String linkFieldVar = "f" + capitalize(sanitizeVarName(aliasInfo.parentAlias)) + capitalize(linkFieldName);
+
+            out.println();
+            out.println("            // Process relationship: " + aliasName + " (" + className + ")");
+            out.println("            Object " + entityVar + "Id = row.get(\"" + aliasName + "." + idFieldName + "\");");
+            out.println("            if (" + entityVar + "Id != null && !" + byIdVar + ".containsKey(" + entityVar + "Id)) {");
+            out.println("                " + className + " " + entityVar + " = new " + className + "();");
+
+            // Apply field mappings for this alias
+            List<RecordedField> aliasFields = fieldsByAlias.get(aliasName);
+            if (aliasFields != null) {
+                for (RecordedField field : aliasFields) {
+                    String fieldName = extractFieldNameFromAlias(field.alias);
+                    String fmVar = aliasVarPrefix + capitalize(fieldName);
+                    out.println("                " + fmVar + ".apply(" + entityVar + ", row.get(\"" + field.alias + "\"));");
+                }
+            }
+
+            out.println("                " + byIdVar + ".put(" + entityVar + "Id, " + entityVar + ");");
+            out.println();
+            out.println("                // Link to parent");
+            out.println("                if (List.class.isAssignableFrom(" + linkFieldVar + ".getType())) {");
+            out.println("                    List<" + className + "> coll = (List<" + className + ">) " + linkFieldVar + ".get(" + parentVar + ");");
+            out.println("                    if (coll == null) {");
+            out.println("                        coll = new ArrayList<>();");
+            out.println("                        " + linkFieldVar + ".set(" + parentVar + ", coll);");
+            out.println("                    }");
+            out.println("                    coll.add(" + entityVar + ");");
+            out.println("                } else {");
+            out.println("                    " + linkFieldVar + ".set(" + parentVar + ", " + entityVar + ");");
+            out.println("                }");
+            out.println("            }");
+        }
+
+        out.println("        }");
+        out.println();
+        out.println("        return result;");
+        out.println("    }");
+        out.println();
+    }
+
+    private String extractAliasFromFieldAlias(String fieldAlias) {
+        int lastDot = fieldAlias.lastIndexOf('.');
+        return lastDot > 0 ? fieldAlias.substring(0, lastDot) : fieldAlias;
+    }
+
+    private String extractFieldNameFromAlias(String fieldAlias) {
+        int lastDot = fieldAlias.lastIndexOf('.');
+        return lastDot >= 0 ? fieldAlias.substring(lastDot + 1) : fieldAlias;
+    }
+
+    // === Helper methods ===
+
+    private String resolveAliases(String expr, String alias, String linkAlias) {
+        String result = expr.replace("{this}", "{" + alias + "}");
+        if (linkAlias != null) {
+            result = result.replace("{link}", "{" + linkAlias + "}");
+        }
+        return result;
+    }
+
+    private String getLinkFieldName(TypeElement typeElement) {
+        // Use table name from @Table annotation, fall back to class name
+        Table tableAnn = typeElement.getAnnotation(Table.class);
+        String name = tableAnn != null ? tableAnn.value() : typeElement.getSimpleName().toString();
+        return name + "_id";
+    }
+
+    private String getForeignKeyField(VariableElement field, TypeElement relatedType) {
+        FieldName fieldNameAnn = field.getAnnotation(FieldName.class);
+        if (fieldNameAnn != null) {
+            return fieldNameAnn.value();
+        }
+        return field.getSimpleName().toString() + "_id";
+    }
+
+    private boolean isEmbedded(VariableElement field) {
+        return field.getAnnotation(Embedded.class) != null;
+    }
+
+    private String getEmbeddedPrefix(VariableElement field) {
+        Embedded embedded = field.getAnnotation(Embedded.class);
+        if (embedded != null && !embedded.prefix().isEmpty()) {
+            return embedded.prefix();
+        }
+        return field.getSimpleName().toString() + "_";
+    }
+
+    private FieldInfo findIdField(TypeElement typeElement, String alias) {
+        for (Element enclosed : typeElement.getEnclosedElements()) {
+            if (enclosed.getKind() != ElementKind.FIELD) continue;
+            VariableElement field = (VariableElement) enclosed;
+            if (field.getAnnotation(Id.class) != null) {
+                String columnName = getColumnName(field);
+                String boxedType = getBoxedTypeName(field.asType());
+                return new FieldInfo(field.getSimpleName().toString(), columnName, boxedType, true, alias);
+            }
+        }
+        TypeMirror superclass = typeElement.getSuperclass();
         if (superclass.getKind() != TypeKind.NONE) {
             Element superElement = typeUtils.asElement(superclass);
             if (superElement instanceof TypeElement) {
-                TypeElement superType = (TypeElement) superElement;
-                if (!superType.getQualifiedName().toString().equals("java.lang.Object")) {
-                    collectRelatedEntityInfo(superType, rel, new HashSet<>(visitedTypes));
-                }
+                return findIdField((TypeElement) superElement, alias);
             }
         }
+        return null;
     }
 
-    private RelationshipInfo createOneToOneRelationship(VariableElement field, TypeMirror relatedType,
-                                                        String parentAlias, Link linkAnn) {
-        TypeElement relatedElement = getTypeElement(relatedType);
-        if (relatedElement == null) return null;
-
-        Table relatedTable = relatedElement.getAnnotation(Table.class);
-        if (relatedTable == null) return null;
-
-        String fieldName = field.getSimpleName().toString();
-        String alias = fieldName;
-        String tableName = relatedTable.value();
-        String schema = relatedTable.schema();
-
-        // Determine foreign key column (default: fieldName_id or from @Link)
-        String foreignKeyColumn = fieldName + "_id";
-        if (linkAnn != null && !Link.NONE.equals(linkAnn.linkfield())) {
-            foreignKeyColumn = linkAnn.linkfield();
-        }
-
-        // Find ID field in related entity
-        String relatedIdColumn = "id";
-        for (Element enclosed : relatedElement.getEnclosedElements()) {
-            if (enclosed.getKind() == ElementKind.FIELD &&
-                enclosed.getAnnotation(Id.class) != null) {
-                relatedIdColumn = getColumnName((VariableElement) enclosed);
-                break;
-            }
-        }
-
-        RelationshipInfo rel = new RelationshipInfo();
-        rel.fieldName = fieldName;
-        rel.alias = alias;
-        rel.tableName = tableName;
-        rel.schema = schema;
-        rel.relatedTypeName = relatedElement.getQualifiedName().toString();
-        rel.relatedSimpleName = relatedElement.getSimpleName().toString();
-        rel.isCollection = false;
-        rel.parentAlias = parentAlias;
-        rel.foreignKeyColumn = foreignKeyColumn;
-        rel.relatedIdColumn = relatedIdColumn;
-
-        return rel;
+    private String getPackageName(TypeElement element) {
+        PackageElement pkg = elementUtils.getPackageOf(element);
+        return pkg.isUnnamed() ? "" : pkg.getQualifiedName().toString();
     }
 
-    private RelationshipInfo createOneToManyRelationship(VariableElement field, TypeMirror componentType,
-                                                         String parentAlias, Link linkAnn) {
-        TypeElement relatedElement = getTypeElement(componentType);
-        if (relatedElement == null) return null;
-
-        Table relatedTable = relatedElement.getAnnotation(Table.class);
-        if (relatedTable == null) return null;
-
-        String fieldName = field.getSimpleName().toString();
-        String alias = fieldName;
-        String tableName = relatedTable.value();
-        String schema = relatedTable.schema();
-
-        // For one-to-many, the FK is in the child table
-        // Default: parentTableName_id or from @Link(foreignlinkfield)
-        String foreignKeyColumn = parentAlias + "_id";
-        if (linkAnn != null && !Link.NONE.equals(linkAnn.foreignlinkfield())) {
-            foreignKeyColumn = linkAnn.foreignlinkfield();
-        }
-
-        // Find ID field in related entity
-        String relatedIdColumn = "id";
-        for (Element enclosed : relatedElement.getEnclosedElements()) {
-            if (enclosed.getKind() == ElementKind.FIELD &&
-                enclosed.getAnnotation(Id.class) != null) {
-                relatedIdColumn = getColumnName((VariableElement) enclosed);
-                break;
-            }
-        }
-
-        RelationshipInfo rel = new RelationshipInfo();
-        rel.fieldName = fieldName;
-        rel.alias = alias;
-        rel.tableName = tableName;
-        rel.schema = schema;
-        rel.relatedTypeName = relatedElement.getQualifiedName().toString();
-        rel.relatedSimpleName = relatedElement.getSimpleName().toString();
-        rel.isCollection = true;
-        rel.parentAlias = parentAlias;
-        rel.foreignKeyColumn = foreignKeyColumn;
-        rel.relatedIdColumn = relatedIdColumn;
-
-        return rel;
+    private String getColumnName(VariableElement field) {
+        FieldName ann = field.getAnnotation(FieldName.class);
+        return ann != null ? ann.value() : field.getSimpleName().toString();
     }
 
     private boolean isCollectionType(TypeMirror type) {
@@ -386,28 +1156,7 @@ public class QueryProcessor extends AbstractProcessor {
         return element.getAnnotation(Table.class) != null;
     }
 
-    private TypeElement getTypeElement(TypeMirror type) {
-        if (type.getKind() != TypeKind.DECLARED) return null;
-        return (TypeElement) typeUtils.asElement(type);
-    }
-
-    private String getColumnName(VariableElement field) {
-        FieldName fieldNameAnn = field.getAnnotation(FieldName.class);
-        if (fieldNameAnn != null) {
-            return fieldNameAnn.value();
-        }
-        return field.getSimpleName().toString();
-    }
-
-    private String getJavaType(TypeMirror type) {
-        if (type.getKind().isPrimitive()) return type.toString();
-        if (type.getKind() == TypeKind.DECLARED) {
-            return ((TypeElement) ((DeclaredType) type).asElement()).getQualifiedName().toString();
-        }
-        return type.toString();
-    }
-
-    private String getBoxedType(TypeMirror type) {
+    private String getBoxedTypeName(TypeMirror type) {
         switch (type.getKind()) {
             case BOOLEAN: return "Boolean";
             case BYTE: return "Byte";
@@ -417,530 +1166,94 @@ public class QueryProcessor extends AbstractProcessor {
             case FLOAT: return "Float";
             case DOUBLE: return "Double";
             case CHAR: return "Character";
-            default: return getJavaType(type);
-        }
-    }
-
-    private String getPackageName(TypeElement element) {
-        PackageElement pkg = elementUtils.getPackageOf(element);
-        return pkg.isUnnamed() ? "" : pkg.getQualifiedName().toString();
-    }
-
-    // === Code Generation ===
-
-    private void generateFieldsClass(String packageName, String entityName,
-                                     String className, EntityInfo entityInfo) throws IOException {
-        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
-        JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
-
-        try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
-            if (!packageName.isEmpty()) {
-                out.println("package " + packageName + ";");
-                out.println();
-            }
-
-            out.println("import org.pojoquery.typedquery.QueryField;");
-            out.println();
-            out.println("/**");
-            out.println(" * Generated field references for {@link " + entityName + "}.");
-            out.println(" */");
-            out.println("public final class " + className + " {");
-            out.println();
-            out.println("    public static final String ALIAS = \"" + entityInfo.tableName + "\";");
-            out.println();
-
-            // Main entity fields
-            for (FieldInfo field : entityInfo.fields) {
-                out.println("    public static final QueryField<" + entityName + ", " + field.boxedType + "> " +
-                    field.fieldName + " = new QueryField<>(ALIAS, \"" + field.columnName + "\", \"" +
-                    field.fieldName + "\", " + field.boxedType + ".class);");
-            }
-            out.println();
-
-            // Nested classes for relationships
-            for (RelationshipInfo rel : entityInfo.relationships) {
-                generateRelationshipFieldsClass(out, entityName, rel);
-            }
-
-            out.println("    private " + className + "() {}");
-            out.println("}");
-        }
-    }
-
-    private void generateRelationshipFieldsClass(PrintWriter out, String rootEntityName,
-                                                 RelationshipInfo rel) {
-        String innerClassName = capitalize(rel.fieldName);
-
-        out.println("    /** Fields for the {@code " + rel.fieldName + "} relationship */");
-        out.println("    public static final class " + innerClassName + " {");
-        out.println("        public static final String ALIAS = \"" + rel.alias + "\";");
-        out.println();
-
-        for (FieldInfo field : rel.fields) {
-            out.println("        public static final QueryField<" + rootEntityName + ", " +
-                field.boxedType + "> " + field.fieldName +
-                " = new QueryField<>(ALIAS, \"" + field.columnName + "\", \"" +
-                rel.fieldName + "." + field.fieldName + "\", " + field.boxedType + ".class);");
-        }
-
-        out.println("        private " + innerClassName + "() {}");
-        out.println("    }");
-        out.println();
-    }
-
-    private void generateQueryClass(String packageName, String entityName, String className,
-                                    String fieldsClassName, EntityInfo entityInfo) throws IOException {
-        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
-        JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
-
-        boolean hasRelationships = !entityInfo.relationships.isEmpty();
-        boolean hasCollections = entityInfo.relationships.stream().anyMatch(r -> r.isCollection);
-
-        try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
-            if (!packageName.isEmpty()) {
-                out.println("package " + packageName + ";");
-                out.println();
-            }
-
-            out.println("import java.sql.ResultSet;");
-            out.println("import java.sql.SQLException;");
-            if (hasRelationships) {
-                out.println("import java.util.ArrayList;");
-                out.println("import java.util.LinkedHashMap;");
-                out.println("import java.util.List;");
-                out.println("import java.util.Map;");
-            }
-            out.println();
-            out.println("import org.pojoquery.DbContext;");
-            out.println("import org.pojoquery.SqlExpression;");
-            out.println("import org.pojoquery.pipeline.SqlQuery.JoinType;");
-            out.println("import org.pojoquery.typedquery.TypedQuery;");
-            out.println();
-            out.println("public class " + className + " extends TypedQuery<" + entityName + ", " + className + "> {");
-            out.println();
-            out.println("    private static final String TABLE_NAME = \"" + entityInfo.tableName + "\";");
-            if (entityInfo.tableSchema != null && !entityInfo.tableSchema.isEmpty()) {
-                out.println("    private static final String SCHEMA = \"" + entityInfo.tableSchema + "\";");
-            } else {
-                out.println("    private static final String SCHEMA = null;");
-            }
-            out.println();
-
-            // Entity cache for deduplication
-            if (hasRelationships) {
-                out.println("    private final Map<Object, " + entityName + "> entityCache = new LinkedHashMap<>();");
-                for (RelationshipInfo rel : entityInfo.relationships) {
-                    out.println("    private final Map<Object, " + rel.relatedSimpleName +
-                        "> " + rel.fieldName + "Cache = new LinkedHashMap<>();");
-                }
-                out.println();
-            }
-
-            // Constructors
-            out.println("    public " + className + "() {");
-            out.println("        super(SCHEMA, TABLE_NAME);");
-            out.println("    }");
-            out.println();
-            out.println("    public " + className + "(DbContext dbContext) {");
-            out.println("        super(dbContext, SCHEMA, TABLE_NAME);");
-            out.println("    }");
-            out.println();
-
-            // initializeQuery
-            out.println("    @Override");
-            out.println("    protected void initializeQuery() {");
-
-            // Add main entity fields
-            for (FieldInfo field : entityInfo.fields) {
-                out.println("        query.addField(SqlExpression.sql(\"{\" + TABLE_NAME + \"}.\" + \"" +
-                    field.columnName + "\"), \"" + entityInfo.tableName + "." + field.columnName + "\");");
-            }
-
-            // Add relationships (joins and fields)
-            for (RelationshipInfo rel : entityInfo.relationships) {
-                out.println();
-                out.println("        // Join " + rel.fieldName + " (" +
-                    (rel.isCollection ? "one-to-many" : "one-to-one") + ")");
-
-                if (rel.isCollection) {
-                    // One-to-many: parent.id = child.parent_id
-                    out.println("        query.addJoin(JoinType.LEFT, " +
-                        (rel.schema != null && !rel.schema.isEmpty() ? "\"" + rel.schema + "\"" : "null") +
-                        ", \"" + rel.tableName + "\", \"" + rel.alias + "\", " +
-                        "SqlExpression.sql(\"{\" + TABLE_NAME + \"}.\" + \"" +
-                        (entityInfo.idField != null ? entityInfo.idField.columnName : "id") +
-                        "\" + \" = {" + rel.alias + "}.\" + \"" + rel.foreignKeyColumn + "\"));");
-                } else {
-                    // One-to-one: parent.fk_id = child.id
-                    out.println("        query.addJoin(JoinType.LEFT, " +
-                        (rel.schema != null && !rel.schema.isEmpty() ? "\"" + rel.schema + "\"" : "null") +
-                        ", \"" + rel.tableName + "\", \"" + rel.alias + "\", " +
-                        "SqlExpression.sql(\"{\" + TABLE_NAME + \"}.\" + \"" + rel.foreignKeyColumn +
-                        "\" + \" = {" + rel.alias + "}.\" + \"" + rel.relatedIdColumn + "\"));");
-                }
-
-                // Add fields from related entity
-                for (FieldInfo field : rel.fields) {
-                    out.println("        query.addField(SqlExpression.sql(\"{" + rel.alias + "}.\" + \"" +
-                        field.columnName + "\"), \"" + rel.alias + "." + field.columnName + "\");");
-                }
-            }
-            out.println("    }");
-            out.println();
-
-            // Generate mapRow or processResults depending on relationships
-            if (hasRelationships) {
-                generateMapRowWithRelationships(out, entityName, entityInfo);
-                generateProcessResultsMethod(out, entityName, entityInfo);
-            } else {
-                generateSimpleMapRow(out, entityName, entityInfo);
-            }
-
-            // getEntityClass
-            out.println("    @Override");
-            out.println("    protected Class<" + entityName + "> getEntityClass() {");
-            out.println("        return " + entityName + ".class;");
-            out.println("    }");
-            out.println();
-
-            // findById
-            if (entityInfo.idField != null) {
-                out.println("    public " + entityName + " findById(javax.sql.DataSource dataSource, " +
-                    entityInfo.idField.boxedType + " id) {");
-                out.println("        return where(" + fieldsClassName + "." +
-                    entityInfo.idField.fieldName + ").is(id).first(dataSource);");
-                out.println("    }");
-                out.println();
-                out.println("    public " + entityName + " findById(java.sql.Connection connection, " +
-                    entityInfo.idField.boxedType + " id) {");
-                out.println("        return where(" + fieldsClassName + "." +
-                    entityInfo.idField.fieldName + ").is(id).first(connection);");
-                out.println("    }");
-                out.println();
-            }
-
-            // Generate helper methods
-            generateResultSetHelpers(out, entityInfo);
-
-            out.println("}");
-        }
-    }
-
-    private void generateSimpleMapRow(PrintWriter out, String entityName, EntityInfo entityInfo) {
-        out.println("    @Override");
-        out.println("    protected " + entityName + " mapRow(ResultSet rs) throws SQLException {");
-        out.println("        " + entityName + " entity = new " + entityName + "();");
-        for (FieldInfo field : entityInfo.fields) {
-            String getter = getResultSetGetter(field);
-            out.println("        entity." + field.fieldName + " = " + getter +
-                "(rs, \"" + entityInfo.tableName + "." + field.columnName + "\");");
-        }
-        out.println("        return entity;");
-        out.println("    }");
-        out.println();
-    }
-
-    private void generateMapRowWithRelationships(PrintWriter out, String entityName, EntityInfo entityInfo) {
-        out.println("    @Override");
-        out.println("    protected " + entityName + " mapRow(ResultSet rs) throws SQLException {");
-
-        // Get/create main entity
-        out.println("        // Get or create main entity");
-        String idGetter = entityInfo.idField != null ?
-            getResultSetGetter(entityInfo.idField) + "(rs, \"" + entityInfo.tableName + "." +
-            entityInfo.idField.columnName + "\")" : "null";
-        out.println("        Object entityId = " + idGetter + ";");
-        out.println("        " + entityName + " entity = entityCache.get(entityId);");
-        out.println("        if (entity == null) {");
-        out.println("            entity = new " + entityName + "();");
-        for (FieldInfo field : entityInfo.fields) {
-            String getter = getResultSetGetter(field);
-            out.println("            entity." + field.fieldName + " = " + getter +
-                "(rs, \"" + entityInfo.tableName + "." + field.columnName + "\");");
-        }
-        // Initialize collections
-        for (RelationshipInfo rel : entityInfo.relationships) {
-            if (rel.isCollection) {
-                out.println("            entity." + rel.fieldName + " = new ArrayList<>();");
-            }
-        }
-        out.println("            entityCache.put(entityId, entity);");
-        out.println("        }");
-        out.println();
-
-        // Process relationships
-        for (RelationshipInfo rel : entityInfo.relationships) {
-            out.println("        // Process " + rel.fieldName + " relationship");
-
-            // Get related entity ID
-            String relIdGetter = rel.idField != null ?
-                getResultSetGetter(rel.idField) + "(rs, \"" + rel.alias + "." +
-                rel.idField.columnName + "\")" : "null";
-            out.println("        Object " + rel.fieldName + "Id = " + relIdGetter + ";");
-            out.println("        if (" + rel.fieldName + "Id != null) {");
-            out.println("            " + rel.relatedSimpleName + " " + rel.fieldName +
-                " = " + rel.fieldName + "Cache.get(" + rel.fieldName + "Id);");
-            out.println("            if (" + rel.fieldName + " == null) {");
-            out.println("                " + rel.fieldName + " = new " + rel.relatedSimpleName + "();");
-
-            for (FieldInfo field : rel.fields) {
-                String getter = getResultSetGetter(field);
-                out.println("                " + rel.fieldName + "." + field.fieldName + " = " +
-                    getter + "(rs, \"" + rel.alias + "." + field.columnName + "\");");
-            }
-
-            out.println("                " + rel.fieldName + "Cache.put(" + rel.fieldName + "Id, " +
-                rel.fieldName + ");");
-            out.println("            }");
-
-            if (rel.isCollection) {
-                out.println("            if (!entity." + rel.fieldName + ".contains(" + rel.fieldName + ")) {");
-                out.println("                entity." + rel.fieldName + ".add(" + rel.fieldName + ");");
-                out.println("            }");
-            } else {
-                out.println("            entity." + rel.fieldName + " = " + rel.fieldName + ";");
-            }
-            out.println("        }");
-            out.println();
-        }
-
-        out.println("        return entity;");
-        out.println("    }");
-        out.println();
-    }
-
-    private void generateProcessResultsMethod(PrintWriter out, String entityName, EntityInfo entityInfo) {
-        out.println("    @Override");
-        out.println("    public java.util.List<" + entityName + "> list(java.sql.Connection connection) {");
-        out.println("        entityCache.clear();");
-        for (RelationshipInfo rel : entityInfo.relationships) {
-            out.println("        " + rel.fieldName + "Cache.clear();");
-        }
-        out.println("        super.list(connection);");
-        out.println("        return new ArrayList<>(entityCache.values());");
-        out.println("    }");
-        out.println();
-    }
-
-    private String getResultSetGetter(FieldInfo field) {
-        TypeMirror type = field.type;
-        if (type.getKind().isPrimitive()) {
-            switch (type.getKind()) {
-                case BOOLEAN: return "getBoolean";
-                case BYTE: return "getByte";
-                case SHORT: return "getShort";
-                case INT: return "getInt";
-                case LONG: return "getLong";
-                case FLOAT: return "getFloat";
-                case DOUBLE: return "getDouble";
-                case CHAR: return "getChar";
-                default: return "getObject";
-            }
-        }
-
-        switch (field.javaType) {
-            case "java.lang.String": return "getString";
-            case "java.lang.Boolean": return "getBooleanObject";
-            case "java.lang.Byte": return "getByteObject";
-            case "java.lang.Short": return "getShortObject";
-            case "java.lang.Integer": return "getIntegerObject";
-            case "java.lang.Long": return "getLongObject";
-            case "java.lang.Float": return "getFloatObject";
-            case "java.lang.Double": return "getDoubleObject";
-            case "java.math.BigDecimal": return "getBigDecimal";
-            case "java.math.BigInteger": return "getBigInteger";
-            case "java.util.Date": return "getDate";
-            case "java.sql.Date": return "getSqlDate";
-            case "java.sql.Time": return "getSqlTime";
-            case "java.sql.Timestamp": return "getSqlTimestamp";
-            case "java.time.LocalDate": return "getLocalDate";
-            case "java.time.LocalTime": return "getLocalTime";
-            case "java.time.LocalDateTime": return "getLocalDateTime";
-            case "java.time.Instant": return "getInstant";
-            case "java.util.UUID": return "getUUID";
-            case "byte[]": return "getBytes";
+            case DECLARED:
+                return ((TypeElement) ((DeclaredType) type).asElement()).getQualifiedName().toString();
             default:
-                if (isEnumType(field.type)) {
-                    return "getEnum_" + getSimpleName(field.javaType);
-                }
-                return "getObject";
+                return "Object";
         }
     }
 
-    private boolean isEnumType(TypeMirror type) {
-        if (type.getKind() != TypeKind.DECLARED) return false;
-        TypeElement element = (TypeElement) typeUtils.asElement(type);
-        return element.getKind() == ElementKind.ENUM;
+    private String simplifyTypeName(String fullName) {
+        if (fullName.startsWith("java.lang.")) {
+            return fullName.substring("java.lang.".length());
+        }
+        if (fullName.equals("int")) return "Integer";
+        if (fullName.equals("long")) return "Long";
+        if (fullName.equals("boolean")) return "Boolean";
+        if (fullName.equals("double")) return "Double";
+        if (fullName.equals("float")) return "Float";
+        if (fullName.equals("short")) return "Short";
+        if (fullName.equals("byte")) return "Byte";
+        if (fullName.equals("char")) return "Character";
+        return fullName;
     }
 
-    private String getSimpleName(String qualifiedName) {
-        int lastDot = qualifiedName.lastIndexOf('.');
-        return lastDot >= 0 ? qualifiedName.substring(lastDot + 1) : qualifiedName;
+    private String extractFieldName(String alias) {
+        int lastDot = alias.lastIndexOf('.');
+        return lastDot >= 0 ? alias.substring(lastDot + 1) : alias;
+    }
+
+    private String extractColumnName(String expression) {
+        int dotPos = expression.lastIndexOf('}');
+        if (dotPos >= 0 && dotPos + 1 < expression.length()) {
+            return expression.substring(dotPos + 2);
+        }
+        return expression;
+    }
+
+    private String getLastPart(String alias) {
+        int lastDot = alias.lastIndexOf('.');
+        return lastDot >= 0 ? alias.substring(lastDot + 1) : alias;
     }
 
     private String capitalize(String s) {
         return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 
-    private void generateResultSetHelpers(PrintWriter out, EntityInfo entityInfo) {
-        Set<String> neededHelpers = new HashSet<>();
-
-        // Collect from main entity
-        for (FieldInfo field : entityInfo.fields) {
-            neededHelpers.add(getResultSetGetter(field));
-        }
-
-        // Collect from relationships
-        for (RelationshipInfo rel : entityInfo.relationships) {
-            for (FieldInfo field : rel.fields) {
-                neededHelpers.add(getResultSetGetter(field));
-            }
-        }
-
-        Map<String, String> enumTypes = new LinkedHashMap<>();
-
-        // Generate needed helpers
-        if (neededHelpers.contains("getBoolean") || neededHelpers.contains("getBooleanObject")) {
-            out.println("    private static boolean getBoolean(ResultSet rs, String col) throws SQLException { return rs.getBoolean(col); }");
-            out.println("    private static Boolean getBooleanObject(ResultSet rs, String col) throws SQLException { boolean v = rs.getBoolean(col); return rs.wasNull() ? null : v; }");
-        }
-        if (neededHelpers.contains("getByte") || neededHelpers.contains("getByteObject")) {
-            out.println("    private static byte getByte(ResultSet rs, String col) throws SQLException { return rs.getByte(col); }");
-            out.println("    private static Byte getByteObject(ResultSet rs, String col) throws SQLException { byte v = rs.getByte(col); return rs.wasNull() ? null : v; }");
-        }
-        if (neededHelpers.contains("getShort") || neededHelpers.contains("getShortObject")) {
-            out.println("    private static short getShort(ResultSet rs, String col) throws SQLException { return rs.getShort(col); }");
-            out.println("    private static Short getShortObject(ResultSet rs, String col) throws SQLException { short v = rs.getShort(col); return rs.wasNull() ? null : v; }");
-        }
-        if (neededHelpers.contains("getInt") || neededHelpers.contains("getIntegerObject")) {
-            out.println("    private static int getInt(ResultSet rs, String col) throws SQLException { return rs.getInt(col); }");
-            out.println("    private static Integer getIntegerObject(ResultSet rs, String col) throws SQLException { int v = rs.getInt(col); return rs.wasNull() ? null : v; }");
-        }
-        if (neededHelpers.contains("getLong") || neededHelpers.contains("getLongObject")) {
-            out.println("    private static long getLong(ResultSet rs, String col) throws SQLException { return rs.getLong(col); }");
-            out.println("    private static Long getLongObject(ResultSet rs, String col) throws SQLException { long v = rs.getLong(col); return rs.wasNull() ? null : v; }");
-        }
-        if (neededHelpers.contains("getFloat") || neededHelpers.contains("getFloatObject")) {
-            out.println("    private static float getFloat(ResultSet rs, String col) throws SQLException { return rs.getFloat(col); }");
-            out.println("    private static Float getFloatObject(ResultSet rs, String col) throws SQLException { float v = rs.getFloat(col); return rs.wasNull() ? null : v; }");
-        }
-        if (neededHelpers.contains("getDouble") || neededHelpers.contains("getDoubleObject")) {
-            out.println("    private static double getDouble(ResultSet rs, String col) throws SQLException { return rs.getDouble(col); }");
-            out.println("    private static Double getDoubleObject(ResultSet rs, String col) throws SQLException { double v = rs.getDouble(col); return rs.wasNull() ? null : v; }");
-        }
-        if (neededHelpers.contains("getString")) {
-            out.println("    private static String getString(ResultSet rs, String col) throws SQLException { return rs.getString(col); }");
-        }
-        if (neededHelpers.contains("getBigDecimal")) {
-            out.println("    private static java.math.BigDecimal getBigDecimal(ResultSet rs, String col) throws SQLException { return rs.getBigDecimal(col); }");
-        }
-        if (neededHelpers.contains("getBigInteger")) {
-            out.println("    private static java.math.BigInteger getBigInteger(ResultSet rs, String col) throws SQLException { java.math.BigDecimal bd = rs.getBigDecimal(col); return bd != null ? bd.toBigInteger() : null; }");
-        }
-        if (neededHelpers.contains("getDate")) {
-            out.println("    private static java.util.Date getDate(ResultSet rs, String col) throws SQLException { java.sql.Timestamp ts = rs.getTimestamp(col); return ts != null ? new java.util.Date(ts.getTime()) : null; }");
-        }
-        if (neededHelpers.contains("getSqlDate")) {
-            out.println("    private static java.sql.Date getSqlDate(ResultSet rs, String col) throws SQLException { return rs.getDate(col); }");
-        }
-        if (neededHelpers.contains("getSqlTime")) {
-            out.println("    private static java.sql.Time getSqlTime(ResultSet rs, String col) throws SQLException { return rs.getTime(col); }");
-        }
-        if (neededHelpers.contains("getSqlTimestamp")) {
-            out.println("    private static java.sql.Timestamp getSqlTimestamp(ResultSet rs, String col) throws SQLException { return rs.getTimestamp(col); }");
-        }
-        if (neededHelpers.contains("getLocalDate")) {
-            out.println("    private static java.time.LocalDate getLocalDate(ResultSet rs, String col) throws SQLException { java.sql.Date d = rs.getDate(col); return d != null ? d.toLocalDate() : null; }");
-        }
-        if (neededHelpers.contains("getLocalTime")) {
-            out.println("    private static java.time.LocalTime getLocalTime(ResultSet rs, String col) throws SQLException { java.sql.Time t = rs.getTime(col); return t != null ? t.toLocalTime() : null; }");
-        }
-        if (neededHelpers.contains("getLocalDateTime")) {
-            out.println("    private static java.time.LocalDateTime getLocalDateTime(ResultSet rs, String col) throws SQLException { java.sql.Timestamp ts = rs.getTimestamp(col); return ts != null ? ts.toLocalDateTime() : null; }");
-        }
-        if (neededHelpers.contains("getInstant")) {
-            out.println("    private static java.time.Instant getInstant(ResultSet rs, String col) throws SQLException { java.sql.Timestamp ts = rs.getTimestamp(col); return ts != null ? ts.toInstant() : null; }");
-        }
-        if (neededHelpers.contains("getUUID")) {
-            out.println("    private static java.util.UUID getUUID(ResultSet rs, String col) throws SQLException { Object o = rs.getObject(col); if (o == null) return null; if (o instanceof java.util.UUID) return (java.util.UUID) o; return java.util.UUID.fromString(o.toString()); }");
-        }
-        if (neededHelpers.contains("getBytes")) {
-            out.println("    private static byte[] getBytes(ResultSet rs, String col) throws SQLException { return rs.getBytes(col); }");
-        }
-        if (neededHelpers.contains("getObject")) {
-            out.println("    @SuppressWarnings(\"unchecked\") private static <T> T getObject(ResultSet rs, String col) throws SQLException { return (T) rs.getObject(col); }");
-        }
-
-        // Collect and generate enum helpers
-        List<FieldInfo> allFields = new ArrayList<>(entityInfo.fields);
-        for (RelationshipInfo rel : entityInfo.relationships) {
-            allFields.addAll(rel.fields);
-        }
-        for (FieldInfo field : allFields) {
-            String getter = getResultSetGetter(field);
-            if (getter.startsWith("getEnum_")) {
-                enumTypes.put(getter, field.javaType);
-            }
-        }
-        for (Map.Entry<String, String> entry : enumTypes.entrySet()) {
-            out.println("    private static " + entry.getValue() + " " + entry.getKey() +
-                "(ResultSet rs, String col) throws SQLException { String v = rs.getString(col); return v != null ? " +
-                entry.getValue() + ".valueOf(v) : null; }");
-        }
+    private String escapeJava(String s) {
+        if (s == null) return null;
+        return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 
-    // === Data Classes ===
-
-    private static class EntityInfo {
-        final String tableName;
-        final String tableSchema;
-        final String entityName;
-        final String qualifiedName;
-        final List<FieldInfo> fields = new ArrayList<>();
-        final List<RelationshipInfo> relationships = new ArrayList<>();
-        FieldInfo idField;
-
-        EntityInfo(String tableName, String tableSchema, String entityName, String qualifiedName) {
-            this.tableName = tableName;
-            this.tableSchema = tableSchema;
-            this.entityName = entityName;
-            this.qualifiedName = qualifiedName;
-        }
-    }
+    // === Data classes ===
 
     private static class FieldInfo {
         final String fieldName;
         final String columnName;
-        final String javaType;
         final String boxedType;
         final boolean isId;
-        final TypeMirror type;
         final String alias;
 
-        FieldInfo(String fieldName, String columnName, String javaType, String boxedType,
-                  boolean isId, TypeMirror type, String alias) {
+        FieldInfo(String fieldName, String columnName, String boxedType, boolean isId, String alias) {
             this.fieldName = fieldName;
             this.columnName = columnName;
-            this.javaType = javaType;
             this.boxedType = boxedType;
             this.isId = isId;
-            this.type = type;
             this.alias = alias;
         }
     }
 
-    private static class RelationshipInfo {
-        String fieldName;
-        String alias;
-        String tableName;
-        String schema;
-        String relatedTypeName;
-        String relatedSimpleName;
-        boolean isCollection;
-        String parentAlias;
-        String foreignKeyColumn;
-        String relatedIdColumn;
-        final List<FieldInfo> fields = new ArrayList<>();
-        FieldInfo idField;
+    private static class AliasInfo {
+        final String alias;
+        final TypeElement typeElement;
+        final String parentAlias;
+        final VariableElement linkField;
+        final boolean isEmbedded;
+
+        AliasInfo(String alias, TypeElement typeElement, String parentAlias, VariableElement linkField) {
+            this(alias, typeElement, parentAlias, linkField, false);
+        }
+
+        AliasInfo(String alias, TypeElement typeElement, String parentAlias, VariableElement linkField, boolean isEmbedded) {
+            this.alias = alias;
+            this.typeElement = typeElement;
+            this.parentAlias = parentAlias;
+            this.linkField = linkField;
+            this.isEmbedded = isEmbedded;
+        }
     }
 }
