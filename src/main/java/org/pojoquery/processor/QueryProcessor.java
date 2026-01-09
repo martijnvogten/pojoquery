@@ -443,28 +443,33 @@ public class QueryProcessor extends AbstractProcessor {
             out.println();
             out.println("            // Process relationship: " + aliasName + " (" + className + ")");
             out.println("            Object " + entityVar + "Id = row.get(\"" + aliasName + "." + aliasIdField.getName() + "\");");
-            out.println("            if (" + entityVar + "Id != null && !" + byIdVar + ".containsKey(" + entityVar + "Id)) {");
-            out.println("                " + className + " " + entityVar + " = new " + className + "();");
+            out.println("            if (" + entityVar + "Id != null) {");
+            out.println("                " + className + " " + entityVar + " = " + byIdVar + ".get(" + entityVar + "Id);");
+            out.println("                if (" + entityVar + " == null) {");
+            out.println("                    " + entityVar + " = new " + className + "();");
 
             List<SqlField> aliasFields = fieldsByAlias.get(aliasName);
             if (aliasFields != null) {
                 for (SqlField field : aliasFields) {
                     String fieldName = extractFieldNameFromAlias(field.alias);
                     String fmVar = aliasVarPrefix + capitalize(fieldName);
-                    out.println("                " + fmVar + ".apply(" + entityVar + ", row.get(\"" + field.alias + "\"));");
+                    out.println("                    " + fmVar + ".apply(" + entityVar + ", row.get(\"" + field.alias + "\"));");
                 }
             }
 
-            out.println("                " + byIdVar + ".put(" + entityVar + "Id, " + entityVar + ");");
+            out.println("                    " + byIdVar + ".put(" + entityVar + "Id, " + entityVar + ");");
+            out.println("                }");
             out.println();
-            out.println("                // Link to parent");
+            out.println("                // Link to parent (if not already linked)");
             out.println("                if (List.class.isAssignableFrom(" + linkFieldVar + ".getType())) {");
             out.println("                    List<" + className + "> coll = (List<" + className + ">) " + linkFieldVar + ".get(" + parentVar + ");");
             out.println("                    if (coll == null) {");
             out.println("                        coll = new ArrayList<>();");
             out.println("                        " + linkFieldVar + ".set(" + parentVar + ", coll);");
             out.println("                    }");
-            out.println("                    coll.add(" + entityVar + ");");
+            out.println("                    if (!coll.contains(" + entityVar + ")) {");
+            out.println("                        coll.add(" + entityVar + ");");
+            out.println("                    }");
             out.println("                } else {");
             out.println("                    " + linkFieldVar + ".set(" + parentVar + ", " + entityVar + ");");
             out.println("                }");
