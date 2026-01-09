@@ -27,7 +27,7 @@ public class LocalDateIT {
 	public void testInserts() {
 		DataSource db = initDatabase();
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			User u = new User();
 			u.dateOfBirth = LocalDate.of(2015, 4, 15);
 			PojoQuery.insert(c, u);

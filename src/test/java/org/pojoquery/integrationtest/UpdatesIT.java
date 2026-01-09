@@ -57,7 +57,7 @@ public class UpdatesIT {
 		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, User.class);
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			User u = new User();
 			PojoQuery.insert(c, u);
 			Assertions.assertEquals((Long)1L, u.id);
@@ -75,7 +75,7 @@ public class UpdatesIT {
 		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, User.class, Article.class);
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			User u = new User();
 			u.username = "bob";
 			PojoQuery.insert(c, u);
@@ -96,7 +96,7 @@ public class UpdatesIT {
 		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, User.class, UserRoles.class);
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			UserDetail u = new UserDetail();
 			u.roles.add(Role.EDITOR);
 			PojoQuery.insert(c, u);

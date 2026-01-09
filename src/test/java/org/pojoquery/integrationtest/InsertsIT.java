@@ -34,7 +34,7 @@ public class InsertsIT {
 	public void testInserts() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			User u = new User();
 			PojoQuery.insert(c, u);
 			Assertions.assertEquals((Long)1L, u.id);
@@ -46,7 +46,7 @@ public class InsertsIT {
 		DataSource db = initDatabase();
 		
 		try {
-			DB.runInTransaction(db, new Transaction<Void>() {
+			DB.withConnection(db, new Transaction<Void>() {
 				@Override
 				public Void run(Connection connection) {
 					User u = new User();

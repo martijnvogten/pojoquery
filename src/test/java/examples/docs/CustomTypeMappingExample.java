@@ -65,7 +65,7 @@ public class CustomTypeMappingExample {
     public static void demonstrateUuidSupport(DataSource db) {
         // tag::usage[]
         // Use runInTransaction for atomic operations
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             // Insert a document with a UUID
             Document doc = new Document();
             doc.documentId = UUID.randomUUID();

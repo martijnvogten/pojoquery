@@ -56,7 +56,7 @@ public class BookstoreExample {
         //    fields and associations of the POJOs
         SchemaGenerator.createTables(db, Author.class, Book.class, BookDetail.class, Review.class);
 
-        DB.runInTransaction(db, c -> {
+        DB.withConnection(db, c -> {
             // 3. Insert test data
             Author tolkien = new Author();
             tolkien.name = "J.R.R. Tolkien";

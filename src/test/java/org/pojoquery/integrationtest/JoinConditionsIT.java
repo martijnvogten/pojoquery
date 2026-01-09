@@ -129,7 +129,7 @@ public class JoinConditionsIT {
 		List<EventWithVisitorsAndOrganizers> events = q.execute(db);
 		Assertions.assertEquals(0, events.size());
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			insertTestData(c);
 		});
 		
@@ -177,7 +177,7 @@ public class JoinConditionsIT {
 	@Test
 	public void testDeeper() {
 		DataSource db = initDatabase();
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			insertTestData(c);
 		});
 		

@@ -68,7 +68,7 @@ public class StreamingIT {
 	public void testStreamingWithConsumer_simpleEntities() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			insertTestData(c);
 		});
 
@@ -90,7 +90,7 @@ public class StreamingIT {
 	public void testStreamingWithConsumer_entitiesWithRelations() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			insertTestData(c);
 		});
 
@@ -123,7 +123,7 @@ public class StreamingIT {
 	public void testStreamingWithConsumer_orderedByAuthorName() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			insertTestData(c);
 		});
 
@@ -154,7 +154,7 @@ public class StreamingIT {
 	public void testStreamingWithConsumer_throwsOnJoinedTableOrderBy() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			insertTestData(c);
 		});
 
@@ -192,7 +192,7 @@ public class StreamingIT {
 	public void testStreamingWithConsumer_singleEntity() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			insertTestData(c);
 		});
 
@@ -213,7 +213,7 @@ public class StreamingIT {
 	public void testStreamingWithConnection() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			insertTestData(c);
 			
 			List<Author> streamedAuthors = new ArrayList<>();
@@ -231,7 +231,7 @@ public class StreamingIT {
 	public void testStreaming_resultsMatchNonStreamingExecution() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			insertTestData(c);
 		});
 

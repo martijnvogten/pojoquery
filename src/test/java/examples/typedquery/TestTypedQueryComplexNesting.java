@@ -42,7 +42,7 @@ public class TestTypedQueryComplexNesting {
      */
     @Test
     void testTwoOrGroupsWithAnd() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Setup: need employees that match various combinations
             insertEmployee(c, "Alice", "Smith", 60000);    // Smith + high salary -> MATCH
             insertEmployee(c, "Bob", "Johnson", 70000);    // Johnson + high salary -> MATCH  
@@ -86,7 +86,7 @@ public class TestTypedQueryComplexNesting {
      */
     @Test
     void testTwoFullOrGroups() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 60000);    // Smith + high -> MATCH
             insertEmployee(c, "Bob", "Johnson", 25000);    // Johnson + low -> MATCH
             insertEmployee(c, "Charlie", "Williams", 60000); // Neither name -> NO MATCH
@@ -130,7 +130,7 @@ public class TestTypedQueryComplexNesting {
      */
     @Test
     void testMixedAndOrAnd() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 60000);    // active=implied, Smith, high -> depends
             insertEmployee(c, "Bob", "Johnson", 70000);
             insertEmployee(c, "Charlie", "Smith", 40000);
@@ -167,7 +167,7 @@ public class TestTypedQueryComplexNesting {
      */
     @Test
     void testThreeOrGroups() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 60000);
             insertEmployee(c, "Bob", "Johnson", 70000);
             insertEmployee(c, "Aaron", "Smith", 65000);

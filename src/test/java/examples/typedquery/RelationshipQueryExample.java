@@ -181,7 +181,7 @@ public class RelationshipQueryExample {
         // Create tables for all entity types
         SchemaGenerator.createTables(dataSource, Department.class, Employee.class, Project.class);
 
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Create test data using rich domain model
             TestData data = insertTestData(c);
 

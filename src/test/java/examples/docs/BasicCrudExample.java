@@ -42,7 +42,7 @@ public class BasicCrudExample {
 
         // tag::crud[]
         // Use runInTransaction to ensure all operations are atomic
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // --- Insert ---
             User newUser = new User();
             newUser.setFirstName("Jane");

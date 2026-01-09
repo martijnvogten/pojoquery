@@ -38,7 +38,7 @@ public class TestTypedQueryWhereChain {
 
     @Test
     void testSimpleWhereChain() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Johnson", 60000);
 
@@ -54,7 +54,7 @@ public class TestTypedQueryWhereChain {
 
     @Test
     void testOrChain() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Johnson", 60000);
             insertEmployee(c, "Charlie", "Williams", 70000);
@@ -73,7 +73,7 @@ public class TestTypedQueryWhereChain {
 
     @Test
     void testAndChain() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Smith", 80000);
             insertEmployee(c, "Charlie", "Johnson", 90000);
@@ -90,7 +90,7 @@ public class TestTypedQueryWhereChain {
 
     @Test
     void testMixedOrAndChain() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Johnson", 60000);
             insertEmployee(c, "Charlie", "Smith", 80000);
@@ -109,7 +109,7 @@ public class TestTypedQueryWhereChain {
 
     @Test
     void testChainWithOrderBy() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Charlie", "Smith", 70000);
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Smith", 60000);
@@ -128,7 +128,7 @@ public class TestTypedQueryWhereChain {
 
     @Test
     void testChainWithLimit() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Smith", 60000);
             insertEmployee(c, "Charlie", "Smith", 70000);
@@ -147,7 +147,7 @@ public class TestTypedQueryWhereChain {
 
     @Test
     void testComparisonOperators() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "A", 40000);
             insertEmployee(c, "Bob", "B", 60000);
             insertEmployee(c, "Charlie", "C", 80000);
@@ -171,7 +171,7 @@ public class TestTypedQueryWhereChain {
 
     @Test
     void testLikeInChain() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Smithson", 60000);
             insertEmployee(c, "Charlie", "Jones", 70000);
@@ -189,7 +189,7 @@ public class TestTypedQueryWhereChain {
 
     @Test
     void testInOperatorChain() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Johnson", 60000);
             insertEmployee(c, "Charlie", "Williams", 70000);

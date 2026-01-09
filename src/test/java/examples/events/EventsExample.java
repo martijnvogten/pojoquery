@@ -78,7 +78,7 @@ public class EventsExample {
 	}
 
 	private static void insertData(DataSource db) {
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			Event e = new Event();
 			e.setDate(new Date());
 			e.setTitle("My Event");

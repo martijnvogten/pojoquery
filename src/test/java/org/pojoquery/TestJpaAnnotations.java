@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
 import java.util.List;
 import java.util.Map;
 
@@ -351,134 +352,139 @@ public class TestJpaAnnotations {
     @Test
     public void testInsertWithJpaAnnotations() {
         DataSource db = createTestDatabase();
-
         // Create table using SchemaGenerator
         SchemaGenerator.createTables(db, JpaUser.class);
 
-        // Insert entity with JPA annotations
-        JpaUser user = new JpaUser();
-        user.username = "john_doe";
-        user.email = "john@example.com";
-        user.biography = "A long biography text";
-        user.temporaryField = "should be ignored";
+        DB.withConnection(db, (Connection c) -> {
+            // Insert entity with JPA annotations
+            JpaUser user = new JpaUser();
+            user.username = "john_doe";
+            user.email = "john@example.com";
+            user.biography = "A long biography text";
+            user.temporaryField = "should be ignored";
 
-        Long id = PojoQuery.insert(db, user);
+            Long id = PojoQuery.insert(c, user);
 
-        assertNotNull(id, "Insert should return generated ID");
-        assertEquals(id, user.id, "Generated ID should be set on entity");
+            assertNotNull(id, "Insert should return generated ID");
+            assertEquals(id, user.id, "Generated ID should be set on entity");
 
-        // Verify data was inserted with correct column names
-        List<Map<String, Object>> rows = DB.queryRows(db, 
-            new SqlExpression("SELECT * FROM jpa_user WHERE id = ?", List.of(id)));
-        assertEquals(1, rows.size());
-        assertEquals("john_doe", rows.get(0).get("USER_NAME")); // JPA @Column(name=...)
-        assertEquals("john@example.com", rows.get(0).get("EMAIL"));
+            // Verify data was inserted with correct column names
+            List<Map<String, Object>> rows = DB.queryRows(c, 
+                new SqlExpression("SELECT * FROM jpa_user WHERE id = ?", List.of(id)));
+            assertEquals(1, rows.size());
+            assertEquals("john_doe", rows.get(0).get("USER_NAME")); // JPA @Column(name=...)
+            assertEquals("john@example.com", rows.get(0).get("EMAIL"));
+        });
     }
 
     @Test
     public void testUpdateWithJpaAnnotations() {
         DataSource db = createTestDatabase();
-
-        // Create table and insert initial data
+        // Create table
         SchemaGenerator.createTables(db, JpaUser.class);
-        
-        JpaUser user = new JpaUser();
-        user.username = "jane_doe";
-        user.email = "jane@example.com";
-        PojoQuery.insert(db, user);
 
-        // Update the entity
-        user.username = "jane_smith";
-        user.email = "jane.smith@example.com";
-        int affected = PojoQuery.update(db, user);
+        DB.withConnection(db, (Connection c) -> {
+            JpaUser user = new JpaUser();
+            user.username = "jane_doe";
+            user.email = "jane@example.com";
+            PojoQuery.insert(c, user);
 
-        assertEquals(1, affected, "Update should affect 1 row");
+            // Update the entity
+            user.username = "jane_smith";
+            user.email = "jane.smith@example.com";
+            int affected = PojoQuery.update(c, user);
 
-        // Verify update used correct column names
-        List<Map<String, Object>> rows = DB.queryRows(db,
-            new SqlExpression("SELECT * FROM jpa_user WHERE id = ?", List.of(user.id)));
-        assertEquals("jane_smith", rows.get(0).get("USER_NAME"));
-        assertEquals("jane.smith@example.com", rows.get(0).get("EMAIL"));
+            assertEquals(1, affected, "Update should affect 1 row");
+
+            // Verify update used correct column names
+            List<Map<String, Object>> rows = DB.queryRows(c,
+                new SqlExpression("SELECT * FROM jpa_user WHERE id = ?", List.of(user.id)));
+            assertEquals("jane_smith", rows.get(0).get("USER_NAME"));
+            assertEquals("jane.smith@example.com", rows.get(0).get("EMAIL"));
+        });
     }
 
     @Test
     public void testInsertWithJpaJoinColumn() {
         DataSource db = createTestDatabase();
-
         // Create tables
         SchemaGenerator.createTables(db, JpaUser.class, JpaSimpleOrder.class);
 
-        // Insert user first
-        JpaUser customer = new JpaUser();
-        customer.username = "customer1";
-        customer.email = "customer@example.com";
-        PojoQuery.insert(db, customer);
+        DB.withConnection(db, (Connection c) -> {
+            // Insert user first
+            JpaUser customer = new JpaUser();
+            customer.username = "customer1";
+            customer.email = "customer@example.com";
+            PojoQuery.insert(c, customer);
 
-        // Insert order with customer reference
-        JpaSimpleOrder order = new JpaSimpleOrder();
-        order.totalAmount = new BigDecimal("99.95");
-        order.buyer = customer;
+            // Insert order with customer reference
+            JpaSimpleOrder order = new JpaSimpleOrder();
+            order.totalAmount = new BigDecimal("99.95");
+            order.buyer = customer;
 
-        Long orderId = PojoQuery.insert(db, order);
+            Long orderId = PojoQuery.insert(c, order);
 
-        // Verify foreign key column used @JoinColumn name
-        List<Map<String, Object>> rows = DB.queryRows(db,
-            new SqlExpression("SELECT * FROM jpa_simple_order WHERE id = ?", List.of(orderId)));
-        assertEquals(1, rows.size());
-        assertEquals(customer.id, rows.get(0).get("BUYER_ID")); // JPA @JoinColumn(name=...)
+            // Verify foreign key column used @JoinColumn name
+            List<Map<String, Object>> rows = DB.queryRows(c,
+                new SqlExpression("SELECT * FROM jpa_simple_order WHERE id = ?", List.of(orderId)));
+            assertEquals(1, rows.size());
+            assertEquals(customer.id, rows.get(0).get("BUYER_ID")); // JPA @JoinColumn(name=...)
+        });
     }
 
     @Test
     public void testInsertWithJpaEmbedded() {
         DataSource db = createTestDatabase();
-
         // Create table
         SchemaGenerator.createTables(db, JpaCompany.class);
 
-        // Insert company with embedded address
-        JpaCompany company = new JpaCompany();
-        company.name = "Acme Corp";
-        company.address = new JpaAddress();
-        company.address.street = "123 Main St";
-        company.address.city = "Springfield";
-        company.address.zipCode = "12345";
+        DB.withConnection(db, (Connection c) -> {
+            // Insert company with embedded address
+            JpaCompany company = new JpaCompany();
+            company.name = "Acme Corp";
+            company.address = new JpaAddress();
+            company.address.street = "123 Main St";
+            company.address.city = "Springfield";
+            company.address.zipCode = "12345";
 
-        Long id = PojoQuery.insert(db, company);
+            Long id = PojoQuery.insert(c, company);
 
-        // Verify embedded fields were inserted without prefix (true JPA behavior)
-        List<Map<String, Object>> rows = DB.queryRows(db,
-            new SqlExpression("SELECT * FROM jpa_company WHERE id = ?", List.of(id)));
-        assertEquals(1, rows.size());
-        assertEquals("123 Main St", rows.get(0).get("STREET")); // No prefix
-        assertEquals("Springfield", rows.get(0).get("CITY"));
-        assertEquals("12345", rows.get(0).get("ZIPCODE"));
+            // Verify embedded fields were inserted without prefix (true JPA behavior)
+            List<Map<String, Object>> rows = DB.queryRows(c,
+                new SqlExpression("SELECT * FROM jpa_company WHERE id = ?", List.of(id)));
+            assertEquals(1, rows.size());
+            assertEquals("123 Main St", rows.get(0).get("STREET")); // No prefix
+            assertEquals("Springfield", rows.get(0).get("CITY"));
+            assertEquals("12345", rows.get(0).get("ZIPCODE"));
+        });
     }
 
     @Test
     public void testQueryWithJpaAnnotationsEndToEnd() {
         DataSource db = createTestDatabase();
-
-        // Create tables and insert data
+        // Create tables
         SchemaGenerator.createTables(db, JpaUser.class, JpaSimpleOrder.class);
 
-        JpaUser customer = new JpaUser();
-        customer.username = "test_user";
-        customer.email = "test@example.com";
-        PojoQuery.insert(db, customer);
+        DB.withConnection(db, (Connection c) -> {
+            JpaUser customer = new JpaUser();
+            customer.username = "test_user";
+            customer.email = "test@example.com";
+            PojoQuery.insert(c, customer);
 
-        JpaSimpleOrder order = new JpaSimpleOrder();
-        order.totalAmount = new BigDecimal("150.00");
-        order.buyer = customer;
-        PojoQuery.insert(db, order);
+            JpaSimpleOrder order = new JpaSimpleOrder();
+            order.totalAmount = new BigDecimal("150.00");
+            order.buyer = customer;
+            PojoQuery.insert(c, order);
 
-        // Query back using PojoQuery
-        List<JpaSimpleOrder> orders = PojoQuery.build(JpaSimpleOrder.class)
-            .addWhere("{jpa_simple_order}.id = ?", order.id)
-            .execute(db);
+            // Query back using PojoQuery
+            List<JpaSimpleOrder> orders = PojoQuery.build(JpaSimpleOrder.class)
+                .addWhere("{jpa_simple_order}.id = ?", order.id)
+                .execute(c);
 
-        assertEquals(1, orders.size());
-        assertEquals(new BigDecimal("150.00"), orders.get(0).totalAmount);
-        assertNotNull(orders.get(0).buyer);
-        assertEquals("test_user", orders.get(0).buyer.username);
+            assertEquals(1, orders.size());
+            assertEquals(new BigDecimal("150.00"), orders.get(0).totalAmount);
+            assertNotNull(orders.get(0).buyer);
+            assertEquals("test_user", orders.get(0).buyer.username);
+        });
     }
 }

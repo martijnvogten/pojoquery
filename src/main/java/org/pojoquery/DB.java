@@ -966,6 +966,40 @@ public interface DB {
 		});
 	}
 
+	/**
+	 * Executes work with a connection from the data source, using autocommit mode.
+	 * The connection is automatically closed after the work completes.
+	 * Use this for read-only queries, single statements, or DDL operations
+	 * that don't require transactional guarantees.
+	 * 
+	 * @param <T> the type of the result
+	 * @param dataSource the data source
+	 * @param work the work to execute with the connection
+	 * @return the result of the work
+	 */
+	public static <T> T withConnection(DataSource dataSource, Transaction<T> work) {
+		try (Connection connection = dataSource.getConnection()) {
+			return work.run(connection);
+		} catch (SQLException e) {
+			throw new DatabaseException(e);
+		}
+	}
+
+	/**
+	 * Executes work with a connection from the data source, using autocommit mode.
+	 * The connection is automatically closed after the work completes.
+	 * Use this overload when the work doesn't need to return a value.
+	 * 
+	 * @param dataSource the data source
+	 * @param work the work to execute with the connection
+	 */
+	public static void withConnection(DataSource dataSource, TransactionReturningVoid work) {
+		withConnection(dataSource, c -> {
+			work.run(c);
+			return null;
+		});
+	}
+
 	public static class Columns {
 
 		private List<List<Object>> data;

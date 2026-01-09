@@ -49,7 +49,7 @@ public class FieldAliasesInWhereIT {
 	public void testBasic() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			Person john = new Person();
 			john.name = "John Lennon";
 			PojoQuery.insert(c, john);

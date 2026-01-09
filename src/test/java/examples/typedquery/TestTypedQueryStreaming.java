@@ -51,7 +51,7 @@ public class TestTypedQueryStreaming {
      */
     @Test
     void testFirstWithCollections() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Create department
             Department engineering = new Department();
             engineering.name = "Engineering";
@@ -97,7 +97,7 @@ public class TestTypedQueryStreaming {
      */
     @Test
     void testStreamWithCollections() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Create department
             Department engineering = new Department();
             engineering.name = "Engineering";
@@ -164,7 +164,7 @@ public class TestTypedQueryStreaming {
      */
     @Test
     void testStreamOrderBy() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Create employees
             for (String name : new String[]{"Charlie", "Alice", "Bob"}) {
                 EmployeeWithRelations emp = new EmployeeWithRelations();

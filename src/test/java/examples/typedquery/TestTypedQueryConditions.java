@@ -39,7 +39,7 @@ public class TestTypedQueryConditions {
 
     @Test
     void testSimpleCondition() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Johnson", 60000);
 
@@ -55,7 +55,7 @@ public class TestTypedQueryConditions {
 
     @Test
     void testOrCondition() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Johnson", 60000);
             insertEmployee(c, "Charlie", "Williams", 70000);
@@ -76,7 +76,7 @@ public class TestTypedQueryConditions {
 
     @Test
     void testAndCondition() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Smith", 80000);
             insertEmployee(c, "Charlie", "Johnson", 90000);
@@ -95,7 +95,7 @@ public class TestTypedQueryConditions {
 
     @Test
     void testComplexCondition() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Johnson", 60000);
             insertEmployee(c, "Charlie", "Smith", 80000);
@@ -118,7 +118,7 @@ public class TestTypedQueryConditions {
 
     @Test
     void testMultipleWhereConditions() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Smith", 80000);
             insertEmployee(c, "Charlie", "Johnson", 90000);
@@ -136,7 +136,7 @@ public class TestTypedQueryConditions {
 
     @Test
     void testComparisonMethods() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "A", 40000);
             insertEmployee(c, "Bob", "B", 60000);
             insertEmployee(c, "Charlie", "C", 80000);
@@ -161,7 +161,7 @@ public class TestTypedQueryConditions {
 
     @Test
     void testLikeCondition() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Smithson", 60000);
             insertEmployee(c, "Charlie", "Jones", 70000);
@@ -179,7 +179,7 @@ public class TestTypedQueryConditions {
 
     @Test
     void testInCondition() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Johnson", 60000);
             insertEmployee(c, "Charlie", "Williams", 70000);
@@ -197,7 +197,7 @@ public class TestTypedQueryConditions {
 
     @Test
     void testNotCondition() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Johnson", 60000);
 
@@ -212,7 +212,7 @@ public class TestTypedQueryConditions {
 
     @Test
     void testReusableConditions() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Johnson", 60000);
             insertEmployee(c, "Charlie", "Smith", 80000);
@@ -235,7 +235,7 @@ public class TestTypedQueryConditions {
 
     @Test
     void testStaticOrMethod() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", 50000);
             insertEmployee(c, "Bob", "Johnson", 60000);
             insertEmployee(c, "Charlie", "Williams", 70000);

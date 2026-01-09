@@ -50,7 +50,7 @@ public class TestTypedQueryCollectionTypes {
         SchemaGenerator.createTables(dataSource, Project.class);
         SchemaGenerator.createTables(dataSource, EmployeeWithSetProjects.class);
 
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Create employee
             EmployeeWithSetProjects alice = new EmployeeWithSetProjects();
             alice.firstName = "Alice";
@@ -108,7 +108,7 @@ public class TestTypedQueryCollectionTypes {
         SchemaGenerator.createTables(dataSource, Department.class, Project.class);
         SchemaGenerator.createTables(dataSource, EmployeeWithRelations.class);
 
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Create department
             Department engineering = new Department();
             engineering.name = "Engineering";
@@ -163,7 +163,7 @@ public class TestTypedQueryCollectionTypes {
         SchemaGenerator.createTables(dataSource, Project.class);
         SchemaGenerator.createTables(dataSource, EmployeeWithArrayProjects.class);
 
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Create employee
             EmployeeWithArrayProjects alice = new EmployeeWithArrayProjects();
             alice.firstName = "Alice";

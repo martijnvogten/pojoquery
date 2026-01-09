@@ -29,7 +29,7 @@ public class BlogDb {
 	}
 	
 	private static void insertData(DataSource db) {
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			User john = new User();
 			john.email = "john@ewbank.nl";
 			john.firstName = "John";

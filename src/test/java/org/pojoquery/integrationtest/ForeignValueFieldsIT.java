@@ -53,7 +53,7 @@ public class ForeignValueFieldsIT {
 		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, Poule.class, PouleWeightClass.class);
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			insertTestData(c);
 			
 			PojoQuery<Poule> query = PojoQuery.build(Poule.class)
@@ -70,7 +70,7 @@ public class ForeignValueFieldsIT {
 		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, Poule.class, PouleWeightClass.class);
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			insertTestData(c);
 			
 			PojoQuery<PouleWithHeavyWeights> query = PojoQuery.build(PouleWithHeavyWeights.class)

@@ -40,7 +40,7 @@ public class InheritanceExample {
 		DataSource db = TestDatabase.dropAndRecreate();
 		createTables(db);
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			BedRoom br = insertData(c);
 
 			// tag::query[]

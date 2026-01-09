@@ -44,7 +44,7 @@ public class TypedQueryExample {
         SchemaGenerator.createTables(dataSource, Employee.class);
 
         // Run example in transaction
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Insert test data
             insertTestData(c);
 

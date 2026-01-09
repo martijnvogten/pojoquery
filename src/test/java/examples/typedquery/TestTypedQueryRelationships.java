@@ -51,7 +51,7 @@ public class TestTypedQueryRelationships {
      */
     @Test
     void testSharedDepartmentLinkedToAllEmployees() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Create a single department
             Department engineering = new Department();
             engineering.name = "Engineering";
@@ -105,7 +105,7 @@ public class TestTypedQueryRelationships {
      */
     @Test
     void testOneToManyRelationshipDeduplication() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Create department
             Department engineering = new Department();
             engineering.name = "Engineering";
@@ -158,7 +158,7 @@ public class TestTypedQueryRelationships {
      */
     @Test
     void testEmployeeWithoutRelationships() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Create employee without department or projects
             EmployeeWithRelations loner = new EmployeeWithRelations();
             loner.firstName = "Loner";

@@ -88,7 +88,7 @@ public class ConstraintsIT {
         account.email = "test@example.com";
         
         try {
-            DB.runInTransaction(db, (Connection c) -> {
+            DB.withConnection(db, (Connection c) -> {
                 PojoQuery.insert(c, account);
             });
             Assertions.fail("Should have thrown exception due to NOT NULL constraint on username");
@@ -102,7 +102,7 @@ public class ConstraintsIT {
     public void testNotNullConstraintAllowsNonNullInsert() {
         DataSource db = initAccountDatabase();
         
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             Account account = new Account();
             account.username = "johndoe";
             account.email = "john@example.com";
@@ -126,7 +126,7 @@ public class ConstraintsIT {
         DataSource db = initAccountDatabase();
         
         // Insert first account
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             Account account1 = new Account();
             account1.username = "uniqueuser";
             account1.email = "unique1@example.com";
@@ -139,7 +139,7 @@ public class ConstraintsIT {
         account2.email = "unique2@example.com";
         
         try {
-            DB.runInTransaction(db, (Connection c) -> {
+            DB.withConnection(db, (Connection c) -> {
                 PojoQuery.insert(c, account2);
             });
             Assertions.fail("Should have thrown exception due to UNIQUE constraint on username");
@@ -153,7 +153,7 @@ public class ConstraintsIT {
     public void testUniqueConstraintAllowsDifferentValues() {
         DataSource db = initAccountDatabase();
         
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             Account account1 = new Account();
             account1.username = "user1";
             account1.email = "user1@example.com";
@@ -184,7 +184,7 @@ public class ConstraintsIT {
         product.category.id = 99999L;  // Non-existent category ID
         
         try {
-            DB.runInTransaction(db, (Connection c) -> {
+            DB.withConnection(db, (Connection c) -> {
                 PojoQuery.insert(c, product);
             });
             Assertions.fail("Should have thrown exception due to FOREIGN KEY constraint");
@@ -198,7 +198,7 @@ public class ConstraintsIT {
     public void testForeignKeyConstraintAllowsValidReference() {
         DataSource db = initProductDatabase();
         
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             // First insert a valid category
             Category category = new Category();
             category.name = "Electronics";
@@ -226,7 +226,7 @@ public class ConstraintsIT {
     public void testForeignKeyAllowsNullReference() {
         DataSource db = initProductDatabase();
         
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             // Insert product without category (FK is nullable)
             Product product = new Product();
             product.name = "Uncategorized Product";
@@ -252,7 +252,7 @@ public class ConstraintsIT {
         item.quantity = 5;
         
         try {
-            DB.runInTransaction(db, (Connection c) -> {
+            DB.withConnection(db, (Connection c) -> {
                 PojoQuery.insert(c, item);
             });
             Assertions.fail("Should have thrown exception due to NOT NULL on FK");
@@ -266,7 +266,7 @@ public class ConstraintsIT {
     public void testRequiredForeignKeyAllowsValidReference() {
         DataSource db = initOrderItemDatabase();
         
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             // First insert a valid category and product
             Category category = new Category();
             category.name = "Electronics";
@@ -299,7 +299,7 @@ public class ConstraintsIT {
     public void testDecimalPrecisionScale() {
         DataSource db = initProductDatabase();
         
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             Category category = new Category();
             category.name = "Test";
             PojoQuery.insert(c, category);
@@ -324,7 +324,7 @@ public class ConstraintsIT {
         DataSource db = initAccountDatabase();
         
         // First insert a valid account
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             Account account1 = new Account();
             account1.username = "testuser";
             account1.email = "test@example.com";
@@ -337,7 +337,7 @@ public class ConstraintsIT {
         account2.email = "another@example.com";
         
         try {
-            DB.runInTransaction(db, (Connection c) -> {
+            DB.withConnection(db, (Connection c) -> {
                 PojoQuery.insert(c, account2);
             });
             Assertions.fail("Should have thrown exception due to NOT NULL constraint");

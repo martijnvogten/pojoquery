@@ -69,7 +69,7 @@ public class SingleTableInheritanceIT {
 	public void testInsertAndQuerySubclasses() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			// Insert a Car (using DB.insert with explicit discriminator value)
 			DB.insert(c, "vehicle", Map.of(
 				"brand", "Toyota",
@@ -131,7 +131,7 @@ public class SingleTableInheritanceIT {
 		// Add a custom column 'mileage' that is not mapped to any field
 		DB.executeDDL(db, "ALTER TABLE vehicle ADD COLUMN mileage INT");
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			// Insert a car with mileage
 			DB.insert(c, "vehicle", Map.of(
 				"brand", "Ford",
@@ -179,7 +179,7 @@ public class SingleTableInheritanceIT {
 		// Add a custom column 'color' that is not mapped to any field
 		DB.executeDDL(db, "ALTER TABLE vehicle ADD COLUMN color VARCHAR(50)");
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			// Insert a car with color
 			DB.insert(c, "vehicle", Map.of(
 				"brand", "BMW",
@@ -215,7 +215,7 @@ public class SingleTableInheritanceIT {
 		// Add a custom column 'notes' 
 		DB.executeDDL(db, "ALTER TABLE vehicle ADD COLUMN notes VARCHAR(255)");
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			// Insert a base vehicle (not a subclass) with notes
 			DB.insert(c, "vehicle", Map.of(
 				"brand", "Unknown",
@@ -248,7 +248,7 @@ public class SingleTableInheritanceIT {
 	public void testFindByIdReturnsCorrectSubclass() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			// Insert a Car with explicit discriminator
 			Long carId = DB.insert(c, "vehicle", Map.of(
 				"brand", "Audi",

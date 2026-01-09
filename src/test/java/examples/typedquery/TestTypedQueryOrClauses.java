@@ -39,7 +39,7 @@ public class TestTypedQueryOrClauses {
 
     @Test
     void testSimpleOrClause() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Insert test data
             insertEmployee(c, "Alice", "Smith", "alice@example.com", 50000);
             insertEmployee(c, "Bob", "Johnson", "bob@example.com", 60000);
@@ -74,7 +74,7 @@ public class TestTypedQueryOrClauses {
 
     @Test
     void testOrWithAndClauses() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             // Insert test data
             insertEmployee(c, "Alice", "Smith", "alice@example.com", 50000);
             insertEmployee(c, "Bob", "Johnson", "bob@example.com", 60000);
@@ -108,7 +108,7 @@ public class TestTypedQueryOrClauses {
 
     @Test
     void testOrWithThreeConditions() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", "alice@example.com", 50000);
             insertEmployee(c, "Bob", "Johnson", "bob@example.com", 60000);
             insertEmployee(c, "Charlie", "Williams", "charlie@example.com", 70000);
@@ -133,7 +133,7 @@ public class TestTypedQueryOrClauses {
 
     @Test
     void testOrWithComparableFields() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", "alice@example.com", 40000);
             insertEmployee(c, "Bob", "Johnson", "bob@example.com", 60000);
             insertEmployee(c, "Charlie", "Williams", "charlie@example.com", 90000);
@@ -155,7 +155,7 @@ public class TestTypedQueryOrClauses {
 
     @Test
     void testOrWithLike() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", "alice@gmail.com", 50000);
             insertEmployee(c, "Bob", "Johnson", "bob@yahoo.com", 60000);
             insertEmployee(c, "Charlie", "Williams", "charlie@gmail.com", 70000);
@@ -179,7 +179,7 @@ public class TestTypedQueryOrClauses {
 
     @Test
     void testMultipleOrGroups() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", "alice@gmail.com", 50000);
             insertEmployee(c, "Bob", "Johnson", "bob@gmail.com", 60000);
             insertEmployee(c, "Charlie", "Smith", "charlie@yahoo.com", 70000);
@@ -204,7 +204,7 @@ public class TestTypedQueryOrClauses {
 
     @Test
     void testEmptyOrGroup() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", "alice@example.com", 50000);
 
             // Empty begin().end() should not affect results
@@ -219,7 +219,7 @@ public class TestTypedQueryOrClauses {
 
     @Test
     void testSingleConditionInOrGroup() {
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        DB.withConnection(dataSource, (Connection c) -> {
             insertEmployee(c, "Alice", "Smith", "alice@example.com", 50000);
             insertEmployee(c, "Bob", "Johnson", "bob@example.com", 60000);
 

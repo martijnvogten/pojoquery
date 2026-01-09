@@ -77,7 +77,7 @@ public class DateTypesIT {
 		LocalTime localTime = LocalTime.of(14, 30, 45);
 		java.sql.Time sqlTime = java.sql.Time.valueOf(localTime);
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			EventWithDates event = new EventWithDates();
 			event.name = "Test Event";
 			event.legacyDate = legacyDate;
@@ -123,7 +123,7 @@ public class DateTypesIT {
 		// Test with a specific instant
 		Instant testInstant = Instant.parse("2025-12-25T10:30:00Z");
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			EventWithDates event = new EventWithDates();
 			event.name = "Christmas Event";
 			event.instant = testInstant;
@@ -141,7 +141,7 @@ public class DateTypesIT {
 		
 		LocalDateTime testDateTime = LocalDateTime.of(2025, 12, 31, 23, 59, 59);
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			EventWithDates event = new EventWithDates();
 			event.name = "New Year Event";
 			event.localDateTime = testDateTime;
@@ -159,7 +159,7 @@ public class DateTypesIT {
 		
 		LocalDate testDate = LocalDate.of(2025, 7, 4);
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			EventWithDates event = new EventWithDates();
 			event.name = "Independence Day";
 			event.localDate = testDate;
@@ -177,7 +177,7 @@ public class DateTypesIT {
 		
 		LocalTime testTime = LocalTime.of(9, 15, 30);
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			EventWithDates event = new EventWithDates();
 			event.name = "Morning Meeting";
 			event.localTime = testTime;
@@ -193,7 +193,7 @@ public class DateTypesIT {
 	public void testNullDateValues() {
 		DataSource db = initDatabase();
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			EventWithDates event = new EventWithDates();
 			event.name = "Event with nulls";
 			// All date fields are null
@@ -220,7 +220,7 @@ public class DateTypesIT {
 		
 		LocalDate targetDate = LocalDate.of(2025, 8, 15);
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			// Insert multiple events
 			for (int i = 1; i <= 5; i++) {
 				EventWithDates event = new EventWithDates();
@@ -246,7 +246,7 @@ public class DateTypesIT {
 		
 		Instant targetInstant = Instant.parse("2025-09-01T12:00:00Z");
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			EventWithDates event1 = new EventWithDates();
 			event1.name = "Before";
 			event1.instant = Instant.parse("2025-09-01T11:00:00Z");
