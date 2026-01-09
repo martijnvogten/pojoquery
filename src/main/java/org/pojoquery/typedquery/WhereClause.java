@@ -17,8 +17,8 @@ import org.pojoquery.SqlExpression;
  */
 public class WhereClause<E, T, Q extends WhereTarget<Q>> {
 
-    private final Q query;
-    private final QueryField<E, T> field;
+    protected final Q query;
+    protected final QueryField<E, T> field;
 
     public WhereClause(Q query, QueryField<E, T> field) {
         this.query = query;
@@ -133,46 +133,6 @@ public class WhereClause<E, T, Q extends WhereTarget<Q>> {
         }
         sb.append(")");
         query.addWhere(SqlExpression.sql(sb.toString(), values.toArray()));
-        return query;
-    }
-
-    /**
-     * Adds a greater than condition: field &gt; value
-     */
-    public Q greaterThan(T value) {
-        query.addWhere(field.getQualifiedColumn() + " > ?", value);
-        return query;
-    }
-
-    /**
-     * Adds a greater than or equal condition: field &gt;= value
-     */
-    public Q greaterThanOrEqual(T value) {
-        query.addWhere(field.getQualifiedColumn() + " >= ?", value);
-        return query;
-    }
-
-    /**
-     * Adds a less than condition: field &lt; value
-     */
-    public Q lessThan(T value) {
-        query.addWhere(field.getQualifiedColumn() + " < ?", value);
-        return query;
-    }
-
-    /**
-     * Adds a less than or equal condition: field &lt;= value
-     */
-    public Q lessThanOrEqual(T value) {
-        query.addWhere(field.getQualifiedColumn() + " <= ?", value);
-        return query;
-    }
-
-    /**
-     * Adds a BETWEEN condition: field BETWEEN low AND high
-     */
-    public Q between(T low, T high) {
-        query.addWhere(field.getQualifiedColumn() + " BETWEEN ? AND ?", low, high);
         return query;
     }
 }

@@ -27,6 +27,7 @@ import javax.tools.JavaFileObject;
 
 import org.pojoquery.annotations.GenerateQuery;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.Alias;
 import org.pojoquery.pipeline.CustomizableQueryBuilder;
 import org.pojoquery.pipeline.QueryBuilder;
@@ -100,7 +101,10 @@ public class QueryProcessor extends AbstractProcessor {
         String fieldsClassName = entityName + fieldsSuffix;
         String queryClassName = entityName + querySuffix;
 
-        List<TableMapping> tableMapping = QueryBuilder.determineTableMapping(typeElement);
+        // Use ElementTypeModel to process the entity at compile time
+        TypeModel entityType = new ElementTypeModel(typeElement, elementUtils, typeUtils);
+
+        List<TableMapping> tableMapping = QueryBuilder.determineTableMapping(entityType);
         if (tableMapping.size() == 0) {
             messager.printMessage(Diagnostic.Kind.ERROR,
                 "@GenerateQuery requires @Table annotation on entity or its superclasses", typeElement);
@@ -108,9 +112,6 @@ public class QueryProcessor extends AbstractProcessor {
         }
         String tableName = tableMapping.get(0).tableName;
 
-        // Use ElementTypeModel to process the entity at compile time
-        // No need to load the class via reflection!
-        TypeModel entityType = new ElementTypeModel(typeElement, elementUtils, typeUtils);
         CustomizableQueryBuilder<?, ?> builder = QueryBuilder.from(entityType);
 
         // Extract query structure
@@ -145,6 +146,7 @@ public class QueryProcessor extends AbstractProcessor {
                 out.println();
             }
 
+            out.println("import org.pojoquery.typedquery.ComparableQueryField;");
             out.println("import org.pojoquery.typedquery.QueryField;");
             out.println();
             out.println("/**");
@@ -163,12 +165,15 @@ public class QueryProcessor extends AbstractProcessor {
             }
 
             // Main entity fields
+            Alias mainAlias = aliases.get(tableName);
             List<SqlField> mainFields = fieldsByAlias.getOrDefault(tableName, List.of());
             for (SqlField field : mainFields) {
                 String fieldName = extractFieldNameFromAlias(field.alias);
-                out.println("    public static final QueryField<" + entityName + ", Object> " +
-                    fieldName + " = new QueryField<>(TABLE, \"" +
-                    fieldName + "\", \"" + fieldName + "\", Object.class);");
+                FieldInfo fieldInfo = getFieldInfo(mainAlias, fieldName);
+                String queryFieldClass = fieldInfo.isComparable ? "ComparableQueryField" : "QueryField";
+                out.println("    public static final " + queryFieldClass + "<" + entityName + ", " + fieldInfo.typeName + "> " +
+                    fieldName + " = new " + queryFieldClass + "<>(TABLE, \"" +
+                    fieldName + "\", \"" + fieldName + "\", " + fieldInfo.typeName + ".class);");
             }
             out.println();
 
@@ -183,14 +188,17 @@ public class QueryProcessor extends AbstractProcessor {
                 out.println("        public static final String ALIAS = \"" + alias + "\";");
                 out.println();
 
+                Alias relAlias = aliases.get(alias);
                 for (SqlField field : entry.getValue()) {
                     String fieldName = extractFieldNameFromAlias(field.alias);
+                    FieldInfo fieldInfo = getFieldInfo(relAlias, fieldName);
+                    String queryFieldClass = fieldInfo.isComparable ? "ComparableQueryField" : "QueryField";
                     String relFieldPath = field.alias.startsWith(tableName + ".")
                         ? field.alias.substring(tableName.length() + 1)
                         : field.alias;
-                    out.println("        public static final QueryField<" + entityName + ", Object> " +
-                        fieldName + " = new QueryField<>(ALIAS, \"" +
-                        fieldName + "\", \"" + relFieldPath + "\", Object.class);");
+                    out.println("        public static final " + queryFieldClass + "<" + entityName + ", " + fieldInfo.typeName + "> " +
+                        fieldName + " = new " + queryFieldClass + "<>(ALIAS, \"" +
+                        fieldName + "\", \"" + relFieldPath + "\", " + fieldInfo.typeName + ".class);");
                 }
 
                 out.println("        private " + innerClassName + "() {}");
@@ -521,6 +529,75 @@ public class QueryProcessor extends AbstractProcessor {
         if (name.equals("short")) return "Short";
         if (name.equals("byte")) return "Byte";
         if (name.equals("char")) return "Character";
-        return type.getSimpleName();
+        // Use simple name for java.lang types, fully qualified for others
+        if (name.startsWith("java.lang.")) {
+            return type.getSimpleName();
+        }
+        return name;
+    }
+
+    /**
+     * Holds field type information including whether it's Comparable.
+     */
+    private static class FieldInfo {
+        final String typeName;
+        final boolean isComparable;
+
+        FieldInfo(String typeName, boolean isComparable) {
+            this.typeName = typeName;
+            this.isComparable = isComparable;
+        }
+    }
+
+    /**
+     * Known Comparable types - primitives box to Comparable, plus common types.
+     */
+    private static final java.util.Set<String> COMPARABLE_TYPES = java.util.Set.of(
+        // Primitive wrappers (all implement Comparable)
+        "int", "Integer", "java.lang.Integer",
+        "long", "Long", "java.lang.Long",
+        "short", "Short", "java.lang.Short",
+        "byte", "Byte", "java.lang.Byte",
+        "double", "Double", "java.lang.Double",
+        "float", "Float", "java.lang.Float",
+        "char", "Character", "java.lang.Character",
+        // String
+        "String", "java.lang.String",
+        // Date/Time types
+        "java.time.LocalDate", "java.time.LocalDateTime", "java.time.LocalTime",
+        "java.time.Instant", "java.time.ZonedDateTime", "java.time.OffsetDateTime",
+        "java.util.Date", "java.sql.Date", "java.sql.Timestamp",
+        // Big numbers
+        "java.math.BigDecimal", "java.math.BigInteger",
+        // UUID
+        "java.util.UUID"
+    );
+
+    /**
+     * Checks if a type is Comparable.
+     */
+    private boolean isComparableType(TypeModel type) {
+        if (type == null) return false;
+        String name = type.getQualifiedName();
+        return COMPARABLE_TYPES.contains(name) || type.isEnum();
+    }
+
+    /**
+     * Looks up field info (type name and whether it's Comparable) from the Alias's TypeModel.
+     * Walks up the class hierarchy to find inherited fields.
+     */
+    private FieldInfo getFieldInfo(Alias alias, String fieldName) {
+        if (alias == null) return new FieldInfo("Object", false);
+        TypeModel type = alias.getResultType();
+        while (type != null) {
+            for (FieldModel field : type.getDeclaredFields()) {
+                if (field.getName().equals(fieldName)) {
+                    TypeModel fieldType = field.getType();
+                    return new FieldInfo(getBoxedType(fieldType), isComparableType(fieldType));
+                }
+            }
+            type = type.getSuperclass();
+        }
+        return new FieldInfo("Object", false);
     }
 }

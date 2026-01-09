@@ -115,6 +115,18 @@ public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> implements Where
     }
 
     /**
+     * Begins a type-safe WHERE condition for a comparable field.
+     * This overload provides additional comparison methods like greaterThan(), lessThan(), between().
+     *
+     * @param field the comparable field to filter on
+     * @param <T>   the field type (must be Comparable)
+     * @return a ComparableWhereClause builder with comparison operations
+     */
+    public <T extends Comparable<? super T>> ComparableWhereClause<E, T, Q> where(ComparableQueryField<E, T> field) {
+        return new ComparableWhereClause<>(self(), field);
+    }
+
+    /**
      * Adds a raw WHERE condition.
      *
      * @param sql    the SQL condition
