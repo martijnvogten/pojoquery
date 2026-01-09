@@ -32,6 +32,15 @@ public class Employee {
 
     public Integer salary;
 
+    protected Employee() {}
+
+    public Employee(String firstName, String lastName, String email, Integer salary) {
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.email = email;
+        this.salary = salary;
+    }
+
     @Override
     public String toString() {
         return "Employee [id=" + id + ", firstName=" + firstName + ", lastName=" + lastName +

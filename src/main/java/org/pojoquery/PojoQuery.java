@@ -15,18 +15,14 @@ import java.util.function.Consumer;
 
 import javax.sql.DataSource;
 
-import org.pojoquery.AnnotationHelper;
-import org.pojoquery.annotations.Embedded;
-import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.NoUpdate;
 import org.pojoquery.annotations.Other;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.SqlQuery;
-import org.pojoquery.typemodel.FieldModel;
-import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.SqlQuery.SqlField;
 import org.pojoquery.pipeline.SqlQuery.SqlJoin;

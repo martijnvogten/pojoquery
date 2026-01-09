@@ -138,6 +138,49 @@ public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> implements Where
         return self();
     }
 
+    /**
+     * Adds a composed condition to the WHERE clause (jOOQ-style).
+     *
+     * <p>Example:
+     * <pre>{@code
+     * Condition<Employee> nameFilter = lastName.eq("Smith").or(lastName.eq("Johnson"));
+     * Condition<Employee> salaryFilter = salary.gt(50000);
+     * 
+     * new EmployeeQuery()
+     *     .where(nameFilter.and(salaryFilter))
+     *     .list(connection);
+     * }</pre>
+     *
+     * @param condition the composed condition
+     * @return this query for chaining
+     */
+    public Q where(Condition<E> condition) {
+        query.addWhere(condition.toExpression());
+        return self();
+    }
+
+    /**
+     * Begins an OR clause group for combining conditions with OR logic.
+     *
+     * <p>Example:
+     * <pre>{@code
+     * new EmployeeQuery()
+     *     .begin()
+     *         .where(lastName).is("Smith")
+     *         .or(lastName).is("Johnson")
+     *     .end()
+     *     .orderBy(firstName)
+     *     .list(connection);
+     * }</pre>
+     *
+     * <p>This generates: {@code WHERE (last_name = 'Smith' OR last_name = 'Johnson')}
+     *
+     * @return an OrClauseBuilder for building the OR group
+     */
+    public OrClauseBuilder<E, Q> begin() {
+        return new OrClauseBuilder<>(self());
+    }
+
     // === ORDER BY methods ===
 
     /**

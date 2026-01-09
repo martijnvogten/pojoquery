@@ -3,7 +3,6 @@ package examples.docs;
 import javax.sql.DataSource;
 
 import org.hsqldb.jdbc.JDBCDataSource;
-import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.schema.SchemaGenerator;
@@ -11,7 +10,6 @@ import org.pojoquery.schema.SchemaGenerator;
 import jakarta.persistence.Column;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
 

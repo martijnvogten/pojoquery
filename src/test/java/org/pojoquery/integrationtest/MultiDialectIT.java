@@ -14,7 +14,6 @@ import javax.sql.DataSource;
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -26,12 +25,11 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.schema.SchemaGenerator;
+import org.postgresql.ds.PGSimpleDataSource;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import com.mysql.cj.jdbc.MysqlDataSource;
-
-import org.postgresql.ds.PGSimpleDataSource;
 
 /**
  * Integration tests that run against real databases using Testcontainers.

@@ -1,10 +1,5 @@
 package examples.typedquery;
 
-import static examples.typedquery.EmployeeWithRelations_.Department;
-import static examples.typedquery.EmployeeWithRelations_.Projects;
-import static examples.typedquery.EmployeeWithRelations_.firstName;
-import static examples.typedquery.EmployeeWithRelations_.lastName;
-
 import java.sql.Connection;
 import java.util.List;
 
@@ -14,94 +9,236 @@ import org.hsqldb.jdbc.JDBCDataSource;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.PojoQuery;
+import org.pojoquery.annotations.Id;
+import org.pojoquery.annotations.Link;
+import org.pojoquery.annotations.Table;
 import org.pojoquery.schema.SchemaGenerator;
 
 /**
- * Example demonstrating typed queries with entity relationships.
+ * Example demonstrating idiomatic PojoQuery modeling with entity relationships.
  *
  * <p>This example shows:
  * <ul>
+ *   <li>Using Ref pattern for lightweight foreign key references</li>
+ *   <li>Rich domain models with constructors</li>
  *   <li>One-to-one relationships (Employee -> Department)</li>
  *   <li>One-to-many relationships (Employee -> Projects)</li>
- *   <li>Filtering on related entity fields</li>
- *   <li>Automatic entity deduplication</li>
+ *   <li>Static inner classes for cohesive organization</li>
  * </ul>
  */
 public class RelationshipQueryExample {
+
+    // ========== Domain Model ==========
+
+    /**
+     * Department entity - full representation with all fields.
+     */
+    @Table("department")
+    public static class Department {
+        @Id
+        public Long id;
+        public String name;
+        public String location;
+
+        public Department() {}
+
+        public Department(String name, String location) {
+            this.name = name;
+            this.location = location;
+        }
+
+        /** Creates a lightweight reference for use in foreign key relationships. */
+        public DepartmentRef toRef() {
+            DepartmentRef ref = new DepartmentRef();
+            ref.id = this.id;
+            ref.name = this.name;
+            return ref;
+        }
+
+        @Override
+        public String toString() {
+            return "Department[" + name + " @ " + location + "]";
+        }
+    }
+
+    /**
+     * Lightweight reference to a Department - used for foreign key relationships.
+     * Maps to same table but only includes fields needed for display/reference.
+     */
+    @Table("department")
+    public static class DepartmentRef {
+        @Id
+        public Long id;
+        public String name;
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    /**
+     * Employee entity - full representation for insert/update operations.
+     */
+    @Table("employee")
+    public static class Employee {
+        @Id
+        public Long id;
+        public String firstName;
+        public String lastName;
+        public String email;
+        public DepartmentRef department;
+
+        public Employee() {}
+
+        public Employee(String firstName, String lastName, String email, DepartmentRef department) {
+            this.firstName = firstName;
+            this.lastName = lastName;
+            this.email = email;
+            this.department = department;
+        }
+
+        /** Creates a lightweight reference for use in foreign key relationships. */
+        public EmployeeRef toRef() {
+            EmployeeRef ref = new EmployeeRef();
+            ref.id = this.id;
+            ref.firstName = this.firstName;
+            ref.lastName = this.lastName;
+            return ref;
+        }
+
+        public String getFullName() {
+            return firstName + " " + lastName;
+        }
+
+        @Override
+        public String toString() {
+            return "Employee[" + getFullName() + ", " + email + "]";
+        }
+    }
+
+    /**
+     * Lightweight reference to an Employee - used for foreign key relationships.
+     */
+    @Table("employee")
+    public static class EmployeeRef {
+        @Id
+        public Long id;
+        public String firstName;
+        public String lastName;
+
+        public String getFullName() {
+            return firstName + " " + lastName;
+        }
+
+        @Override
+        public String toString() {
+            return getFullName();
+        }
+    }
+
+    /**
+     * Employee with all relationships loaded - used for queries that need full data.
+     */
+    public static class EmployeeWithProjects extends Employee {
+        @Link(foreignlinkfield = "assignee_id")
+        public List<Project> projects;
+    }
+
+    /**
+     * Project entity with full details.
+     */
+    @Table("project")
+    public static class Project {
+        @Id
+        public Long id;
+        public String name;
+        public String status;
+        public EmployeeRef assignee;  // Uses EmployeeRef instead of raw employee_id
+
+        public Project() {}
+
+        public Project(String name, String status, EmployeeRef assignee) {
+            this.name = name;
+            this.status = status;
+            this.assignee = assignee;
+        }
+
+        @Override
+        public String toString() {
+            return "Project[" + name + " - " + status + 
+                   (assignee != null ? ", assigned to " + assignee : "") + "]";
+        }
+    }
+
+    // ========== Main Example ==========
 
     public static void main(String[] args) {
         DbContext.setDefault(DbContext.forDialect(DbContext.Dialect.HSQLDB));
 
         DataSource dataSource = createDataSource();
 
-        // Create tables (use fully qualified names to avoid shadowing by static imports)
-        SchemaGenerator.createTables(dataSource, examples.typedquery.Department.class, examples.typedquery.Project.class);
-        SchemaGenerator.createTables(dataSource, EmployeeWithRelations.class);
+        // Create tables for all entity types
+        SchemaGenerator.createTables(dataSource, Department.class, Employee.class, Project.class);
 
         DB.runInTransaction(dataSource, (Connection c) -> {
-            try {
-                insertTestData(c);
-            } catch (java.sql.SQLException e) {
-                throw new RuntimeException(e);
-            }
+            // Create test data using rich domain model
+            TestData data = insertTestData(c);
 
-            // Example 1: Load employees with their departments and projects
-            System.out.println("=== Example 1: Load all employees with relationships ===");
-            List<EmployeeWithRelations> employees = new EmployeeWithRelationsQuery()
-                .orderBy(lastName)
-                .list(c);
-            for (EmployeeWithRelations emp : employees) {
-                System.out.println(emp);
-                if (emp.department != null) {
-                    System.out.println("  Department: " + emp.department);
-                }
+            // Example 1: Load all employees with their departments
+            System.out.println("=== Example 1: All employees with departments ===");
+            List<Employee> employees = PojoQuery.build(Employee.class)
+                .addOrderBy("{employee}.lastName ASC")
+                .execute(c);
+            for (Employee emp : employees) {
+                System.out.println("  " + emp.getFullName() + " - " + 
+                    (emp.department != null ? emp.department.name : "no department"));
+            }
+            System.out.println();
+
+            // Example 2: Load employees with their projects
+            System.out.println("=== Example 2: Employees with projects ===");
+            List<EmployeeWithProjects> employeesWithProjects = PojoQuery.build(EmployeeWithProjects.class)
+                .addOrderBy("{employee}.lastName ASC")
+                .execute(c);
+            for (EmployeeWithProjects emp : employeesWithProjects) {
+                System.out.println("  " + emp.getFullName());
                 if (emp.projects != null && !emp.projects.isEmpty()) {
-                    System.out.println("  Projects:");
                     for (Project p : emp.projects) {
-                        System.out.println("    - " + p);
+                        System.out.println("    - " + p.name + " (" + p.status + ")");
                     }
+                } else {
+                    System.out.println("    (no projects)");
                 }
             }
-
             System.out.println();
 
-            // Example 2: Filter by department name
-            System.out.println("=== Example 2: Find employees in Engineering department ===");
-            List<EmployeeWithRelations> engineers = new EmployeeWithRelationsQuery()
-                .where(Department.name).is("Engineering")
-                .orderBy(firstName)
-                .list(c);
-            for (EmployeeWithRelations emp : engineers) {
-                System.out.println("  " + emp.firstName + " " + emp.lastName);
+            // Example 3: Filter by department
+            System.out.println("=== Example 3: Engineers only ===");
+            List<Employee> engineers = PojoQuery.build(Employee.class)
+                .addWhere("{department}.name = ?", "Engineering")
+                .execute(c);
+            for (Employee emp : engineers) {
+                System.out.println("  " + emp.getFullName());
             }
             System.out.println();
 
-            // Example 3: Filter by project status
-            System.out.println("=== Example 3: Find employees with active projects ===");
-            List<EmployeeWithRelations> activeProjectEmployees = new EmployeeWithRelationsQuery()
-                .where(Projects.status).is("active")
-                .list(c);
-            for (EmployeeWithRelations emp : activeProjectEmployees) {
-                System.out.println("  " + emp.firstName + " " + emp.lastName +
-                    " - " + emp.projects.size() + " project(s)");
-            }
-            System.out.println();
-
-            // Example 4: Find by ID with relationships loaded
-            System.out.println("=== Example 4: Find employee by ID ===");
-            EmployeeWithRelations emp = new EmployeeWithRelationsQuery().findById(c, 1L);
-            if (emp != null) {
-                System.out.println("Found: " + emp.firstName + " " + emp.lastName);
-                System.out.println("Department: " + (emp.department != null ? emp.department.name : "none"));
-                System.out.println("Projects: " + (emp.projects != null ? emp.projects.size() : 0));
+            // Example 4: Find projects by status
+            System.out.println("=== Example 4: Active projects with assignees ===");
+            List<Project> activeProjects = PojoQuery.build(Project.class)
+                .addWhere("{project}.status = ?", "active")
+                .execute(c);
+            for (Project p : activeProjects) {
+                System.out.println("  " + p.name + " - " + 
+                    (p.assignee != null ? "assigned to " + p.assignee.getFullName() : "unassigned"));
             }
             System.out.println();
 
             // Example 5: Show generated SQL
             System.out.println("=== Example 5: Generated SQL ===");
-            String sql = new EmployeeWithRelationsQuery()
-                .where(Department.location).like("San%")
-                .orderBy(lastName)
+            String sql = PojoQuery.build(EmployeeWithProjects.class)
+                .addWhere("{department}.location LIKE ?", "San%")
+                .addOrderBy("{employee}.lastName ASC")
                 .toSql();
             System.out.println(sql);
         });
@@ -109,59 +246,48 @@ public class RelationshipQueryExample {
         System.out.println("\nRelationship query example completed successfully!");
     }
 
-    private static void insertTestData(Connection c) throws java.sql.SQLException {
-        // Insert departments (use fully qualified name to avoid shadowing by static import)
-        examples.typedquery.Department eng = new examples.typedquery.Department();
-        eng.name = "Engineering";
-        eng.location = "San Francisco";
-        PojoQuery.insert(c, eng);
+    // ========== Test Data Setup ==========
 
-        examples.typedquery.Department sales = new examples.typedquery.Department();
-        sales.name = "Sales";
-        sales.location = "New York";
-        PojoQuery.insert(c, sales);
+    /** Container for test data references */
+    static class TestData {
+        Department engineering, sales, hr;
+        Employee alice, bob, carol, david;
+    }
 
-        examples.typedquery.Department hr = new examples.typedquery.Department();
-        hr.name = "HR";
-        hr.location = "Chicago";
-        PojoQuery.insert(c, hr);
+    private static TestData insertTestData(Connection c) {
+        TestData data = new TestData();
 
-        // Insert employees using PreparedStatement
-        try (var ps = c.prepareStatement("INSERT INTO employee (id, firstName, lastName, email, department_id) VALUES (?, ?, ?, ?, ?)")) {
-            insertEmployee(ps, 1L, "Alice", "Smith", "alice@example.com", 1L);
-            insertEmployee(ps, 2L, "Bob", "Jones", "bob@example.com", 1L);
-            insertEmployee(ps, 3L, "Carol", "Wilson", "carol@example.com", 2L);
-            insertEmployee(ps, 4L, "David", "Brown", "david@example.com", 3L);
-        }
+        // Create departments using constructor
+        data.engineering = new Department("Engineering", "San Francisco");
+        PojoQuery.insert(c, data.engineering);
 
-        // Insert projects
-        try (var ps = c.prepareStatement("INSERT INTO project (id, name, status, employee_id) VALUES (?, ?, ?, ?)")) {
-            insertProject(ps, 1L, "Project Alpha", "active", 1L);
-            insertProject(ps, 2L, "Project Beta", "active", 1L);
-            insertProject(ps, 3L, "Project Gamma", "completed", 2L);
-            insertProject(ps, 4L, "Sales Dashboard", "active", 3L);
-        }
+        data.sales = new Department("Sales", "New York");
+        PojoQuery.insert(c, data.sales);
+
+        data.hr = new Department("HR", "Chicago");
+        PojoQuery.insert(c, data.hr);
+
+        // Create employees using constructor with department reference
+        data.alice = new Employee("Alice", "Smith", "alice@example.com", data.engineering.toRef());
+        PojoQuery.insert(c, data.alice);
+
+        data.bob = new Employee("Bob", "Jones", "bob@example.com", data.engineering.toRef());
+        PojoQuery.insert(c, data.bob);
+
+        data.carol = new Employee("Carol", "Wilson", "carol@example.com", data.sales.toRef());
+        PojoQuery.insert(c, data.carol);
+
+        data.david = new Employee("David", "Brown", "david@example.com", data.hr.toRef());
+        PojoQuery.insert(c, data.david);
+
+        // Create projects using constructor with employee reference
+        PojoQuery.insert(c, new Project("Project Alpha", "active", data.alice.toRef()));
+        PojoQuery.insert(c, new Project("Project Beta", "active", data.alice.toRef()));
+        PojoQuery.insert(c, new Project("Project Gamma", "completed", data.bob.toRef()));
+        PojoQuery.insert(c, new Project("Sales Dashboard", "active", data.carol.toRef()));
 
         System.out.println("Inserted test data: 3 departments, 4 employees, 4 projects\n");
-    }
-
-    private static void insertEmployee(java.sql.PreparedStatement ps, Long id, String firstName,
-                                       String lastName, String email, Long deptId) throws java.sql.SQLException {
-        ps.setLong(1, id);
-        ps.setString(2, firstName);
-        ps.setString(3, lastName);
-        ps.setString(4, email);
-        ps.setLong(5, deptId);
-        ps.executeUpdate();
-    }
-
-    private static void insertProject(java.sql.PreparedStatement ps, Long id, String name,
-                                      String status, Long empId) throws java.sql.SQLException {
-        ps.setLong(1, id);
-        ps.setString(2, name);
-        ps.setString(3, status);
-        ps.setLong(4, empId);
-        ps.executeUpdate();
+        return data;
     }
 
     private static DataSource createDataSource() {
