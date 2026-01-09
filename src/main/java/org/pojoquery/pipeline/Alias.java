@@ -1,35 +1,58 @@
 package org.pojoquery.pipeline;
 
-import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
+
+import java.lang.reflect.Field;
+
+import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.ReflectionFieldModel;
+import org.pojoquery.typemodel.ReflectionTypeModel;
+import org.pojoquery.typemodel.TypeModel;
 
 public class Alias {
 
 	private String alias;
-	private Class<?> resultClass;
+	private TypeModel resultType;
 	private String parentAlias;
-	private Field linkField;
-	private Field otherField = null;
-	private List<Field> idFields;
+	private FieldModel linkField;
+	private FieldModel otherField = null;
+	private List<FieldModel> idFields;
 	private List<String> subClassAliases;
 	private boolean isLinkedValue;
 	private boolean isASubClass = false;
 	private boolean isEmbedded = false;
 	private boolean isSingleTableInheritance = false;
 	private String discriminatorColumn;
-	private Map<String, Class<?>> discriminatorValues;
+	private Map<String, TypeModel> discriminatorValues;
 
-	public Alias(String alias, Class<?> resultClass, String parentAlias, Field linkField, List<Field> idFields) {
+	public Alias(String alias, TypeModel resultType, String parentAlias, FieldModel linkField, List<FieldModel> idFields) {
 		this.alias = alias;
-		this.resultClass = resultClass;
+		this.resultType = resultType;
 		this.parentAlias = parentAlias;
 		this.linkField = linkField;
 		this.idFields = idFields;
 	}
 
-	public List<Field> getIdFields() {
+	public List<FieldModel> getIdFields() {
 		return idFields;
+	}
+
+	/**
+	 * Returns the ID fields as reflection Field objects.
+	 * @throws IllegalStateException if any field is not a ReflectionFieldModel
+	 */
+	public List<Field> getIdReflectionFields() {
+		if (idFields == null) return null;
+		List<Field> result = new java.util.ArrayList<>();
+		for (FieldModel fm : idFields) {
+			if (fm instanceof ReflectionFieldModel) {
+				result.add(((ReflectionFieldModel) fm).getReflectionField());
+			} else {
+				throw new IllegalStateException("Cannot get reflection field from non-reflection field model: " + fm);
+			}
+		}
+		return result;
 	}
 
 	public String getAlias() {
@@ -40,12 +63,23 @@ public class Alias {
 		this.alias = alias;
 	}
 
-	public Class<?> getResultClass() {
-		return resultClass;
+	public TypeModel getResultType() {
+		return resultType;
 	}
 
-	public void setResultClass(Class<?> resultClass) {
-		this.resultClass = resultClass;
+	/**
+	 * Returns the runtime Class for this alias.
+	 * @throws IllegalStateException if the type is not a ReflectionTypeModel
+	 */
+	public Class<?> getResultClass() {
+		if (resultType instanceof ReflectionTypeModel) {
+			return ((ReflectionTypeModel) resultType).getReflectionClass();
+		}
+		throw new IllegalStateException("Cannot get reflection class from non-reflection type: " + resultType);
+	}
+
+	public void setResultType(TypeModel resultType) {
+		this.resultType = resultType;
 	}
 
 	public String getParentAlias() {
@@ -56,11 +90,23 @@ public class Alias {
 		this.parentAlias = parentAlias;
 	}
 
-	public Field getLinkField() {
+	public FieldModel getLinkField() {
 		return linkField;
 	}
 
-	public void setLinkField(Field linkField) {
+	/**
+	 * Returns the link field as a reflection Field object.
+	 * @throws IllegalStateException if the field is not a ReflectionFieldModel
+	 */
+	public Field getLinkReflectionField() {
+		if (linkField == null) return null;
+		if (linkField instanceof ReflectionFieldModel) {
+			return ((ReflectionFieldModel) linkField).getReflectionField();
+		}
+		throw new IllegalStateException("Cannot get reflection field from non-reflection field model: " + linkField);
+	}
+
+	public void setLinkField(FieldModel linkField) {
 		this.linkField = linkField;
 	}
 
@@ -74,15 +120,15 @@ public class Alias {
 
 	@Override
 	public String toString() {
-		return "Alias [alias=" + alias + ", resultClass=" + resultClass + ", parentAlias=" + parentAlias
+		return "Alias [alias=" + alias + ", resultType=" + resultType + ", parentAlias=" + parentAlias
 				+ ", linkField=" + linkField + ", idFields=" + idFields + ", isLinkedValue=" + isLinkedValue + "]";
 	}
 
-	public Field getOtherField() {
+	public FieldModel getOtherField() {
 		return otherField;
 	}
 
-	public void setOtherField(Field f) {
+	public void setOtherField(FieldModel f) {
 		this.otherField = f;
 	}
 
@@ -126,11 +172,11 @@ public class Alias {
 		this.discriminatorColumn = discriminatorColumn;
 	}
 
-	public Map<String, Class<?>> getDiscriminatorValues() {
+	public Map<String, TypeModel> getDiscriminatorValues() {
 		return discriminatorValues;
 	}
 
-	public void setDiscriminatorValues(Map<String, Class<?>> discriminatorValues) {
+	public void setDiscriminatorValues(Map<String, TypeModel> discriminatorValues) {
 		this.discriminatorValues = discriminatorValues;
 	}
 

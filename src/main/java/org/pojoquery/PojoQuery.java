@@ -25,6 +25,7 @@ import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.SqlQuery;
+import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.SqlQuery.SqlField;
@@ -526,7 +527,7 @@ public class PojoQuery<T> {
 			return ids;
 		} else {
 			TableMapping topType = tables.remove(0);
-			Map<String, Object> values = extractValues(topType.clazz, o);
+			Map<String, Object> values = extractValues(topType.getReflectionClass(), o);
 			PK ids;
 			if (conn != null) {
 				ids = DB.insert(context, conn, topType.tableName, values);
@@ -544,7 +545,7 @@ public class PojoQuery<T> {
 
 			while (tables.size() > 0) {
 				TableMapping supertype = tables.remove(0);
-				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.clazz : type, o, topType.clazz);
+				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.getReflectionClass() : type, o, topType.getReflectionClass());
 				subvals.put(idField, ids);
 				if (conn != null) {
 					DB.insert(context, conn, supertype.tableName, subvals);
@@ -652,7 +653,7 @@ public class PojoQuery<T> {
 			int affectedRows = 0;
 
 			TableMapping topType = tables.remove(0);
-			Map<String, Object> values = extractValues(topType.clazz, o);
+			Map<String, Object> values = extractValues(topType.getReflectionClass(), o);
 			Map<String, Object> ids = splitIdFields(o, values);
 			Map<String, Object> topIds = new HashMap<>(ids);
 
@@ -672,7 +673,7 @@ public class PojoQuery<T> {
 
 			while (tables.size() > 0) {
 				TableMapping supertype = tables.remove(0);
-				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.clazz : type, o, topType.clazz);
+				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.getReflectionClass() : type, o, topType.getReflectionClass());
 				if (conn != null) {
 					DB.update(context, conn, supertype.tableName, subvals, ids);
 				} else {
@@ -881,7 +882,7 @@ public class PojoQuery<T> {
 	
 	public static void deleteById(DbContext context, DataSource db, Class<?> clz, Object id) {
 		for (TableMapping table : QueryBuilder.determineTableMapping(clz)) {
-			List<SqlExpression> wheres = QueryBuilder.buildIdCondition(context, table.clazz, id);
+			List<SqlExpression> wheres = QueryBuilder.buildIdCondition(context, table.getReflectionClass(), id);
 			executeDelete(context, null, db, table.tableName, wheres);
 		}
 	}
@@ -927,7 +928,7 @@ public class PojoQuery<T> {
 	@SuppressWarnings("unchecked")
 	public <PK> List<PK> listIds(DataSource db) {
 		List<Field> idFields = QueryBuilder.determineIdFields(resultClass);
-		SqlExpression stmt = queryBuilder.buildListIdsStatement(idFields);
+		SqlExpression stmt = queryBuilder.buildListIdsStatementFromFields(idFields);
 		List<Map<String, Object>> rows = DB.queryRows(db, stmt);
 		if (idFields.size() > 1) {
 			return (List<PK>) rows;

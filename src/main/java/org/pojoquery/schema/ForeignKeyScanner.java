@@ -189,7 +189,7 @@ class ForeignKeyScanner {
     static Class<?> findTableClass(Class<?> clazz) {
         List<TableMapping> mappings = QueryBuilder.determineTableMapping(clazz);
         if (!mappings.isEmpty()) {
-            return mappings.get(0).clazz;
+            return mappings.get(0).getReflectionClass();
         }
         return null;
     }

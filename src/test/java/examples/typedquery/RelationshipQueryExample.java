@@ -62,6 +62,7 @@ public class RelationshipQueryExample {
                     }
                 }
             }
+
             System.out.println();
 
             // Example 2: Filter by department name

@@ -122,49 +122,6 @@
           </execution>
         </executions>
       </plugin>
-      <!-- Two-phase entity compilation: compile first, then run annotation processor -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.13.0</version>
-        <executions>
-          <!-- Phase 1: Compile entities without annotation processing -->
-          <execution>
-            <id>compile-test-entities</id>
-            <phase>process-test-sources</phase>
-            <goals>
-              <goal>testCompile</goal>
-            </goals>
-            <configuration>
-              <proc>none</proc>
-              <compileSourceRoots>
-                <compileSourceRoot>${project.basedir}/src/test/entities</compileSourceRoot>
-              </compileSourceRoots>
-            </configuration>
-          </execution>
-          <!-- Phase 2: Compile again with annotation processing (recompiles entities but also generates query classes) -->
-          <execution>
-            <id>process-entity-annotations</id>
-            <phase>process-test-sources</phase>
-            <goals>
-              <goal>testCompile</goal>
-            </goals>
-            <configuration>
-              <!-- Full compile with processing - entities will be recompiled but that's OK -->
-              <compileSourceRoots>
-                <compileSourceRoot>${project.basedir}/src/test/entities</compileSourceRoot>
-              </compileSourceRoots>
-              <annotationProcessorPaths>
-                <path>
-                  <groupId>org.pojoquery</groupId>
-                  <artifactId>pojoquery</artifactId>
-                  <version>${project.version}</version>
-                </path>
-              </annotationProcessorPaths>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
@@ -258,8 +215,6 @@
             <execution>
               <id>default-testCompile</id>
               <configuration>
-                <!-- Don't run annotation processor again - it already ran in process-entity-annotations -->
-                <proc>none</proc>
                 <!-- Explicitly include generated sources -->
                 <compileSourceRoots>
                   <compileSourceRoot>${project.basedir}/src/test/java</compileSourceRoot>

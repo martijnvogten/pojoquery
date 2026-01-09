@@ -75,16 +75,16 @@ public class TestInheritanceWithJoins {
 		// and fields per table
 		List<TableMapping> mapping = QueryBuilder.determineTableMapping(Room.class);
 		Assertions.assertEquals(1, mapping.size());
-		Assertions.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area"), Room.class.getDeclaredField("house")), mapping.get(0).fields);
-		
+		Assertions.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area"), Room.class.getDeclaredField("house")), mapping.get(0).getReflectionFields());
+
 		List<TableMapping> bedroom = QueryBuilder.determineTableMapping(BedRoom.class);
 		Assertions.assertEquals(2, bedroom.size());
-		Assertions.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area"), Room.class.getDeclaredField("house")), bedroom.get(0).fields);
-		Assertions.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds")), bedroom.get(1).fields);
-		
+		Assertions.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area"), Room.class.getDeclaredField("house")), bedroom.get(0).getReflectionFields());
+		Assertions.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds")), bedroom.get(1).getReflectionFields());
+
 		List<TableMapping> luxury = QueryBuilder.determineTableMapping(LuxuryBedRoom.class);
 		Assertions.assertEquals(2, luxury.size());
-		Assertions.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds"), LuxuryBedRoom.class.getDeclaredField("tvScreenSize")), luxury.get(1).fields);
+		Assertions.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds"), LuxuryBedRoom.class.getDeclaredField("tvScreenSize")), luxury.get(1).getReflectionFields());
 	}
 	
 	@Test

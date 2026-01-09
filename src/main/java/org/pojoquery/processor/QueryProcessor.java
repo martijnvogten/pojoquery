@@ -1,11 +1,7 @@
 package org.pojoquery.processor;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.lang.reflect.Field;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,10 +20,10 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
-import javax.tools.FileObject;
 import javax.tools.JavaFileObject;
-import javax.tools.StandardLocation;
 
 import org.pojoquery.annotations.GenerateQuery;
 import org.pojoquery.annotations.Table;
@@ -37,6 +33,9 @@ import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.pipeline.SqlQuery.SqlField;
 import org.pojoquery.pipeline.SqlQuery.SqlJoin;
+import org.pojoquery.typemodel.ElementTypeModel;
+import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.TypeModel;
 
 /**
  * Annotation processor that generates type-safe query builders for PojoQuery entities.
@@ -57,58 +56,16 @@ public class QueryProcessor extends AbstractProcessor {
 
     private Filer filer;
     private Messager messager;
-    private ClassLoader entityClassLoader;
+    private Elements elementUtils;
+    private Types typeUtils;
 
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
         filer = processingEnv.getFiler();
         messager = processingEnv.getMessager();
-        entityClassLoader = createEntityClassLoader();
-    }
-
-    /**
-     * Creates a classloader that can load entity classes from the compilation output directory.
-     * This allows the annotation processor to load classes that were compiled in a previous phase.
-     */
-    private ClassLoader createEntityClassLoader() {
-        try {
-            // Create a temporary resource to determine the output directory
-            FileObject resource = filer.createResource(StandardLocation.CLASS_OUTPUT, "", "temp_marker_" + System.nanoTime());
-            String resourcePath = resource.toUri().getPath();
-            // Delete the temp file
-            new File(resourcePath).delete();
-            // Get the parent directory (class output)
-            File classOutputDir = new File(resourcePath).getParentFile();
-
-            // Also try to find the test-classes directory (entities may be compiled there)
-            // Walk up to find target directory and look for test-classes
-            List<URL> urls = new ArrayList<>();
-
-            if (classOutputDir != null && classOutputDir.exists()) {
-                urls.add(classOutputDir.toURI().toURL());
-
-                // If we're in annotation-processor-output or similar, also add test-classes
-                File targetDir = classOutputDir.getParentFile();
-                if (targetDir != null && targetDir.getName().equals("target")) {
-                    File testClassesDir = new File(targetDir, "test-classes");
-                    if (testClassesDir.exists()) {
-                        urls.add(testClassesDir.toURI().toURL());
-                    }
-                }
-            }
-
-            if (!urls.isEmpty()) {
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                    "Using class output directories: " + urls);
-                return new URLClassLoader(urls.toArray(new URL[0]), getClass().getClassLoader());
-            }
-        } catch (Exception e) {
-            // Fall back to default classloader
-            messager.printMessage(Diagnostic.Kind.NOTE,
-                "Could not determine class output directory: " + e.getMessage());
-        }
-        return getClass().getClassLoader();
+        elementUtils = processingEnv.getElementUtils();
+        typeUtils = processingEnv.getTypeUtils();
     }
 
     @Override
@@ -123,11 +80,6 @@ public class QueryProcessor extends AbstractProcessor {
             TypeElement typeElement = (TypeElement) element;
             try {
                 processEntity(typeElement);
-            } catch (ClassNotFoundException e) {
-                messager.printMessage(Diagnostic.Kind.ERROR,
-                    "Entity class not yet compiled. Ensure entities are compiled before " +
-                    "annotation processing (e.g., put entities in main module, run processor during test-compile)",
-                    element);
             } catch (Exception e) {
                 messager.printMessage(Diagnostic.Kind.ERROR,
                     "Failed to generate query classes: " + e.getMessage() +
@@ -148,18 +100,18 @@ public class QueryProcessor extends AbstractProcessor {
         String fieldsClassName = entityName + fieldsSuffix;
         String queryClassName = entityName + querySuffix;
 
-        Table tableAnnotation = typeElement.getAnnotation(Table.class);
-        if (tableAnnotation == null) {
+        List<TableMapping> tableMapping = QueryBuilder.determineTableMapping(typeElement);
+        if (tableMapping.size() == 0) {
             messager.printMessage(Diagnostic.Kind.ERROR,
-                "@GenerateQuery requires @Table annotation", typeElement);
+                "@GenerateQuery requires @Table annotation on entity or its superclasses", typeElement);
             return;
         }
-        String tableName = tableAnnotation.value();
+        String tableName = tableMapping.get(0).tableName;
 
-        // Load the entity class using our custom classloader that has access to the compilation output
-        // This works because Maven runs test compilation in phases: entities are compiled before annotation processing
-        Class<?> entityClass = Class.forName(qualifiedName, true, entityClassLoader);
-        CustomizableQueryBuilder<?, ?> builder = QueryBuilder.from(entityClass);
+        // Use ElementTypeModel to process the entity at compile time
+        // No need to load the class via reflection!
+        TypeModel entityType = new ElementTypeModel(typeElement, elementUtils, typeUtils);
+        CustomizableQueryBuilder<?, ?> builder = QueryBuilder.from(entityType);
 
         // Extract query structure
         SqlQuery<?> query = builder.getQuery();
@@ -261,7 +213,7 @@ public class QueryProcessor extends AbstractProcessor {
 
         // Find ID field for the root entity
         Alias rootAlias = aliases.get(tableName);
-        Field idField = rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()
+        FieldModel idField = rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()
             ? rootAlias.getIdFields().get(0) : null;
 
         try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
@@ -387,7 +339,7 @@ public class QueryProcessor extends AbstractProcessor {
             Alias alias = entry.getValue();
             if (alias.getIsEmbedded()) continue;
 
-            String className = alias.getResultClass().getSimpleName();
+            String className = alias.getResultType().getSimpleName();
             String varPrefix = "fm" + capitalize(sanitizeVarName(aliasName));
 
             List<SqlField> aliasFields = fieldsByAlias.get(aliasName);
@@ -403,11 +355,11 @@ public class QueryProcessor extends AbstractProcessor {
             }
 
             // Link field for relationships
-            Field linkField = alias.getLinkField();
+            FieldModel linkField = alias.getLinkField();
             if (linkField != null && alias.getParentAlias() != null) {
                 Alias parentAlias = aliases.get(alias.getParentAlias());
                 if (parentAlias != null) {
-                    String parentClassName = parentAlias.getResultClass().getSimpleName();
+                    String parentClassName = parentAlias.getResultType().getSimpleName();
                     String linkFieldName = linkField.getName();
                     String linkFieldVar = "f" + capitalize(sanitizeVarName(alias.getParentAlias())) + capitalize(linkFieldName);
                     out.println("        // Link field: " + alias.getParentAlias() + "." + linkFieldName);
@@ -425,7 +377,7 @@ public class QueryProcessor extends AbstractProcessor {
             Alias alias = entry.getValue();
             if (alias.getIsEmbedded()) continue;
             String varName = sanitizeVarName(entry.getKey()) + "ById";
-            String className = alias.getResultClass().getSimpleName();
+            String className = alias.getResultType().getSimpleName();
             out.println("        Map<Object, " + className + "> " + varName + " = new HashMap<>();");
         }
         out.println();
@@ -434,9 +386,9 @@ public class QueryProcessor extends AbstractProcessor {
         out.println("        for (Map<String, Object> row : rows) {");
 
         // Process root entity
-        Alias rootAlias = aliases.get(tableName);
-        if (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()) {
-            Field rootIdField = rootAlias.getIdFields().get(0);
+        Alias rootAlias2 = aliases.get(tableName);
+        if (rootAlias2 != null && rootAlias2.getIdFields() != null && !rootAlias2.getIdFields().isEmpty()) {
+            FieldModel rootIdField = rootAlias2.getIdFields().get(0);
             String rootVarPrefix = "fm" + capitalize(sanitizeVarName(tableName));
 
             out.println("            // Process root entity: " + entityName);
@@ -470,8 +422,8 @@ public class QueryProcessor extends AbstractProcessor {
             if (alias.getParentAlias() == null || alias.getLinkField() == null) continue;
             if (alias.getIdFields() == null || alias.getIdFields().isEmpty()) continue;
 
-            String className = alias.getResultClass().getSimpleName();
-            Field aliasIdField = alias.getIdFields().get(0);
+            String className = alias.getResultType().getSimpleName();
+            FieldModel aliasIdField = alias.getIdFields().get(0);
 
             String aliasVarPrefix = "fm" + capitalize(sanitizeVarName(aliasName));
             String entityVar = sanitizeVarName(aliasName);
@@ -559,15 +511,16 @@ public class QueryProcessor extends AbstractProcessor {
                 .replace("\t", "\\t");
     }
 
-    private String getBoxedType(Class<?> type) {
-        if (type == int.class) return "Integer";
-        if (type == long.class) return "Long";
-        if (type == boolean.class) return "Boolean";
-        if (type == double.class) return "Double";
-        if (type == float.class) return "Float";
-        if (type == short.class) return "Short";
-        if (type == byte.class) return "Byte";
-        if (type == char.class) return "Character";
+    private String getBoxedType(TypeModel type) {
+        String name = type.getQualifiedName();
+        if (name.equals("int")) return "Integer";
+        if (name.equals("long")) return "Long";
+        if (name.equals("boolean")) return "Boolean";
+        if (name.equals("double")) return "Double";
+        if (name.equals("float")) return "Float";
+        if (name.equals("short")) return "Short";
+        if (name.equals("byte")) return "Byte";
+        if (name.equals("char")) return "Character";
         return type.getSimpleName();
     }
 }

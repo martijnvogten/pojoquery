@@ -185,7 +185,7 @@ public class SchemaGenerator {
             generatedTables.add(fullTableName);
             
             // Get inferred foreign keys for this class
-            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.clazz);
+            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.getReflectionClass());
             
             // Get merged column annotations for this table (may be null for single-class generation)
             Map<String, MergedColumnAnnotations> mergedAnnotations = null;
@@ -228,7 +228,7 @@ public class SchemaGenerator {
                             }
                         }
 
-                        List<InferredForeignKey> fks = inferredForeignKeys.get(parentMapping.clazz);
+                        List<InferredForeignKey> fks = inferredForeignKeys.get(parentMapping.getReflectionClass());
                         Map<String, MergedColumnAnnotations> mergedAnnotations = null;
                         if (tableColumnAnnotations != null) {
                             String tableKey = (parentMapping.schemaName != null ? parentMapping.schemaName + "." : "") + parentMapping.tableName;
@@ -263,7 +263,7 @@ public class SchemaGenerator {
                     .computeIfAbsent(tableKey, k -> new HashMap<>());
                 
                 // Process fields from this mapping
-                for (Field field : mapping.fields) {
+                for (Field field : mapping.getReflectionFields()) {
                     String columnName = QueryBuilder.determineSqlFieldName(field).toLowerCase();
                     MergedColumnAnnotations merged = columnMap.computeIfAbsent(columnName, k -> new MergedColumnAnnotations());
                     AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
@@ -372,13 +372,13 @@ public class SchemaGenerator {
         Set<String> existingFkColumns = new HashSet<>(); // Track FK columns to avoid duplicates
         
         // Determine if we have a composite key from the overall class hierarchy
-        List<Field> idFields = QueryBuilder.determineIdFields(mapping.clazz);
+        List<Field> idFields = QueryBuilder.determineIdFields(mapping.getReflectionClass());
         boolean isCompositeKey = idFields.size() > 1;
         
         // Check if this is a subclass table (not the root table with @Id fields)
         // In table-per-subclass, the subclass table needs the ID field from parent as FK/PK
         boolean hasIdFieldInThisMapping = false;
-        for (Field field : mapping.fields) {
+        for (Field field : mapping.getReflectionFields()) {
             if (AnnotationHelper.isId(field)) {
                 hasIdFieldInThisMapping = true;
                 break;
@@ -398,7 +398,7 @@ public class SchemaGenerator {
             }
         }
         
-        for (Field field : mapping.fields) {
+        for (Field field : mapping.getReflectionFields()) {
             // Handle embedded fields
             if (AnnotationHelper.isEmbedded(field)) {
                 String prefix = QueryBuilder.determinePrefix(field);
@@ -523,11 +523,11 @@ public class SchemaGenerator {
         Set<String> existingFkColumns = new HashSet<>();
 
         // Determine if we have a composite key
-        List<Field> idFields = QueryBuilder.determineIdFields(mapping.clazz);
+        List<Field> idFields = QueryBuilder.determineIdFields(mapping.getReflectionClass());
         boolean isCompositeKey = idFields.size() > 1;
 
         // Process fields from the mapping (parent class fields)
-        for (Field field : mapping.fields) {
+        for (Field field : mapping.getReflectionFields()) {
             // Handle embedded fields
             if (field.getAnnotation(Embedded.class) != null) {
                 Embedded embedded = field.getAnnotation(Embedded.class);
@@ -920,7 +920,7 @@ public class SchemaGenerator {
             processedTables.add(fullTableName);
             
             // Get inferred foreign keys for this class
-            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.clazz);
+            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.getReflectionClass());
             
             // Check if table exists
             SchemaInfo.TableInfo existingTable = schemaInfo.getTable(mapping.schemaName, mapping.tableName);
@@ -1012,12 +1012,12 @@ public class SchemaGenerator {
         Set<String> existingColumnNames = new HashSet<>();
         
         // Determine if we have a composite key from the overall class hierarchy
-        List<Field> idFields = QueryBuilder.determineIdFields(mapping.clazz);
+        List<Field> idFields = QueryBuilder.determineIdFields(mapping.getReflectionClass());
         boolean isCompositeKey = idFields.size() > 1;
         
         // Check if this is a subclass table
         boolean hasIdFieldInThisMapping = false;
-        for (Field field : mapping.fields) {
+        for (Field field : mapping.getReflectionFields()) {
             if (AnnotationHelper.isId(field)) {
                 hasIdFieldInThisMapping = true;
                 break;
@@ -1035,7 +1035,7 @@ public class SchemaGenerator {
         }
 
         // Process fields
-        for (Field field : mapping.fields) {
+        for (Field field : mapping.getReflectionFields()) {
             // Handle embedded fields
             if (AnnotationHelper.isEmbedded(field)) {
                 String prefix = QueryBuilder.determinePrefix(field);
