@@ -33,7 +33,6 @@ public abstract class OrClauseWhereBuilder<E, Q extends TypedQuery<E, Q>, W exte
     /**
      * Adds a condition part (called by field builders)
      */
-    @SuppressWarnings("unchecked")
     protected void addCondition(Condition<E> condition) {
         _parts.add(new ConditionPart(_nextOperator, condition));
         _nextOperator = "OR"; // default to OR for next condition (we're in an OR group)

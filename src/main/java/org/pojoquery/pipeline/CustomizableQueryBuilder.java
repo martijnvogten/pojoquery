@@ -2,7 +2,6 @@ package org.pojoquery.pipeline;
 
 import static org.pojoquery.util.Strings.implode;
 
-import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;

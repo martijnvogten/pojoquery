@@ -12,7 +12,6 @@ import java.util.Set;
 import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
-import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Link;

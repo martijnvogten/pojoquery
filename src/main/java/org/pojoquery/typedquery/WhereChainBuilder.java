@@ -304,7 +304,6 @@ public abstract class WhereChainBuilder<E, Q extends TypedQuery<E, Q>, W extends
             super(field);
         }
 
-        @SuppressWarnings("unchecked")
         private ComparableQueryField<E, T> comparableField() {
             return (ComparableQueryField<E, T>) field;
         }

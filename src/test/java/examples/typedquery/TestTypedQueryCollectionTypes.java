@@ -1,9 +1,10 @@
 package examples.typedquery;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 

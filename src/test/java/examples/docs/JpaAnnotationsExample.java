@@ -1,8 +1,11 @@
 package examples.docs;
 
+import java.sql.Connection;
+
 import javax.sql.DataSource;
 
 import org.hsqldb.jdbc.JDBCDataSource;
+import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.schema.SchemaGenerator;
@@ -40,6 +43,14 @@ public class JpaAnnotationsExample {
         @JoinColumn(name = "primary_address_id")
         Address primaryAddress;
 
+        public Customer() {}
+
+        public Customer(String name, String email, String biography) {
+            this.name = name;
+            this.email = email;
+            this.biography = biography;
+        }
+
         // Getters
         public Long getId() { return id; }
         public String getName() { return name; }
@@ -56,6 +67,13 @@ public class JpaAnnotationsExample {
 
         String street;
         String city;
+
+        public Address() {}
+
+        public Address(String street, String city) {
+            this.street = street;
+            this.city = city;
+        }
 
         public Long getId() { return id; }
         public String getStreet() { return street; }
@@ -94,40 +112,31 @@ public class JpaAnnotationsExample {
 
     public static void main(String[] args) {
         DataSource dataSource = createDatabase();
-        createTables(dataSource);
-        insertTestData(dataSource);
+        SchemaGenerator.createTables(dataSource, Address.class, Customer.class);
 
-        // Both JPA and PojoQuery annotated entities work identically
-        Customer customer = PojoQuery.build(Customer.class)
-            .addWhere("{customers}.id = ?", 1L)
-            .execute(dataSource)
-            .stream().findFirst().orElse(null);
+        DB.withConnection(dataSource, (Connection c) -> {
+            // Insert test data
+            Address address = new Address("123 Main St", "Springfield");
+            PojoQuery.insert(c, address);
 
-        if (customer != null) {
-            System.out.println("Customer: " + customer.getName());
-            System.out.println("Email: " + customer.getEmail());
-            if (customer.getPrimaryAddress() != null) {
-                System.out.println("Address: " + customer.getPrimaryAddress().getStreet());
+            Customer customer = new Customer("John Doe", "john@example.com", "A software developer.");
+            customer.primaryAddress = address;
+            PojoQuery.insert(c, customer);
+
+            // Both JPA and PojoQuery annotated entities work identically
+            Customer loaded = PojoQuery.build(Customer.class)
+                .addWhere("{customers}.id = ?", customer.id)
+                .execute(c)
+                .stream().findFirst().orElse(null);
+
+            if (loaded != null) {
+                System.out.println("Customer: " + loaded.getName());
+                System.out.println("Email: " + loaded.getEmail());
+                if (loaded.getPrimaryAddress() != null) {
+                    System.out.println("Address: " + loaded.getPrimaryAddress().getStreet());
+                }
             }
-        }
-    }
-
-    private static void createTables(DataSource db) {
-        SchemaGenerator.createTables(db, Address.class, Customer.class);
-    }
-
-    private static void insertTestData(DataSource db) {
-        Address address = new Address();
-        address.street = "123 Main St";
-        address.city = "Springfield";
-        PojoQuery.insert(db, address);
-
-        Customer customer = new Customer();
-        customer.name = "John Doe";
-        customer.email = "john@example.com";
-        customer.biography = "A software developer.";
-        customer.primaryAddress = address;
-        PojoQuery.insert(db, customer);
+        });
     }
 
     private static DataSource createDatabase() {

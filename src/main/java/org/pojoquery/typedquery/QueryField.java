@@ -2,8 +2,6 @@ package org.pojoquery.typedquery;
 
 import java.util.Collection;
 
-import org.pojoquery.SqlExpression;
-
 /**
  * Represents a type-safe reference to an entity field for use in queries.
  *
