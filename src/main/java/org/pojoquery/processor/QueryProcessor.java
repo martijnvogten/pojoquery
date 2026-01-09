@@ -230,12 +230,15 @@ public class QueryProcessor extends AbstractProcessor {
                 out.println();
             }
 
+            out.println("import java.lang.reflect.Array;");
             out.println("import java.lang.reflect.Field;");
             out.println("import java.sql.Connection;");
             out.println("import java.util.ArrayList;");
             out.println("import java.util.HashMap;");
+            out.println("import java.util.HashSet;");
             out.println("import java.util.List;");
             out.println("import java.util.Map;");
+            out.println("import java.util.Set;");
             out.println();
             out.println("import javax.sql.DataSource;");
             out.println();
@@ -469,6 +472,26 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("                    }");
             out.println("                    if (!coll.contains(" + entityVar + ")) {");
             out.println("                        coll.add(" + entityVar + ");");
+            out.println("                    }");
+            out.println("                } else if (Set.class.isAssignableFrom(" + linkFieldVar + ".getType())) {");
+            out.println("                    Set<" + className + "> coll = (Set<" + className + ">) " + linkFieldVar + ".get(" + parentVar + ");");
+            out.println("                    if (coll == null) {");
+            out.println("                        coll = new HashSet<>();");
+            out.println("                        " + linkFieldVar + ".set(" + parentVar + ", coll);");
+            out.println("                    }");
+            out.println("                    coll.add(" + entityVar + ");");
+            out.println("                } else if (" + linkFieldVar + ".getType().isArray()) {");
+            out.println("                    Object arr = " + linkFieldVar + ".get(" + parentVar + ");");
+            out.println("                    int len = (arr == null) ? 0 : Array.getLength(arr);");
+            out.println("                    boolean contains = false;");
+            out.println("                    for (int i = 0; i < len; i++) {");
+            out.println("                        if (" + entityVar + ".equals(Array.get(arr, i))) { contains = true; break; }");
+            out.println("                    }");
+            out.println("                    if (!contains) {");
+            out.println("                        Object extended = Array.newInstance(" + linkFieldVar + ".getType().getComponentType(), len + 1);");
+            out.println("                        if (len > 0) System.arraycopy(arr, 0, extended, 0, len);");
+            out.println("                        Array.set(extended, len, " + entityVar + ");");
+            out.println("                        " + linkFieldVar + ".set(" + parentVar + ", extended);");
             out.println("                    }");
             out.println("                } else {");
             out.println("                    " + linkFieldVar + ".set(" + parentVar + ", " + entityVar + ");");
