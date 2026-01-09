@@ -1,6 +1,7 @@
 package org.pojoquery.typedquery;
 
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -232,7 +233,8 @@ public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> implements Where
      */
     public List<E> list(Connection connection) {
         SqlExpression stmt = query.toStatement();
-        return executeQuery(connection, stmt);
+        List<Map<String, Object>> rows = DB.queryRows(connection, stmt);
+        return processRowsToEntities(rows);
     }
 
     /**
@@ -457,31 +459,5 @@ public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> implements Where
      */
     public SqlQuery<?> getQuery() {
         return query;
-    }
-
-    // === Private helper methods ===
-
-    private List<E> executeQuery(Connection connection, SqlExpression stmt) {
-        String sql = stmt.getSql();
-        List<E> results = new ArrayList<>();
-
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            int index = 1;
-            for (Object param : stmt.getParameters()) {
-                Object converted = dbContext.convertParameterForJdbc(param);
-                ps.setObject(index++, converted);
-            }
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    E entity = mapRow(rs);
-                    results.add(entity);
-                }
-            }
-        } catch (SQLException e) {
-            throw new DB.DatabaseException(e);
-        }
-
-        return results;
     }
 }

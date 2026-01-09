@@ -975,62 +975,12 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		return result;
 	}
 
-	@SuppressWarnings("unchecked")
-	private void putValueIntoField(Object parentEntity, FieldModel linkField, Object entity) {
+	private static void putValueIntoField(Object parentEntity, FieldModel linkField, Object entity) {
 		if (!(linkField instanceof ReflectionFieldModel)) {
 			throw new MappingException("Cannot set field value without reflection: " + linkField);
 		}
 		Field field = ((ReflectionFieldModel) linkField).getReflectionField();
-		try {
-			if (List.class.isAssignableFrom(field.getType())) {
-				List<Object> coll = (List<Object>) field.get(parentEntity);
-				if (coll == null) {
-					coll = new ArrayList<Object>();
-					field.set(parentEntity, coll);
-				}
-				if (!coll.contains(entity) && entity != null) {
-					coll.add(entity);
-				}
-			} else if (Set.class.isAssignableFrom(field.getType())) {
-				Set<Object> coll = (Set<Object>) field.get(parentEntity);
-				if (coll == null) {
-					coll = new HashSet<Object>();
-					field.set(parentEntity, coll);
-				}
-				if (!coll.contains(entity) && entity != null) {
-					coll.add(entity);
-				}
-			} else if (field.getType().isArray()) {
-				Object arr = field.get(parentEntity);
-				if (arr == null) {
-					arr = Array.newInstance(field.getType()
-							.getComponentType(), 0);
-				}
-				boolean contains = false;
-				int arrlen = Array.getLength(arr);
-				for (int i = 0; i < arrlen; i++) {
-					if (Array.get(arr, i).equals(entity)) {
-						contains = true;
-						break;
-					}
-				}
-				if (!contains && entity != null) {
-					Object extended = Array.newInstance(field.getType()
-							.getComponentType(), arrlen + 1);
-					if (arrlen > 0) {
-						System.arraycopy(arr, 0, extended, 0, arrlen);
-					}
-					Array.set(extended, arrlen, entity);
-					arr = extended;
-				}
-				field.set(parentEntity, arr);
-			} else {
-				field.set(parentEntity, entity);
-			}
-
-		} catch (IllegalArgumentException | IllegalAccessException e) {
-			throw new MappingException(e);
-		}
+		org.pojoquery.util.FieldHelper.putValueIntoField(parentEntity, field, entity);
 	}
 
 	private Object createId(String alias, Values values, List<FieldModel> idFields) {
