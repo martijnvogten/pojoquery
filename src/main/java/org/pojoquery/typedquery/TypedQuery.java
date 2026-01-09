@@ -6,6 +6,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 import javax.sql.DataSource;
@@ -251,6 +252,11 @@ public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> implements Where
 
     /**
      * Executes the query and returns the first matching entity, or null if none found.
+     * 
+     * <p>For entities with relationships (collections), this method streams the results
+     * and returns the first complete entity with all its related entities populated.
+     * Unlike a naive LIMIT 1 approach, this ensures the entity has all its joined
+     * collection items.</p>
      *
      * @param dataSource the data source
      * @return the first matching entity, or null
@@ -265,18 +271,35 @@ public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> implements Where
 
     /**
      * Executes the query and returns the first matching entity, or null if none found.
+     * 
+     * <p>For entities with relationships (collections), this method streams the results
+     * and returns the first complete entity with all its related entities populated.
+     * Unlike a naive LIMIT 1 approach, this ensures the entity has all its joined
+     * collection items.</p>
      *
      * @param connection the database connection
      * @return the first matching entity, or null
      */
     public E first(Connection connection) {
-        query.setLimit(1);
-        List<E> results = list(connection);
-        return results.isEmpty() ? null : results.get(0);
+        // Use streaming to get the first complete entity (including all related items)
+        List<E> holder = new ArrayList<>(1);
+        streamInternal(connection, entity -> {
+            if (holder.isEmpty()) {
+                holder.add(entity);
+            }
+        }, true); // stopAfterFirst = true
+        return holder.isEmpty() ? null : holder.get(0);
     }
 
     /**
      * Streams results through a callback for memory-efficient processing of large result sets.
+     * 
+     * <p>Each entity is emitted only after all its related entities (from joined collections)
+     * have been accumulated. This ensures the callback receives complete entity graphs.</p>
+     * 
+     * <p><strong>Ordering behavior:</strong> Your ORDER BY clause is respected, and the primary
+     * entity's ID is automatically appended as a tiebreaker to ensure all rows for the same
+     * entity stay grouped together.</p>
      *
      * @param dataSource the data source
      * @param callback   the callback to process each entity
@@ -291,34 +314,147 @@ public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> implements Where
 
     /**
      * Streams results through a callback for memory-efficient processing of large result sets.
+     * 
+     * <p>Each entity is emitted only after all its related entities (from joined collections)
+     * have been accumulated. This ensures the callback receives complete entity graphs.</p>
+     * 
+     * <p><strong>Ordering behavior:</strong> Your ORDER BY clause is respected, and the primary
+     * entity's ID is automatically appended as a tiebreaker to ensure all rows for the same
+     * entity stay grouped together.</p>
      *
      * @param connection the database connection
      * @param callback   the callback to process each entity
      */
     public void stream(Connection connection, Consumer<E> callback) {
+        streamInternal(connection, callback, false);
+    }
+
+    /**
+     * Internal streaming implementation that processes rows and emits complete entities.
+     * 
+     * <p>This method ensures ORDER BY includes the primary ID for proper grouping,
+     * then streams rows and accumulates them into complete entities before emitting.</p>
+     *
+     * @param connection the database connection
+     * @param callback   the callback to process each entity
+     * @param stopAfterFirst if true, stops processing after the first entity is emitted
+     */
+    protected void streamInternal(Connection connection, Consumer<E> callback, boolean stopAfterFirst) {
+        // Ensure ORDER BY ends with primary ID for proper grouping
+        ensureOrderByPrimaryId();
+        
         SqlExpression stmt = query.toStatement();
-        String sql = stmt.getSql();
+        
+        // Use the streaming row handler pattern
+        StreamingEntityBuilder builder = new StreamingEntityBuilder(callback, stopAfterFirst);
+        
+        DB.queryRowsStreaming(connection, stmt, builder);
+        
+        // Emit the final entity if any
+        builder.flush();
+    }
 
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            int index = 1;
-            for (Object param : stmt.getParameters()) {
-                Object converted = dbContext.convertParameterForJdbc(param);
-                ps.setObject(index++, converted);
+    /**
+     * Ensures the query ORDER BY ends with the primary entity's ID field(s).
+     * This is required for streaming to work correctly - all rows for the same
+     * entity must be consecutive in the result set.
+     */
+    protected void ensureOrderByPrimaryId() {
+        String idOrderBy = getIdOrderByClause();
+        if (idOrderBy != null) {
+            List<String> currentOrderBy = query.getOrderBy();
+            // Check if ID is already in ORDER BY
+            boolean hasIdOrderBy = currentOrderBy.stream()
+                .anyMatch(o -> o.contains(idOrderBy.replace(" ASC", "")));
+            if (!hasIdOrderBy) {
+                query.addOrderBy(idOrderBy);
             }
+        }
+    }
 
-            int fetchSize = dbContext.getStreamingFetchSize();
-            if (fetchSize != 0) {
-                ps.setFetchSize(fetchSize);
+    /**
+     * Returns the ORDER BY clause for the primary ID field(s).
+     * Subclasses should override this to provide the correct clause.
+     * 
+     * @return the ID ORDER BY clause (e.g., "{employee.id} ASC"), or null if not applicable
+     */
+    protected String getIdOrderByClause() {
+        return null; // Generated subclasses will override this
+    }
+
+    /**
+     * Returns the primary ID value from a row for entity grouping during streaming.
+     * Subclasses should override this to extract the correct ID.
+     *
+     * @param row the row data
+     * @return the primary ID value, or null if not found
+     */
+    protected Object getPrimaryIdFromRow(Map<String, Object> row) {
+        return null; // Generated subclasses will override this
+    }
+
+    /**
+     * Processes a list of raw rows and returns mapped entities.
+     * Generated subclasses implement this via processRows().
+     *
+     * @param rows the raw row data
+     * @return list of mapped entities
+     */
+    protected List<E> processRowsToEntities(List<Map<String, Object>> rows) {
+        // Default implementation uses list() behavior
+        // Generated subclasses override this
+        throw new UnsupportedOperationException("Subclass must implement processRowsToEntities");
+    }
+
+    /**
+     * Helper class that accumulates rows and emits complete entities.
+     */
+    protected class StreamingEntityBuilder implements Consumer<Map<String, Object>> {
+        private final Consumer<E> entityCallback;
+        private final boolean stopAfterFirst;
+        private Object currentPrimaryId = null;
+        private List<Map<String, Object>> currentRows = new ArrayList<>();
+        private boolean stopped = false;
+
+        StreamingEntityBuilder(Consumer<E> entityCallback, boolean stopAfterFirst) {
+            this.entityCallback = entityCallback;
+            this.stopAfterFirst = stopAfterFirst;
+        }
+
+        @Override
+        public void accept(Map<String, Object> row) {
+            if (stopped) return;
+            
+            Object primaryId = getPrimaryIdFromRow(row);
+            
+            // If primary ID changed, emit the current entity
+            if (currentPrimaryId != null && primaryId != null && !currentPrimaryId.equals(primaryId)) {
+                emitCurrentEntity();
+                if (stopped) return;
             }
+            
+            currentPrimaryId = primaryId;
+            currentRows.add(row);
+        }
 
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    E entity = mapRow(rs);
-                    callback.accept(entity);
+        public void flush() {
+            if (!stopped) {
+                emitCurrentEntity();
+            }
+        }
+
+        private void emitCurrentEntity() {
+            if (!currentRows.isEmpty()) {
+                List<E> entities = processRowsToEntities(currentRows);
+                if (!entities.isEmpty()) {
+                    entityCallback.accept(entities.get(0));
+                    if (stopAfterFirst) {
+                        stopped = true;
+                    }
                 }
+                currentRows.clear();
+                currentPrimaryId = null;
             }
-        } catch (SQLException e) {
-            throw new DB.DatabaseException(e);
         }
     }
 

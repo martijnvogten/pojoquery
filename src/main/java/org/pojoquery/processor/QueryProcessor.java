@@ -287,6 +287,35 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("    }");
             out.println();
 
+            // processRowsToEntities - for streaming support
+            out.println("    @Override");
+            out.println("    protected List<" + entityName + "> processRowsToEntities(List<Map<String, Object>> rows) {");
+            out.println("        try {");
+            out.println("            return processRows(rows);");
+            out.println("        } catch (NoSuchFieldException | IllegalAccessException e) {");
+            out.println("            throw new RuntimeException(e);");
+            out.println("        }");
+            out.println("    }");
+            out.println();
+
+            // getIdOrderByClause - for streaming support
+            if (idField != null) {
+                out.println("    @Override");
+                out.println("    protected String getIdOrderByClause() {");
+                out.println("        return \"{" + tableName + "." + idField.getName() + "} ASC\";");
+                out.println("    }");
+                out.println();
+            }
+
+            // getPrimaryIdFromRow - for streaming support
+            if (idField != null) {
+                out.println("    @Override");
+                out.println("    protected Object getPrimaryIdFromRow(Map<String, Object> row) {");
+                out.println("        return row.get(\"" + tableName + "." + idField.getName() + "\");");
+                out.println("    }");
+                out.println();
+            }
+
             // processRows - use Alias metadata from CustomizableQueryBuilder
             generateProcessRows(out, entityName, tableName, fields, aliases);
 
