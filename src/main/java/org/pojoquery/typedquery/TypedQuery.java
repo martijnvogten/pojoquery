@@ -1,9 +1,6 @@
 package org.pojoquery.typedquery;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,8 +22,9 @@ import org.pojoquery.pipeline.SqlQuery;
  *
  * <p>Subclasses must implement:
  * <ul>
- *   <li>{@link #mapRow(ResultSet)} - efficient direct ResultSet mapping</li>
+ *   <li>{@link #initializeQuery()} - set up fields and joins</li>
  *   <li>{@link #getEntityClass()} - return the entity class</li>
+ *   <li>{@link #processRowsToEntities(List)} - map raw rows to entities</li>
  * </ul>
  *
  * @param <E> the entity type this query returns
@@ -75,19 +73,6 @@ public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> implements Where
      * Called by the constructor after basic setup.
      */
     protected abstract void initializeQuery();
-
-    /**
-     * Maps a single row from the ResultSet to an entity.
-     * Override this for simple entities without relationships.
-     * For entities with relationships, override {@link #list(Connection)} instead.
-     *
-     * @param rs the ResultSet positioned at the current row
-     * @return the mapped entity
-     * @throws SQLException if a database access error occurs
-     */
-    protected E mapRow(ResultSet rs) throws SQLException {
-        throw new UnsupportedOperationException("Use list() for entity graph mapping");
-    }
 
     /**
      * Returns the entity class this query operates on.
