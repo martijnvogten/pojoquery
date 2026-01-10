@@ -225,7 +225,15 @@ public interface DB {
         return new Columns(execute(db, QueryType.SELECT, sql, Arrays.asList(params), new ColumnProcessor()));
     }
 	
+	/**
+	 * ResultSet processor that extracts columns as lists of values.
+	 */
 	public static class ColumnProcessor implements ResultSetProcessor<List<List<Object>>> {
+		/**
+		 * Processes the ResultSet and returns columns as lists of values.
+		 * @param rs the ResultSet to process
+		 * @return a list of columns, each column being a list of values
+		 */
 		public List<List<Object>> process(ResultSet rs) {
 			List<List<Object>> result = new ArrayList<>();
 			try {
@@ -245,7 +253,15 @@ public interface DB {
 		}
 	}
 	
+	/**
+	 * ResultSet processor that extracts rows as maps of column name to value.
+	 */
 	public static class RowProcessor implements ResultSetProcessor<List<Map<String, Object>>> {
+		/**
+		 * Processes the ResultSet and returns rows as maps.
+		 * @param rs the ResultSet to process
+		 * @return a list of rows, each row being a map from column name to value
+		 */
 		public List<Map<String, Object>> process(ResultSet rs) {
 			List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
 			try {

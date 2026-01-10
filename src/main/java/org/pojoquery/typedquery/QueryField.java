@@ -43,6 +43,7 @@ public class QueryField<E, T> {
 
     /**
      * Returns the table alias for this field.
+     * @return the table alias
      */
     public String getAlias() {
         return alias;
@@ -50,6 +51,7 @@ public class QueryField<E, T> {
 
     /**
      * Returns the database column name.
+     * @return the column name
      */
     public String getColumnName() {
         return columnName;
@@ -57,6 +59,7 @@ public class QueryField<E, T> {
 
     /**
      * Returns the Java field name.
+     * @return the field name
      */
     public String getFieldName() {
         return fieldName;
@@ -64,6 +67,7 @@ public class QueryField<E, T> {
 
     /**
      * Returns the Java type of this field.
+     * @return the field type
      */
     public Class<T> getFieldType() {
         return fieldType;
@@ -71,6 +75,7 @@ public class QueryField<E, T> {
 
     /**
      * Returns the fully qualified column reference (alias.column).
+     * @return the qualified column reference
      */
     public String getQualifiedColumn() {
         return "{" + alias + "}." + columnName;
@@ -85,6 +90,8 @@ public class QueryField<E, T> {
 
     /**
      * Creates an equality condition: field = value
+     * @param value the value to compare
+     * @return the condition
      */
     public Condition<E> eq(T value) {
         return new Condition<>(getQualifiedColumn() + " = ?", value);
@@ -92,6 +99,8 @@ public class QueryField<E, T> {
 
     /**
      * Creates a not-equal condition: field != value
+     * @param value the value to compare
+     * @return the condition
      */
     public Condition<E> ne(T value) {
         return new Condition<>(getQualifiedColumn() + " != ?", value);
@@ -99,6 +108,7 @@ public class QueryField<E, T> {
 
     /**
      * Creates an IS NULL condition.
+     * @return the condition
      */
     public Condition<E> isNull() {
         return new Condition<>(getQualifiedColumn() + " IS NULL");
@@ -106,6 +116,7 @@ public class QueryField<E, T> {
 
     /**
      * Creates an IS NOT NULL condition.
+     * @return the condition
      */
     public Condition<E> isNotNull() {
         return new Condition<>(getQualifiedColumn() + " IS NOT NULL");
@@ -113,6 +124,8 @@ public class QueryField<E, T> {
 
     /**
      * Creates a LIKE condition: field LIKE pattern
+     * @param pattern the LIKE pattern
+     * @return the condition
      */
     public Condition<E> like(String pattern) {
         return new Condition<>(getQualifiedColumn() + " LIKE ?", pattern);
@@ -120,6 +133,8 @@ public class QueryField<E, T> {
 
     /**
      * Creates a NOT LIKE condition.
+     * @param pattern the LIKE pattern
+     * @return the condition
      */
     public Condition<E> notLike(String pattern) {
         return new Condition<>(getQualifiedColumn() + " NOT LIKE ?", pattern);
@@ -127,6 +142,8 @@ public class QueryField<E, T> {
 
     /**
      * Creates an IN condition: field IN (values)
+     * @param values the values to check against
+     * @return the condition
      */
     public Condition<E> in(Collection<? extends T> values) {
         if (values == null || values.isEmpty()) {
@@ -138,6 +155,8 @@ public class QueryField<E, T> {
 
     /**
      * Creates an IN condition with varargs.
+     * @param values the values to check against
+     * @return the condition
      */
     @SafeVarargs
     public final Condition<E> in(T... values) {
@@ -150,6 +169,8 @@ public class QueryField<E, T> {
 
     /**
      * Creates a NOT IN condition.
+     * @param values the values to check against
+     * @return the condition
      */
     public Condition<E> notIn(Collection<? extends T> values) {
         if (values == null || values.isEmpty()) {

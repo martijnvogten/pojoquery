@@ -8,7 +8,7 @@ import java.util.Collection;
  * <p>This class provides a fluent API for building WHERE conditions with
  * type safety. It's returned by {@code query.where(field)} and allows
  * chaining conditions.
- * 
+ *
  * <p>Internally delegates to {@link QueryField} condition-building methods
  * to avoid code duplication.
  *
@@ -18,9 +18,16 @@ import java.util.Collection;
  */
 public class WhereClause<E, T, Q extends WhereTarget<Q>> {
 
+    /** The query being built. */
     protected final Q query;
+    /** The field to filter on. */
     protected final QueryField<E, T> field;
 
+    /**
+     * Creates a new WhereClause.
+     * @param query the query being built
+     * @param field the field to filter on
+     */
     public WhereClause(Q query, QueryField<E, T> field) {
         this.query = query;
         this.field = field;
@@ -28,6 +35,8 @@ public class WhereClause<E, T, Q extends WhereTarget<Q>> {
 
     /**
      * Applies a condition to the query and returns the query for chaining.
+     * @param condition the condition to apply
+     * @return the query for further chaining
      */
     protected Q apply(Condition<E> condition) {
         query.addWhere(condition.toExpression());
@@ -36,6 +45,8 @@ public class WhereClause<E, T, Q extends WhereTarget<Q>> {
 
     /**
      * Adds an equality condition: field = value
+     * @param value the value to compare
+     * @return the query for further chaining
      */
     public Q is(T value) {
         return apply(field.eq(value));
@@ -43,6 +54,8 @@ public class WhereClause<E, T, Q extends WhereTarget<Q>> {
 
     /**
      * Adds a not-equal condition: field != value
+     * @param value the value to compare
+     * @return the query for further chaining
      */
     public Q isNot(T value) {
         return apply(field.ne(value));
@@ -50,6 +63,7 @@ public class WhereClause<E, T, Q extends WhereTarget<Q>> {
 
     /**
      * Adds an IS NULL condition.
+     * @return the query for further chaining
      */
     public Q isNull() {
         return apply(field.isNull());
@@ -57,6 +71,7 @@ public class WhereClause<E, T, Q extends WhereTarget<Q>> {
 
     /**
      * Adds an IS NOT NULL condition.
+     * @return the query for further chaining
      */
     public Q isNotNull() {
         return apply(field.isNotNull());
@@ -64,6 +79,8 @@ public class WhereClause<E, T, Q extends WhereTarget<Q>> {
 
     /**
      * Adds a LIKE condition: field LIKE pattern
+     * @param pattern the LIKE pattern
+     * @return the query for further chaining
      */
     public Q like(String pattern) {
         return apply(field.like(pattern));
@@ -71,6 +88,8 @@ public class WhereClause<E, T, Q extends WhereTarget<Q>> {
 
     /**
      * Adds a NOT LIKE condition.
+     * @param pattern the LIKE pattern
+     * @return the query for further chaining
      */
     public Q notLike(String pattern) {
         return apply(field.notLike(pattern));
@@ -78,6 +97,8 @@ public class WhereClause<E, T, Q extends WhereTarget<Q>> {
 
     /**
      * Adds an IN condition: field IN (values)
+     * @param values the values to check against
+     * @return the query for further chaining
      */
     public Q in(Collection<? extends T> values) {
         return apply(field.in(values));
@@ -85,6 +106,8 @@ public class WhereClause<E, T, Q extends WhereTarget<Q>> {
 
     /**
      * Adds an IN condition with varargs.
+     * @param values the values to check against
+     * @return the query for further chaining
      */
     @SafeVarargs
     public final Q in(T... values) {
@@ -93,6 +116,8 @@ public class WhereClause<E, T, Q extends WhereTarget<Q>> {
 
     /**
      * Adds a NOT IN condition.
+     * @param values the values to check against
+     * @return the query for further chaining
      */
     public Q notIn(Collection<? extends T> values) {
         return apply(field.notIn(values));

@@ -9,7 +9,7 @@ import org.pojoquery.SqlExpression;
  * <pre>{@code
  * Condition nameFilter = lastName.eq("Smith").or(lastName.eq("Johnson"));
  * Condition salaryFilter = salary.gt(50000);
- * 
+ *
  * new EmployeeQuery()
  *     .where(nameFilter.and(salaryFilter))
  *     .list(connection);
@@ -24,6 +24,8 @@ public class Condition<E> {
 
     /**
      * Creates a condition with the given SQL and parameters.
+     * @param sql the SQL expression
+     * @param params the parameters for the SQL expression
      */
     public Condition(String sql, Object... params) {
         this.sql = sql;
@@ -32,12 +34,13 @@ public class Condition<E> {
 
     /**
      * Creates a condition from a SqlExpression.
+     * @param expr the SQL expression
      */
     public Condition(SqlExpression expr) {
         this.sql = expr.getSql();
         this.params = toArray(expr.getParameters());
     }
-    
+
     private static Object[] toArray(Iterable<Object> iterable) {
         java.util.List<Object> list = new java.util.ArrayList<>();
         for (Object obj : iterable) {
@@ -48,6 +51,8 @@ public class Condition<E> {
 
     /**
      * Combines this condition with another using AND.
+     * @param other the other condition
+     * @return the combined condition
      */
     public Condition<E> and(Condition<E> other) {
         String combinedSql = "(" + this.sql + " AND " + other.sql + ")";
@@ -57,6 +62,8 @@ public class Condition<E> {
 
     /**
      * Combines this condition with another using OR.
+     * @param other the other condition
+     * @return the combined condition
      */
     public Condition<E> or(Condition<E> other) {
         String combinedSql = "(" + this.sql + " OR " + other.sql + ")";
@@ -66,6 +73,7 @@ public class Condition<E> {
 
     /**
      * Negates this condition.
+     * @return the negated condition
      */
     public Condition<E> not() {
         return new Condition<>("NOT (" + this.sql + ")", this.params);
@@ -73,6 +81,7 @@ public class Condition<E> {
 
     /**
      * Returns the SQL for this condition.
+     * @return the SQL string
      */
     public String getSql() {
         return sql;
@@ -80,6 +89,7 @@ public class Condition<E> {
 
     /**
      * Returns the parameters for this condition.
+     * @return the parameters array
      */
     public Object[] getParams() {
         return params;
@@ -87,6 +97,7 @@ public class Condition<E> {
 
     /**
      * Converts this condition to a SqlExpression.
+     * @return the SqlExpression
      */
     public SqlExpression toExpression() {
         return SqlExpression.sql(sql, params);
@@ -103,6 +114,8 @@ public class Condition<E> {
 
     /**
      * Creates a condition that is always true (1=1).
+     * @param <E> the entity type
+     * @return a condition that always evaluates to true
      */
     public static <E> Condition<E> alwaysTrue() {
         return new Condition<>("1=1");
@@ -110,6 +123,8 @@ public class Condition<E> {
 
     /**
      * Creates a condition that is always false (1=0).
+     * @param <E> the entity type
+     * @return a condition that always evaluates to false
      */
     public static <E> Condition<E> alwaysFalse() {
         return new Condition<>("1=0");
@@ -117,6 +132,9 @@ public class Condition<E> {
 
     /**
      * Combines multiple conditions with AND.
+     * @param <E> the entity type
+     * @param conditions the conditions to combine
+     * @return the combined condition
      */
     @SafeVarargs
     public static <E> Condition<E> and(Condition<E>... conditions) {
@@ -132,6 +150,9 @@ public class Condition<E> {
 
     /**
      * Combines multiple conditions with OR.
+     * @param <E> the entity type
+     * @param conditions the conditions to combine
+     * @return the combined condition
      */
     @SafeVarargs
     public static <E> Condition<E> or(Condition<E>... conditions) {

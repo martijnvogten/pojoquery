@@ -72,6 +72,8 @@ public class AnnotationHelper {
 
 	/**
 	 * Returns true if the class has a @Table annotation (PojoQuery or JPA).
+	 * @param clz the class to check
+	 * @return true if the class has a @Table annotation
 	 */
 	public static boolean hasTableAnnotation(Class<?> clz) {
 		if (clz.getAnnotation(Table.class) != null) {
@@ -89,6 +91,8 @@ public class AnnotationHelper {
 	/**
 	 * Returns the table name from @Table annotation, or null if not specified.
 	 * Checks PojoQuery @Table first, then JPA @Table.
+	 * @param clz the class to check
+	 * @return the table name, or null if not specified
 	 */
 	public static String getTableName(Class<?> clz) {
 		Table tableAnn = clz.getAnnotation(Table.class);
@@ -107,6 +111,8 @@ public class AnnotationHelper {
 
 	/**
 	 * Returns the table schema from @Table annotation, or empty string if not specified.
+	 * @param clz the class to check
+	 * @return the table schema, or empty string if not specified
 	 */
 	public static String getTableSchema(Class<?> clz) {
 		Table tableAnn = clz.getAnnotation(Table.class);
@@ -126,6 +132,8 @@ public class AnnotationHelper {
 
 	/**
 	 * Returns a TableInfo object with both name and schema, or null if no @Table annotation.
+	 * @param clz the class to check
+	 * @return the TableInfo, or null if no @Table annotation
 	 */
 	public static TableInfo getTableInfo(Class<?> clz) {
 		Table tableAnn = clz.getAnnotation(Table.class);
@@ -146,6 +154,8 @@ public class AnnotationHelper {
 
 	/**
 	 * Returns true if the type has a @Table annotation (PojoQuery or JPA).
+	 * @param type the type to check
+	 * @return true if the type has a @Table annotation
 	 */
 	public static boolean hasTableAnnotation(TypeModel type) {
 		if (type.getAnnotation(Table.class) != null) {
@@ -162,6 +172,8 @@ public class AnnotationHelper {
 
 	/**
 	 * Returns a TableInfo object with both name and schema, or null if no @Table annotation.
+	 * @param type the type to check
+	 * @return the TableInfo, or null if no @Table annotation
 	 */
 	public static TableInfo getTableInfo(TypeModel type) {
 		Table tableAnn = type.getAnnotation(Table.class);
@@ -195,6 +207,8 @@ public class AnnotationHelper {
 
 	/**
 	 * Returns true if the field is marked as an ID field.
+	 * @param f the field to check
+	 * @return true if the field is an ID field
 	 */
 	public static boolean isId(Field f) {
 		if (f.getAnnotation(Id.class) != null) {
@@ -211,6 +225,8 @@ public class AnnotationHelper {
 
 	/**
 	 * Returns true if the field is marked as transient (excluded from persistence).
+	 * @param f the field to check
+	 * @return true if the field is transient
 	 */
 	public static boolean isTransient(Field f) {
 		if (f.getAnnotation(Transient.class) != null) {
@@ -227,6 +243,8 @@ public class AnnotationHelper {
 
 	/**
 	 * Returns true if the field is marked as embedded.
+	 * @param f the field to check
+	 * @return true if the field is embedded
 	 */
 	public static boolean isEmbedded(Field f) {
 		if (f.getAnnotation(Embedded.class) != null) {
@@ -243,6 +261,8 @@ public class AnnotationHelper {
 
 	/**
 	 * Returns true if the field is marked as a LOB (large object).
+	 * @param f the field to check
+	 * @return true if the field is a LOB
 	 */
 	public static boolean isLob(Field f) {
 		if (f.getAnnotation(Lob.class) != null) {
@@ -261,6 +281,8 @@ public class AnnotationHelper {
 	 * Returns the column name for a field.
 	 * Checks PojoQuery @FieldName first, then JPA @Column(name=...).
 	 * Returns null if no custom column name is specified.
+	 * @param f the field to check
+	 * @return the column name, or null if not specified
 	 */
 	public static String getColumnName(Field f) {
 		FieldName fieldNameAnn = f.getAnnotation(FieldName.class);
@@ -286,6 +308,8 @@ public class AnnotationHelper {
 	 * Returns the join column name for a foreign key field.
 	 * Checks PojoQuery @Link(linkfield=...) first, then JPA @JoinColumn(name=...).
 	 * Returns null if no custom join column name is specified.
+	 * @param f the field to check
+	 * @return the join column name, or null if not specified
 	 */
 	public static String getJoinColumnName(Field f) {
 		Link linkAnn = f.getAnnotation(Link.class);
@@ -310,6 +334,8 @@ public class AnnotationHelper {
 	/**
 	 * Returns column metadata (length, precision, scale, nullable, unique).
 	 * Merges information from PojoQuery @Column and JPA @Column.
+	 * @param f the field to check
+	 * @return the column metadata, or null if no @Column annotation
 	 */
 	public static ColumnMetadata getColumnMetadata(Field f) {
 		Column pojoColumn = f.getAnnotation(Column.class);
@@ -341,6 +367,8 @@ public class AnnotationHelper {
 
 	/**
 	 * Returns true if the field is marked as an ID field.
+	 * @param f the field to check
+	 * @return true if the field is an ID field
 	 */
 	public static boolean isId(FieldModel f) {
 		if (f.getAnnotation(Id.class) != null) {
@@ -357,6 +385,8 @@ public class AnnotationHelper {
 
 	/**
 	 * Returns true if the field is marked as transient (excluded from persistence).
+	 * @param f the field to check
+	 * @return true if the field is transient
 	 */
 	public static boolean isTransient(FieldModel f) {
 		if (f.getAnnotation(Transient.class) != null) {
@@ -373,6 +403,8 @@ public class AnnotationHelper {
 
 	/**
 	 * Returns true if the field is marked as embedded.
+	 * @param f the field to check
+	 * @return true if the field is embedded
 	 */
 	public static boolean isEmbedded(FieldModel f) {
 		if (f.getAnnotation(Embedded.class) != null) {
@@ -389,6 +421,8 @@ public class AnnotationHelper {
 
 	/**
 	 * Returns true if the field is marked as a LOB (large object).
+	 * @param f the field to check
+	 * @return true if the field is a LOB
 	 */
 	public static boolean isLob(FieldModel f) {
 		if (f.getAnnotation(Lob.class) != null) {
@@ -407,6 +441,8 @@ public class AnnotationHelper {
 	 * Returns the column name for a field.
 	 * Checks PojoQuery @FieldName first, then JPA @Column(name=...).
 	 * Returns null if no custom column name is specified.
+	 * @param f the field to check
+	 * @return the column name, or null if not specified
 	 */
 	public static String getColumnName(FieldModel f) {
 		FieldName fieldNameAnn = f.getAnnotation(FieldName.class);
@@ -442,6 +478,8 @@ public class AnnotationHelper {
 	 * Returns the join column name for a foreign key field.
 	 * Checks PojoQuery @Link(linkfield=...) first, then JPA @JoinColumn(name=...).
 	 * Returns null if no custom join column name is specified.
+	 * @param f the field to check
+	 * @return the join column name, or null if not specified
 	 */
 	public static String getJoinColumnName(FieldModel f) {
 		Link linkAnn = f.getAnnotation(Link.class);
@@ -475,23 +513,49 @@ public class AnnotationHelper {
 
 	// ========== Helper classes ==========
 
+	/**
+	 * Holds table name and schema information from a @Table annotation.
+	 */
 	public static class TableInfo {
+		/** The table name. */
 		public final String name;
+		/** The schema name. */
 		public final String schema;
 
+		/**
+		 * Creates a new TableInfo.
+		 * @param name the table name
+		 * @param schema the schema name (may be null)
+		 */
 		public TableInfo(String name, String schema) {
 			this.name = name;
 			this.schema = schema != null ? schema : "";
 		}
 	}
 
+	/**
+	 * Holds column metadata from a @Column annotation.
+	 */
 	public static class ColumnMetadata {
+		/** The column length (for VARCHAR). */
 		public final int length;
+		/** The precision (for DECIMAL). */
 		public final int precision;
+		/** The scale (for DECIMAL). */
 		public final int scale;
+		/** Whether the column allows NULL. */
 		public final boolean nullable;
+		/** Whether the column has a UNIQUE constraint. */
 		public final boolean unique;
 
+		/**
+		 * Creates a new ColumnMetadata.
+		 * @param length the column length
+		 * @param precision the precision
+		 * @param scale the scale
+		 * @param nullable whether nullable
+		 * @param unique whether unique
+		 */
 		public ColumnMetadata(int length, int precision, int scale, boolean nullable, boolean unique) {
 			this.length = length;
 			this.precision = precision;
