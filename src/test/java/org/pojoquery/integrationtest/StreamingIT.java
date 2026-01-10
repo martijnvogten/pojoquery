@@ -7,8 +7,8 @@ import java.util.List;
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
@@ -20,12 +20,8 @@ import org.pojoquery.schema.SchemaGenerator;
 /**
  * Integration tests for streaming query execution with consumer-based processing.
  */
+@ExtendWith(DbContextExtension.class)
 public class StreamingIT {
-
-	@BeforeAll
-	public static void setupDbContext() {
-		TestDatabaseProvider.initDbContext();
-	}
 
 	@Table("author")
 	public static class Author {

@@ -16,6 +16,14 @@ public class Department {
 
     public String location;
 
+    public Department() {
+    }
+
+    public Department(String name, String location) {
+        this.name = name;
+        this.location = location;
+    }
+
     @Override
     public String toString() {
         return "Department [id=" + id + ", name=" + name + ", location=" + location + "]";

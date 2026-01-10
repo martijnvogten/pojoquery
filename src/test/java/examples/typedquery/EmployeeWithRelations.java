@@ -3,8 +3,6 @@ package examples.typedquery;
 import java.util.List;
 
 import org.pojoquery.annotations.GenerateQuery;
-import org.pojoquery.annotations.Id;
-import org.pojoquery.annotations.Table;
 
 /**
  * Example entity demonstrating relationships in generated queries.
@@ -15,25 +13,9 @@ import org.pojoquery.annotations.Table;
  *   <li>One-to-many relationship with Project (projects have employee_id FK)</li>
  * </ul>
  */
-@Table("employee")
 @GenerateQuery
-public class EmployeeWithRelations {
+public class EmployeeWithRelations extends Employee  {
 
-    @Id
-    public Long id;
-
-    public String firstName;
-
-    public String lastName;
-
-    public String email;
-
-    public Long department_id;  // Foreign key column
-
-    /**
-     * One-to-one relationship: Employee belongs to a Department.
-     * Join condition: employee.department_id = department.id
-     */
     public Department department;
 
     /**
@@ -41,6 +23,15 @@ public class EmployeeWithRelations {
      * Join condition: employee.id = project.employee_id
      */
     public List<Project> projects;
+
+    public EmployeeWithRelations() {
+        super();
+    }
+
+    public EmployeeWithRelations(String firstName, String lastName, String email, Department department) {
+        super(firstName, lastName, email, null);
+        this.department = department;
+    }
 
     @Override
     public String toString() {

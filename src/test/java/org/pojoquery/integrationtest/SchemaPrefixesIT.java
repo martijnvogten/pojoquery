@@ -22,7 +22,6 @@ public class SchemaPrefixesIT {
 
 	@BeforeAll
 	public static void setupDbContext() {
-		TestDatabaseProvider.initDbContext();
 		// This test uses HSQLDB-specific CREATE SCHEMA syntax
 		Assumptions.assumeTrue("hsqldb".equals(TestDatabaseProvider.getDatabaseName()), 
 			"SchemaPrefixesIT only runs with HSQLDB");

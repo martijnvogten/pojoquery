@@ -40,7 +40,7 @@ public class RelationshipQueryExample {
         public String name;
         public String location;
 
-        public Department() {}
+        Department() {}
 
         public Department(String name, String location) {
             this.name = name;
@@ -89,7 +89,7 @@ public class RelationshipQueryExample {
         public String email;
         public DepartmentRef department;
 
-        public Employee() {}
+        Employee() {}
 
         public Employee(String firstName, String lastName, String email, DepartmentRef department) {
             this.firstName = firstName;
@@ -156,7 +156,7 @@ public class RelationshipQueryExample {
         public String status;
         public EmployeeRef assignee;  // Uses EmployeeRef instead of raw employee_id
 
-        public Project() {}
+        Project() {}
 
         public Project(String name, String status, EmployeeRef assignee) {
             this.name = name;
@@ -183,7 +183,7 @@ public class RelationshipQueryExample {
 
         DB.withConnection(dataSource, (Connection c) -> {
             // Create test data using rich domain model
-            TestData data = insertTestData(c);
+            insertTestData(c);
 
             // Example 1: Load all employees with their departments
             System.out.println("=== Example 1: All employees with departments ===");
@@ -246,48 +246,34 @@ public class RelationshipQueryExample {
         System.out.println("\nRelationship query example completed successfully!");
     }
 
-    // ========== Test Data Setup ==========
+    private static void insertTestData(Connection c) {
 
-    /** Container for test data references */
-    static class TestData {
-        Department engineering, sales, hr;
-        Employee alice, bob, carol, david;
-    }
+        // Create departments
+        Department engineering = new Department("Engineering", "San Francisco");
+        PojoQuery.insert(c, engineering);
 
-    private static TestData insertTestData(Connection c) {
-        TestData data = new TestData();
+        Department sales = new Department("Sales", "New York");
+        PojoQuery.insert(c, sales);
+        Department hr = new Department("HR", "Chicago");
+        PojoQuery.insert(c, hr);
 
-        // Create departments using constructor
-        data.engineering = new Department("Engineering", "San Francisco");
-        PojoQuery.insert(c, data.engineering);
-
-        data.sales = new Department("Sales", "New York");
-        PojoQuery.insert(c, data.sales);
-
-        data.hr = new Department("HR", "Chicago");
-        PojoQuery.insert(c, data.hr);
-
-        // Create employees using constructor with department reference
-        data.alice = new Employee("Alice", "Smith", "alice@example.com", data.engineering.toRef());
-        PojoQuery.insert(c, data.alice);
-
-        data.bob = new Employee("Bob", "Jones", "bob@example.com", data.engineering.toRef());
-        PojoQuery.insert(c, data.bob);
-
-        data.carol = new Employee("Carol", "Wilson", "carol@example.com", data.sales.toRef());
-        PojoQuery.insert(c, data.carol);
-
-        data.david = new Employee("David", "Brown", "david@example.com", data.hr.toRef());
-        PojoQuery.insert(c, data.david);
+        // Create employees
+        Employee alice = new Employee("Alice", "Smith", "alice@example.com", engineering.toRef());
+        PojoQuery.insert(c, alice);
+        Employee bob = new Employee("Bob", "Jones", "bob@example.com", engineering.toRef());
+        PojoQuery.insert(c, bob);
+        Employee carol = new Employee("Carol", "Wilson", "carol@example.com", sales.toRef());
+        PojoQuery.insert(c, carol);
+        Employee david = new Employee("David", "Brown", "david@example.com", hr.toRef());
+        PojoQuery.insert(c, david);
 
         // Create projects using constructor with employee reference
-        PojoQuery.insert(c, new Project("Project Alpha", "active", data.alice.toRef()));
-        PojoQuery.insert(c, new Project("Project Beta", "active", data.alice.toRef()));
-        PojoQuery.insert(c, new Project("Project Gamma", "completed", data.bob.toRef()));
-        PojoQuery.insert(c, new Project("Sales Dashboard", "active", data.carol.toRef()));
+        PojoQuery.insert(c, new Project("Project Alpha", "active", alice.toRef()));
+        PojoQuery.insert(c, new Project("Project Beta", "active", alice.toRef()));
+        PojoQuery.insert(c, new Project("Project Gamma", "completed", bob.toRef()));
+        PojoQuery.insert(c, new Project("Sales Dashboard", "active", carol.toRef()));
 
         System.out.println("Inserted test data: 3 departments, 4 employees, 4 projects\n");
-        return data;
     }
 
     private static DataSource createDataSource() {

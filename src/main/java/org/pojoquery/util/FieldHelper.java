@@ -14,6 +14,28 @@ import java.util.Set;
 public class FieldHelper {
 
     /**
+     * Gets a field from a class, searching the entire class hierarchy.
+     * Unlike {@link Class#getDeclaredField(String)}, this method searches
+     * superclasses if the field is not found in the specified class.
+     *
+     * @param clazz the class to search
+     * @param fieldName the name of the field
+     * @return the Field object
+     * @throws NoSuchFieldException if the field is not found in the class hierarchy
+     */
+    public static Field getField(Class<?> clazz, String fieldName) throws NoSuchFieldException {
+        Class<?> current = clazz;
+        while (current != null) {
+            try {
+                return current.getDeclaredField(fieldName);
+            } catch (NoSuchFieldException e) {
+                current = current.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(fieldName + " not found in " + clazz.getName() + " or its superclasses");
+    }
+
+    /**
      * Sets a value into a field, handling collections and arrays appropriately.
      * <ul>
      *   <li>For List fields: adds the value if not already present</li>

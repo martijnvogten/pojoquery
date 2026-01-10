@@ -7,6 +7,9 @@ package org.pojoquery.typedquery;
  * for fields with Comparable types. Methods like {@code greaterThan()},
  * {@code lessThan()}, and {@code between()} are restricted to fields
  * where such comparisons make semantic sense.
+ * 
+ * <p>Internally delegates to {@link ComparableQueryField} condition-building
+ * methods to avoid code duplication.
  *
  * @param <E> the entity type
  * @param <T> the field type (must be Comparable)
@@ -15,47 +18,52 @@ package org.pojoquery.typedquery;
 public class ComparableWhereClause<E, T extends Comparable<? super T>, Q extends WhereTarget<Q>>
         extends WhereClause<E, T, Q> {
 
+    private final ComparableQueryField<E, T> comparableField;
+
     public ComparableWhereClause(Q query, ComparableQueryField<E, T> field) {
         super(query, field);
+        this.comparableField = field;
     }
 
     /**
      * Adds a greater than condition: field &gt; value
      */
     public Q greaterThan(T value) {
-        query.addWhere(field.getQualifiedColumn() + " > ?", value);
-        return query;
+        return apply(comparableField.gt(value));
     }
 
     /**
      * Adds a greater than or equal condition: field &gt;= value
      */
     public Q greaterThanOrEqual(T value) {
-        query.addWhere(field.getQualifiedColumn() + " >= ?", value);
-        return query;
+        return apply(comparableField.ge(value));
     }
 
     /**
      * Adds a less than condition: field &lt; value
      */
     public Q lessThan(T value) {
-        query.addWhere(field.getQualifiedColumn() + " < ?", value);
-        return query;
+        return apply(comparableField.lt(value));
     }
 
     /**
      * Adds a less than or equal condition: field &lt;= value
      */
     public Q lessThanOrEqual(T value) {
-        query.addWhere(field.getQualifiedColumn() + " <= ?", value);
-        return query;
+        return apply(comparableField.le(value));
     }
 
     /**
      * Adds a BETWEEN condition: field BETWEEN low AND high
      */
     public Q between(T low, T high) {
-        query.addWhere(field.getQualifiedColumn() + " BETWEEN ? AND ?", low, high);
-        return query;
+        return apply(comparableField.between(low, high));
+    }
+
+    /**
+     * Adds a NOT BETWEEN condition: field NOT BETWEEN low AND high
+     */
+    public Q notBetween(T low, T high) {
+        return apply(comparableField.notBetween(low, high));
     }
 }

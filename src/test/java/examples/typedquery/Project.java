@@ -16,7 +16,16 @@ public class Project {
 
     public String status;
 
-    public Long employee_id;  // Foreign key to employee
+    public Employee employee;
+
+    public Project() {
+    }
+
+    public Project(String name, String status, Employee employee) {
+        this.name = name;
+        this.status = status;
+        this.employee = employee;
+    }
 
     @Override
     public String toString() {

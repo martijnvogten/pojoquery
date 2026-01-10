@@ -228,7 +228,7 @@
           <artifactId>maven-surefire-plugin</artifactId>
           <version>3.3.0</version>
           <configuration>
-            <runOrder>alphabetical</runOrder>
+            <runOrder>random</runOrder>
             <systemPropertyVariables>
               <api.version>1.44</api.version>
             </systemPropertyVariables>

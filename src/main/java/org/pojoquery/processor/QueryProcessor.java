@@ -440,8 +440,8 @@ public class QueryProcessor extends AbstractProcessor {
                 for (SqlField field : aliasFields) {
                     String fieldName = extractFieldNameFromAlias(field.alias);
                     String varName = varPrefix + capitalize(fieldName);
-                    out.println("        FieldMapping " + varName + " = dbContext.getFieldMapping(" +
-                        className + ".class.getDeclaredField(\"" + fieldName + "\"));");
+                    out.println("        FieldMapping " + varName + " = dbContext.getFieldMapping(FieldHelper.getField(" +
+                        className + ".class, \"" + fieldName + "\"));");
                 }
                 out.println();
             }
@@ -455,7 +455,7 @@ public class QueryProcessor extends AbstractProcessor {
                     String linkFieldName = linkField.getName();
                     String linkFieldVar = "f" + capitalize(sanitizeVarName(alias.getParentAlias())) + capitalize(linkFieldName);
                     out.println("        // Link field: " + alias.getParentAlias() + "." + linkFieldName);
-                    out.println("        Field " + linkFieldVar + " = " + parentClassName + ".class.getDeclaredField(\"" + linkFieldName + "\");");
+                    out.println("        Field " + linkFieldVar + " = FieldHelper.getField(" + parentClassName + ".class, \"" + linkFieldName + "\");");
                     out.println("        " + linkFieldVar + ".setAccessible(true);");
                     out.println();
                 }
@@ -545,7 +545,24 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("                }");
             out.println();
             out.println("                // Link to parent");
-            out.println("                FieldHelper.putValueIntoField(" + parentVar + ", " + linkFieldVar + ", " + entityVar + ");");
+            // For nested relationships, we need to look up the parent from its ById map
+            Alias parentAlias = aliases.get(alias.getParentAlias());
+            if (alias.getParentAlias().equals(tableName)) {
+                // Parent is the root entity, use the variable directly
+                out.println("                FieldHelper.putValueIntoField(" + parentVar + ", " + linkFieldVar + ", " + entityVar + ");");
+            } else if (parentAlias != null && parentAlias.getIdFields() != null && !parentAlias.getIdFields().isEmpty()) {
+                // Parent is a nested entity, look it up from its ById map
+                String parentIdField = parentAlias.getIdFields().get(0).getName();
+                String parentByIdVar = sanitizeVarName(alias.getParentAlias()) + "ById";
+                // Use unique variable names to avoid conflicts with earlier declarations
+                String parentIdVarName = entityVar + "_parentId";
+                String parentVarName = entityVar + "_parent";
+                out.println("                Object " + parentIdVarName + " = row.get(\"" + alias.getParentAlias() + "." + parentIdField + "\");");
+                out.println("                " + parentAlias.getResultType().getSimpleName() + " " + parentVarName + " = " + parentByIdVar + ".get(" + parentIdVarName + ");");
+                out.println("                if (" + parentVarName + " != null) {");
+                out.println("                    FieldHelper.putValueIntoField(" + parentVarName + ", " + linkFieldVar + ", " + entityVar + ");");
+                out.println("                }");
+            }
             out.println("            }");
         }
 

@@ -51,8 +51,7 @@ public class TestTypedQueryCollectionTypes {
     @Test
     void testSetCollectionType() {
         // Create tables
-        SchemaGenerator.createTables(dataSource, Project.class);
-        SchemaGenerator.createTables(dataSource, EmployeeWithSetProjects.class);
+        SchemaGenerator.createTables(dataSource, Project.class, EmployeeWithSetProjects.class);
 
         DB.withConnection(dataSource, (Connection c) -> {
             // Create employee
@@ -63,16 +62,10 @@ public class TestTypedQueryCollectionTypes {
             PojoQuery.insert(c, alice);
 
             // Create projects for the employee
-            Project projectA = new Project();
-            projectA.name = "Project Alpha";
-            projectA.status = "active";
-            projectA.employee_id = alice.id;
+            Project projectA = new Project("Project Alpha", "active", alice);
             PojoQuery.insert(c, projectA);
 
-            Project projectB = new Project();
-            projectB.name = "Project Beta";
-            projectB.status = "active";
-            projectB.employee_id = alice.id;
+            Project projectB = new Project("Project Beta", "active", alice);
             PojoQuery.insert(c, projectB);
 
             // Query using TypedQuery
@@ -109,35 +102,22 @@ public class TestTypedQueryCollectionTypes {
     @Test
     void testListCollectionType() {
         // Create tables  
-        SchemaGenerator.createTables(dataSource, Department.class, Project.class);
-        SchemaGenerator.createTables(dataSource, EmployeeWithRelations.class);
+        SchemaGenerator.createTables(dataSource, Department.class, Project.class, EmployeeWithRelations.class);
 
         DB.withConnection(dataSource, (Connection c) -> {
             // Create department
-            Department engineering = new Department();
-            engineering.name = "Engineering";
-            engineering.location = "San Francisco";
+            Department engineering = new Department("Engineering", "San Francisco");
             PojoQuery.insert(c, engineering);
 
             // Create employee
-            EmployeeWithRelations alice = new EmployeeWithRelations();
-            alice.firstName = "Alice";
-            alice.lastName = "Smith";
-            alice.email = "alice@example.com";
-            alice.department = engineering;
+            EmployeeWithRelations alice = new EmployeeWithRelations("Alice", "Smith", "alice@example.com", engineering);
             PojoQuery.insert(c, alice);
 
             // Create projects
-            Project projectA = new Project();
-            projectA.name = "Project Alpha";
-            projectA.status = "active";
-            projectA.employee_id = alice.id;
+            Project projectA = new Project("Project Alpha", "active", alice);
             PojoQuery.insert(c, projectA);
 
-            Project projectB = new Project();
-            projectB.name = "Project Beta";
-            projectB.status = "active";
-            projectB.employee_id = alice.id;
+            Project projectB = new Project("Project Beta", "active", alice);
             PojoQuery.insert(c, projectB);
 
             // Query using TypedQuery
@@ -164,8 +144,7 @@ public class TestTypedQueryCollectionTypes {
     @Test
     void testArrayCollectionType() {
         // Create tables
-        SchemaGenerator.createTables(dataSource, Project.class);
-        SchemaGenerator.createTables(dataSource, EmployeeWithArrayProjects.class);
+        SchemaGenerator.createTables(dataSource, Project.class, EmployeeWithArrayProjects.class);
 
         DB.withConnection(dataSource, (Connection c) -> {
             // Create employee
@@ -176,16 +155,10 @@ public class TestTypedQueryCollectionTypes {
             PojoQuery.insert(c, alice);
 
             // Create projects for the employee
-            Project projectA = new Project();
-            projectA.name = "Project Alpha";
-            projectA.status = "active";
-            projectA.employee_id = alice.id;
+            Project projectA = new Project("Project Alpha", "active", alice);
             PojoQuery.insert(c, projectA);
 
-            Project projectB = new Project();
-            projectB.name = "Project Beta";
-            projectB.status = "active";
-            projectB.employee_id = alice.id;
+            Project projectB = new Project("Project Beta", "active", alice);
             PojoQuery.insert(c, projectB);
 
             // Query using TypedQuery

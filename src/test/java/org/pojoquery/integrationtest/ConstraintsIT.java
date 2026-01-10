@@ -7,6 +7,7 @@ import javax.sql.DataSource;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Column;
@@ -23,6 +24,7 @@ import org.pojoquery.schema.SchemaGenerator;
  * - FOREIGN KEY constraints (@Link)
  * - Column length constraints (@Column(length = ...))
  */
+@ExtendWith(DbContextExtension.class)
 public class ConstraintsIT {
 
     // ========== Test Entities ==========

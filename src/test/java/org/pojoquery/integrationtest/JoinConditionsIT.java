@@ -10,8 +10,8 @@ import java.util.Map;
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.TestUtils;
@@ -22,13 +22,8 @@ import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
+@ExtendWith(DbContextExtension.class)
 public class JoinConditionsIT {
-
-	@BeforeAll
-	public static void setupDbContext() {
-		// Trigger TestDatabaseProvider static initialization to set DbContext
-		TestDatabaseProvider.initDbContext();
-	}
 
 	@Table("person")
 	static class Person {

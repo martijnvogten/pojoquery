@@ -349,3 +349,46 @@ public void updateProductPrice(Long productId, BigDecimal newPrice) {
 }
 ----
 
+== Future Enhancements
+
+This section documents potential features that may be added in future versions.
+
+=== Java Record Support (Planned)
+
+Java records provide a concise way to declare immutable data classes. While runtime PojoQuery requires mutable POJOs with no-arg constructors, the generated typed query API could support records in a future version.
+
+**Why records don't work with runtime PojoQuery:**
+
+* Records have no no-arg constructor — PojoQuery creates instances with `new Entity()` then sets fields
+* Record fields are `final` — PojoQuery sets fields via reflection after construction
+* Records can't use inheritance — patterns like `EmployeeWithProjects extends Employee` won't work
+
+**Why records _could_ work with generated queries:**
+
+The annotation processor has full knowledge of field names, types, and column mappings at compile time. Instead of generating field-by-field assignment:
+
+[source,java]
+----
+// Current generated code (for mutable classes)
+employee = new Employee();
+fmId.apply(employee, row.get("employee.id"));
+fmFirstName.apply(employee, row.get("employee.firstName"));
+----
+
+It could generate constructor calls for records:
+
+[source,java]
+----
+// Possible future generated code (for records)
+employee = new EmployeeRecord(
+    (Long) row.get("employee.id"),
+    (String) row.get("employee.firstName")
+);
+----
+
+**Potential detection strategy:**
+
+* Has no-arg constructor → use field injection (current behavior)
+* Is a record or only has all-args constructor → use constructor injection
+
+This would keep runtime PojoQuery simple while enabling immutable data classes for generated type-safe queries.

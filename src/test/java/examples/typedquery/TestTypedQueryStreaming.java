@@ -43,9 +43,8 @@ public class TestTypedQueryStreaming {
         ds.setPassword("");
         dataSource = ds;
 
-        // Create tables
-        SchemaGenerator.createTables(dataSource, Department.class, Project.class);
-        SchemaGenerator.createTables(dataSource, EmployeeWithRelations.class);
+        // Create tables - EmployeeWithRelations must come before Project since Project has FK to Employee
+        SchemaGenerator.createTables(dataSource, Department.class, Project.class, EmployeeWithRelations.class);
     }
 
     /**
@@ -56,26 +55,16 @@ public class TestTypedQueryStreaming {
     void testFirstWithCollections() {
         DB.withConnection(dataSource, (Connection c) -> {
             // Create department
-            Department engineering = new Department();
-            engineering.name = "Engineering";
-            engineering.location = "San Francisco";
+            Department engineering = new Department("Engineering", "San Francisco");
             PojoQuery.insert(c, engineering);
 
             // Create employee with multiple projects
-            EmployeeWithRelations alice = new EmployeeWithRelations();
-            alice.firstName = "Alice";
-            alice.lastName = "Smith";
-            alice.email = "alice@example.com";
-            alice.department = engineering;
+            EmployeeWithRelations alice = new EmployeeWithRelations("Alice", "Smith", "alice@example.com", engineering);
             PojoQuery.insert(c, alice);
 
             // Create 3 projects for Alice
             for (int i = 1; i <= 3; i++) {
-                Project project = new Project();
-                project.name = "Project " + i;
-                project.status = "active";
-                project.employee_id = alice.id;
-                PojoQuery.insert(c, project);
+                PojoQuery.insert(c, new Project("Project " + i, "active", alice));
             }
 
             // Use first() - this should return Alice with ALL 3 projects
@@ -102,40 +91,22 @@ public class TestTypedQueryStreaming {
     void testStreamWithCollections() {
         DB.withConnection(dataSource, (Connection c) -> {
             // Create department
-            Department engineering = new Department();
-            engineering.name = "Engineering";
-            engineering.location = "San Francisco";
+            Department engineering = new Department("Engineering", "San Francisco");
             PojoQuery.insert(c, engineering);
 
             // Create 2 employees, each with multiple projects
-            EmployeeWithRelations alice = new EmployeeWithRelations();
-            alice.firstName = "Alice";
-            alice.lastName = "Smith";
-            alice.email = "alice@example.com";
-            alice.department = engineering;
+            EmployeeWithRelations alice = new EmployeeWithRelations("Alice", "Smith", "alice@example.com", engineering);
             PojoQuery.insert(c, alice);
 
             for (int i = 1; i <= 3; i++) {
-                Project project = new Project();
-                project.name = "Alice Project " + i;
-                project.status = "active";
-                project.employee_id = alice.id;
-                PojoQuery.insert(c, project);
+                PojoQuery.insert(c, new Project("Alice Project " + i, "active", alice));
             }
 
-            EmployeeWithRelations bob = new EmployeeWithRelations();
-            bob.firstName = "Bob";
-            bob.lastName = "Jones";
-            bob.email = "bob@example.com";
-            bob.department = engineering;
+            EmployeeWithRelations bob = new EmployeeWithRelations("Bob", "Jones", "bob@example.com", engineering);
             PojoQuery.insert(c, bob);
 
             for (int i = 1; i <= 2; i++) {
-                Project project = new Project();
-                project.name = "Bob Project " + i;
-                project.status = "active";
-                project.employee_id = bob.id;
-                PojoQuery.insert(c, project);
+                PojoQuery.insert(c, new Project("Bob Project " + i, "active", bob));
             }
 
             // Use stream() - each emitted entity should be complete with all projects
@@ -170,11 +141,7 @@ public class TestTypedQueryStreaming {
         DB.withConnection(dataSource, (Connection c) -> {
             // Create employees
             for (String name : new String[]{"Charlie", "Alice", "Bob"}) {
-                EmployeeWithRelations emp = new EmployeeWithRelations();
-                emp.firstName = name;
-                emp.lastName = "Test";
-                emp.email = name.toLowerCase() + "@example.com";
-                PojoQuery.insert(c, emp);
+                PojoQuery.insert(c, new EmployeeWithRelations(name, "Test", name.toLowerCase() + "@example.com", null));
             }
 
             // Stream with ORDER BY firstName DESC

@@ -1,6 +1,7 @@
 package org.pojoquery.typedquery;
 
 import java.util.Collection;
+import java.util.Collections;
 
 /**
  * Represents a type-safe reference to an entity field for use in queries.
@@ -131,16 +132,8 @@ public class QueryField<E, T> {
         if (values == null || values.isEmpty()) {
             return Condition.alwaysFalse();
         }
-        StringBuilder sb = new StringBuilder(getQualifiedColumn());
-        sb.append(" IN (");
-        boolean first = true;
-        for (T value : values) {
-            if (!first) sb.append(", ");
-            sb.append("?");
-            first = false;
-        }
-        sb.append(")");
-        return new Condition<>(sb.toString(), values.toArray());
+        String placeholders = String.join(", ", Collections.nCopies(values.size(), "?"));
+        return new Condition<>(getQualifiedColumn() + " IN (" + placeholders + ")", values.toArray());
     }
 
     /**
@@ -151,14 +144,8 @@ public class QueryField<E, T> {
         if (values == null || values.length == 0) {
             return Condition.alwaysFalse();
         }
-        StringBuilder sb = new StringBuilder(getQualifiedColumn());
-        sb.append(" IN (");
-        for (int i = 0; i < values.length; i++) {
-            if (i > 0) sb.append(", ");
-            sb.append("?");
-        }
-        sb.append(")");
-        return new Condition<>(sb.toString(), values);
+        String placeholders = String.join(", ", Collections.nCopies(values.length, "?"));
+        return new Condition<>(getQualifiedColumn() + " IN (" + placeholders + ")", values);
     }
 
     /**
@@ -168,15 +155,7 @@ public class QueryField<E, T> {
         if (values == null || values.isEmpty()) {
             return Condition.alwaysTrue();
         }
-        StringBuilder sb = new StringBuilder(getQualifiedColumn());
-        sb.append(" NOT IN (");
-        boolean first = true;
-        for (T value : values) {
-            if (!first) sb.append(", ");
-            sb.append("?");
-            first = false;
-        }
-        sb.append(")");
-        return new Condition<>(sb.toString(), values.toArray());
+        String placeholders = String.join(", ", Collections.nCopies(values.size(), "?"));
+        return new Condition<>(getQualifiedColumn() + " NOT IN (" + placeholders + ")", values.toArray());
     }
 }

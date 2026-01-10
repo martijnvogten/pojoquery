@@ -6,6 +6,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import javax.sql.DataSource;
 
@@ -41,7 +42,6 @@ public class TestDatabaseProvider {
     
     private static MySQLContainer<?> mysqlContainer;
     private static PostgreSQLContainer<?> postgresContainer;
-    private static int dbCounter = 0;
     
     private static DbContext currentContext;
     private static DataSource currentDataSource;
@@ -123,11 +123,12 @@ public class TestDatabaseProvider {
         
         if ("hsqldb".equals(database)) {
             // Create a unique in-memory HSQLDB database for each test
-            String dbName = "testdb_" + (++dbCounter);
+            String dbName = "testdb_" + UUID.randomUUID().toString().replace("-", "");
             JDBCDataSource dataSource = new JDBCDataSource();
             dataSource.setUrl("jdbc:hsqldb:mem:" + dbName);
             dataSource.setUser("SA");
             dataSource.setPassword("");
+            // dropAllTables(dataSource, database);
             return dataSource;
         }
         
@@ -142,13 +143,20 @@ public class TestDatabaseProvider {
      */
     private static void dropAllTables(DataSource ds, String database) {
         try (Connection conn = ds.getConnection()) {
-            List<String> tables = getAllTables(conn, database);
-            
-            if (tables.isEmpty()) {
-                return;
-            }
-            
             try (Statement stmt = conn.createStatement()) {
+                if ("hsqldb".equals(database)) {
+                    // HSQLDB: drop and recreate the PUBLIC schema
+                    stmt.execute("DROP SCHEMA PUBLIC CASCADE");
+                    // stmt.execute("CREATE SCHEMA PUBLIC");
+                    return;
+                }
+                
+                List<String> tables = getAllTables(conn, database);
+                
+                if (tables.isEmpty()) {
+                    return;
+                }
+                
                 // Disable foreign key checks for the drop operation
                 if ("mysql".equals(database)) {
                     stmt.execute("SET FOREIGN_KEY_CHECKS = 0");
@@ -205,13 +213,6 @@ public class TestDatabaseProvider {
      */
     public static DbContext getDbContext() {
         return currentContext;
-    }
-    
-    /**
-     * Ensures the DbContext is set up. Call this from @BeforeClass in tests.
-     */
-    public static void initDbContext() {
-        // Static initializer already did the work, this just ensures class is loaded
     }
     
     /**

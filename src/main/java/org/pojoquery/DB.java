@@ -809,7 +809,12 @@ public interface DB {
 						if (keysResult != null) {
 							try {
 								if (keysResult.next()) {
-									return (T) keysResult.getObject(1);
+									Object key = keysResult.getObject(1);
+									// MySQL returns BigInteger for auto-generated keys, normalize to Long
+									if (key instanceof Number) {
+										return (T) Long.valueOf(((Number) key).longValue());
+									}
+									return (T) key;
 								}
 							} catch (SQLException e) {
 								// Some databases (e.g., HSQLDB) throw exception when no keys were generated
