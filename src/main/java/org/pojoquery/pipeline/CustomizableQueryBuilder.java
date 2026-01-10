@@ -869,7 +869,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 						}
 					}
 
-					Object entity = buildEntity(entityType, merged, a.getOtherField());
+					Object entity = buildEntity(entityType, merged, a.getOtherField(), a.getDiscriminatorColumn());
 					allEntities.put(id, entity);
 					allEntities.put(subClassId, entity);
 					onNewPrimaryEntity.accept(id, entity);
@@ -946,7 +946,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 					// Linked entity
 					Object entity = allEntities.get(id);
 					if (entity == null) {
-						entity = buildEntity(entityType, values, a.getOtherField());
+						entity = buildEntity(entityType, values, a.getOtherField(), a.getDiscriminatorColumn());
 						allEntities.put(id, entity);
 					}
 					putValueIntoField(parent, a.getLinkField(), entity);
@@ -1007,13 +1007,13 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		return result;
 	}
 
-	private <E> E buildEntity(TypeModel type, Values values, FieldModel otherField) {
+	private <E> E buildEntity(TypeModel type, Values values, FieldModel otherField, String discriminatorColumn) {
 		if (allNulls(values)) {
 			return null;
 		}
 		Class<E> clazz = getReflectionClass(type);
 		E entity = createInstance(clazz);
-		Values other = applyValues(entity, values);
+		Values other = applyValues(entity, values, discriminatorColumn);
 		if (otherField != null) {
 			if (!(otherField instanceof ReflectionFieldModel)) {
 				throw new MappingException("Cannot set other field without reflection: " + otherField);
@@ -1042,19 +1042,18 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		return (E) Enum.valueOf((Class<? extends Enum>) enumClass, name);
 	}
 
-	private Values applyValues(Object entity, Values aliasValues) {
+	private Values applyValues(Object entity, Values aliasValues, String discriminatorColumn) {
 		Values other = new Values();
 		for(String fieldAlias : aliasValues.keySet()) {
+			// Skip discriminator column - it's used internally for type resolution
+			if (fieldAlias.equals(discriminatorColumn)) {
+				continue;
+			}
 			FieldMapping mapping = fieldMappings.get(fieldAlias);
 			if (mapping != null) {
 				mapping.apply(entity, aliasValues.get(fieldAlias));
 			} else {
 				String fieldName = fieldAlias.substring(fieldAlias.lastIndexOf(".") + 1);
-//				Other otherAnn = alias.otherField.getAnnotation(Other.class);
-//				if (otherAnn != null && otherAnn.prefix().length() > 0) {
-//					// Remove prefix.
-//					fieldName = fieldName.substring(otherAnn.prefix().length());
-//				}
 				other.put(fieldName, aliasValues.get(fieldAlias));
 			}
 		}

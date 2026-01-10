@@ -9,13 +9,16 @@ import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.schema.SchemaGenerator;
 
+@ExtendWith(DbContextExtension.class)
 public class TestEmbedded {
 
 	@BeforeEach

@@ -85,8 +85,8 @@ public class OrClauseBuilder<E, Q extends TypedQuery<E, Q>> implements WhereTarg
      * @deprecated Use where() without parameters for fluent field access
      */
     @Deprecated
-    public <T> OrWhereClause<E, T, Q> where(QueryField<E, T> field) {
-        return new OrWhereClause<>(this, field);
+    public <T> WhereClause<E, T, OrClauseBuilder<E, Q>> where(QueryField<E, T> field) {
+        return new WhereClause<>(this, field);
     }
 
     /**
@@ -94,8 +94,8 @@ public class OrClauseBuilder<E, Q extends TypedQuery<E, Q>> implements WhereTarg
      * @deprecated Use where() without parameters for fluent field access
      */
     @Deprecated
-    public <T extends Comparable<? super T>> OrComparableWhereClause<E, T, Q> where(ComparableQueryField<E, T> field) {
-        return new OrComparableWhereClause<>(this, field);
+    public <T extends Comparable<? super T>> ComparableWhereClause<E, T, OrClauseBuilder<E, Q>> where(ComparableQueryField<E, T> field) {
+        return new ComparableWhereClause<>(this, field);
     }
 
     /**
@@ -103,7 +103,7 @@ public class OrClauseBuilder<E, Q extends TypedQuery<E, Q>> implements WhereTarg
      * @deprecated Use or() without parameters for fluent field access
      */
     @Deprecated
-    public <T> OrWhereClause<E, T, Q> or(QueryField<E, T> field) {
+    public <T> WhereClause<E, T, OrClauseBuilder<E, Q>> or(QueryField<E, T> field) {
         return where(field);
     }
 
@@ -112,7 +112,7 @@ public class OrClauseBuilder<E, Q extends TypedQuery<E, Q>> implements WhereTarg
      * @deprecated Use or() without parameters for fluent field access
      */
     @Deprecated
-    public <T extends Comparable<? super T>> OrComparableWhereClause<E, T, Q> or(ComparableQueryField<E, T> field) {
+    public <T extends Comparable<? super T>> ComparableWhereClause<E, T, OrClauseBuilder<E, Q>> or(ComparableQueryField<E, T> field) {
         return where(field);
     }
 

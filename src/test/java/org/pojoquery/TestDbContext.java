@@ -9,32 +9,27 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.integrationtest.db.TestDatabase;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.schema.SchemaGenerator;
 
+@ExtendWith(DbContextExtension.class)
 public class TestDbContext {
 
-	// Save and restore default context to avoid polluting global state for other tests
-	private static DbContext originalDefault;
-	
-	@BeforeAll
-	public static void saveDefaultContext() {
-		originalDefault = DbContext.getDefault();
+	@BeforeEach
+	public void setUpHsqldbContext() {
+		// Ensure HSQLDB context is set for SchemaGenerator.createTables calls
+		TestDatabase.initDbContext();
 	}
-	
-	@AfterAll
-	public static void restoreDefaultContext() {
-		DbContext.setDefault(originalDefault);
-	}
-	
+
 	@Table(value="article", schema="schema1")
 	static class Article {
 		@Id

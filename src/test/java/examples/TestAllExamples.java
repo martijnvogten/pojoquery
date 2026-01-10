@@ -1,6 +1,8 @@
 package examples;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.pojoquery.integrationtest.DbContextExtension;
 
 import examples.blog.ArticleDetailExample;
 import examples.blog.ArticleListViewExample;
@@ -22,6 +24,7 @@ import examples.users.UsersExample;
  * Runs all examples as tests to ensure they don't throw exceptions.
  * Each example is still independently runnable via its main() method.
  */
+@ExtendWith(DbContextExtension.class)
 public class TestAllExamples {
 
 	@Test

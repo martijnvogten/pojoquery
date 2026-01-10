@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
@@ -47,6 +48,8 @@ public class TestEmbeddedNested {
 	
 	@Test
 	public void testEmbeddedLinkField() {
+		DbContext mysqlContext = DbContext.forDialect(Dialect.MYSQL);
+
 		assertEquals(
 				norm("""
 				SELECT
@@ -60,7 +63,7 @@ public class TestEmbeddedNested {
 				FROM `customer` AS `customer`
 				 LEFT JOIN `country` AS `personal.home.country` ON `customer`.`personal_home_country_id` = `personal.home.country`.`id`
 				"""), 
-				norm(QueryBuilder.from(Customer.class).getQuery().toStatement().getSql()));
+				norm(QueryBuilder.from(mysqlContext, Customer.class).getQuery().toStatement().getSql()));
 	}
 	
 	private List<Map<String, Object>> RESULT_CUSTOMERS = Collections.singletonList(Map.of(

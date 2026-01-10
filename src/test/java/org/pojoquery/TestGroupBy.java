@@ -4,12 +4,20 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.annotations.GroupBy;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Table;
 
+@ExtendWith(org.pojoquery.integrationtest.DbContextExtension.class)
 public class TestGroupBy {
+
+	@BeforeEach
+	public void setUp() {
+		DbContext.setDefault(DbContext.forDialect(DbContext.Dialect.MYSQL));
+	}
 
 	@Table("wordindex")
 	@GroupBy("wordindex.word")

@@ -11,12 +11,15 @@ import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.QueryBuilder;
 
+@ExtendWith(DbContextExtension.class)
 public class TestInheritanceWithJoins {
 
 	@BeforeEach

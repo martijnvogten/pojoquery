@@ -89,24 +89,12 @@ public abstract class WhereChainBuilder<E, Q extends TypedQuery<E, Q>, W extends
         return build().list(connection);
     }
 
-    public java.util.List<E> list(javax.sql.DataSource dataSource) {
-        return build().list(dataSource);
-    }
-
     public void stream(java.sql.Connection connection, java.util.function.Consumer<E> callback) {
         build().stream(connection, callback);
     }
 
-    public void stream(javax.sql.DataSource dataSource, java.util.function.Consumer<E> callback) {
-        build().stream(dataSource, callback);
-    }
-
     public E first(java.sql.Connection connection) {
         return build().first(connection);
-    }
-
-    public E first(javax.sql.DataSource dataSource) {
-        return build().first(dataSource);
     }
 
     public String toSql() {
@@ -121,8 +109,8 @@ public abstract class WhereChainBuilder<E, Q extends TypedQuery<E, Q>, W extends
         return build().orderByDesc(field);
     }
 
-    public Q limit(int limit) {
-        return build().limit(limit);
+    public Q limit(int rowCount) {
+        return build().limit(rowCount);
     }
 
     public Q limit(int offset, int rowCount) {
@@ -144,6 +132,7 @@ public abstract class WhereChainBuilder<E, Q extends TypedQuery<E, Q>, W extends
 
     /**
      * Chain result that allows .or() or .and() to continue, or terminal operations.
+     * Terminal methods delegate to the enclosing WhereChainBuilder to avoid duplication.
      */
     public class ChainResult {
         
@@ -176,49 +165,37 @@ public abstract class WhereChainBuilder<E, Q extends TypedQuery<E, Q>, W extends
             return buildCondition();
         }
 
-        // Terminal methods
+        // Terminal methods - delegate to enclosing class
         public java.util.List<E> list(java.sql.Connection connection) {
-            return build().list(connection);
-        }
-
-        public java.util.List<E> list(javax.sql.DataSource dataSource) {
-            return build().list(dataSource);
+            return WhereChainBuilder.this.list(connection);
         }
 
         public void stream(java.sql.Connection connection, java.util.function.Consumer<E> callback) {
-            build().stream(connection, callback);
-        }
-
-        public void stream(javax.sql.DataSource dataSource, java.util.function.Consumer<E> callback) {
-            build().stream(dataSource, callback);
+            WhereChainBuilder.this.stream(connection, callback);
         }
 
         public E first(java.sql.Connection connection) {
-            return build().first(connection);
-        }
-
-        public E first(javax.sql.DataSource dataSource) {
-            return build().first(dataSource);
+            return WhereChainBuilder.this.first(connection);
         }
 
         public String toSql() {
-            return build().toSql();
+            return WhereChainBuilder.this.toSql();
         }
 
         public Q orderBy(QueryField<E, ?> field) {
-            return build().orderBy(field);
+            return WhereChainBuilder.this.orderBy(field);
         }
 
         public Q orderByDesc(QueryField<E, ?> field) {
-            return build().orderByDesc(field);
+            return WhereChainBuilder.this.orderByDesc(field);
         }
 
-        public Q limit(int limit) {
-            return build().limit(limit);
+        public Q limit(int rowCount) {
+            return WhereChainBuilder.this.limit(rowCount);
         }
 
         public Q limit(int offset, int rowCount) {
-            return build().limit(offset, rowCount);
+            return WhereChainBuilder.this.limit(offset, rowCount);
         }
 
         public <T> WhereClause<E, T, Q> where(QueryField<E, T> field) {

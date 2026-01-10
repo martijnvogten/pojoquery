@@ -10,6 +10,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DbContext;
 import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.annotations.DiscriminatorColumn;
@@ -21,7 +22,9 @@ import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.dialects.PostgresDbContext;
+import org.pojoquery.integrationtest.DbContextExtension;
 
+@ExtendWith(DbContextExtension.class)
 public class TestSchemaGenerator {
 
     @BeforeEach

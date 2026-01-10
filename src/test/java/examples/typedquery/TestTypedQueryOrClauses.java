@@ -12,14 +12,17 @@ import javax.sql.DataSource;
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.PojoQuery;
+import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.schema.SchemaGenerator;
 
 /**
  * Tests for OR clause support in TypedQuery.
  */
+@ExtendWith(DbContextExtension.class)
 public class TestTypedQueryOrClauses {
 
     private DataSource dataSource;

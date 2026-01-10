@@ -21,6 +21,7 @@ import org.pojoquery.annotations.Other;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
+import org.pojoquery.pipeline.CustomizableQueryBuilder;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
@@ -94,7 +95,7 @@ import org.slf4j.LoggerFactory;
 public class PojoQuery<T> {
 	private static final Logger LOG = LoggerFactory.getLogger(PojoQuery.class);
 	
-	private final QueryBuilder<T> queryBuilder; 
+	private final CustomizableQueryBuilder<DefaultSqlQuery, T> queryBuilder; 
 	private final SqlQuery<DefaultSqlQuery> query;
 	private Class<T> resultClass;
 	private DbContext dbContext;
@@ -102,8 +103,8 @@ public class PojoQuery<T> {
 	private PojoQuery(DbContext context, Class<T> clz) {
 		this.dbContext = context;
 		this.resultClass = clz;
-		this.queryBuilder = QueryBuilder.from(clz);
-		this.query = queryBuilder.getQuery();
+		this.query = new DefaultSqlQuery(context);
+		this.queryBuilder = QueryBuilder.from(this.query, clz);
 	}
 	
 

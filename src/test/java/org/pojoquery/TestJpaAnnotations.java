@@ -13,7 +13,9 @@ import javax.sql.DataSource;
 
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DbContext.QuoteStyle;
+import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.schema.SchemaGenerator;
 
 import jakarta.persistence.Column;
@@ -29,6 +31,7 @@ import jakarta.persistence.Transient;
  * This verifies the AnnotationHelper correctly reads JPA annotations as alternatives
  * to PojoQuery's native annotations.
  */
+@ExtendWith(DbContextExtension.class)
 public class TestJpaAnnotations {
 
     // ========== Test Entities with JPA Annotations ==========

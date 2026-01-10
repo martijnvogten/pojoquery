@@ -46,7 +46,7 @@ public class InsertsIT {
 		DataSource db = initDatabase();
 		
 		try {
-			DB.withConnection(db, new Transaction<Void>() {
+			DB.runInTransaction(db, new Transaction<Void>() {
 				@Override
 				public Void run(Connection connection) {
 					User u = new User();
