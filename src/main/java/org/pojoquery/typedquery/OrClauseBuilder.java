@@ -50,6 +50,22 @@ public class OrClauseBuilder<E, Q extends TypedQuery<E, Q>> implements WhereTarg
      * has already combined the conditions into one).
      */
     protected Q endInternal() {
+        return applyConditionsToParent();
+    }
+
+    /**
+     * Ends the OR group and returns to the parent query.
+     * Combines all conditions with OR and adds them to the parent.
+     */
+    public Q end() {
+        return applyConditionsToParent();
+    }
+
+    /**
+     * Applies the accumulated conditions to the parent query.
+     * Combines multiple conditions with OR and wraps in parentheses.
+     */
+    private Q applyConditionsToParent() {
         if (conditions.isEmpty()) {
             return parentQuery;
         }
@@ -114,39 +130,6 @@ public class OrClauseBuilder<E, Q extends TypedQuery<E, Q>> implements WhereTarg
     @Deprecated
     public <T extends Comparable<? super T>> ComparableWhereClause<E, T, OrClauseBuilder<E, Q>> or(ComparableQueryField<E, T> field) {
         return where(field);
-    }
-
-    /**
-     * Ends the OR group and returns to the parent query.
-     * Combines all conditions with OR and adds them to the parent.
-     */
-    public Q end() {
-        if (conditions.isEmpty()) {
-            return parentQuery;
-        }
-        if (conditions.size() == 1) {
-            parentQuery.addWhere(conditions.get(0));
-            return parentQuery;
-        }
-
-        // Combine all conditions with OR
-        StringBuilder sql = new StringBuilder("(");
-        List<Object> allParams = new ArrayList<>();
-        
-        for (int i = 0; i < conditions.size(); i++) {
-            if (i > 0) {
-                sql.append(" OR ");
-            }
-            SqlExpression cond = conditions.get(i);
-            sql.append(cond.getSql());
-            for (Object param : cond.getParameters()) {
-                allParams.add(param);
-            }
-        }
-        sql.append(")");
-
-        parentQuery.addWhere(SqlExpression.sql(sql.toString(), allParams.toArray()));
-        return parentQuery;
     }
 
     // === WhereTarget implementation ===
