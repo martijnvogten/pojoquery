@@ -39,6 +39,22 @@ public class TestTypedQueryComplexNesting {
         SchemaGenerator.createTables(dataSource, Employee.class);
     }
 
+        /**
+     * Test: (A OR B) AND (C OR D)
+     * Two separate begin/end blocks create ANDed OR-groups
+     */
+    @Test
+    void testBeginAfterWhere() {
+        new EmployeeQuery()
+            .where().salary.greaterThan(50000)
+            .begin()
+                .where().lastName.is("Smith")
+                .or().lastName.is("Johnson")
+            .end()
+            .orderBy(firstName)
+            .toSql().toString();
+    }
+
     /**
      * Test: (A OR B) AND (C OR D)
      * Two separate begin/end blocks create ANDed OR-groups
@@ -59,9 +75,7 @@ public class TestTypedQueryComplexNesting {
                     .where().lastName.is("Smith")
                     .or().lastName.is("Johnson")
                 .end()
-                .begin()
-                    .where().salary.greaterThan(50000)
-                .end()
+                .where().salary.greaterThan(50000)
                 .orderBy(firstName)
                 .list(c);
 

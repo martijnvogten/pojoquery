@@ -7,9 +7,10 @@ package org.pojoquery.typedquery;
  * @param <E> The entity type
  * @param <Q> The query type (for fluent return)
  * @param <W> The where builder type (self-referential for fluent chains)
+ * @param <O> The OR clause builder type (for begin() return)
  */
-public abstract class WhereChainBuilder<E, Q extends TypedQuery<E, Q>, W extends WhereChainBuilder<E, Q, W>>
-        extends AbstractConditionBuilder<E, W, WhereChainBuilder<E, Q, W>.ChainResult> {
+public abstract class WhereChainBuilder<E, Q extends TypedQuery<E, Q>, W extends WhereChainBuilder<E, Q, W, O>, O extends OrClauseBuilder<E, Q>>
+        extends AbstractConditionBuilder<E, W, WhereChainBuilder<E, Q, W, O>.ChainResult> {
 
     // Prefixed with underscore to avoid clashes with entity field names
     protected final Q _query;
@@ -27,6 +28,11 @@ public abstract class WhereChainBuilder<E, Q extends TypedQuery<E, Q>, W extends
     protected ChainResult createChainResult() {
         return new ChainResult();
     }
+
+    /**
+     * Returns the OR clause builder for begin(). Subclasses override to return specific type.
+     */
+    protected abstract O createOrClauseBuilder();
 
     /**
      * Builds the final condition and applies it to the query.
@@ -165,8 +171,8 @@ public abstract class WhereChainBuilder<E, Q extends TypedQuery<E, Q>, W extends
          * Starts an OR clause group.
          * <p>Example: {@code query.where().firstName.like("A%").begin().where().lastName.is("Smith").end()}
          */
-        public OrClauseBuilder<E, Q> begin() {
-            return build().begin();
+        public O begin() {
+            return createOrClauseBuilder();
         }
     }
 }

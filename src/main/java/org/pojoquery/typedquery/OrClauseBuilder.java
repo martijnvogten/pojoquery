@@ -94,44 +94,6 @@ public class OrClauseBuilder<E, Q extends TypedQuery<E, Q>> implements WhereTarg
         return parentQuery;
     }
 
-    // === Legacy methods (kept for backward compatibility) ===
-
-    /**
-     * Begins a type-safe WHERE condition within this OR group.
-     * @deprecated Use where() without parameters for fluent field access
-     */
-    @Deprecated
-    public <T> WhereClause<E, T, OrClauseBuilder<E, Q>> where(QueryField<E, T> field) {
-        return new WhereClause<>(this, field);
-    }
-
-    /**
-     * Begins a type-safe WHERE condition for a comparable field within this OR group.
-     * @deprecated Use where() without parameters for fluent field access
-     */
-    @Deprecated
-    public <T extends Comparable<? super T>> ComparableWhereClause<E, T, OrClauseBuilder<E, Q>> where(ComparableQueryField<E, T> field) {
-        return new ComparableWhereClause<>(this, field);
-    }
-
-    /**
-     * Alias for where() - starts a new OR branch after a previous condition.
-     * @deprecated Use or() without parameters for fluent field access
-     */
-    @Deprecated
-    public <T> WhereClause<E, T, OrClauseBuilder<E, Q>> or(QueryField<E, T> field) {
-        return where(field);
-    }
-
-    /**
-     * Alias for where() for comparable fields - starts a new OR branch.
-     * @deprecated Use or() without parameters for fluent field access
-     */
-    @Deprecated
-    public <T extends Comparable<? super T>> ComparableWhereClause<E, T, OrClauseBuilder<E, Q>> or(ComparableQueryField<E, T> field) {
-        return where(field);
-    }
-
     // === WhereTarget implementation ===
 
     @Override
