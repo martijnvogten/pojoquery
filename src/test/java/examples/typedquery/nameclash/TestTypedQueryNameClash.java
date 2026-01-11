@@ -1,6 +1,9 @@
 package examples.typedquery.nameclash;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.util.List;
@@ -10,9 +13,11 @@ import javax.sql.DataSource;
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.PojoQuery;
+import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.schema.SchemaGenerator;
 
 /**
@@ -31,6 +36,7 @@ import org.pojoquery.schema.SchemaGenerator;
  *   <li>Company_.mainDepartment.head.department - second Department (properly nested)</li>
  * </ul>
  */
+@ExtendWith(DbContextExtension.class)
 public class TestTypedQueryNameClash {
 
     private DataSource dataSource;
