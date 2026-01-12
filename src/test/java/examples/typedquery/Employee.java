@@ -31,6 +31,8 @@ public class Employee {
     public LocalDate hireDate;
 
     public Integer salary;
+    
+    public String primary;
 
     protected Employee() {}
 

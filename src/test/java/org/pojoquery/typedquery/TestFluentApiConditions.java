@@ -185,7 +185,7 @@ public class TestFluentApiConditions {
     void testSimpleCondition() {
         String sql = Person_.lastName.eq("Smith").getSql();
 
-        assertEquals("{person}.lastName = ?", sql);
+        assertEquals("{person.lastName} = ?", sql);
     }
 
     @Test
@@ -195,7 +195,7 @@ public class TestFluentApiConditions {
             .and(Person_.lastName.eq("Smith"))
             .getSql();
 
-        assertEquals("({person}.firstName = ? AND {person}.lastName = ?)", sql);
+        assertEquals("({person.firstName} = ? AND {person.lastName} = ?)", sql);
     }
 
     @Test
@@ -205,7 +205,7 @@ public class TestFluentApiConditions {
             .or(Person_.firstName.eq("Jane"))
             .getSql();
 
-        assertEquals("({person}.firstName = ? OR {person}.firstName = ?)", sql);
+        assertEquals("({person.firstName} = ? OR {person.firstName} = ?)", sql);
     }
 
     @Test
@@ -220,7 +220,7 @@ public class TestFluentApiConditions {
         String sql = group1.or(group2).getSql();
 
         assertEquals(
-            "(({person}.firstName = ? AND {person}.lastName = ?) OR ({person}.firstName = ? AND {person}.lastName = ?))",
+            "(({person.firstName} = ? AND {person.lastName} = ?) OR ({person.firstName} = ? AND {person.lastName} = ?))",
             sql);
     }
 
@@ -243,7 +243,7 @@ public class TestFluentApiConditions {
 
         // Result is: ((firstName=John AND lastName=Smith) OR firstName=Jane) AND lastName=Doe
         assertEquals(
-            "((({person}.firstName = ? AND {person}.lastName = ?) OR {person}.firstName = ?) AND {person}.lastName = ?)",
+            "((({person.firstName} = ? AND {person.lastName} = ?) OR {person.firstName} = ?) AND {person.lastName} = ?)",
             sql);
     }
 
@@ -271,7 +271,7 @@ public class TestFluentApiConditions {
         // Verify the WHERE clause structure: (a AND b) OR (c AND d)
         // Parentheses are added by the Condition.or() combination
         assertEquals(
-			"(({person}.firstName = ? AND {person}.lastName = ?) OR ({person}.firstName = ? AND {person}.lastName = ?))",
+			"(({person.firstName} = ? AND {person.lastName} = ?) OR ({person.firstName} = ? AND {person.lastName} = ?))",
             sql);
     }
 
@@ -285,7 +285,7 @@ public class TestFluentApiConditions {
                 .lastName.eq("Smith")
             .toCondition().getSql();
 
-        assertEquals("({person}.firstName = ? AND {person}.lastName = ?)", sql);
+        assertEquals("({person.firstName} = ? AND {person.lastName} = ?)", sql);
     }
 
     @Test
@@ -303,7 +303,7 @@ public class TestFluentApiConditions {
         String sql = nameFilter.and(ageFilter).getSql();
 
         assertEquals(
-            "((({person}.firstName = ? AND {person}.lastName = ?) OR ({person}.firstName = ? AND {person}.lastName = ?)) AND {person}.age >= ?)",
+            "((({person.firstName} = ? AND {person.lastName} = ?) OR ({person.firstName} = ? AND {person.lastName} = ?)) AND {person.age} >= ?)",
             sql);
     }
 
@@ -322,7 +322,7 @@ public class TestFluentApiConditions {
             .toCondition().getSql();
 
         assertEquals(
-            "(({person}.firstName = ? OR {person}.lastName = ?) AND {person}.age >= ?)",
+            "(({person.firstName} = ? OR {person.lastName} = ?) AND {person.age} >= ?)",
             sql);
     }
 
@@ -335,7 +335,7 @@ public class TestFluentApiConditions {
             .toCondition().getSql();
 
         assertEquals(
-            "({person}.firstName IN (?, ?) AND {person}.age >= ?)",
+            "({person.firstName} IN (?, ?) AND {person.age} >= ?)",
             sql);
     }
 }

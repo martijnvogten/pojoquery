@@ -74,11 +74,12 @@ public class QueryField<E, T> {
     }
 
     /**
-     * Returns the fully qualified column reference (alias.column).
+     * Returns the fully qualified column reference (alias.column) wrapped in curly braces
+     * for proper escaping by the query pipeline.
      * @return the qualified column reference
      */
     public String getQualifiedColumn() {
-        return "{" + alias + "}." + columnName;
+        return "{" + alias + "." + columnName + "}";
     }
 
     @Override
