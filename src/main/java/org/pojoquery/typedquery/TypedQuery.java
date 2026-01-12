@@ -175,10 +175,10 @@ public abstract class TypedQuery<E, Q extends TypedQuery<E, Q>> implements Where
      *
      * <p>This generates: {@code WHERE (last_name = 'Smith' OR last_name = 'Johnson')}
      *
-     * @return an OrClauseBuilder for building the OR group
+     * @return a SubClauseBuilder for building the sub-clause group
      */
-    public OrClauseBuilder<E, Q> begin() {
-        return new OrClauseBuilder<>(self());
+    public SubClauseBuilder<E, Q> begin() {
+        return new SubClauseBuilder<>(self());
     }
 
     // === ORDER BY methods ===

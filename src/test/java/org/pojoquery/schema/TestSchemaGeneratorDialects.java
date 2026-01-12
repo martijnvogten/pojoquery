@@ -5,10 +5,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import java.util.stream.Stream;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.pojoquery.DbContext;
 import org.pojoquery.DbContext.Dialect;
+import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Lob;
@@ -20,6 +23,11 @@ import org.pojoquery.annotations.Table;
  */
 public class TestSchemaGeneratorDialects {
 
+    @BeforeEach
+	public void setup() {
+		DbContext.setDefault(DbContext.forDialect(Dialect.HSQLDB));
+	}
+	
     @Table("users")
     public static class User {
         @Id Long id;
@@ -412,5 +420,74 @@ public class TestSchemaGeneratorDialects {
             default:
                 break;
         }
+    }
+    
+    // Test entity with SQL reserved keyword as column name
+    @Table("contact")
+    public static class Contact {
+        @Id Long id;
+        String name;
+        @FieldName("primary")
+        Boolean isPrimary;  // 'primary' is a SQL reserved keyword
+    }
+    
+    /**
+     * Test that reserved SQL keywords used as column names are properly quoted
+     * when using DbContextBuilder with quoteObjectNames(true) for HSQLDB.
+     * 
+     * This test exposes an issue where 'primary' (a SQL keyword) causes errors
+     * in CREATE TABLE statements even when quoting is enabled.
+     */
+    @Test
+    public void testReservedKeywordColumnNameWithQuoting() {
+        // Use DbContextBuilder to create HSQLDB context with ANSI quoting enabled
+        DbContext dbContext = DbContext.builder()
+            .dialect(Dialect.HSQLDB)
+            .withQuoteStyle(DbContext.QuoteStyle.ANSI)
+            .quoteObjectNames(true)
+            .build();
+        
+        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Contact.class, dbContext);
+        String sql = String.join("\n", sqlList);
+        
+        System.out.println("HSQLDB with ANSI quoting (reserved keyword):\n" + sql + "\n");
+        
+        // The 'primary' column should be quoted to avoid SQL syntax errors
+        assertTrue(sql.contains("\"primary\""), 
+            "Reserved keyword 'primary' should be quoted with ANSI double quotes");
+        
+        // Also verify the table name is quoted
+        assertTrue(sql.contains("\"contact\""), 
+            "Table name should be quoted with ANSI double quotes");
+    }
+    
+    /**
+     * Test that exposes the issue: when using HSQLDB dialect with quoteObjectNames(true)
+     * but WITHOUT explicitly setting the quote style, the HSQLDB default QuoteStyle.NONE
+     * is still used, which doesn't quote the column names - causing SQL syntax errors
+     * for reserved keywords like 'primary'.
+     */
+    @Test
+    public void testReservedKeywordColumnNameWithQuoteObjectNamesOnly() {
+        // Use DbContextBuilder with HSQLDB dialect and quoteObjectNames(true),
+        // but WITHOUT explicitly setting a quote style.
+        // This exposes the bug: quoteObjectNames(true) should enable quoting,
+        // but HSQLDB's default QuoteStyle.NONE means identifiers are not quoted.
+        DbContext dbContext = DbContext.builder()
+            .dialect(Dialect.HSQLDB)
+            .quoteObjectNames(true)  // User expects this to enable quoting
+            .build();
+        
+        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Contact.class, dbContext);
+        String sql = String.join("\n", sqlList);
+        
+        System.out.println("HSQLDB with quoteObjectNames(true) only:\n" + sql + "\n");
+        
+        // This assertion will FAIL, exposing the bug:
+        // The 'primary' column is NOT quoted even though quoteObjectNames(true) was set
+        // because HSQLDB's default QuoteStyle is NONE
+        assertTrue(sql.contains("\"primary\""), 
+            "Reserved keyword 'primary' should be quoted when quoteObjectNames(true) is set, " +
+            "but HSQLDB's default QuoteStyle.NONE does not quote identifiers");
     }
 }

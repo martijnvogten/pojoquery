@@ -9,7 +9,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
@@ -17,6 +19,11 @@ import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.QueryBuilder;
 
 public class TestInheritance {
+
+	@BeforeEach
+	public void setup() {
+		DbContext.setDefault(DbContext.forDialect(Dialect.MYSQL));
+	}
 	
 	static class Entity {
 		@Id

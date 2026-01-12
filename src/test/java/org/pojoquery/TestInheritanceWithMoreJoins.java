@@ -3,7 +3,9 @@ package org.pojoquery;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.pojoquery.TestUtils.norm;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.SubClasses;
@@ -11,6 +13,11 @@ import org.pojoquery.annotations.Table;
 import org.pojoquery.pipeline.QueryBuilder;
 
 public class TestInheritanceWithMoreJoins {
+
+	@BeforeEach
+	public void setup() {
+		DbContext.setDefault(DbContext.forDialect(Dialect.MYSQL));
+	}
 	
 	static class Entity {
 		@Id

@@ -14,6 +14,7 @@ import javax.sql.DataSource;
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.schema.SchemaGenerator;
@@ -153,6 +154,7 @@ public class TestJpaAnnotations {
     @Test
     public void testJpaLobAnnotation() {
         DbContext dbContext = DbContext.builder()
+            .dialect(Dialect.HSQLDB)
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
@@ -167,6 +169,7 @@ public class TestJpaAnnotations {
     @Test
     public void testJpaTransientAnnotation() {
         DbContext dbContext = DbContext.builder()
+            .dialect(Dialect.HSQLDB)
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
@@ -181,6 +184,7 @@ public class TestJpaAnnotations {
     @Test
     public void testJpaSchemaAnnotation() {
         DbContext dbContext = DbContext.builder()
+            .dialect(Dialect.HSQLDB)
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
@@ -195,6 +199,7 @@ public class TestJpaAnnotations {
     @Test
     public void testJpaColumnPrecisionScale() {
         DbContext dbContext = DbContext.builder()
+            .dialect(Dialect.HSQLDB)
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
@@ -209,6 +214,7 @@ public class TestJpaAnnotations {
     @Test
     public void testJpaJoinColumnAnnotation() {
         DbContext dbContext = DbContext.builder()
+            .dialect(Dialect.HSQLDB)
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 

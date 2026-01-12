@@ -3,14 +3,22 @@ package org.pojoquery.typedquery;
 /**
  * Base class for fluent where clause chain building.
  * Supports patterns like: where().lastName.eq("Smith").or().firstName.eq("John")
+ * 
+ * <p>Also supports grouped conditions with begin()/end():
+ * <pre>{@code
+ * query.where()
+ *     .begin().firstName.eq("John").and().lastName.eq("Smith").end()
+ *     .or()
+ *     .begin().firstName.eq("Jane").and().lastName.eq("Doe").end()
+ * }</pre>
  *
  * @param <E> The entity type
  * @param <Q> The query type (for fluent return)
  * @param <W> The where builder type (self-referential for fluent chains)
- * @param <O> The OR clause builder type (for begin() return)
+ * @param <I> The inline sub-clause builder type (for begin() return - has direct field access)
  */
-public abstract class WhereChainBuilder<E, Q extends TypedQuery<E, Q>, W extends WhereChainBuilder<E, Q, W, O>, O extends OrClauseBuilder<E, Q>>
-        extends AbstractConditionBuilder<E, W, WhereChainBuilder<E, Q, W, O>.ChainResult> {
+public abstract class WhereChainBuilder<E, Q extends TypedQuery<E, Q>, W extends WhereChainBuilder<E, Q, W, I>, I extends InlineSubClauseBuilder<E, Q, W, I>>
+        extends AbstractConditionBuilder<E, W, WhereChainBuilder<E, Q, W, I>.ChainResult> {
 
     // Prefixed with underscore to avoid clashes with entity field names
     protected final Q _query;
@@ -30,9 +38,19 @@ public abstract class WhereChainBuilder<E, Q extends TypedQuery<E, Q>, W extends
     }
 
     /**
-     * Returns the OR clause builder for begin(). Subclasses override to return specific type.
+     * Returns the inline sub-clause builder for begin(). Subclasses override to return specific type.
+     * This allows direct field access: begin().lastName.eq("Smith").and().firstName.eq("John").end()
      */
-    protected abstract O createOrClauseBuilder();
+    protected abstract I createInlineSubClauseBuilder();
+
+    /**
+     * Starts a sub-clause group (parenthesized conditions) with direct field access.
+     * Can be called at the start of a where chain.
+     * <p>Example: {@code query.where().begin().lastName.is("Smith").or().lastName.is("Jones").end()}
+     */
+    public I begin() {
+        return createInlineSubClauseBuilder();
+    }
 
     /**
      * Builds the final condition and applies it to the query.
@@ -168,11 +186,11 @@ public abstract class WhereChainBuilder<E, Q extends TypedQuery<E, Q>, W extends
         }
 
         /**
-         * Starts an OR clause group.
-         * <p>Example: {@code query.where().firstName.like("A%").begin().where().lastName.is("Smith").end()}
+         * Starts a sub-clause group (parenthesized conditions) with direct field access.
+         * <p>Example: {@code query.where().firstName.like("A%").and().begin().lastName.is("Smith").or().lastName.is("Jones").end()}
          */
-        public O begin() {
-            return createOrClauseBuilder();
+        public I begin() {
+            return createInlineSubClauseBuilder();
         }
     }
 }

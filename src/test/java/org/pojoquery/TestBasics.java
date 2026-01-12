@@ -5,12 +5,19 @@ import static org.pojoquery.TestUtils.norm;
 
 import java.util.Date;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.pipeline.QueryBuilder;
 
 public class TestBasics {
+
+    @BeforeEach
+	public void setup() {
+		DbContext.setDefault(DbContext.forDialect(Dialect.MYSQL));
+	}
 	
 	@Table("user")
 	public static class User {

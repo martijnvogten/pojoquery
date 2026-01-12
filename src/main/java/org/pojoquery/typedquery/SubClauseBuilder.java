@@ -6,7 +6,7 @@ import java.util.List;
 import org.pojoquery.SqlExpression;
 
 /**
- * Builder for type-safe OR clause groups.
+ * Builder for type-safe sub-clause groups (parenthesized conditions).
  *
  * <p>Usage example:
  * <pre>{@code
@@ -22,31 +22,31 @@ import org.pojoquery.SqlExpression;
  * @param <E> the entity type
  * @param <Q> the parent query type (for returning after end())
  */
-public class OrClauseBuilder<E, Q extends TypedQuery<E, Q>> implements WhereTarget<OrClauseBuilder<E, Q>> {
+public class SubClauseBuilder<E, Q extends TypedQuery<E, Q>> implements WhereTarget<SubClauseBuilder<E, Q>> {
 
     private final Q parentQuery;
     private final List<SqlExpression> conditions = new ArrayList<>();
 
-    public OrClauseBuilder(Q parentQuery) {
+    public SubClauseBuilder(Q parentQuery) {
         this.parentQuery = parentQuery;
     }
 
     /**
-     * Gets the parent query (for use by generated OrClauseWhere classes).
+     * Gets the parent query (for use by generated SubClauseWhere classes).
      */
     protected Q getParentQuery() {
         return parentQuery;
     }
 
     /**
-     * Adds a condition to the OR group (for use by OrClauseWhereBuilder).
+     * Adds a condition to the sub-clause group (for use by SubClauseWhereBuilder).
      */
     protected void addCondition(Condition<E> condition) {
         conditions.add(condition.toExpression());
     }
 
     /**
-     * Internal end method that doesn't combine conditions (used when OrClauseWhereBuilder
+     * Internal end method that doesn't combine conditions (used when SubClauseWhereBuilder
      * has already combined the conditions into one).
      */
     protected Q endInternal() {
@@ -54,7 +54,7 @@ public class OrClauseBuilder<E, Q extends TypedQuery<E, Q>> implements WhereTarg
     }
 
     /**
-     * Ends the OR group and returns to the parent query.
+     * Ends the sub-clause group and returns to the parent query.
      * Combines all conditions with OR and adds them to the parent.
      */
     public Q end() {
@@ -97,13 +97,13 @@ public class OrClauseBuilder<E, Q extends TypedQuery<E, Q>> implements WhereTarg
     // === WhereTarget implementation ===
 
     @Override
-    public OrClauseBuilder<E, Q> addWhere(String sql, Object... params) {
+    public SubClauseBuilder<E, Q> addWhere(String sql, Object... params) {
         conditions.add(SqlExpression.sql(sql, params));
         return this;
     }
 
     @Override
-    public OrClauseBuilder<E, Q> addWhere(SqlExpression expression) {
+    public SubClauseBuilder<E, Q> addWhere(SqlExpression expression) {
         conditions.add(expression);
         return this;
     }

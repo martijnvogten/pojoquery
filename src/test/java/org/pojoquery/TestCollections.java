@@ -8,13 +8,20 @@ import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.pipeline.QueryBuilder;
 
 public class TestCollections {
+
+    @BeforeEach
+	public void setup() {
+		DbContext.setDefault(DbContext.forDialect(Dialect.MYSQL));
+	}
 	
 	@Table("article")
 	static class Article {

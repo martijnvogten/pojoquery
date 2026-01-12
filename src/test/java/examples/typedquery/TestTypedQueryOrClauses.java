@@ -51,10 +51,8 @@ public class TestTypedQueryOrClauses {
 
             // Test OR clause: lastName = 'Smith' OR lastName = 'Johnson'
             List<Employee> results = new EmployeeQuery()
-                .begin()
-                    .where().lastName.is("Smith")
-                    .or().lastName.is("Johnson")
-                .end()
+        		.where().lastName.is("Smith")
+                .or().lastName.is("Johnson")
                 .orderBy(firstName)
                 .list(c);
 
@@ -86,11 +84,12 @@ public class TestTypedQueryOrClauses {
 
             // Test: (lastName = 'Smith' OR lastName = 'Johnson') AND salary > 55000
             List<Employee> results = new EmployeeQuery()
-                .begin()
-                    .where().lastName.is("Smith")
-                    .or().lastName.is("Johnson")
-                .end()
-                .where().salary.greaterThan(55000)
+        		.where()
+	                .begin()
+	                    .lastName.is("Smith")
+	                    .or().lastName.is("Johnson")
+	                .end()
+                .and().salary.greaterThan(55000)
                 .orderBy(firstName)
                 .list(c);
 
@@ -99,11 +98,12 @@ public class TestTypedQueryOrClauses {
             assertEquals("Charlie", results.get(1).firstName); // Smith, 80000
 
             String sql = new EmployeeQuery()
+        		.where()
                 .begin()
-                    .where().lastName.is("Smith")
+                    .lastName.is("Smith")
                     .or().lastName.is("Johnson")
                 .end()
-                .where().salary.greaterThan(55000)
+                .and().salary.greaterThan(55000)
                 .toSql();
             System.out.println("Generated SQL with AND: " + sql);
         });
@@ -119,11 +119,10 @@ public class TestTypedQueryOrClauses {
 
             // Test three OR conditions
             List<Employee> results = new EmployeeQuery()
-                .begin()
-                    .where().lastName.is("Smith")
-                    .or().lastName.is("Johnson")
-                    .or().lastName.is("Williams")
-                .end()
+        		.where()
+                .lastName.is("Smith")
+                .or().lastName.is("Johnson")
+                .or().lastName.is("Williams")
                 .orderBy(firstName)
                 .list(c);
 

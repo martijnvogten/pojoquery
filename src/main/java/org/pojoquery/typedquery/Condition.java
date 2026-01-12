@@ -80,6 +80,14 @@ public class Condition<E> {
     }
 
     /**
+     * Wraps this condition in parentheses for explicit grouping.
+     * @return the grouped condition
+     */
+    public Condition<E> grouped() {
+        return new Condition<>("(" + this.sql + ")", this.params);
+    }
+
+    /**
      * Returns the SQL for this condition.
      * @return the SQL string
      */

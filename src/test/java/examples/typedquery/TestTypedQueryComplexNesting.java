@@ -48,7 +48,7 @@ public class TestTypedQueryComplexNesting {
         new EmployeeQuery()
             .where().salary.greaterThan(50000)
             .begin()
-                .where().lastName.is("Smith")
+                .lastName.is("Smith")
                 .or().lastName.is("Johnson")
             .end()
             .orderBy(firstName)

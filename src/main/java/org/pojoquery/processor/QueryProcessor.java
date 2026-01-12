@@ -132,7 +132,9 @@ public class QueryProcessor extends AbstractProcessor {
         generateQueryClass(packageName, entityName, queryClassName, fieldsClassName, tableName,
             fields, joins, aliases);
         generateWhereBuilderClass(packageName, entityName, queryClassName, fieldsClassName, tableName, fields, aliases);
-        generateOrClauseWhereClass(packageName, entityName, queryClassName, fieldsClassName, tableName, fields, aliases);
+        generateInlineSubClauseBuilderClass(packageName, entityName, queryClassName, fieldsClassName, tableName, fields, aliases);
+        generateSubClauseWhereClass(packageName, entityName, queryClassName, fieldsClassName, tableName, fields, aliases);
+        generateOrderByBuilderClass(packageName, entityName, queryClassName, fieldsClassName, tableName, fields, aliases);
     }
 
     // === Code generation ===
@@ -352,40 +354,51 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("    }");
             out.println();
 
-            // begin() - returns specialized OR clause builder with where() method
-            String orClauseWhereClass = className + "OrClauseWhere";
+            // begin() - returns specialized sub-clause builder with where() method
+            String subClauseWhereClass = className + "SubClauseWhere";
             out.println("    /**");
-            out.println("     * Start an OR clause group for complex conditions.");
+            out.println("     * Start a sub-clause group for complex conditions.");
             out.println("     * <p>Example: {@code query.begin().where().lastName.eq(\"Smith\").or().firstName.eq(\"John\").end()}");
             out.println("     */");
             out.println("    @Override");
-            out.println("    public " + className + "OrClauseBuilder begin() {");
-            out.println("        return new " + className + "OrClauseBuilder(this);");
+            out.println("    public " + className + "SubClauseBuilder begin() {");
+            out.println("        return new " + className + "SubClauseBuilder(this);");
             out.println("    }");
             out.println();
 
-            // Inner class for specialized OrClauseBuilder
+            // Inner class for specialized SubClauseBuilder
             out.println("    /**");
-            out.println("     * Specialized OR clause builder that provides fluent where() method.");
+            out.println("     * Specialized sub-clause builder that provides fluent where() method.");
             out.println("     */");
-            out.println("    public static class " + className + "OrClauseBuilder extends org.pojoquery.typedquery.OrClauseBuilder<" + entityName + ", " + className + "> {");
-            out.println("        public " + className + "OrClauseBuilder(" + className + " parentQuery) {");
+            out.println("    public static class " + className + "SubClauseBuilder extends org.pojoquery.typedquery.SubClauseBuilder<" + entityName + ", " + className + "> {");
+            out.println("        public " + className + "SubClauseBuilder(" + className + " parentQuery) {");
             out.println("            super(parentQuery);");
             out.println("        }");
             out.println();
             out.println("        /**");
-            out.println("         * Start a fluent where clause within this OR group.");
+            out.println("         * Start a fluent where clause within this sub-clause group.");
             out.println("         */");
-            out.println("        public " + orClauseWhereClass + " where() {");
-            out.println("            return new " + orClauseWhereClass + "(this);");
+            out.println("        public " + subClauseWhereClass + " where() {");
+            out.println("            return new " + subClauseWhereClass + "(this);");
             out.println("        }");
             out.println();
             out.println("        /**");
             out.println("         * Alias for where() - starts a new condition after previous ones.");
             out.println("         */");
-            out.println("        public " + orClauseWhereClass + " or() {");
+            out.println("        public " + subClauseWhereClass + " or() {");
             out.println("            return where();");
             out.println("        }");
+            out.println("    }");
+            out.println();
+
+            // orderBy() - returns fluent orderBy builder
+            String orderByBuilderClass = className + "OrderBy";
+            out.println("    /**");
+            out.println("     * Start a fluent ORDER BY clause chain.");
+            out.println("     * <p>Example: {@code query.orderBy().lastName.asc().firstName.desc()}");
+            out.println("     */");
+            out.println("    public " + orderByBuilderClass + " orderBy() {");
+            out.println("        return new " + orderByBuilderClass + "(this);");
             out.println("    }");
             out.println();
 
@@ -786,7 +799,7 @@ public class QueryProcessor extends AbstractProcessor {
             List<SqlField> fields, LinkedHashMap<String, Alias> aliases) throws IOException {
 
         String className = queryClassName + "Where";
-        String orClauseBuilderClass = queryClassName + "." + queryClassName + "OrClauseBuilder";
+        String inlineSubClauseClass = queryClassName + "InlineSubClause";
         String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
         JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
 
@@ -805,7 +818,7 @@ public class QueryProcessor extends AbstractProcessor {
             out.println(" * <p>Usage: {@code query.where().lastName.eq(\"Smith\").or().firstName.eq(\"John\")}");
             out.println(" */");
             out.println("@SuppressWarnings(\"all\")");
-            out.println("public class " + className + " extends WhereChainBuilder<" + entityName + ", " + queryClassName + ", " + className + ", " + orClauseBuilderClass + "> {");
+            out.println("public class " + className + " extends WhereChainBuilder<" + entityName + ", " + queryClassName + ", " + className + ", " + inlineSubClauseClass + "> {");
             out.println();
 
             // Constructor
@@ -850,10 +863,10 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("    }");
             out.println();
             
-            // Generate createOrClauseBuilder() that returns the correctly-typed OrClauseBuilder
+            // Generate createInlineSubClauseBuilder() that returns the correctly-typed InlineSubClauseBuilder
             out.println("    @Override");
-            out.println("    protected " + orClauseBuilderClass + " createOrClauseBuilder() {");
-            out.println("        return _query.begin();");
+            out.println("    protected " + inlineSubClauseClass + " createInlineSubClauseBuilder() {");
+            out.println("        return new " + inlineSubClauseClass + "(this);");
             out.println("    }");
             out.println("}");
         }
@@ -903,14 +916,15 @@ public class QueryProcessor extends AbstractProcessor {
     }
 
     /**
-     * Generates an OrClauseWhere builder class for fluent OR clause building within begin()/end() blocks.
-     * Example: query.begin().where().lastName.eq("Smith").or().firstName.eq("John").end()
+     * Generates an InlineSubClauseBuilder class for begin()/end() grouping within where() chains.
+     * Example: query.where().begin().lastName.eq("Smith").or().firstName.eq("John").end().and().age.ge(18)
      */
-    private void generateOrClauseWhereClass(String packageName, String entityName,
+    private void generateInlineSubClauseBuilderClass(String packageName, String entityName,
             String queryClassName, String fieldsClassName, String tableName,
             List<SqlField> fields, LinkedHashMap<String, Alias> aliases) throws IOException {
 
-        String className = queryClassName + "OrClauseWhere";
+        String whereClassName = queryClassName + "Where";
+        String className = queryClassName + "InlineSubClause";
         String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
         JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
 
@@ -921,21 +935,138 @@ public class QueryProcessor extends AbstractProcessor {
             }
 
             out.println("import org.pojoquery.typedquery.ComparableQueryField;");
-            out.println("import org.pojoquery.typedquery.OrClauseBuilder;");
-            out.println("import org.pojoquery.typedquery.OrClauseWhereBuilder;");
+            out.println("import org.pojoquery.typedquery.InlineSubClauseBuilder;");
             out.println("import org.pojoquery.typedquery.QueryField;");
             out.println();
             out.println("/**");
-            out.println(" * Fluent OR clause builder for {@link " + entityName + "}.");
-            out.println(" * <p>Usage: {@code query.begin().where().lastName.eq(\"Smith\").or().firstName.eq(\"John\").end()}");
+            out.println(" * Inline sub-clause builder for {@link " + entityName + "}.");
+            out.println(" * <p>Usage: {@code query.where().begin().lastName.eq(\"Smith\").or().firstName.eq(\"John\").end().and().age.ge(18)}");
             out.println(" */");
             out.println("@SuppressWarnings(\"all\")");
-            out.println("public class " + className + " extends OrClauseWhereBuilder<" + entityName + ", " + queryClassName + ", " + className + "> {");
+            out.println("public class " + className + " extends InlineSubClauseBuilder<" + entityName + ", " + queryClassName + ", " + whereClassName + ", " + className + "> {");
             out.println();
 
             // Constructor
-            out.println("    public " + className + "(OrClauseBuilder<" + entityName + ", " + queryClassName + "> orClauseBuilder) {");
-            out.println("        super(orClauseBuilder);");
+            out.println("    public " + className + "(" + whereClassName + " parentBuilder) {");
+            out.println("        super(parentBuilder);");
+            out.println("    }");
+            out.println();
+
+            // Group fields by alias
+            Map<String, List<SqlField>> fieldsByAlias = new LinkedHashMap<>();
+            for (SqlField field : fields) {
+                String alias = extractAliasFromFieldAlias(field.alias);
+                fieldsByAlias.computeIfAbsent(alias, k -> new ArrayList<>()).add(field);
+            }
+
+            // Main entity fields as instance properties
+            Alias mainAlias = aliases.get(tableName);
+            List<SqlField> mainFields = fieldsByAlias.getOrDefault(tableName, List.of());
+            for (SqlField field : mainFields) {
+                String fieldName = extractFieldNameFromAlias(field.alias);
+                FieldInfo fieldInfo = getFieldInfo(mainAlias, fieldName);
+                
+                String chainFieldType = fieldInfo.isComparable 
+                    ? "ComparableChainField<" + fieldInfo.typeName + ">"
+                    : "ChainField<" + fieldInfo.typeName + ">";
+                
+                out.println("    /** Field: " + fieldName + " */");
+                out.println("    public final " + chainFieldType + " " + fieldName + " = ");
+                out.println("        new " + chainFieldType + "(" + fieldsClassName + "." + fieldName + ");");
+            }
+            out.println();
+
+            // Build tree structure and generate nested classes recursively
+            RelationNode root = buildRelationTree(tableName, fieldsByAlias.keySet());
+            for (RelationNode child : root.children.values()) {
+                generateNestedInlineSubClauseClass(out, fieldsClassName, child, fieldsByAlias, aliases, "    ", fieldsClassName);
+            }
+
+            out.println("    @Override");
+            out.println("    protected " + className + " self() {");
+            out.println("        return this;");
+            out.println("    }");
+            out.println("}");
+        }
+    }
+
+    /**
+     * Recursively generates nested inline sub-clause builder classes for relationships.
+     */
+    private void generateNestedInlineSubClauseClass(PrintWriter out, String fieldsClassName, RelationNode node,
+            Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases,
+            String indent, String fieldsPathPrefix) {
+        
+        String alias = node.fullAlias;
+        String relationFieldName = node.name;
+        String innerClassName = relationFieldName + "InlineSubClause";
+        // Build the fields class path: e.g., "Employee_.projects.employee"
+        String fieldsPath = fieldsPathPrefix + "." + relationFieldName;
+        
+        out.println(indent + "/** Inline sub-clause builder for the {@code " + relationFieldName + "} relationship */");
+        out.println(indent + "public final " + innerClassName + " " + relationFieldName + " = new " + innerClassName + "();");
+        out.println();
+        out.println(indent + "public class " + innerClassName + " {");
+        
+        Alias relAlias = aliases.get(alias);
+        List<SqlField> relationFields = fieldsByAlias.getOrDefault(alias, List.of());
+        for (SqlField field : relationFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias);
+            FieldInfo fieldInfo = getFieldInfo(relAlias, fieldName);
+            
+            String chainFieldType = fieldInfo.isComparable 
+                ? "ComparableChainField<" + fieldInfo.typeName + ">"
+                : "ChainField<" + fieldInfo.typeName + ">";
+            
+            out.println(indent + "    public final " + chainFieldType + " " + fieldName + " = ");
+            out.println(indent + "        new " + chainFieldType + "(" + fieldsPath + "." + fieldName + ");");
+        }
+        
+        // Recursively generate nested classes for child relations
+        for (RelationNode child : node.children.values()) {
+            out.println();
+            generateNestedInlineSubClauseClass(out, fieldsClassName, child, fieldsByAlias, aliases, indent + "    ", fieldsPath);
+        }
+        
+        out.println(indent + "    private " + innerClassName + "() {}");
+        out.println(indent + "}");
+        out.println();
+    }
+
+    /**
+     * Generates a SubClauseWhere builder class for fluent sub-clause building within begin()/end() blocks.
+     * Example: query.begin().where().lastName.eq("Smith").or().firstName.eq("John").end()
+     */
+    private void generateSubClauseWhereClass(String packageName, String entityName,
+            String queryClassName, String fieldsClassName, String tableName,
+            List<SqlField> fields, LinkedHashMap<String, Alias> aliases) throws IOException {
+
+        String className = queryClassName + "SubClauseWhere";
+        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
+        JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
+
+        try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
+            if (!packageName.isEmpty()) {
+                out.println("package " + packageName + ";");
+                out.println();
+            }
+
+            out.println("import org.pojoquery.typedquery.ComparableQueryField;");
+            out.println("import org.pojoquery.typedquery.SubClauseBuilder;");
+            out.println("import org.pojoquery.typedquery.SubClauseWhereBuilder;");
+            out.println("import org.pojoquery.typedquery.QueryField;");
+            out.println();
+            out.println("/**");
+            out.println(" * Fluent sub-clause builder for {@link " + entityName + "}.");
+            out.println(" * <p>Usage: {@code query.begin().where().lastName.eq(\"Smith\").or().firstName.eq(\"John\").end()}");
+            out.println(" */");
+            out.println("@SuppressWarnings(\"all\")");
+            out.println("public class " + className + " extends SubClauseWhereBuilder<" + entityName + ", " + queryClassName + ", " + className + "> {");
+            out.println();
+
+            // Constructor
+            out.println("    public " + className + "(SubClauseBuilder<" + entityName + ", " + queryClassName + "> subClauseBuilder) {");
+            out.println("        super(subClauseBuilder);");
             out.println("    }");
             out.println();
 
@@ -1018,6 +1149,120 @@ public class QueryProcessor extends AbstractProcessor {
         out.println(indent + "    private " + innerClassName + "() {}");
         out.println(indent + "}");
         out.println();
+    }
+
+    /**
+     * Generates an orderBy builder class for fluent chain-style orderBy clauses.
+     * Example: query.orderBy().lastName.asc().firstName.desc()
+     */
+    private void generateOrderByBuilderClass(String packageName, String entityName,
+            String queryClassName, String fieldsClassName, String tableName,
+            List<SqlField> fields, LinkedHashMap<String, Alias> aliases) throws IOException {
+
+        String className = queryClassName + "OrderBy";
+        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
+        JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
+
+        try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
+            if (!packageName.isEmpty()) {
+                out.println("package " + packageName + ";");
+                out.println();
+            }
+
+            out.println("import org.pojoquery.typedquery.QueryField;");
+            out.println("import org.pojoquery.typedquery.OrderByBuilder;");
+            out.println();
+            out.println("/**");
+            out.println(" * Fluent ORDER BY clause builder for {@link " + entityName + "}.");
+            out.println(" * <p>Usage: {@code query.orderBy().lastName.asc().firstName.desc()}");
+            out.println(" */");
+            out.println("@SuppressWarnings(\"all\")");
+            out.println("public class " + className + " extends OrderByBuilder<" + entityName + ", " + queryClassName + ", " + className + "> {");
+            out.println();
+
+            // Constructor
+            out.println("    public " + className + "(" + queryClassName + " query) {");
+            out.println("        super(query);");
+            out.println("    }");
+            out.println();
+
+            // Group fields by alias
+            Map<String, List<SqlField>> fieldsByAlias = new LinkedHashMap<>();
+            for (SqlField field : fields) {
+                String alias = extractAliasFromFieldAlias(field.alias);
+                fieldsByAlias.computeIfAbsent(alias, k -> new ArrayList<>()).add(field);
+            }
+
+            // Main entity fields as instance properties
+            Alias mainAlias = aliases.get(tableName);
+            List<SqlField> mainFields = fieldsByAlias.getOrDefault(tableName, List.of());
+            for (SqlField field : mainFields) {
+                String fieldName = extractFieldNameFromAlias(field.alias);
+                
+                out.println("    /** Field: " + fieldName + " */");
+                out.println("    public final OrderByField<" + getFieldTypeName(mainAlias, fieldName) + "> " + fieldName + " = ");
+                out.println("        new OrderByField<>(" + fieldsClassName + "." + fieldName + ");");
+            }
+            out.println();
+
+            // Build tree structure and generate nested classes recursively
+            RelationNode root = buildRelationTree(tableName, fieldsByAlias.keySet());
+            for (RelationNode child : root.children.values()) {
+                generateNestedOrderByClass(out, fieldsClassName, child, fieldsByAlias, aliases, "    ", fieldsClassName);
+            }
+
+            out.println("    @Override");
+            out.println("    protected " + className + " self() {");
+            out.println("        return this;");
+            out.println("    }");
+            out.println("}");
+        }
+    }
+
+    /**
+     * Recursively generates nested orderBy builder classes for relationships.
+     */
+    private void generateNestedOrderByClass(PrintWriter out, String fieldsClassName, RelationNode node,
+            Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases,
+            String indent, String fieldsPathPrefix) {
+        
+        String alias = node.fullAlias;
+        String relationFieldName = node.name;
+        String innerClassName = relationFieldName + "OrderBy";
+        // Build the fields class path: e.g., "Employee_.projects.employee"
+        String fieldsPath = fieldsPathPrefix + "." + relationFieldName;
+        
+        out.println(indent + "/** OrderBy builder for the {@code " + relationFieldName + "} relationship */");
+        out.println(indent + "public final " + innerClassName + " " + relationFieldName + " = new " + innerClassName + "();");
+        out.println();
+        out.println(indent + "public class " + innerClassName + " {");
+        
+        Alias relAlias = aliases.get(alias);
+        List<SqlField> relationFields = fieldsByAlias.getOrDefault(alias, List.of());
+        for (SqlField field : relationFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias);
+            
+            out.println(indent + "    public final OrderByField<" + getFieldTypeName(relAlias, fieldName) + "> " + fieldName + " = ");
+            out.println(indent + "        new OrderByField<>(" + fieldsPath + "." + fieldName + ");");
+        }
+        
+        // Recursively generate nested classes for child relations
+        for (RelationNode child : node.children.values()) {
+            out.println();
+            generateNestedOrderByClass(out, fieldsClassName, child, fieldsByAlias, aliases, indent + "    ", fieldsPath);
+        }
+        
+        out.println(indent + "    private " + innerClassName + "() {}");
+        out.println(indent + "}");
+        out.println();
+    }
+
+    /**
+     * Gets the type name for a field (for generic type parameters).
+     */
+    private String getFieldTypeName(Alias alias, String fieldName) {
+        FieldInfo fieldInfo = getFieldInfo(alias, fieldName);
+        return fieldInfo != null ? fieldInfo.typeName : "Object";
     }
 }
 
