@@ -14,6 +14,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
+import org.pojoquery.DbContext.Dialect;
+import org.pojoquery.DbContext.QuoteStyle;
+import org.pojoquery.DbContextBuilder;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.schema.SchemaGenerator;
@@ -29,7 +32,8 @@ public class TestTypedQueryConditions {
 
     @BeforeEach
     void setup() {
-        DbContext.setDefault(DbContext.forDialect(DbContext.Dialect.HSQLDB));
+        DbContext.setDefault(new DbContextBuilder().dialect(Dialect.HSQLDB).withQuoteStyle(QuoteStyle.ANSI).quoteObjectNames(true).build());
+
 
         JDBCDataSource ds = new JDBCDataSource();
         ds.setUrl("jdbc:hsqldb:mem:condition_test_" + System.nanoTime());
