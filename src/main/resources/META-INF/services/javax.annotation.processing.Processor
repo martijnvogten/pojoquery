@@ -1,1 +1,2 @@
 org.pojoquery.processor.QueryProcessor
+org.pojoquery.processor.FluentQueryProcessor

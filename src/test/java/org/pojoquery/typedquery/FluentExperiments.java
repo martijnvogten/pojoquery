@@ -16,42 +16,15 @@ import org.pojoquery.typedquery.FluentExperiments.BookQuery.BookQueryStaticCondi
 
 public class FluentExperiments {
 
+	// Below is the original class that will be annotated with @GenerateQuery
 	static class Book {
 		@Id
 		public Long id;
 		public String title;
 	}
 
-	static class OrderByBuilder<Q> {
-	}
-
-	interface OrderByTarget {
-		void orderBy(String fieldExpression, boolean ascending);
-	}
-
-	static class OrderByField<Q> {
-		private final String tableAlias;
-		private final String columnName;
-		private final OrderByTarget target;
-		private final Q query;
-
-		public OrderByField(OrderByTarget target, Q query, String tableAlias, String columnName) {
-			this.target = target;
-			this.query = query;
-			this.tableAlias = tableAlias;
-			this.columnName = columnName;
-		}
-
-		public Q asc() {
-			target.orderBy("{" + tableAlias + "." + columnName + "}", true);
-			return query;
-		}
-
-		public Q desc() {
-			target.orderBy("{" + tableAlias + "." + columnName + "}", false);
-			return query;
-		}
-	}
+	// These are the utility classes that will be available to the generated code
+	// Move them to a separate package if needed
 
 	interface ConditionChain<C> {
 		C getContinuation();
@@ -86,7 +59,151 @@ public class FluentExperiments {
 		}
 	}
 
-	static class BookQuery {
+	interface OrderByTarget {
+		void orderBy(String fieldExpression, boolean ascending);
+	}
+
+	public static class OrderByField<Q> {
+		private final String tableAlias;
+		private final String columnName;
+		private final OrderByTarget target;
+		private final Q query;
+
+		public OrderByField(OrderByTarget target, Q query, String tableAlias, String columnName) {
+			this.target = target;
+			this.query = query;
+			this.tableAlias = tableAlias;
+			this.columnName = columnName;
+		}
+
+		public Q asc() {
+			target.orderBy("{" + tableAlias + "." + columnName + "}", true);
+			return query;
+		}
+
+		public Q desc() {
+			target.orderBy("{" + tableAlias + "." + columnName + "}", false);
+			return query;
+		}
+	}
+
+
+	static class ConditionBuilderField<T, C> {
+		protected final ChainFactory<C> chainFactory;
+
+		protected final String tableAlias;
+		protected final String columnName;
+
+		public ConditionBuilderField(ChainFactory<C> chainFactory, String tableAlias, String columnName) {
+			this.chainFactory = chainFactory;
+			this.tableAlias = tableAlias;
+			this.columnName = columnName;
+		}
+
+		public C eq(T other) {
+			var op = chainFactory.createChain();
+			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} = ?", other));
+			return op.getContinuation();
+		}
+
+		public C ne(T other) {
+			var op = chainFactory.createChain();
+			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} <> ?", other));
+			return op.getContinuation();
+		}
+
+		public C isNull() {
+			var op = chainFactory.createChain();
+			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} IS NULL"));
+			return op.getContinuation();
+		}
+
+		public C isNotNull() {
+			var op = chainFactory.createChain();
+			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} IS NOT NULL"));
+			return op.getContinuation();
+		}
+	}
+
+	static class ComparableConditionBuilderField<T, C> extends ConditionBuilderField<T, C> {
+		public ComparableConditionBuilderField(ChainFactory<C> chainFactory, String tableAlias, String columnName) {
+			super(chainFactory, tableAlias, columnName);
+		}
+
+		public C gt(T other) {
+			var op = chainFactory.createChain();
+			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} > ?", other));
+			return op.getContinuation();
+		}
+
+		public C lt(T other) {
+			var op = chainFactory.createChain();
+			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} < ?", other));
+			return op.getContinuation();
+		}
+
+		public C ge(T other) {
+			var op = chainFactory.createChain();
+			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} >= ?", other));
+			return op.getContinuation();
+		}
+
+		public C le(T other) {
+			var op = chainFactory.createChain();
+			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} <= ?", other));
+			return op.getContinuation();
+		}
+	}
+
+	static class StaticConditionTerminator<C, E> {
+		private final C continuation;
+		private ConditionBuilder builder;
+		private final E termination;
+
+		public StaticConditionTerminator(ConditionBuilder builder, C chainedContinuation, E termination) {
+			this.continuation = chainedContinuation;
+			this.builder = builder;
+			this.termination = termination;
+		}
+
+		public C and() {
+			builder = builder.add(sql(" AND "));
+			return continuation;
+		}
+
+		public C or() {
+			builder = builder.add(sql(" OR "));
+			return continuation;
+		}
+
+		public E and(SqlExpression expr) {
+			builder = builder.add(sql(" AND ")).startClause().add(expr).endClause();
+			return termination;
+		}
+
+		public E or(SqlExpression expr) {
+			builder = builder.add(sql(" OR ")).startClause().add(expr).endClause();
+			return termination;
+		}
+	}
+
+	interface ConditionBuilder {
+		ConditionBuilder startClause();
+
+		ConditionBuilder endClause();
+
+		ConditionBuilder add(SqlExpression expr);
+	}
+
+
+
+	// THE GENERATED CODE IS SIMULATED BELOW: FOLLOW THIS AS CLOSE AS POSSIBLE
+
+	// File: BookQuery.java
+
+	public static class BookQuery {
+
+		// For static condition chaining
 		public final ComparableConditionBuilderField<Long, BookQueryStaticConditionChain> id = new ComparableConditionBuilderField<Long, BookQueryStaticConditionChain>(
 				() -> new BookQueryStaticConditionChain(), "b", "id");
 		public final ComparableConditionBuilderField<String, BookQueryStaticConditionChain> title = new ComparableConditionBuilderField<String, BookQueryStaticConditionChain>(
@@ -204,7 +321,7 @@ public class FluentExperiments {
 
 		/**
 		 * if a field should mirror query methods like list() and groupBy()
-		 * this is neede to enable groupBy().firstName.list() syntax
+		 * this is needed to enable groupBy().firstName.list() syntax
 		 */
 		private class BookQueryDelegate {
 			protected void callback() {
@@ -241,7 +358,8 @@ public class FluentExperiments {
 			}
 		}
 
-		class BookQueryWhereBuilder implements ConditionChain<BookQueryWhereBuilder.BookQueryWhereConditionTerminator> {
+		// This is for where clause building. Make sure it is generated as an inner class
+		public class BookQueryWhereBuilder implements ConditionChain<BookQueryWhereBuilder.BookQueryWhereConditionTerminator> {
 			public final ComparableConditionBuilderField<Long, BookQueryWhereBuilder.BookQueryWhereConditionTerminator> id = new ComparableConditionBuilderField<Long, BookQueryWhereBuilder.BookQueryWhereConditionTerminator>(
 					() -> this, "b", "id");
 			public final ComparableConditionBuilderField<String, BookQueryWhereBuilder.BookQueryWhereConditionTerminator> title = new ComparableConditionBuilderField<String, BookQueryWhereBuilder.BookQueryWhereConditionTerminator>(
@@ -313,112 +431,7 @@ public class FluentExperiments {
 
 	}
 
-	static class ConditionBuilderField<T, C> {
-		protected final ChainFactory<C> chainFactory;
-
-		protected final String tableAlias;
-		protected final String columnName;
-
-		public ConditionBuilderField(ChainFactory<C> chainFactory, String tableAlias, String columnName) {
-			this.chainFactory = chainFactory;
-			this.tableAlias = tableAlias;
-			this.columnName = columnName;
-		}
-
-		public C eq(T other) {
-			var op = chainFactory.createChain();
-			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} = ?", other));
-			return op.getContinuation();
-		}
-
-		public C ne(T other) {
-			var op = chainFactory.createChain();
-			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} <> ?", other));
-			return op.getContinuation();
-		}
-
-		public C isNull() {
-			var op = chainFactory.createChain();
-			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} IS NULL"));
-			return op.getContinuation();
-		}
-
-		public C isNotNull() {
-			var op = chainFactory.createChain();
-			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} IS NOT NULL"));
-			return op.getContinuation();
-		}
-	}
-
-	static class ComparableConditionBuilderField<T, C> extends ConditionBuilderField<T, C> {
-		public ComparableConditionBuilderField(ChainFactory<C> chainFactory, String tableAlias, String columnName) {
-			super(chainFactory, tableAlias, columnName);
-		}
-
-		public C gt(T other) {
-			var op = chainFactory.createChain();
-			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} > ?", other));
-			return op.getContinuation();
-		}
-
-		public C lt(T other) {
-			var op = chainFactory.createChain();
-			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} < ?", other));
-			return op.getContinuation();
-		}
-
-		public C ge(T other) {
-			var op = chainFactory.createChain();
-			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} >= ?", other));
-			return op.getContinuation();
-		}
-
-		public C le(T other) {
-			var op = chainFactory.createChain();
-			op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} <= ?", other));
-			return op.getContinuation();
-		}
-	}
-
-	static class StaticConditionTerminator<C, E> {
-		private final C continuation;
-		private ConditionBuilder builder;
-		private final E termination;
-
-		public StaticConditionTerminator(ConditionBuilder builder, C chainedContinuation, E termination) {
-			this.continuation = chainedContinuation;
-			this.builder = builder;
-			this.termination = termination;
-		}
-
-		public C and() {
-			builder = builder.add(sql(" AND "));
-			return continuation;
-		}
-
-		public C or() {
-			builder = builder.add(sql(" OR "));
-			return continuation;
-		}
-
-		public E and(SqlExpression expr) {
-			builder = builder.add(sql(" AND ")).startClause().add(expr).endClause();
-			return termination;
-		}
-
-		public E or(SqlExpression expr) {
-			builder = builder.add(sql(" OR ")).startClause().add(expr).endClause();
-			return termination;
-		}
-	}
-
-	interface ConditionBuilder {
-		ConditionBuilder startClause();
-
-		ConditionBuilder endClause();
-
-		ConditionBuilder add(SqlExpression expr);
-	}
+	// END OF SIMULATED GENERATED CODE
 
 	@Test
 	public void testFluentApi() {
