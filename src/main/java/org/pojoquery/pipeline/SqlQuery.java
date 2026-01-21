@@ -237,7 +237,7 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 
 		String sql = implode(" ", Arrays.asList(
 					selectClause.getSql(), 
-					"\nFROM", DB.prefixAndQuoteTableName(dbContext, schema, from), "AS", dbContext.quoteAlias(from) + "\n", 
+					"\nFROM", DB.prefixAndQuoteTableName(dbContext, schema, from), "AS", dbContext.quoteAlias(from), 
 					joinsClause.getSql(), 
 					whereClause == null ? "" : whereClause.getSql(), 
 					groupByClause,

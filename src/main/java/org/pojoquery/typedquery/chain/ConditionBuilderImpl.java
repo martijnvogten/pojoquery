@@ -14,7 +14,7 @@ import static org.pojoquery.SqlExpression.sql;
 public class ConditionBuilderImpl implements ConditionBuilder {
     
     /** The accumulated SQL expressions. */
-    public List<SqlExpression> expressions = new ArrayList<>();
+    private List<SqlExpression> expressions = new ArrayList<>();
 
     @Override
     public ConditionBuilder startClause() {
@@ -33,4 +33,9 @@ public class ConditionBuilderImpl implements ConditionBuilder {
         expressions.add(expr);
         return this;
     }
+
+    public List<SqlExpression> getExpressions() {
+        return expressions;
+    }
+
 }

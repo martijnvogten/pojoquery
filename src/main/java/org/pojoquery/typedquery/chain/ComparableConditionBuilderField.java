@@ -64,4 +64,10 @@ public class ComparableConditionBuilderField<T, C> extends ConditionBuilderField
         op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} <= ?", other));
         return op.getContinuation();
     }
+
+    public C like(String pattern) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} LIKE ?", pattern));
+        return op.getContinuation();
+    }
 }
