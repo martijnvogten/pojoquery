@@ -50,18 +50,6 @@ public class DbContextBuilder {
      */
     public DbContextBuilder withQuoteStyle(QuoteStyle style) {
         this.quoteStyle = style;
-        // Map quote style to appropriate dialect
-        switch (style) {
-            case MYSQL:
-                this.dialect = Dialect.MYSQL;
-                break;
-            case ANSI:
-                this.dialect = Dialect.POSTGRES;
-                break;
-            case NONE:
-                this.dialect = Dialect.HSQLDB;
-                break;
-        }
         return this;
     }
 
@@ -166,6 +154,11 @@ public class DbContextBuilder {
             }
             // Use potentially overridden quote style
             QuoteStyle style = getQuoteStyle();
+            // If quoteObjects is explicitly true but the style is NONE, use ANSI quoting
+            // This handles the case where HSQLDB dialect is used with quoteObjectNames(true)
+            if (quoteObjects != null && quoteObjects && style == QuoteStyle.NONE) {
+                style = QuoteStyle.ANSI;
+            }
             StringBuilder ret = new StringBuilder();
             for (int i = 0; i < names.length; i++) {
                 if (i > 0) {

@@ -5,7 +5,7 @@
 
   <groupId>org.pojoquery</groupId>
   <artifactId>pojoquery</artifactId>
-  <version>4.0.0-BETA</version>
+  <version>4.1.0-BETA</version>
 
   <name>pojoquery</name>
   <description>Model-driven ORM library for Java</description>
@@ -93,19 +93,42 @@
       <version>2.0.16</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>jakarta.persistence</groupId>
+      <artifactId>jakarta.persistence-api</artifactId>
+      <version>3.1.0</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <id>add-test-source</id>
+            <phase>generate-test-sources</phase>
+            <goals>
+              <goal>add-test-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${project.build.directory}/generated-test-sources/test-annotations</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
         <version>3.5.2</version>
         <configuration>
           <systemPropertyVariables>
-            <!-- Required for Docker 29+ compatibility with Testcontainers -->
             <api.version>1.44</api.version>
-            <!-- Default to HSQLDB, can be overridden by profiles -->
             <test.database>hsqldb</test.database>
           </systemPropertyVariables>
         </configuration>
@@ -168,17 +191,12 @@
       </plugin>
     </plugins>
 
-    <pluginManagement>      <!-- lock down plugins versions to avoid using Maven
-			defaults (may be moved to parent pom) -->
+    <pluginManagement>
       <plugins>
-        <!-- clean lifecycle, see
-				https://maven.apache.org/ref/current/maven-core/lifecycles.html#clean_Lifecycle -->
         <plugin>
           <artifactId>maven-clean-plugin</artifactId>
           <version>3.4.0</version>
         </plugin>
-        <!-- default lifecycle, jar packaging: see
-				https://maven.apache.org/ref/current/maven-core/default-bindings.html#Plugin_bindings_for_jar_packaging -->
         <plugin>
           <artifactId>maven-resources-plugin</artifactId>
           <version>3.3.1</version>
@@ -186,13 +204,32 @@
         <plugin>
           <artifactId>maven-compiler-plugin</artifactId>
           <version>3.13.0</version>
+          <executions>
+            <execution>
+              <id>default-compile</id>
+              <configuration>
+                <!-- Don't use annotation processor during main compilation -->
+                <proc>none</proc>
+              </configuration>
+            </execution>
+            <execution>
+              <id>default-testCompile</id>
+              <configuration>
+                <!-- Explicitly include generated sources -->
+                <compileSourceRoots>
+                  <compileSourceRoot>${project.basedir}/src/test/java</compileSourceRoot>
+                  <compileSourceRoot>${project.build.directory}/generated-test-sources/test-annotations</compileSourceRoot>
+                </compileSourceRoots>
+              </configuration>
+            </execution>
+          </executions>
         </plugin>
         <plugin>
           <artifactId>maven-surefire-plugin</artifactId>
           <version>3.3.0</version>
           <configuration>
+            <runOrder>random</runOrder>
             <systemPropertyVariables>
-              <!-- Required for Docker 29+ compatibility with Testcontainers -->
               <api.version>1.44</api.version>
             </systemPropertyVariables>
           </configuration>
@@ -209,8 +246,6 @@
           <artifactId>maven-deploy-plugin</artifactId>
           <version>3.1.2</version>
         </plugin>
-        <!-- site lifecycle, see
-				https://maven.apache.org/ref/current/maven-core/lifecycles.html#site_Lifecycle -->
         <plugin>
           <artifactId>maven-site-plugin</artifactId>
           <version>3.12.1</version>
@@ -221,11 +256,10 @@
         </plugin>
       </plugins>
     </pluginManagement>
-  
+
   </build>
-  
+
   <profiles>
-    <!-- Profile for running integration tests against PostgreSQL -->
     <profile>
       <id>postgres</id>
       <build>
@@ -243,8 +277,7 @@
         </plugins>
       </build>
     </profile>
-    
-    <!-- Profile for running integration tests against MySQL -->
+
     <profile>
       <id>mysql</id>
       <build>
@@ -262,8 +295,7 @@
         </plugins>
       </build>
     </profile>
-    
-    <!-- Profile for running integration tests against all databases -->
+
     <profile>
       <id>all-databases</id>
       <build>
@@ -310,7 +342,7 @@
       </build>
     </profile>
   </profiles>
-  
+
   <distributionManagement>
     <repository>
       <id>github</id>

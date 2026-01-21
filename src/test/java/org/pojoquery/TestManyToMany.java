@@ -6,12 +6,20 @@ import java.util.Date;
 import java.util.List;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 
 public class TestManyToMany {
+
+	@BeforeEach
+	public void setup() {
+		DbContext.setDefault(DbContext.forDialect(Dialect.MYSQL));
+	}
+	
 
 	@Table("person")
 	static class PersonRecord {

@@ -3,14 +3,13 @@ package org.pojoquery;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Date;
 import java.util.Map;
 
-import org.pojoquery.annotations.Column;
-import org.pojoquery.annotations.Lob;
 import org.pojoquery.dialects.HsqldbDbContext;
 import org.pojoquery.dialects.MysqlDbContext;
 import org.pojoquery.dialects.PostgresDbContext;
@@ -253,9 +252,9 @@ public interface DbContext {
 			return "TINYINT(1)";
 		}
 		if (type == BigDecimal.class) {
-			Column colAnn = field.getAnnotation(Column.class);
-			int precision = (colAnn != null) ? colAnn.precision() : 19;
-			int scale = (colAnn != null) ? colAnn.scale() : 4;
+			AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);
+			int precision = (colMeta != null) ? colMeta.precision : 19;
+			int scale = (colMeta != null) ? colMeta.scale : 4;
 			return "DECIMAL(" + precision + "," + scale + ")";
 		}
 		if (type == BigInteger.class) {
@@ -264,17 +263,20 @@ public interface DbContext {
 
 		// Handle String
 		if (type == String.class) {
-			if (field.getAnnotation(Lob.class) != null) {
+			if (AnnotationHelper.isLob(field)) {
 				return "CLOB";
 			}
-			Column colAnn = field.getAnnotation(Column.class);
-			int length = (colAnn != null) ? colAnn.length() : getDefaultVarcharLength();
+			AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);
+			int length = (colMeta != null) ? colMeta.length : getDefaultVarcharLength();
 			return "VARCHAR(" + length + ")";
 		}
 
 		// Handle date/time types
-		if (type == Date.class || type == java.sql.Timestamp.class || type == LocalDateTime.class) {
+		if (type == LocalDateTime.class) {
 			return "DATETIME";
+		}
+		if (type == Date.class || type == java.sql.Timestamp.class || type == Instant.class) {
+			return "TIMESTAMP";
 		}
 		if (type == java.sql.Date.class || type == LocalDate.class) {
 			return "DATE";
@@ -325,5 +327,47 @@ public interface DbContext {
 	 */
 	default String getCreateTableSuffix() {
 		return " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+	}
+
+	/**
+	 * Converts a Java parameter value to a JDBC-compatible value for use in prepared statements.
+	 * Override this method to customize how specific types are converted for your database.
+	 * 
+	 * <p>The default implementation handles:</p>
+	 * <ul>
+	 *   <li>{@code LocalDate} → {@code java.sql.Date}</li>
+	 *   <li>{@code Instant} → {@code java.sql.Timestamp}</li>
+	 *   <li>{@code LocalTime} → {@code java.sql.Time}</li>
+	 *   <li>{@code LocalDateTime} → {@code java.sql.Timestamp}</li>
+	 *   <li>Enums → String (enum name)</li>
+	 * </ul>
+	 * 
+	 * @param value the parameter value to convert (may be null)
+	 * @return the JDBC-compatible value
+	 */
+	default Object convertParameterForJdbc(Object value) {
+		if (value == null) {
+			return null;
+		}
+		if (value instanceof java.util.Date && !(value instanceof java.sql.Date) 
+				&& !(value instanceof java.sql.Time) && !(value instanceof java.sql.Timestamp)) {
+			return new java.sql.Timestamp(((java.util.Date) value).getTime());
+		}
+		if (value instanceof java.time.LocalDate) {
+			return java.sql.Date.valueOf((java.time.LocalDate) value);
+		}
+		if (value instanceof java.time.Instant) {
+			return java.sql.Timestamp.from((java.time.Instant) value);
+		}
+		if (value instanceof java.time.LocalTime) {
+			return java.sql.Time.valueOf((java.time.LocalTime) value);
+		}
+		if (value instanceof java.time.LocalDateTime) {
+			return java.sql.Timestamp.valueOf((java.time.LocalDateTime) value);
+		}
+		if (value.getClass().isEnum()) {
+			return ((Enum<?>) value).name();
+		}
+		return value;
 	}
 }

@@ -9,6 +9,7 @@ import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.schema.SchemaGenerator;
 
 /**
  * Example demonstrating embedded objects - mapping multiple columns to nested POJOs.
@@ -16,11 +17,18 @@ import org.pojoquery.annotations.Table;
 public class EmbeddedExample {
 
     // tag::address[]
-    // Value object (not an entity - no @Table)
     public static class Address {
         String street;
         String city;
         String zip;
+
+        public Address() {}
+
+        public Address(String street, String city, String zip) {
+            this.street = street;
+            this.city = city;
+            this.zip = zip;
+        }
 
         public String getStreet() { return street; }
         public String getCity() { return city; }
@@ -40,6 +48,14 @@ public class EmbeddedExample {
         @Embedded(prefix = "bill_")
         Address billingAddress;
 
+        public Customer() {}
+
+        public Customer(String name, Address shippingAddress, Address billingAddress) {
+            this.name = name;
+            this.shippingAddress = shippingAddress;
+            this.billingAddress = billingAddress;
+        }
+
         public Long getId() { return id; }
         public String getName() { return name; }
         public Address getShippingAddress() { return shippingAddress; }
@@ -49,12 +65,12 @@ public class EmbeddedExample {
 
     public static void main(String[] args) {
         DataSource dataSource = createDatabase();
-        createTable(dataSource);
+        SchemaGenerator.createTables(dataSource, Customer.class);
         insertTestData(dataSource);
 
         // tag::query[]
         Customer customer = PojoQuery.build(Customer.class)
-            .addWhere("customer.id = ?", 1L)
+            .addWhere("{customer}.id = ?", 1L)
             .execute(dataSource)
             .stream().findFirst().orElse(null);
 
@@ -68,28 +84,13 @@ public class EmbeddedExample {
         // end::query[]
     }
 
-    // tag::schema[]
-    private static void createTable(DataSource db) {
-        DB.executeDDL(db, """
-            CREATE TABLE customer (
-                id BIGINT IDENTITY PRIMARY KEY,
-                name VARCHAR(255),
-                ship_street VARCHAR(255),
-                ship_city VARCHAR(100),
-                ship_zip VARCHAR(20),
-                bill_street VARCHAR(255),
-                bill_city VARCHAR(100),
-                bill_zip VARCHAR(20)
-            )
-            """);
-    }
-    // end::schema[]
-
     private static void insertTestData(DataSource db) {
-        DB.executeDDL(db, """
-            INSERT INTO customer (name, ship_street, ship_city, ship_zip, bill_street, bill_city, bill_zip)
-            VALUES ('Acme Corp', '123 Warehouse Ave', 'Seattle', '98101', '456 Finance Blvd', 'New York', '10001')
-            """);
+        Customer customer = new Customer(
+            "Acme Corp",
+            new Address("123 Warehouse Ave", "Seattle", "98101"),
+            new Address("456 Finance Blvd", "New York", "10001")
+        );
+        PojoQuery.insert(db, customer);
     }
 
     private static DataSource createDatabase() {

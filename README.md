@@ -1,87 +1,137 @@
 PojoQuery
 =========
 
-PojoQuery is a lightweight utility for working with relational databases in Java. Instead of writing SQL queries in plain text, PojoQuery leverages Plain Old Java Objects (POJOs) to define the set of fields and tables (joins) to fetch.
+[![Maven Central](https://img.shields.io/maven-central/v/org.pojoquery/pojoquery)](https://search.maven.org/artifact/org.pojoquery/pojoquery)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Java 17+](https://img.shields.io/badge/Java-17%2B-blue)](https://openjdk.org/)
+
+PojoQuery is a lightweight Java library for working with relational databases. Instead of writing SQL queries in plain text, PojoQuery uses Plain Old Java Objects (POJOs) to define the shape of your result set — including which tables to join and which columns to fetch.
+
+## Why PojoQuery?
+
+Unlike traditional ORMs where classes define how data is *stored*, PojoQuery uses classes to define what data you want to *retrieve*. This simple shift eliminates lazy loading, proxy objects, and session management complexity. Your POJO is essentially a type-safe SQL query.
+
+This approach scales to rich domain models — PojoQuery has been used to port the [DDD Sample cargo tracking system](https://github.com/martijnvogten/dddsample-core), demonstrating it handles complex domain-driven designs without compromise.
+
+See [this article](https://martijnvogten.github.io/2025/04/16/the-basic-mistake-all-orms-make-and-how-to-fix-it.html) for the full rationale behind this approach.
 
 ## Key Features
 
-* Type-safe database queries using POJOs
-* Automatic SQL generation from POJO structure
-* Support for complex joins and relationships via `@Link` and `@Join`
-* Customizable through annotations (`@Table`, `@Id`, `@FieldName`, `@Select`, etc.)
-* No lazy loading, no proxies, no session management complexity
-* Easily adaptable to different database engines or SQL dialects (tested with MySQL, PostgreSQL, HSQL)
-* Support for table-per-subclass inheritance mapping (`@SubClasses`)
-* Support for embedded objects (`@Embedded`)
-* Handling of dynamic columns (`@Other`)
+**Query Building**
+- Type-safe database queries using POJOs with full IDE support
+- Automatic SQL generation from POJO structure
+- Convention-based relationship mapping (one-to-one, one-to-many, many-to-many)
+- Custom joins via `@Link`, `@Join`, and `@JoinCondition`
+- Fluent query API with `addWhere()`, `addOrderBy()`, `setLimit()`, `addJoin()`
+- Alias resolution with curly braces `{table.field}` for readable conditions
 
-## Rationale
+**CRUD Operations**
+- Insert, update, and delete with automatic multi-table inheritance handling
+- `@NoUpdate` to exclude fields from updates
+- Transaction support via `DB.runInTransaction()`
 
-The main difference with conventional Object Relational Mapping (ORM) is that types (Java classes) do not double as table definitions but rather as *query definitions*. More precisely, the POJO defines the shape of the resultset. This implies that type definitions must be *cycle-free*. The principle is the key to avoiding lazy loading and other complexities of conventional ORM. See [this article](https://martijnvogten.github.io/2025/04/16/the-basic-mistake-all-orms-make-and-how-to-fix-it.html) about model-driven ORM.
+**Schema Generation**
+- Generate `CREATE TABLE` statements from entity classes
+- Generate `ALTER TABLE` migration statements for schema updates
+- `@Column` for length, precision, scale, nullable, and unique constraints
+
+**Advanced Mapping**
+- Table-per-subclass inheritance (`@SubClasses`)
+- Embedded objects (`@Embedded`) with optional column prefix
+- Dynamic columns (`@Other`) for schemaless patterns
+- Custom SQL expressions (`@Select`) and aggregation (`@GroupBy`)
+- Large objects (`@Lob`) for CLOB/BLOB support
+
+**Performance & Flexibility**
+- Streaming API for large result sets without memory issues
+- No lazy loading, no proxies—predictable SQL, predictable behavior
+- Multi-dialect support (MySQL, PostgreSQL, HSQLDB)
+- JPA annotation compatibility (`jakarta.persistence` and `javax.persistence`)
 
 ## Quick Example
 
-Define your POJOs to represent the data structure you want to retrieve. Access modifiers and getters/setters are omitted for brevity.
+Define POJOs that describe the data you want to retrieve. PojoQuery automatically generates the SQL with proper joins.
 
 ```java
-// Define the main entity, mapping to the 'article' table
-@Table("article")
-class Article {
+@Table("order")
+class Order {
     @Id Long id;
-    String title;
-    String content;
-    User author; // Automatically joins with the 'user' table based on 'author_id'
-    List<Comment> comments; // Automatically joins with the 'comment' table based on 'article_id'
-
-    // Getters and setters...
+    LocalDate orderDate;
+    Customer customer;           // Joins on customer_id → customer.id
+    List<OrderLine> lines;       // Joins on order.id → order_line.order_id
 }
 
-// Define the related 'user' entity
-@Table("user")
-class User {
+@Table("customer")
+class Customer {
     @Id Long id;
-    String firstName;
-    String lastName;
+    String name;
     String email;
-
-    // Getters and setters...
 }
 
-// Define the related 'comment' entity
-@Table("comment")
-class Comment {
+@Table("order_line")
+class OrderLine {
     @Id Long id;
-    Long article_id; // Foreign key linking back to Article
-    String comment;
-    Date submitdate;
-    User author; // Automatically joins with the 'user' table based on 'author_id'
+    Product product;             // Joins on product_id → product.id
+    int quantity;
+    BigDecimal unitPrice;
+}
 
-    // Getters and setters...
+@Table("product")  
+class Product {
+    @Id Long id;
+    String name;
+    String sku;
 }
 ```
 
-Build and execute the query using PojoQuery:
+Generate the database schema from your entities:
 
 ```java
-// Assuming 'connection' is your active JDBC Connection (java.sql.Connection)
-List<Article> articles = PojoQuery.build(Article.class) // Start building a query for Article
-    .addWhere("article.id = ?", 123L) // Filter by article ID
-    .addOrderBy("comments.submitdate DESC") // Order comments by submission date
-    .execute(connection); // Execute the query against the database connection
+SchemaGenerator.createTables(dataSource, Order.class, Customer.class, OrderLine.class, Product.class);
+```
 
-// Process the results
-for (Article article : articles) {
-    System.out.println("Article Title: " + article.getTitle());
-    System.out.println("Author: " + article.getAuthor().getFirstName());
-    System.out.println("Number of comments: " + article.getComments().size());
+Query with a fluent API:
+
+```java
+List<Order> orders = PojoQuery.build(Order.class)
+    .addWhere("{customer}.name LIKE ?", "%Acme%")
+    .addWhere("{lines.product}.sku = ?", "WIDGET-42")
+    .addOrderBy("{order}.orderDate DESC")
+    .setLimit(10)
+    .execute(dataSource);
+
+// All data is eagerly loaded—no lazy loading surprises
+for (Order order : orders) {
+    System.out.println(order.customer.name + " ordered on " + order.orderDate);
+    for (OrderLine line : order.lines) {
+        System.out.println("  " + line.quantity + "x " + line.product.name);
+    }
 }
 ```
 
-This generates a predictable SQL query, joining `article`, `user` (for article author), `comment`, and `user` (for comment author) tables.
+PojoQuery generates proper `CREATE TABLE` statements with foreign keys, and queries join all four tables automatically with proper quoting and aliases.
 
 ## Getting Started
 
-To begin using PojoQuery in your project, see the Getting started section in the [PojoQuery docs](https://pojoquery.org).
+**Requirements:** Java 17 or later.
+
+Add PojoQuery to your project:
+
+**Maven:**
+```xml
+<dependency>
+    <groupId>org.pojoquery</groupId>
+    <artifactId>pojoquery</artifactId>
+    <version>4.1.0-BETA</version>
+</dependency>
+```
+
+**Gradle:**
+```groovy
+implementation 'org.pojoquery:pojoquery:4.1.0-BETA'
+```
+
+For more details, see the [PojoQuery docs](https://pojoquery.org).
 
 ## Building from Source
 
@@ -96,3 +146,10 @@ To build PojoQuery from the source code:
 
 This will compile the code, run tests, and install the artifact into your local Maven repository.
 
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues and pull requests.
+
+## License
+
+PojoQuery is released under the [MIT License](LICENSE).

@@ -6,7 +6,6 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -133,6 +132,18 @@ public interface DB {
      * @param rowCallback the callback to process each row
      */
     public static void queryRowsStreaming(Connection conn, SqlExpression queryStatement, Consumer<Map<String,Object>> rowCallback) {
+        queryRowsStreaming(DbContext.getDefault(), conn, queryStatement, rowCallback);
+    }
+
+    /**
+     * Streams rows from the database using a connection and a SQL expression with explicit DbContext.
+     * 
+     * @param context the database context
+     * @param conn the database connection
+     * @param queryStatement the SQL expression to execute
+     * @param rowCallback the callback to process each row
+     */
+    public static void queryRowsStreaming(DbContext context, Connection conn, SqlExpression queryStatement, Consumer<Map<String,Object>> rowCallback) {
         String sql = queryStatement.getSql();
         String connId = null;
         if (LOG.isDebugEnabled()) {
@@ -143,8 +154,8 @@ public interface DB {
             }
         }
         try (PreparedStatement stmt = conn.prepareStatement(sql);) {
-			applyParameters(queryStatement.getParameters(), stmt);
-			int fetchSize = DbContext.getDefault().getStreamingFetchSize();
+			applyParameters(context, queryStatement.getParameters(), stmt);
+			int fetchSize = context.getStreamingFetchSize();
 			if (fetchSize != 0) {
 				stmt.setFetchSize(fetchSize);
 			}
@@ -171,8 +182,20 @@ public interface DB {
      * @param rowCallback the callback to process each row
      */
     public static void queryRowsStreaming(DataSource db, SqlExpression queryStatement, Consumer<Map<String,Object>> rowCallback) {
+        queryRowsStreaming(DbContext.getDefault(), db, queryStatement, rowCallback);
+    }
+
+    /**
+     * Streams rows from the database using a data source and a SQL expression with explicit DbContext.
+     * 
+     * @param context the database context
+     * @param db the data source
+     * @param queryStatement the SQL expression to execute
+     * @param rowCallback the callback to process each row
+     */
+    public static void queryRowsStreaming(DbContext context, DataSource db, SqlExpression queryStatement, Consumer<Map<String,Object>> rowCallback) {
 		try (Connection connection = db.getConnection()) {
-			queryRowsStreaming(connection, queryStatement, rowCallback);
+			queryRowsStreaming(context, connection, queryStatement, rowCallback);
 		} catch (SQLException e) {
 			throw new DatabaseException(e);
 		}
@@ -202,7 +225,15 @@ public interface DB {
         return new Columns(execute(db, QueryType.SELECT, sql, Arrays.asList(params), new ColumnProcessor()));
     }
 	
+	/**
+	 * ResultSet processor that extracts columns as lists of values.
+	 */
 	public static class ColumnProcessor implements ResultSetProcessor<List<List<Object>>> {
+		/**
+		 * Processes the ResultSet and returns columns as lists of values.
+		 * @param rs the ResultSet to process
+		 * @return a list of columns, each column being a list of values
+		 */
 		public List<List<Object>> process(ResultSet rs) {
 			List<List<Object>> result = new ArrayList<>();
 			try {
@@ -222,7 +253,15 @@ public interface DB {
 		}
 	}
 	
+	/**
+	 * ResultSet processor that extracts rows as maps of column name to value.
+	 */
 	public static class RowProcessor implements ResultSetProcessor<List<Map<String, Object>>> {
+		/**
+		 * Processes the ResultSet and returns rows as maps.
+		 * @param rs the ResultSet to process
+		 * @return a list of rows, each row being a map from column name to value
+		 */
 		public List<Map<String, Object>> process(ResultSet rs) {
 			List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
 			try {
@@ -696,8 +735,24 @@ public interface DB {
      * @return the processed result
      */
 	public static <T> T execute(DataSource db, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
+		return execute(DbContext.getDefault(), db, type, sql, params, processor);
+	}
+
+	/**
+     * Executes a query and processes the result set with explicit DbContext.
+     * 
+     * @param <T> the type of the result
+     * @param context the database context
+     * @param db the data source
+     * @param type the type of query (e.g., SELECT, INSERT)
+     * @param sql the SQL query to execute
+     * @param params the parameters for the query
+     * @param processor the processor to handle the result set
+     * @return the processed result
+     */
+	public static <T> T execute(DbContext context, DataSource db, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
 		try (Connection connection = db.getConnection()) {
-			return execute(connection, type, sql, params, processor);
+			return execute(context, connection, type, sql, params, processor);
 		} catch (SQLException e) {
 			throw new DatabaseException(e);
 		}
@@ -714,8 +769,24 @@ public interface DB {
      * @param processor the processor to handle the result set
      * @return the processed result
      */
-	@SuppressWarnings("unchecked")
 	public static <T> T execute(Connection connection, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
+		return execute(DbContext.getDefault(), connection, type, sql, params, processor);
+	}
+
+	/**
+     * Executes a query and processes the result set using a connection with explicit DbContext.
+     * 
+     * @param <T> the type of the result
+     * @param context the database context
+     * @param connection the database connection
+     * @param type the type of query (e.g., SELECT, INSERT)
+     * @param sql the SQL query to execute
+     * @param params the parameters for the query
+     * @param processor the processor to handle the result set
+     * @return the processed result
+     */
+	@SuppressWarnings("unchecked")
+	public static <T> T execute(DbContext context, Connection connection, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
 		long startTime = 0;
 		String connId = null;
 		if (LOG.isDebugEnabled()) {
@@ -733,7 +804,7 @@ public interface DB {
 					: Statement.NO_GENERATED_KEYS
 			)) {
 			if (params != null) {
-				applyParameters(params, stmt);
+				applyParameters(context, params, stmt);
 			}
 			boolean success = false;
 			try {
@@ -754,7 +825,12 @@ public interface DB {
 						if (keysResult != null) {
 							try {
 								if (keysResult.next()) {
-									return (T) keysResult.getObject(1);
+									Object key = keysResult.getObject(1);
+									// MySQL returns BigInteger for auto-generated keys, normalize to Long
+									if (key instanceof Number) {
+										return (T) Long.valueOf(((Number) key).longValue());
+									}
+									return (T) key;
 								}
 							} catch (SQLException e) {
 								// Some databases (e.g., HSQLDB) throw exception when no keys were generated
@@ -787,22 +863,16 @@ public interface DB {
 	/**
 	 * Applies parameters to a prepared statement.
 	 * 
+	 * @param context the database context for type conversion
 	 * @param params the parameters to apply
 	 * @param stmt the prepared statement
 	 * @throws SQLException if an SQL error occurs
 	 */
-	private static void applyParameters(Iterable<Object> params, PreparedStatement stmt) throws SQLException {
+	private static void applyParameters(DbContext context, Iterable<Object> params, PreparedStatement stmt) throws SQLException {
 		int index = 1;
 		for (Object val : params) {
-			if (val != null && val instanceof LocalDate) {
-				LocalDate localDate = (LocalDate)val;
-				// Use java.sql.Date for proper JDBC date handling (works with PostgreSQL)
-				stmt.setDate(index++, java.sql.Date.valueOf(localDate));
-			} else if (val != null && val.getClass().isEnum()) {
-				stmt.setObject(index++, ((Enum<?>)val).name());
-			} else {
-				stmt.setObject(index++, val);
-			}
+			Object converted = context.convertParameterForJdbc(val);
+			stmt.setObject(index++, converted);
 		}
 	}
 
@@ -913,6 +983,40 @@ public interface DB {
 	public static void runInTransaction(DataSource dataSource, TransactionReturningVoid transaction) {
 		runInTransaction(dataSource, c -> {
 			transaction.run(c);
+			return null;
+		});
+	}
+
+	/**
+	 * Executes work with a connection from the data source, using autocommit mode.
+	 * The connection is automatically closed after the work completes.
+	 * Use this for read-only queries, single statements, or DDL operations
+	 * that don't require transactional guarantees.
+	 * 
+	 * @param <T> the type of the result
+	 * @param dataSource the data source
+	 * @param work the work to execute with the connection
+	 * @return the result of the work
+	 */
+	public static <T> T withConnection(DataSource dataSource, Transaction<T> work) {
+		try (Connection connection = dataSource.getConnection()) {
+			return work.run(connection);
+		} catch (SQLException e) {
+			throw new DatabaseException(e);
+		}
+	}
+
+	/**
+	 * Executes work with a connection from the data source, using autocommit mode.
+	 * The connection is automatically closed after the work completes.
+	 * Use this overload when the work doesn't need to return a value.
+	 * 
+	 * @param dataSource the data source
+	 * @param work the work to execute with the connection
+	 */
+	public static void withConnection(DataSource dataSource, TransactionReturningVoid work) {
+		withConnection(dataSource, c -> {
+			work.run(c);
 			return null;
 		});
 	}

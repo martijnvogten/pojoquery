@@ -2,7 +2,6 @@ package examples.events;
 
 import java.sql.Connection;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -60,25 +59,28 @@ public class EventsExample {
 		createTables(db);
 		insertData(db);
 
-		// tag::query-links[]
-		PojoQuery<EventPersonLink> links = PojoQuery.build(EventPersonLink.class);
-		for(EventPersonLink epl : links.execute(db)) {
-			System.out.println(epl.event.getTitle() + " is visited by " + epl.person.getFullName());
-		}
-		// end::query-links[]
-		
-		// tag::query-with-filter[]
-		PojoQuery<EventWithPersons> q = PojoQuery.build(EventWithPersons.class)
-					.addWhere("{persons}.firstname=?", "John");
-		
-		for(EventWithPersons event : q.execute(db)) {
-			System.out.println(event.persons.get(0).getEmailAddresses().get(0));
-		}
-		// end::query-with-filter[]
+		DB.withConnection(db, c -> {
+			// tag::query-links[]
+			PojoQuery<EventPersonLink> links = PojoQuery.build(EventPersonLink.class);
+			for(EventPersonLink epl : links.execute(c)) {
+				System.out.println(epl.event.getTitle() + " is visited by " + epl.person.getFullName());
+			}
+			// end::query-links[]
+			
+			// tag::query-with-filter[]
+			PojoQuery<EventWithPersons> q = PojoQuery.build(EventWithPersons.class)
+						.addWhere("{persons}.firstname=?", "John");
+			
+			for(EventWithPersons event : q.execute(c)) {
+				System.out.println(event.persons.get(0).getEmailAddresses().get(0));
+			}
+			// end::query-with-filter[]
+		});
+
 	}
 
 	private static void insertData(DataSource db) {
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			Event e = new Event();
 			e.setDate(new Date());
 			e.setTitle("My Event");
@@ -101,8 +103,8 @@ public class EventsExample {
 			em.setEmail("john.ewbank@endemol.nl");
 			PojoQuery.insert(c, em);
 			
-			DB.insert(c, "event_person", map("event_id", eventId, "person_id", personId));
-			DB.insert(c, "event_person", map("event_id", concertId, "person_id", personId));
+			DB.insert(c, "event_person", Map.of("event_id", eventId, "person_id", personId));
+			DB.insert(c, "event_person", Map.of("event_id", concertId, "person_id", personId));
 		});
 	}
 
@@ -110,10 +112,5 @@ public class EventsExample {
 		SchemaGenerator.createTables(db, Event.class, PersonRecord.class, EventPersonLink.class, EmailAddress.class);
 	}
 	
-	private static <K,V> Map<K,V> map(K k1, V v1, K k2, V v2) {
-		Map<K,V> result = new HashMap<K,V>();
-		result.put(k1, v1);
-		result.put(k2, v2);
-		return result;
-	}
 }
+

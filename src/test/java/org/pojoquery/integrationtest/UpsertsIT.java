@@ -48,7 +48,7 @@ public class UpsertsIT {
 	public void testUpsertInsertsNewRecord() {
 		DataSource db = initDatabase();
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			// Insert a new record using upsert (must include id for HSQLDB MERGE)
 			DB.upsert(c, "product", Map.of(
 				"id", 1,
@@ -67,7 +67,7 @@ public class UpsertsIT {
 	public void testUpsertUpdatesExistingRecord() {
 		DataSource db = initDatabase();
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			// First insert a record
 			DB.insert(c, "product", Map.of(
 				"id", 1,
@@ -104,7 +104,7 @@ public class UpsertsIT {
 	public void testMultipleUpserts() {
 		DataSource db = initDatabase();
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			// Insert first record
 			DB.upsert(c, "product", Map.of(
 				"id", 1,
@@ -140,7 +140,7 @@ public class UpsertsIT {
 	public void testUpsertWithCustomPrimaryKeyName() {
 		DataSource db = initDatabaseWithInventory();
 
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			// Insert a new record using upsert with custom primary key name
 			DB.upsert(c, "inventory_item", Map.of(
 				"productID", 1,

@@ -9,7 +9,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
@@ -17,6 +19,11 @@ import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.QueryBuilder;
 
 public class TestInheritance {
+
+	@BeforeEach
+	public void setup() {
+		DbContext.setDefault(DbContext.forDialect(Dialect.MYSQL));
+	}
 	
 	static class Entity {
 		@Id
@@ -63,16 +70,16 @@ public class TestInheritance {
 		// and fields per table
 		List<TableMapping> mapping = QueryBuilder.determineTableMapping(Room.class);
 		Assertions.assertEquals(1, mapping.size());
-		Assertions.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area")), mapping.get(0).fields);
+		Assertions.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area")), mapping.get(0).getReflectionFields());
 		
 		List<TableMapping> bedroom = QueryBuilder.determineTableMapping(BedRoom.class);
 		Assertions.assertEquals(2, bedroom.size());
-		Assertions.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area")), bedroom.get(0).fields);
-		Assertions.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds")), bedroom.get(1).fields);
+		Assertions.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area")), bedroom.get(0).getReflectionFields());
+		Assertions.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds")), bedroom.get(1).getReflectionFields());
 		
 		List<TableMapping> luxury = QueryBuilder.determineTableMapping(LuxuryBedRoom.class);
 		Assertions.assertEquals(2, luxury.size());
-		Assertions.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds"), LuxuryBedRoom.class.getDeclaredField("tvScreenSize")), luxury.get(1).fields);
+		Assertions.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds"), LuxuryBedRoom.class.getDeclaredField("tvScreenSize")), luxury.get(1).getReflectionFields());
 	}
 	
 	@Test

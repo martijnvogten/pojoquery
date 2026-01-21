@@ -26,6 +26,7 @@ PojoQuery offers a focused set of features for interacting with relational datab
 *   **Streaming API:** Process large result sets efficiently without loading all rows into memory using `executeStreaming()` or `DB.queryRowsStreaming()`.
 *   **Transaction Management:** Basic transaction support via `DB.runInTransaction()`.
 *   **Database Agnostic (with caveats):** Designed to work with standard SQL. Specific database functions or syntax might require adjustments. Tested primarily with MySQL, PostgreSQL, and HSQLDB.
+*   **JPA Annotation Compatibility:** Supports standard JPA annotations (`jakarta.persistence` and `javax.persistence`) as alternatives to PojoQuery's native annotations, allowing existing JPA-annotated entities to work with PojoQuery without modification.
 
 == What PojoQuery is NOT
 

@@ -10,6 +10,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneOffset;
 
 import org.pojoquery.FieldMapping;
@@ -26,6 +27,16 @@ public class SimpleFieldMapping implements FieldMapping {
 	@Override
 	public void apply(Object targetEntity, Object value) {
 		try {
+			// Skip if no field is associated (e.g., discriminator column)
+			if (f == null) {
+				return;
+			}
+
+			// For single table inheritance, skip fields that don't belong to this entity's class
+			if (!f.getDeclaringClass().isAssignableFrom(targetEntity.getClass())) {
+				return;
+			}
+
 			if (value instanceof String && f.getType().isEnum()) {
 				value = QueryBuilder.enumValueOf(f.getType(), (String)value);
 			}
@@ -46,6 +57,9 @@ public class SimpleFieldMapping implements FieldMapping {
 			}
 			if (value instanceof Timestamp && (f.getType().equals(Instant.class))) {
 				value = ((Timestamp)value).toInstant();
+			}
+			if (value instanceof java.sql.Time && (f.getType().equals(LocalTime.class))) {
+				value = ((java.sql.Time)value).toLocalTime();
 			}
 			if (value instanceof Blob && f.getType().equals(byte[].class)) {
 				Blob blob = (Blob) value;

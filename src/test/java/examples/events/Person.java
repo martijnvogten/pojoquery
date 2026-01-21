@@ -2,10 +2,7 @@ package examples.events;
 
 import java.util.List;
 
-import org.pojoquery.annotations.Table;
 
-
-@Table("person")
 public class Person extends PersonRecord {
 	private List<EmailAddress> emailAddresses;
 

@@ -22,7 +22,6 @@ public class SchemaPrefixesIT {
 
 	@BeforeAll
 	public static void setupDbContext() {
-		TestDatabaseProvider.initDbContext();
 		// This test uses HSQLDB-specific CREATE SCHEMA syntax
 		Assumptions.assumeTrue("hsqldb".equals(TestDatabaseProvider.getDatabaseName()), 
 			"SchemaPrefixesIT only runs with HSQLDB");
@@ -68,61 +67,64 @@ public class SchemaPrefixesIT {
 	@Test
 	// @Disabled("DB.upsert uses MySQL-specific ON DUPLICATE KEY UPDATE syntax; needs HSQLDB MERGE support")
 	public void testCrud() {
-		List<Map<String, Object>> results;
-
 		DataSource db = dropAndRecreate();
 		SchemaGenerator.createTables(db, Article.class, Book.class);
-		DB.insert(
-			db,
-			"schema1",
-			"article",
-			Map.of(
-				"title", "How to awesomize stuff"
-			)
-		);
-		results = DB.queryRows(db, "SELECT title FROM schema1.article WHERE id=1");
-		Assertions.assertEquals(1, results.size());
-		// HSQLDB returns column names in uppercase
-		Assertions.assertEquals("How to awesomize stuff", results.get(0).get("TITLE"));
-		// Use update instead of upsert since we know the record exists
-		DB.update(
-			db,
-			"schema1",
-			"article",
-			Map.of(
-				"title", "How to awesomize stuff even better"
-			),
-			Map.of(
-				"id", 1
-			)
-		);
-		results = DB.queryRows(db, "SELECT title FROM schema1.article WHERE id=1");
-		Assertions.assertEquals(1, results.size());
-		Assertions.assertEquals("How to awesomize stuff even better", results.get(0).get("TITLE"));
-		DB.update(
-			db,
-			"schema1",
-			"article",
-			Map.of(
-				"title", "How to awesomize stuff to the max"
-			),
-			Map.of(
-				"id", 1
-			)
-		);
+		
+		DB.withConnection(db, c -> {
+			List<Map<String, Object>> results;
+			
+			DB.insert(
+				c,
+				"schema1",
+				"article",
+				Map.of(
+					"title", "How to awesomize stuff"
+				)
+			);
+			results = DB.queryRows(c, "SELECT title FROM schema1.article WHERE id=1");
+			Assertions.assertEquals(1, results.size());
+			// HSQLDB returns column names in uppercase
+			Assertions.assertEquals("How to awesomize stuff", results.get(0).get("TITLE"));
+			// Use update instead of upsert since we know the record exists
+			DB.update(
+				c,
+				"schema1",
+				"article",
+				Map.of(
+					"title", "How to awesomize stuff even better"
+				),
+				Map.of(
+					"id", 1
+				)
+			);
+			results = DB.queryRows(c, "SELECT title FROM schema1.article WHERE id=1");
+			Assertions.assertEquals(1, results.size());
+			Assertions.assertEquals("How to awesomize stuff even better", results.get(0).get("TITLE"));
+			DB.update(
+				c,
+				"schema1",
+				"article",
+				Map.of(
+					"title", "How to awesomize stuff to the max"
+				),
+				Map.of(
+					"id", 1
+				)
+			);
 
-		results = DB.queryRows(db, "SELECT title FROM schema1.article WHERE id=1");
-		Assertions.assertEquals(1, results.size());
-		Assertions.assertEquals("How to awesomize stuff to the max", results.get(0).get("TITLE"));
+			results = DB.queryRows(c, "SELECT title FROM schema1.article WHERE id=1");
+			Assertions.assertEquals(1, results.size());
+			Assertions.assertEquals("How to awesomize stuff to the max", results.get(0).get("TITLE"));
 
-		DB.insert(db, "schema1", "article", Map.of("id", 2, "title", "Part II - how to make sure stuff works"));
-		DB.insert(db, "schema2", "book", Map.of("id", 1, "title", "Great lessons from the beyond"));
+			DB.insert(c, "schema1", "article", Map.of("id", 2, "title", "Part II - how to make sure stuff works"));
+			DB.insert(c, "schema2", "book", Map.of("id", 1, "title", "Great lessons from the beyond"));
 
-		DB.update(db, new SqlExpression("UPDATE schema1.article SET book_id=1"));
+			DB.update(c, new SqlExpression("UPDATE schema1.article SET book_id=1"));
 
-		List<Book> books = PojoQuery.build(Book.class).execute(db);
+			List<Book> books = PojoQuery.build(Book.class).execute(c);
 
-		Assertions.assertEquals(1, books.size());
-		Assertions.assertEquals(2, books.get(0).articles.length);
+			Assertions.assertEquals(1, books.size());
+			Assertions.assertEquals(2, books.get(0).articles.length);
+		});
 	}
 }

@@ -9,11 +9,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
-import org.pojoquery.annotations.Column;
+import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Embedded;
-import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.internal.TableMapping;
@@ -184,7 +184,7 @@ public class SchemaGenerator {
             generatedTables.add(fullTableName);
             
             // Get inferred foreign keys for this class
-            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.clazz);
+            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.getReflectionClass());
             
             // Get merged column annotations for this table (may be null for single-class generation)
             Map<String, MergedColumnAnnotations> mergedAnnotations = null;
@@ -196,12 +196,55 @@ public class SchemaGenerator {
             statements.add(generateCreateTableForMapping(mapping, dbContext, fks, deferredForeignKeys, mergedAnnotations));
         }
         
-        // Handle @SubClasses annotation for table-per-subclass inheritance
+        // Handle @SubClasses annotation
         SubClasses subClassesAnn = entityClass.getAnnotation(SubClasses.class);
         if (subClassesAnn != null) {
-            for (Class<?> subClass : subClassesAnn.value()) {
-                generateCreateTableStatementsInternal(subClass, dbContext, generatedTables, statements, 
-                    inferredForeignKeys, linkTables, deferredForeignKeys, tableColumnAnnotations);
+            DiscriminatorColumn discAnn = entityClass.getAnnotation(DiscriminatorColumn.class);
+
+            if (discAnn != null) {
+                // Single table inheritance: add discriminator and subclass columns to parent table
+                // The parent table was already generated above, we need to modify the last statement
+                // to include subclass fields and discriminator column
+
+                // Actually, we need to regenerate with the extra fields
+                // Remove the last statement (the parent table we just generated)
+                if (!statements.isEmpty()) {
+                    String lastStatement = statements.get(statements.size() - 1);
+                    TableMapping parentMapping = tableMappings.get(tableMappings.size() - 1);
+                    String parentTableName = getFullTableName(parentMapping, dbContext);
+                    if (lastStatement.contains(parentTableName)) {
+                        statements.remove(statements.size() - 1);
+                        generatedTables.remove(parentTableName);
+
+                        // Regenerate with STI info
+                        List<Field> stiFields = new ArrayList<>();
+                        for (Class<?> subClass : subClassesAnn.value()) {
+                            // Collect fields declared only in the subclass
+                            for (Field f : QueryBuilder.collectFieldsOfClass(subClass, entityClass)) {
+                                if (!isLinkedField(f) && !CustomizableQueryBuilder.isListOrArray(f.getType())) {
+                                    stiFields.add(f);
+                                }
+                            }
+                        }
+
+                        List<InferredForeignKey> fks = inferredForeignKeys.get(parentMapping.getReflectionClass());
+                        Map<String, MergedColumnAnnotations> mergedAnnotations = null;
+                        if (tableColumnAnnotations != null) {
+                            String tableKey = (parentMapping.schemaName != null ? parentMapping.schemaName + "." : "") + parentMapping.tableName;
+                            mergedAnnotations = tableColumnAnnotations.get(tableKey);
+                        }
+
+                        statements.add(generateCreateTableForMappingWithSTI(parentMapping, dbContext, fks,
+                                deferredForeignKeys, mergedAnnotations, discAnn.name(), stiFields));
+                        generatedTables.add(parentTableName);
+                    }
+                }
+            } else {
+                // Table-per-subclass inheritance: generate separate tables for each subclass
+                for (Class<?> subClass : subClassesAnn.value()) {
+                    generateCreateTableStatementsInternal(subClass, dbContext, generatedTables, statements,
+                            inferredForeignKeys, linkTables, deferredForeignKeys, tableColumnAnnotations);
+                }
             }
         }
     }
@@ -219,11 +262,11 @@ public class SchemaGenerator {
                     .computeIfAbsent(tableKey, k -> new HashMap<>());
                 
                 // Process fields from this mapping
-                for (Field field : mapping.fields) {
+                for (Field field : mapping.getReflectionFields()) {
                     String columnName = QueryBuilder.determineSqlFieldName(field).toLowerCase();
                     MergedColumnAnnotations merged = columnMap.computeIfAbsent(columnName, k -> new MergedColumnAnnotations());
-                    Column columnAnn = field.getAnnotation(Column.class);
-                    merged.mergeWith(columnAnn);
+                    AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
+                    merged.mergeWith(columnMeta);
                 }
             }
         }
@@ -328,14 +371,14 @@ public class SchemaGenerator {
         Set<String> existingFkColumns = new HashSet<>(); // Track FK columns to avoid duplicates
         
         // Determine if we have a composite key from the overall class hierarchy
-        List<Field> idFields = QueryBuilder.determineIdFields(mapping.clazz);
+        List<Field> idFields = QueryBuilder.determineIdFields(mapping.getReflectionClass());
         boolean isCompositeKey = idFields.size() > 1;
         
         // Check if this is a subclass table (not the root table with @Id fields)
         // In table-per-subclass, the subclass table needs the ID field from parent as FK/PK
         boolean hasIdFieldInThisMapping = false;
-        for (Field field : mapping.fields) {
-            if (field.getAnnotation(Id.class) != null) {
+        for (Field field : mapping.getReflectionFields()) {
+            if (AnnotationHelper.isId(field)) {
                 hasIdFieldInThisMapping = true;
                 break;
             }
@@ -354,12 +397,11 @@ public class SchemaGenerator {
             }
         }
         
-        for (Field field : mapping.fields) {
+        for (Field field : mapping.getReflectionFields()) {
             // Handle embedded fields
-            if (field.getAnnotation(Embedded.class) != null) {
-                Embedded embedded = field.getAnnotation(Embedded.class);
-                String prefix = Embedded.DEFAULT.equals(embedded.prefix()) ? "" : embedded.prefix();
-                addEmbeddedColumns(field.getType(), prefix, columnDefinitions, primaryKeyColumns, 
+            if (AnnotationHelper.isEmbedded(field)) {
+                String prefix = QueryBuilder.determinePrefix(field);
+                addEmbeddedColumns(field.getType(), prefix, columnDefinitions, primaryKeyColumns,
                     existingColumnNames, dbContext, isCompositeKey, mergedAnnotations);
                 continue;
             }
@@ -398,18 +440,18 @@ public class SchemaGenerator {
             }
             
             String columnName = QueryBuilder.determineSqlFieldName(field);
-            boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
+            boolean isPrimaryKey = AnnotationHelper.isId(field);
             // Only auto-increment if single primary key (not composite) and it's in this mapping
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext, field, mergedAnnotations);
             columnDefinitions.add(columnDef);
             existingColumnNames.add(columnName.toLowerCase());
-            
+
             if (isPrimaryKey) {
                 primaryKeyColumns.add(dbContext.quoteObjectNames(columnName));
             }
         }
-        
+
         // Add inferred foreign key columns from collection fields in other entities
         if (inferredForeignKeys != null) {
             for (InferredForeignKey fk : inferredForeignKeys) {
@@ -454,32 +496,186 @@ public class SchemaGenerator {
         }
         
         sb.append(";");
-        
+
         return sb.toString();
     }
-    
-    private static void addEmbeddedColumns(Class<?> embeddedClass, String prefix, 
-            List<String> columnDefinitions, List<String> primaryKeyColumns, Set<String> existingColumnNames, 
+
+    /**
+     * Generates a CREATE TABLE statement for a mapping with single table inheritance.
+     * Includes the discriminator column and fields from all subclasses.
+     */
+    private static String generateCreateTableForMappingWithSTI(TableMapping mapping, DbContext dbContext,
+            List<InferredForeignKey> inferredForeignKeys, List<DeferredForeignKey> deferredForeignKeys,
+            Map<String, MergedColumnAnnotations> mergedAnnotations, String discriminatorColumnName,
+            List<Field> stiFields) {
+        StringBuilder sb = new StringBuilder();
+
+        String tableName = getFullTableName(mapping, dbContext);
+
+        // CREATE TABLE
+        sb.append("CREATE TABLE ");
+        sb.append(tableName).append(" (\n");
+
+        List<String> columnDefinitions = new ArrayList<>();
+        List<String> primaryKeyColumns = new ArrayList<>();
+        Set<String> existingColumnNames = new HashSet<>();
+        Set<String> existingFkColumns = new HashSet<>();
+
+        // Determine if we have a composite key
+        List<Field> idFields = QueryBuilder.determineIdFields(mapping.getReflectionClass());
+        boolean isCompositeKey = idFields.size() > 1;
+
+        // Process fields from the mapping (parent class fields)
+        for (Field field : mapping.getReflectionFields()) {
+            // Handle embedded fields
+            if (field.getAnnotation(Embedded.class) != null) {
+                Embedded embedded = field.getAnnotation(Embedded.class);
+                String prefix = Embedded.DEFAULT.equals(embedded.prefix()) ? "" : embedded.prefix();
+                addEmbeddedColumns(field.getType(), prefix, columnDefinitions, primaryKeyColumns,
+                        existingColumnNames, dbContext, isCompositeKey, mergedAnnotations);
+                continue;
+            }
+
+            // Handle linked fields
+            if (isLinkedField(field)) {
+                if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
+                    String columnName = determineForeignKeyColumnName(field);
+                    if (!existingColumnNames.contains(columnName.toLowerCase())) {
+                        String columnDef = formatForeignKeyColumnDefinition(columnName, dbContext, field);
+                        columnDefinitions.add(columnDef);
+                        existingColumnNames.add(columnName.toLowerCase());
+                    }
+
+                    if (!existingFkColumns.contains(columnName.toLowerCase())) {
+                        Class<?> linkedType = field.getType();
+                        List<TableMapping> linkedMappings = QueryBuilder.determineTableMapping(linkedType);
+                        if (!linkedMappings.isEmpty()) {
+                            TableMapping linkedMapping = linkedMappings.get(0);
+                            List<Field> linkedIdFields = QueryBuilder.determineIdFields(linkedType);
+                            if (!linkedIdFields.isEmpty()) {
+                                String refColumn = QueryBuilder.determineSqlFieldName(linkedIdFields.get(0));
+                                deferredForeignKeys.add(new DeferredForeignKey(
+                                        mapping.tableName, mapping.schemaName, columnName,
+                                        linkedMapping.tableName, refColumn, linkedMapping.schemaName));
+                                existingFkColumns.add(columnName.toLowerCase());
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+
+            String columnName = QueryBuilder.determineSqlFieldName(field);
+            boolean isPrimaryKey = AnnotationHelper.isId(field);
+            boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
+            String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext, field, mergedAnnotations);
+            columnDefinitions.add(columnDef);
+            existingColumnNames.add(columnName.toLowerCase());
+
+            if (isPrimaryKey) {
+                primaryKeyColumns.add(dbContext.quoteObjectNames(columnName));
+            }
+        }
+
+        // Add discriminator column (NOT NULL, VARCHAR(255))
+        String discColumnDef = dbContext.quoteObjectNames(discriminatorColumnName) + " VARCHAR(255) NOT NULL";
+        columnDefinitions.add(discColumnDef);
+        existingColumnNames.add(discriminatorColumnName.toLowerCase());
+
+        // Add fields from subclasses (single table inheritance)
+        for (Field field : stiFields) {
+            String columnName = QueryBuilder.determineSqlFieldName(field);
+            if (!existingColumnNames.contains(columnName.toLowerCase())) {
+                // Subclass fields are nullable (since not all rows will be of that subclass)
+                String columnDef = formatColumnDefinition(columnName, field.getType(), false, dbContext, field, mergedAnnotations);
+                columnDefinitions.add(columnDef);
+                existingColumnNames.add(columnName.toLowerCase());
+            }
+        }
+
+        // Add inferred foreign key columns
+        if (inferredForeignKeys != null) {
+            for (InferredForeignKey fk : inferredForeignKeys) {
+                if (!existingColumnNames.contains(fk.columnName.toLowerCase())) {
+                    String columnDef = formatIdColumnDefinition(fk.columnName, dbContext);
+                    columnDefinitions.add(columnDef);
+                    existingColumnNames.add(fk.columnName.toLowerCase());
+                }
+
+                if (fk.hasReference() && !existingFkColumns.contains(fk.columnName.toLowerCase())) {
+                    deferredForeignKeys.add(new DeferredForeignKey(
+                            mapping.tableName, mapping.schemaName, fk.columnName,
+                            fk.referencedTable, fk.referencedColumn, fk.referencedSchema));
+                    existingFkColumns.add(fk.columnName.toLowerCase());
+                }
+            }
+        }
+
+        // Add column definitions
+        boolean hasMoreConstraints = !primaryKeyColumns.isEmpty();
+        for (int i = 0; i < columnDefinitions.size(); i++) {
+            sb.append("  ").append(columnDefinitions.get(i));
+            if (i < columnDefinitions.size() - 1 || hasMoreConstraints) {
+                sb.append(",");
+            }
+            sb.append("\n");
+        }
+
+        // Add primary key constraint
+        if (!primaryKeyColumns.isEmpty()) {
+            sb.append("  PRIMARY KEY (").append(String.join(", ", primaryKeyColumns)).append(")\n");
+        }
+
+        sb.append(")");
+
+        // Add engine specification
+        String tableSuffix = dbContext.getCreateTableSuffix();
+        if (tableSuffix != null && !tableSuffix.isEmpty()) {
+            sb.append(tableSuffix);
+        }
+
+        sb.append(";");
+
+        return sb.toString();
+    }
+
+    private static void addEmbeddedColumns(Class<?> embeddedClass, String prefix,
+            List<String> columnDefinitions, List<String> primaryKeyColumns, Set<String> existingColumnNames,
             DbContext dbContext, boolean isCompositeKey, Map<String, MergedColumnAnnotations> mergedAnnotations) {
         // Use QueryBuilder's filterFields which already handles static, transient, and @Transient
         Collection<Field> fields = QueryBuilder.filterFields(embeddedClass);
         for (Field field : fields) {
             // Recursively handle nested embedded
-            if (field.getAnnotation(Embedded.class) != null) {
-                Embedded nested = field.getAnnotation(Embedded.class);
-                String nestedPrefix = prefix + (Embedded.DEFAULT.equals(nested.prefix()) ? "" : nested.prefix());
-                addEmbeddedColumns(field.getType(), nestedPrefix, columnDefinitions, primaryKeyColumns, 
+            if (AnnotationHelper.isEmbedded(field)) {
+                String nestedPrefix = prefix + QueryBuilder.determinePrefix(field);
+                addEmbeddedColumns(field.getType(), nestedPrefix, columnDefinitions, primaryKeyColumns,
                     existingColumnNames, dbContext, isCompositeKey, mergedAnnotations);
                 continue;
             }
-            
+
+            // Handle linked fields (foreign keys) inside embedded
+            if (isLinkedField(field)) {
+                // For single entity references, add a foreign key column
+                if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
+                    String fkColumnName = determineForeignKeyColumnName(field);
+                    String columnName = prefix + fkColumnName;
+                    if (!existingColumnNames.contains(columnName.toLowerCase())) {
+                        String columnDef = formatForeignKeyColumnDefinition(columnName, dbContext, field);
+                        columnDefinitions.add(columnDef);
+                        existingColumnNames.add(columnName.toLowerCase());
+                    }
+                }
+                // Collections are handled via inferred foreign keys in the referenced table
+                continue;
+            }
+
             String columnName = prefix + QueryBuilder.determineSqlFieldName(field);
-            boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
+            boolean isPrimaryKey = AnnotationHelper.isId(field);
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext, field, mergedAnnotations);
             columnDefinitions.add(columnDef);
             existingColumnNames.add(columnName.toLowerCase());
-            
+
             if (isPrimaryKey) {
                 primaryKeyColumns.add(dbContext.quoteObjectNames(columnName));
             }
@@ -501,9 +697,10 @@ public class SchemaGenerator {
     }
     
     private static String determineForeignKeyColumnName(Field field) {
-        Link linkAnn = field.getAnnotation(Link.class);
-        if (linkAnn != null && !Link.NONE.equals(linkAnn.linkfield())) {
-            return linkAnn.linkfield();
+        // First check @Link(linkfield=...) then JPA @JoinColumn(name=...)
+        String columnName = AnnotationHelper.getJoinColumnName(field);
+        if (columnName != null) {
+            return columnName;
         }
         return field.getName() + "_id";
     }
@@ -556,12 +753,12 @@ public class SchemaGenerator {
             sb.append(dbContext.getAutoIncrementKeyColumnType());
         } else {
             sb.append(dbContext.mapJavaTypeToSql(field));
-            
+
             // Add NOT NULL constraint - check both field annotation and merged annotations
             if (!autoIncrement && field != null) {
                 boolean isNotNull = false;
-                Column columnAnn = field.getAnnotation(Column.class);
-                if (columnAnn != null && !columnAnn.nullable()) {
+                AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
+                if (columnMeta != null && !columnMeta.nullable) {
                     isNotNull = true;
                 }
                 if (merged != null && merged.notNull) {
@@ -571,7 +768,7 @@ public class SchemaGenerator {
                     sb.append(" NOT NULL");
                 }
             }
-            
+
             if (autoIncrement) {
                 String autoIncrementSyntax = dbContext.getAutoIncrementSyntax();
                 if (!autoIncrementSyntax.isEmpty()) {
@@ -580,12 +777,12 @@ public class SchemaGenerator {
                 }
             }
         }
-        
+
         // Add UNIQUE constraint - check both field annotation and merged annotations
         if (field != null) {
             boolean isUnique = false;
-            Column columnAnn = field.getAnnotation(Column.class);
-            if (columnAnn != null && columnAnn.unique()) {
+            AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
+            if (columnMeta != null && columnMeta.unique) {
                 isUnique = true;
             }
             if (merged != null && merged.unique) {
@@ -595,7 +792,7 @@ public class SchemaGenerator {
                 sb.append(" UNIQUE");
             }
         }
-        
+
         return sb.toString();
     }
     
@@ -722,7 +919,7 @@ public class SchemaGenerator {
             processedTables.add(fullTableName);
             
             // Get inferred foreign keys for this class
-            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.clazz);
+            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.getReflectionClass());
             
             // Check if table exists
             SchemaInfo.TableInfo existingTable = schemaInfo.getTable(mapping.schemaName, mapping.tableName);
@@ -814,18 +1011,18 @@ public class SchemaGenerator {
         Set<String> existingColumnNames = new HashSet<>();
         
         // Determine if we have a composite key from the overall class hierarchy
-        List<Field> idFields = QueryBuilder.determineIdFields(mapping.clazz);
+        List<Field> idFields = QueryBuilder.determineIdFields(mapping.getReflectionClass());
         boolean isCompositeKey = idFields.size() > 1;
         
         // Check if this is a subclass table
         boolean hasIdFieldInThisMapping = false;
-        for (Field field : mapping.fields) {
-            if (field.getAnnotation(Id.class) != null) {
+        for (Field field : mapping.getReflectionFields()) {
+            if (AnnotationHelper.isId(field)) {
                 hasIdFieldInThisMapping = true;
                 break;
             }
         }
-        
+
         // Add ID fields if needed (for subclass tables)
         if (!hasIdFieldInThisMapping && !idFields.isEmpty()) {
             for (Field idField : idFields) {
@@ -835,17 +1032,20 @@ public class SchemaGenerator {
                 existingColumnNames.add(columnName.toLowerCase());
             }
         }
-        
+
         // Process fields
-        for (Field field : mapping.fields) {
+        for (Field field : mapping.getReflectionFields()) {
             // Handle embedded fields
-            if (field.getAnnotation(Embedded.class) != null) {
-                Embedded embedded = field.getAnnotation(Embedded.class);
-                String prefix = Embedded.DEFAULT.equals(embedded.prefix()) ? "" : embedded.prefix();
+            if (AnnotationHelper.isEmbedded(field)) {
+                String prefix = QueryBuilder.determinePrefix(field);
+                // Remove trailing underscore
+                if (prefix.endsWith("_")) {
+                    prefix = prefix.substring(0, prefix.length() - 1);
+                }
                 addEmbeddedColumnsToList(field.getType(), prefix, columns, existingColumnNames, dbContext, isCompositeKey);
                 continue;
             }
-            
+
             // Handle linked fields
             if (isLinkedField(field)) {
                 if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
@@ -863,15 +1063,15 @@ public class SchemaGenerator {
                 }
                 continue;
             }
-            
+
             String columnName = QueryBuilder.determineSqlFieldName(field);
-            boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
+            boolean isPrimaryKey = AnnotationHelper.isId(field);
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String sqlType = dbContext.mapJavaTypeToSql(field);
-            Column columnAnn = field.getAnnotation(Column.class);
-            boolean notNull = !shouldAutoIncrement && columnAnn != null && !columnAnn.nullable();
-            boolean unique = columnAnn != null && columnAnn.unique();
-            
+            AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
+            boolean notNull = !shouldAutoIncrement && columnMeta != null && !columnMeta.nullable;
+            boolean unique = columnMeta != null && columnMeta.unique;
+
             columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey, notNull, unique));
             existingColumnNames.add(columnName.toLowerCase());
         }
@@ -890,25 +1090,26 @@ public class SchemaGenerator {
         return columns;
     }
     
-    private static void addEmbeddedColumnsToList(Class<?> embeddedClass, String prefix, 
+    private static void addEmbeddedColumnsToList(Class<?> embeddedClass, String prefix,
             List<ColumnDefinition> columns, Set<String> existingColumnNames, DbContext dbContext, boolean isCompositeKey) {
         Collection<Field> fields = QueryBuilder.filterFields(embeddedClass);
         for (Field field : fields) {
-            if (field.getAnnotation(Embedded.class) != null) {
+            if (AnnotationHelper.isEmbedded(field)) {
+                // Get prefix from PojoQuery @Embedded if present, otherwise use empty string (JPA @Embedded has no prefix)
                 Embedded nested = field.getAnnotation(Embedded.class);
-                String nestedPrefix = prefix + (Embedded.DEFAULT.equals(nested.prefix()) ? "" : nested.prefix());
+                String nestedPrefix = prefix + (nested != null && !Embedded.DEFAULT.equals(nested.prefix()) ? nested.prefix() : "");
                 addEmbeddedColumnsToList(field.getType(), nestedPrefix, columns, existingColumnNames, dbContext, isCompositeKey);
                 continue;
             }
-            
+
             String columnName = prefix + QueryBuilder.determineSqlFieldName(field);
-            boolean isPrimaryKey = field.getAnnotation(Id.class) != null;
+            boolean isPrimaryKey = AnnotationHelper.isId(field);
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String sqlType = dbContext.mapJavaTypeToSql(field);
-            Column columnAnn = field.getAnnotation(Column.class);
-            boolean notNull = !shouldAutoIncrement && columnAnn != null && !columnAnn.nullable();
-            boolean unique = columnAnn != null && columnAnn.unique();
-            
+            AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
+            boolean notNull = !shouldAutoIncrement && columnMeta != null && !columnMeta.nullable;
+            boolean unique = columnMeta != null && columnMeta.unique;
+
             columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey, notNull, unique));
             existingColumnNames.add(columnName.toLowerCase());
         }

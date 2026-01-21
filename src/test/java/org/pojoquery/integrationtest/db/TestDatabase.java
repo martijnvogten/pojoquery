@@ -19,9 +19,10 @@ public class TestDatabase {
 	/**
 	 * Ensures the DbContext is set up. Call this from @BeforeClass in tests
 	 * that need the DbContext but don't call dropAndRecreate().
+	 * Also resets the default context in case another test changed it.
 	 */
 	public static void initDbContext() {
-		// Static initializer already did the work, this just ensures class is loaded
+		DbContext.setDefault(HSQLDB_CONTEXT);
 	}
 	
 	public static DataSource dropAndRecreate() {

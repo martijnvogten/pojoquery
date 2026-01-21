@@ -11,19 +11,19 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 import javax.sql.DataSource;
 
-import org.pojoquery.annotations.Embedded;
-import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.NoUpdate;
 import org.pojoquery.annotations.Other;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
+import org.pojoquery.pipeline.CustomizableQueryBuilder;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.SqlQuery;
-import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.SqlQuery.SqlField;
 import org.pojoquery.pipeline.SqlQuery.SqlJoin;
@@ -95,7 +95,7 @@ import org.slf4j.LoggerFactory;
 public class PojoQuery<T> {
 	private static final Logger LOG = LoggerFactory.getLogger(PojoQuery.class);
 	
-	private final QueryBuilder<T> queryBuilder; 
+	private final CustomizableQueryBuilder<DefaultSqlQuery, T> queryBuilder; 
 	private final SqlQuery<DefaultSqlQuery> query;
 	private Class<T> resultClass;
 	private DbContext dbContext;
@@ -103,8 +103,8 @@ public class PojoQuery<T> {
 	private PojoQuery(DbContext context, Class<T> clz) {
 		this.dbContext = context;
 		this.resultClass = clz;
-		this.queryBuilder = QueryBuilder.from(clz);
-		this.query = queryBuilder.getQuery();
+		this.query = new DefaultSqlQuery(context);
+		this.queryBuilder = QueryBuilder.from(this.query, clz);
 	}
 	
 
@@ -386,19 +386,64 @@ public class PojoQuery<T> {
 		return queryBuilder.processRows(DB.queryRows(connection, stmt));
 	}
 
+
 	/**
-	 * Executes the query in streaming mode using the specified DataSource.
+	 * Executes the query in streaming mode, calling the consumer for each completed entity.
+	 * 
+	 * <p>This method processes rows one at a time and emits entities as soon as they are complete
+	 * (when all rows belonging to an entity have been processed). This is useful for processing
+	 * large result sets without loading everything into memory.</p>
+	 * 
+	 * <p><strong>Ordering behavior:</strong> Your ORDER BY clause is respected, and the primary
+	 * entity's ID is automatically appended as a tiebreaker to ensure all rows for the same entity
+	 * stay grouped together.</p>
+	 * 
+	 * <p><strong>Restriction:</strong> ORDER BY clauses must only reference fields from the primary
+	 * entity (root table). Ordering by fields from joined tables (e.g., a collection relationship)
+	 * is not supported and will throw a {@link org.pojoquery.internal.MappingException}.</p>
+	 * 
+	 * <p>Example usage:</p>
+	 * <pre>{@code
+	 * PojoQuery.build(Order.class)
+	 *     .addWhere("{order}.status = ?")
+	 *     .addOrderBy("{order}.createdAt DESC")  // OK: ordering by primary entity field
+	 *     .executeStreaming(dataSource, order -> {
+	 *         processOrder(order);  // Called as each Order is complete
+	 *     });
+	 * }</pre>
 	 *
 	 * @param db the DataSource
-	 * @return the list of results
+	 * @param consumer the consumer to receive each completed entity
+	 * @throws org.pojoquery.internal.MappingException if ORDER BY references a joined table
 	 */
-	public List<T> executeStreaming(DataSource db) {
-		List<T> result = new ArrayList<>();
-		Map<Object, Object> allEntities = new HashMap<>();
-		DB.queryRowsStreaming(db, query.toStatement(), row -> {
-			queryBuilder.processRow(result, allEntities, row);
-		});
-		return result;
+	public void executeStreaming(DataSource db, Consumer<T> consumer) {
+		executeStreamingImpl(consumer, rowConsumer -> DB.queryRowsStreaming(db, query.toStatement(), rowConsumer));
+	}
+
+	/**
+	 * Executes the query in streaming mode using the specified Connection, calling the consumer 
+	 * for each completed entity.
+	 * 
+	 * <p>This method processes rows one at a time and emits entities as soon as they are complete
+	 * (when all rows belonging to an entity have been processed). This is useful for processing
+	 * large result sets without loading everything into memory.</p>
+	 * 
+	 * <p><strong>Restriction:</strong> ORDER BY clauses must only reference fields from the primary
+	 * entity. See {@link #executeStreaming(DataSource, Consumer)} for details.</p>
+	 *
+	 * @param connection the database connection
+	 * @param consumer the consumer to receive each completed entity
+	 * @throws org.pojoquery.internal.MappingException if ORDER BY references a joined table
+	 */
+	public void executeStreaming(Connection connection, Consumer<T> consumer) {
+		executeStreamingImpl(consumer, rowConsumer -> DB.queryRowsStreaming(connection, query.toStatement(), rowConsumer));
+	}
+
+	private void executeStreamingImpl(Consumer<T> consumer, Consumer<Consumer<Map<String, Object>>> queryExecutor) {
+		queryBuilder.ensureOrderByPrimaryId();
+		var handler = queryBuilder.createStreamingRowHandler(consumer);
+		queryExecutor.accept(handler);
+		handler.flush();
 	}
 
 	public static <PK> PK insert(Connection conn, Class<?> type, Object o) {
@@ -479,7 +524,7 @@ public class PojoQuery<T> {
 			return ids;
 		} else {
 			TableMapping topType = tables.remove(0);
-			Map<String, Object> values = extractValues(topType.clazz, o);
+			Map<String, Object> values = extractValues(topType.getReflectionClass(), o);
 			PK ids;
 			if (conn != null) {
 				ids = DB.insert(context, conn, topType.tableName, values);
@@ -497,7 +542,7 @@ public class PojoQuery<T> {
 
 			while (tables.size() > 0) {
 				TableMapping supertype = tables.remove(0);
-				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.clazz : type, o, topType.clazz);
+				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.getReflectionClass() : type, o, topType.getReflectionClass());
 				subvals.put(idField, ids);
 				if (conn != null) {
 					DB.insert(context, conn, supertype.tableName, subvals);
@@ -605,7 +650,7 @@ public class PojoQuery<T> {
 			int affectedRows = 0;
 
 			TableMapping topType = tables.remove(0);
-			Map<String, Object> values = extractValues(topType.clazz, o);
+			Map<String, Object> values = extractValues(topType.getReflectionClass(), o);
 			Map<String, Object> ids = splitIdFields(o, values);
 			Map<String, Object> topIds = new HashMap<>(ids);
 
@@ -625,7 +670,7 @@ public class PojoQuery<T> {
 
 			while (tables.size() > 0) {
 				TableMapping supertype = tables.remove(0);
-				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.clazz : type, o, topType.clazz);
+				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.getReflectionClass() : type, o, topType.getReflectionClass());
 				if (conn != null) {
 					DB.update(context, conn, supertype.tableName, subvals, ids);
 				} else {
@@ -661,7 +706,7 @@ public class PojoQuery<T> {
 				}
 
 				Object val = f.get(o);
-				if (f.getAnnotation(Embedded.class) != null) {
+				if (AnnotationHelper.isEmbedded(f)) {
 					if (val != null) {
 						Map<String, Object> embeddedVals = extractValues(f.getType(), val);
 						String prefix = QueryBuilder.determinePrefix(f);
@@ -679,11 +724,9 @@ public class PojoQuery<T> {
 				} else if (Collection.class.isAssignableFrom(f.getType())) {
 				} else if (QueryBuilder.isLinkedClass(f.getType())) {
 					// Linked entity.
-					String linkfieldName = f.getName() + "_id";
-					if (f.getAnnotation(Link.class) != null) {
-						if (!Link.NONE.equals(f.getAnnotation(Link.class).linkfield())) {
-							linkfieldName = f.getAnnotation(Link.class).linkfield();
-						}
+					String linkfieldName = AnnotationHelper.getJoinColumnName(f);
+					if (linkfieldName == null) {
+						linkfieldName = f.getName() + "_id";
 					}
 					if (val == null) {
 						values.put(linkfieldName, null);
@@ -693,7 +736,7 @@ public class PojoQuery<T> {
 						Object idValue = idField.get(val);
 						values.put(linkfieldName, idValue);
 					}
-                } else if (f.getAnnotation(Id.class) != null && val == null) {
+                } else if (AnnotationHelper.isId(f) && val == null) {
                 	// Skip auto-generated ID field when value is null (for INSERT)
                 } else {
                 	values.put(QueryBuilder.determineSqlFieldName(f), val);
@@ -774,7 +817,7 @@ public class PojoQuery<T> {
 	 */
 	public T findById(DataSource db, Object id) {
 		query.getWheres().addAll(QueryBuilder.buildIdCondition(dbContext, resultClass, id));
-		return returnSingleRow(executeStreaming(db));
+		return returnSingleRow(execute(db));
 	}
 
 	public static void delete(Connection conn, Object entity) {
@@ -836,7 +879,7 @@ public class PojoQuery<T> {
 	
 	public static void deleteById(DbContext context, DataSource db, Class<?> clz, Object id) {
 		for (TableMapping table : QueryBuilder.determineTableMapping(clz)) {
-			List<SqlExpression> wheres = QueryBuilder.buildIdCondition(context, table.clazz, id);
+			List<SqlExpression> wheres = QueryBuilder.buildIdCondition(context, table.getReflectionClass(), id);
 			executeDelete(context, null, db, table.tableName, wheres);
 		}
 	}
@@ -882,7 +925,7 @@ public class PojoQuery<T> {
 	@SuppressWarnings("unchecked")
 	public <PK> List<PK> listIds(DataSource db) {
 		List<Field> idFields = QueryBuilder.determineIdFields(resultClass);
-		SqlExpression stmt = queryBuilder.buildListIdsStatement(idFields);
+		SqlExpression stmt = queryBuilder.buildListIdsStatementFromFields(idFields);
 		List<Map<String, Object>> rows = DB.queryRows(db, stmt);
 		if (idFields.size() > 1) {
 			return (List<PK>) rows;
@@ -905,5 +948,4 @@ public class PojoQuery<T> {
 		List<Map<String, Object>> rows = DB.queryRows(db, stmt);
 		return ((Long) rows.get(0).values().iterator().next()).intValue();
 	}
-
 }

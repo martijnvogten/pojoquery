@@ -69,8 +69,8 @@ public class GettingStartedExample {
         // end::setup[]
         
         // tag::insert[]
-        // Use runInTransaction to ensure all operations are atomic
-        DB.runInTransaction(dataSource, (Connection c) -> {
+        // Run all operations within a connection
+        DB.withConnection(dataSource, (Connection c) -> {
             // Insert a department
             Department engineering = new Department();
             engineering.name = "Engineering";

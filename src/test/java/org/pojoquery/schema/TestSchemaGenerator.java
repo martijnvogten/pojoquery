@@ -8,9 +8,12 @@ import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DbContext;
 import org.pojoquery.DbContext.QuoteStyle;
+import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.Id;
@@ -19,8 +22,16 @@ import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.dialects.PostgresDbContext;
+import org.pojoquery.integrationtest.DbContextExtension;
 
+@ExtendWith(DbContextExtension.class)
 public class TestSchemaGenerator {
+
+    @BeforeEach
+    public void setUp() {
+        // Ensure MySQL dialect is used (default) - tests depend on backtick quoting
+        DbContext.setDefault(DbContext.forDialect(DbContext.Dialect.MYSQL));
+    }
 
     @Table("users")
     public static class User {
@@ -456,6 +467,76 @@ public class TestSchemaGenerator {
         // For consistency, just check that joined is not empty and contains expected table
         assertTrue(joined.contains("CREATE TABLE"));
         assertTrue(joined.contains("`room`"));
+    }
+    
+    // Single Table Inheritance (STI) test classes
+    @Table("vehicle")
+    @SubClasses({Car.class, Motorcycle.class})
+    @DiscriminatorColumn(name = "vehicle_type")
+    public static class Vehicle {
+        @Id
+        Long id;
+        String brand;
+        int year;
+    }
+    
+    @Table("vehicle")
+    public static class Car extends Vehicle {
+        int numberOfDoors;
+        boolean hasAirConditioning;
+    }
+    
+    @Table("vehicle")
+    public static class Motorcycle extends Vehicle {
+        int engineCC;
+        boolean hasSidecar;
+    }
+    
+    @Test
+    public void testSingleTableInheritance() {
+        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Vehicle.class);
+        String sql = String.join("\n", sqlList);
+        System.out.println("Single Table Inheritance:");
+        System.out.println(sql);
+        
+        // Should generate only ONE table (all classes in same table)
+        assertEquals(1, sqlList.size(), "Single table inheritance should generate exactly 1 table");
+        
+        // Table name should be 'vehicle'
+        assertTrue(sql.contains("`vehicle`"));
+        
+        // Should contain discriminator column
+        assertTrue(sql.contains("`vehicle_type`"), "Should contain discriminator column 'vehicle_type'");
+        assertTrue(sql.contains("VARCHAR(255) NOT NULL"), "Discriminator column should be VARCHAR NOT NULL");
+        
+        // Should contain base class fields
+        assertTrue(sql.contains("`id`"));
+        assertTrue(sql.contains("`brand`"));
+        assertTrue(sql.contains("`year`"));
+        
+        // Should contain Car subclass fields
+        assertTrue(sql.contains("`numberOfDoors`"), "Should contain Car field 'numberOfDoors'");
+        assertTrue(sql.contains("`hasAirConditioning`"), "Should contain Car field 'hasAirConditioning'");
+        
+        // Should contain Motorcycle subclass fields
+        assertTrue(sql.contains("`engineCC`"), "Should contain Motorcycle field 'engineCC'");
+        assertTrue(sql.contains("`hasSidecar`"), "Should contain Motorcycle field 'hasSidecar'");
+    }
+    
+    @Test
+    public void testSingleTableInheritanceVsTablePerSubclass() {
+        // STI: generates 1 table
+        List<String> stiStatements = SchemaGenerator.generateCreateTableStatements(Vehicle.class);
+        
+        // Table-per-subclass: generates 3 tables
+        List<String> tpsStatements = SchemaGenerator.generateCreateTableStatements(Room.class);
+        
+        assertEquals(1, stiStatements.size(), "STI should generate 1 table");
+        assertEquals(3, tpsStatements.size(), "Table-per-subclass should generate 3 tables");
+        
+        // STI table should NOT have foreign key references to itself
+        String stiSql = stiStatements.get(0);
+        assertFalse(stiSql.contains("REFERENCES `vehicle`"), "STI table should not have self-referencing FK");
     }
     
     @Test

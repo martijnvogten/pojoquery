@@ -12,6 +12,7 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.schema.SchemaGenerator;
 
 /**
  * Example demonstrating filtered relationships using @JoinCondition.
@@ -26,6 +27,13 @@ public class FilteredRelationshipExample {
         String firstname;
         String lastname;
 
+        public Person() {}
+
+        public Person(String firstname, String lastname) {
+            this.firstname = firstname;
+            this.lastname = lastname;
+        }
+
         public Long getId() { return id; }
         public String getFirstname() { return firstname; }
         public String getLastname() { return lastname; }
@@ -39,10 +47,35 @@ public class FilteredRelationshipExample {
         @Id Long id;
         String title;
 
+        public Event() {}
+
+        public Event(String title) {
+            this.title = title;
+        }
+
         public Long getId() { return id; }
         public String getTitle() { return title; }
     }
     // end::event[]
+
+    @Table("event_person")
+    public static class RoleInEvent {
+        @Id Long event_id;
+        @Id Long person_id;
+        String role;
+
+        public RoleInEvent() {}
+
+        public RoleInEvent(Long event_id, Long person_id, String role) {
+            this.event_id = event_id;
+            this.person_id = person_id;
+            this.role = role;
+        }
+
+        public Long getEventId() { return event_id; }
+        public Long getPersonId() { return person_id; }
+        public String getRole() { return role; }
+    }
 
     // tag::event-with-participants[]
     @Table("event")
@@ -67,12 +100,11 @@ public class FilteredRelationshipExample {
 
     public static void main(String[] args) {
         DataSource dataSource = createDatabase();
-        createTables(dataSource);
+        SchemaGenerator.createTables(dataSource, Event.class, Person.class, RoleInEvent.class);
         insertTestData(dataSource);
 
         // tag::query[]
         EventWithParticipants event = PojoQuery.build(EventWithParticipants.class)
-            .addWhere("event.id = ?", 1L)
             .execute(dataSource)
             .stream().findFirst().orElse(null);
 
@@ -90,48 +122,29 @@ public class FilteredRelationshipExample {
         // end::query[]
     }
 
-    // tag::schema[]
-    private static void createTables(DataSource db) {
-        DB.executeDDL(db, """
-            CREATE TABLE event (
-                id BIGINT IDENTITY PRIMARY KEY,
-                title VARCHAR(255)
-            )
-            """);
-        DB.executeDDL(db, """
-            CREATE TABLE person (
-                id BIGINT IDENTITY PRIMARY KEY,
-                firstname VARCHAR(100),
-                lastname VARCHAR(100)
-            )
-            """);
-        DB.executeDDL(db, """
-            CREATE TABLE event_person (
-                event_id BIGINT,
-                person_id BIGINT,
-                role VARCHAR(20),
-                PRIMARY KEY (event_id, person_id, role)
-            )
-            """);
-    }
-    // end::schema[]
-
     private static void insertTestData(DataSource db) {
-        // Event
-        DB.executeDDL(db, "INSERT INTO event (id, title) VALUES (1, 'Tech Conference 2025')");
-        
-        // People
-        DB.executeDDL(db, "INSERT INTO person (id, firstname, lastname) VALUES (1, 'Alice', 'Admin')");
-        DB.executeDDL(db, "INSERT INTO person (id, firstname, lastname) VALUES (2, 'Bob', 'Builder')");
-        DB.executeDDL(db, "INSERT INTO person (id, firstname, lastname) VALUES (3, 'Carol', 'Coder')");
-        DB.executeDDL(db, "INSERT INTO person (id, firstname, lastname) VALUES (4, 'Dave', 'Developer')");
-        
-        // Event-Person links with roles
-        DB.executeDDL(db, "INSERT INTO event_person (event_id, person_id, role) VALUES (1, 1, 'organizer')");
-        DB.executeDDL(db, "INSERT INTO event_person (event_id, person_id, role) VALUES (1, 2, 'organizer')");
-        DB.executeDDL(db, "INSERT INTO event_person (event_id, person_id, role) VALUES (1, 3, 'visitor')");
-        DB.executeDDL(db, "INSERT INTO event_person (event_id, person_id, role) VALUES (1, 4, 'visitor')");
+        DB.runInTransaction(db, conn -> {
+            // Event
+            Event event = new Event("Tech Conference 2025");
+            PojoQuery.insert(conn, event);
+            
+            // People
+            Person alice = new Person("Alice", "Admin");
+            Person bob = new Person("Bob", "Builder");
+            Person carol = new Person("Carol", "Coder");
+            Person dave = new Person("Dave", "Developer");
+            PojoQuery.insert(conn, alice);
+            PojoQuery.insert(conn, bob);
+            PojoQuery.insert(conn, carol);
+            PojoQuery.insert(conn, dave);
+            
+            PojoQuery.insert(conn, new RoleInEvent(event.id, alice.id, "organizer"));
+            PojoQuery.insert(conn, new RoleInEvent(event.id, bob.id, "organizer"));
+            PojoQuery.insert(conn, new RoleInEvent(event.id, carol.id, "visitor"));
+            PojoQuery.insert(conn, new RoleInEvent(event.id, dave.id, "visitor"));
+        });
     }
+
 
     private static DataSource createDatabase() {
         JDBCDataSource ds = new JDBCDataSource();

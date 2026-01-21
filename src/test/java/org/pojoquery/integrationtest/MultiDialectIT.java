@@ -14,7 +14,6 @@ import javax.sql.DataSource;
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -26,12 +25,11 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.schema.SchemaGenerator;
+import org.postgresql.ds.PGSimpleDataSource;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import com.mysql.cj.jdbc.MysqlDataSource;
-
-import org.postgresql.ds.PGSimpleDataSource;
 
 /**
  * Integration tests that run against real databases using Testcontainers.
@@ -195,143 +193,161 @@ public class MultiDialectIT {
     @MethodSource("dialects")
     public void testInsertAndSelect(Dialect dialect) {
         setUp(dialect);
-        User user = new User("alice", "alice@example.com");
-        PojoQuery.insert(dataSource, user);
-        
-        assertNotNull(user.id, "User should have an ID after insert");
-        assertTrue(user.id > 0, "User ID should be positive");
-        
-        User loaded = PojoQuery.build(User.class).findById(dataSource, user.id);
-        assertNotNull(loaded, "User should be found");
-        assertEquals("alice", loaded.username);
-        assertEquals("alice@example.com", loaded.email);
-        assertEquals(Boolean.TRUE, loaded.active);
+        DB.withConnection(dataSource, c -> {
+            User user = new User("alice", "alice@example.com");
+            PojoQuery.insert(c, user);
+            
+            assertNotNull(user.id, "User should have an ID after insert");
+            assertTrue(user.id > 0, "User ID should be positive");
+            
+            User loaded = PojoQuery.build(User.class).findById(c, user.id);
+            assertNotNull(loaded, "User should be found");
+            assertEquals("alice", loaded.username);
+            assertEquals("alice@example.com", loaded.email);
+            assertEquals(Boolean.TRUE, loaded.active);
+        });
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("dialects")
     public void testUpdate(Dialect dialect) {
         setUp(dialect);
-        User user = new User("bob", "bob@example.com");
-        PojoQuery.insert(dataSource, user);
-        
-        user.email = "bob.updated@example.com";
-        user.active = false;
-        PojoQuery.update(dataSource, user);
-        
-        User loaded = PojoQuery.build(User.class).findById(dataSource, user.id);
-        assertEquals("bob.updated@example.com", loaded.email);
-        assertEquals(Boolean.FALSE, loaded.active);
+        DB.withConnection(dataSource, c -> {
+            User user = new User("bob", "bob@example.com");
+            PojoQuery.insert(c, user);
+            
+            user.email = "bob.updated@example.com";
+            user.active = false;
+            PojoQuery.update(c, user);
+            
+            User loaded = PojoQuery.build(User.class).findById(c, user.id);
+            assertEquals("bob.updated@example.com", loaded.email);
+            assertEquals(Boolean.FALSE, loaded.active);
+        });
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("dialects")
     public void testDelete(Dialect dialect) {
         setUp(dialect);
-        User user = new User("charlie", "charlie@example.com");
-        PojoQuery.insert(dataSource, user);
-        Long id = user.id;
-        
-        PojoQuery.delete(dataSource, user);
-        
-        User loaded = PojoQuery.build(User.class).findById(dataSource, id);
-        assertNull(loaded, "User should be deleted");
+        DB.withConnection(dataSource, c -> {
+            User user = new User("charlie", "charlie@example.com");
+            PojoQuery.insert(c, user);
+            Long id = user.id;
+            
+            PojoQuery.delete(c, user);
+            
+            User loaded = PojoQuery.build(User.class).findById(c, id);
+            assertNull(loaded, "User should be deleted");
+        });
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("dialects")
     public void testSelectAll(Dialect dialect) {
         setUp(dialect);
-        PojoQuery.insert(dataSource, new User("user1", "user1@example.com"));
-        PojoQuery.insert(dataSource, new User("user2", "user2@example.com"));
-        PojoQuery.insert(dataSource, new User("user3", "user3@example.com"));
-        
-        List<User> users = PojoQuery.build(User.class).execute(dataSource);
-        assertEquals(3, users.size());
+        DB.withConnection(dataSource, c -> {
+            PojoQuery.insert(c, new User("user1", "user1@example.com"));
+            PojoQuery.insert(c, new User("user2", "user2@example.com"));
+            PojoQuery.insert(c, new User("user3", "user3@example.com"));
+            
+            List<User> users = PojoQuery.build(User.class).execute(c);
+            assertEquals(3, users.size());
+        });
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("dialects")
     public void testWhereClause(Dialect dialect) {
         setUp(dialect);
-        PojoQuery.insert(dataSource, new User("active1", "a1@example.com"));
-        User inactive = new User("inactive1", "i1@example.com");
-        inactive.active = false;
-        PojoQuery.insert(dataSource, inactive);
-        PojoQuery.insert(dataSource, new User("active2", "a2@example.com"));
-        
-        List<User> activeUsers = PojoQuery.build(User.class)
-                .addWhere("active = ?", true)
-                .execute(dataSource);
-        
-        assertEquals(2, activeUsers.size());
+        DB.withConnection(dataSource, c -> {
+            PojoQuery.insert(c, new User("active1", "a1@example.com"));
+            User inactive = new User("inactive1", "i1@example.com");
+            inactive.active = false;
+            PojoQuery.insert(c, inactive);
+            PojoQuery.insert(c, new User("active2", "a2@example.com"));
+            
+            List<User> activeUsers = PojoQuery.build(User.class)
+                    .addWhere("active = ?", true)
+                    .execute(c);
+            
+            assertEquals(2, activeUsers.size());
+        });
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("dialects")
     public void testLobField(Dialect dialect) {
         setUp(dialect);
-        // Create a large content string
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 1000; i++) {
-            sb.append("Line ").append(i).append(": This is test content for LOB testing.\n");
-        }
-        String largeContent = sb.toString();
-        
-        Article article = new Article("Test Article", largeContent);
-        PojoQuery.insert(dataSource, article);
-        
-        assertNotNull(article.id, "Article should have an ID");
-        
-        Article loaded = PojoQuery.build(Article.class).findById(dataSource, article.id);
-        assertNotNull(loaded, "Article should be found");
-        assertEquals("Test Article", loaded.title);
-        assertEquals(largeContent, loaded.content);
+        DB.withConnection(dataSource, c -> {
+            // Create a large content string
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 1000; i++) {
+                sb.append("Line ").append(i).append(": This is test content for LOB testing.\n");
+            }
+            String largeContent = sb.toString();
+            
+            Article article = new Article("Test Article", largeContent);
+            PojoQuery.insert(c, article);
+            
+            assertNotNull(article.id, "Article should have an ID");
+            
+            Article loaded = PojoQuery.build(Article.class).findById(c, article.id);
+            assertNotNull(loaded, "Article should be found");
+            assertEquals("Test Article", loaded.title);
+            assertEquals(largeContent, loaded.content);
+        });
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("dialects")
     public void testLobUpdate(Dialect dialect) {
         setUp(dialect);
-        Article article = new Article("Original Title", "Original content");
-        PojoQuery.insert(dataSource, article);
-        
-        String updatedContent = "Updated content that is different from the original.";
-        article.content = updatedContent;
-        article.title = "Updated Title";
-        PojoQuery.update(dataSource, article);
-        
-        Article loaded = PojoQuery.build(Article.class).findById(dataSource, article.id);
-        assertEquals("Updated Title", loaded.title);
-        assertEquals(updatedContent, loaded.content);
+        DB.withConnection(dataSource, c -> {
+            Article article = new Article("Original Title", "Original content");
+            PojoQuery.insert(c, article);
+            
+            String updatedContent = "Updated content that is different from the original.";
+            article.content = updatedContent;
+            article.title = "Updated Title";
+            PojoQuery.update(c, article);
+            
+            Article loaded = PojoQuery.build(Article.class).findById(c, article.id);
+            assertEquals("Updated Title", loaded.title);
+            assertEquals(updatedContent, loaded.content);
+        });
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("dialects")
     public void testNullValues(Dialect dialect) {
         setUp(dialect);
-        User user = new User();
-        user.username = "nulltest";
-        // email and active are null
-        PojoQuery.insert(dataSource, user);
-        
-        User loaded = PojoQuery.build(User.class).findById(dataSource, user.id);
-        assertEquals("nulltest", loaded.username);
-        assertNull(loaded.email, "Email should be null");
-        assertNull(loaded.active, "Active should be null");
+        DB.withConnection(dataSource, c -> {
+            User user = new User();
+            user.username = "nulltest";
+            // email and active are null
+            PojoQuery.insert(c, user);
+            
+            User loaded = PojoQuery.build(User.class).findById(c, user.id);
+            assertEquals("nulltest", loaded.username);
+            assertNull(loaded.email, "Email should be null");
+            assertNull(loaded.active, "Active should be null");
+        });
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("dialects")
     public void testMultipleInserts(Dialect dialect) {
         setUp(dialect);
-        for (int i = 0; i < 100; i++) {
-            User user = new User("user" + i, "user" + i + "@example.com");
-            PojoQuery.insert(dataSource, user);
-            assertEquals(Long.valueOf(i + 1), user.id, "Each user should get a unique ID");
-        }
-        
-        List<User> users = PojoQuery.build(User.class).execute(dataSource);
-        assertEquals(100, users.size());
+        DB.withConnection(dataSource, c -> {
+            for (int i = 0; i < 100; i++) {
+                User user = new User("user" + i, "user" + i + "@example.com");
+                PojoQuery.insert(c, user);
+                assertEquals(Long.valueOf(i + 1), user.id, "Each user should get a unique ID");
+            }
+            
+            List<User> users = PojoQuery.build(User.class).execute(c);
+            assertEquals(100, users.size());
+        });
     }
 }

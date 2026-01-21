@@ -6,8 +6,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import org.pojoquery.AnnotationHelper;
 import org.pojoquery.annotations.Link;
-import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.CustomizableQueryBuilder;
 import org.pojoquery.pipeline.QueryBuilder;
@@ -69,6 +69,12 @@ class ForeignKeyScanner {
                 // One-to-many - Get the component type of the collection
                 Class<?> componentType = Types.getCollectionComponentType(field);
                 if (componentType != null && CustomizableQueryBuilder.isLinkedClass(componentType)) {
+                    // Check if the component type already has a back-reference field to the owner
+                    // If so, skip inferring a FK - the existing field will create the FK column
+                    if (hasBackReferenceField(componentType, entityClass)) {
+                        continue;
+                    }
+                    
                     // Determine the foreign key column name
                     String fkColumnName = determineForeignKeyColumnNameForCollection(entityClass, field);
                     
@@ -83,6 +89,45 @@ class ForeignKeyScanner {
                 }
             }
         }
+    }
+    
+    /**
+     * Checks if the target class has a field that references back to the owner class or any of its superclasses.
+     * This is used to detect existing back-references so we don't infer duplicate FK columns.
+     * 
+     * @param targetClass the class to check for back-reference fields (e.g., LineItem)
+     * @param ownerClass the owner class that has a collection of targetClass (e.g., CustomerOrderWithLineItems)
+     * @return true if targetClass has a field referencing ownerClass or one of its superclasses
+     */
+    private static boolean hasBackReferenceField(Class<?> targetClass, Class<?> ownerClass) {
+        Collection<Field> targetFields = QueryBuilder.filterFields(targetClass);
+        
+        // Build a set of all classes in the owner's hierarchy that share the same table
+        List<TableMapping> ownerMappings = QueryBuilder.determineTableMapping(ownerClass);
+        if (ownerMappings.isEmpty()) {
+            return false;
+        }
+        String ownerTableName = ownerMappings.get(0).tableName;
+        
+        for (Field field : targetFields) {
+            // Skip collections - we're looking for single entity references
+            if (CustomizableQueryBuilder.isListOrArray(field.getType())) {
+                continue;
+            }
+            
+            Class<?> fieldType = field.getType();
+            if (CustomizableQueryBuilder.isLinkedClass(fieldType)) {
+                // Check if this field's type maps to the same table as the owner
+                List<TableMapping> fieldTypeMappings = QueryBuilder.determineTableMapping(fieldType);
+                if (!fieldTypeMappings.isEmpty()) {
+                    String fieldTypeTableName = fieldTypeMappings.get(0).tableName;
+                    if (ownerTableName.equals(fieldTypeTableName)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
     
     /**
@@ -174,7 +219,7 @@ class ForeignKeyScanner {
         Class<?> rootTableClass = null;
         Class<?> current = clazz;
         while (current != null) {
-            if (current.getAnnotation(Table.class) != null) {
+            if (AnnotationHelper.hasTableAnnotation(current)) {
                 rootTableClass = current;
             }
             current = current.getSuperclass();
@@ -189,7 +234,7 @@ class ForeignKeyScanner {
     static Class<?> findTableClass(Class<?> clazz) {
         List<TableMapping> mappings = QueryBuilder.determineTableMapping(clazz);
         if (!mappings.isEmpty()) {
-            return mappings.get(0).clazz;
+            return mappings.get(0).getReflectionClass();
         }
         return null;
     }

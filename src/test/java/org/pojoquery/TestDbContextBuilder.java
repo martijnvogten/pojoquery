@@ -50,6 +50,7 @@ public class TestDbContextBuilder {
     }
 
     @Test
+    @SuppressWarnings("deprecation")
     public void testDisableObjectQuoting() {
         DbContext context = DbContext.builder()
             .withQuotedObjectNames(false)
@@ -70,6 +71,7 @@ public class TestDbContextBuilder {
     }
 
     @Test
+    @SuppressWarnings("deprecation")
     public void testCombinedConfiguration() {
         DbContext context = DbContext.builder()
             .withQuoteStyle(DbContext.QuoteStyle.ANSI)

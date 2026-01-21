@@ -313,3 +313,44 @@ public class Record {
     LocalDateTime createdAt;
 }
 ----
+
+== JPA Annotation Compatibility
+
+PojoQuery supports standard JPA annotations from both `jakarta.persistence` and `javax.persistence` namespaces as alternatives to its native annotations. This allows you to use existing JPA-annotated entities with PojoQuery without modification.
+
+=== Supported JPA Annotations
+
+[cols="2,2,3"]
+|===
+| PojoQuery Annotation | JPA Equivalent | Notes
+
+| `@Table` | `@Table` | Table name (`name`) and schema
+| `@Id` | `@Id` | Primary key field
+| `@FieldName` | `@Column(name=...)` | Custom column name
+| `@Column` | `@Column` | length, precision, scale, nullable, unique
+| `@Transient` | `@Transient` | Exclude field from persistence
+| `@Embedded` | `@Embedded` | Embed value object (note: JPA `@Embedded` has no prefix support)
+| `@Lob` | `@Lob` | Large object (CLOB/BLOB)
+| `@Link(linkfield=...)` | `@JoinColumn(name=...)` | Foreign key column name
+| `@SubClasses` | _(none)_ | No JPA equivalent—see note below
+|===
+
+NOTE: PojoQuery annotations always take precedence when both PojoQuery and JPA annotations are present on the same element.
+
+=== No JPA Equivalent: @SubClasses
+
+JPA uses `@Inheritance(strategy=...)` combined with classpath scanning to discover subclasses automatically. PojoQuery takes a different approach: subclasses must be explicitly declared using `@SubClasses`. This design choice keeps PojoQuery simple and avoids the complexity of classpath scanning, reflection-based discovery, and the associated startup overhead.
+
+=== Example with JPA Annotations
+
+[source,java]
+----
+include::example$test/examples/docs/JpaAnnotationsExample.java[tag=jpa-entity,indent=0]
+----
+
+This entity works identically to one using PojoQuery's native annotations:
+
+[source,java]
+----
+include::example$test/examples/docs/JpaAnnotationsExample.java[tag=pojoquery-entity,indent=0]
+----

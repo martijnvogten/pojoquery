@@ -9,32 +9,27 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.integrationtest.db.TestDatabase;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.schema.SchemaGenerator;
 
+@ExtendWith(DbContextExtension.class)
 public class TestDbContext {
 
-	// Save and restore default context to avoid polluting global state for other tests
-	private static DbContext originalDefault;
-	
-	@BeforeAll
-	public static void saveDefaultContext() {
-		originalDefault = DbContext.getDefault();
+	@BeforeEach
+	public void setUpHsqldbContext() {
+		// Ensure HSQLDB context is set for SchemaGenerator.createTables calls
+		TestDatabase.initDbContext();
 	}
-	
-	@AfterAll
-	public static void restoreDefaultContext() {
-		DbContext.setDefault(originalDefault);
-	}
-	
+
 	@Table(value="article", schema="schema1")
 	static class Article {
 		@Id
@@ -92,14 +87,16 @@ public class TestDbContext {
 		DataSource db = TestDatabase.dropAndRecreate();
 		SchemaGenerator.createTables(db, Product.class);
 		
-		// Insert with explicit context
-		Product p = new Product();
-		p.name = "Test Product";
-		p.price = 100;
-		Long id = PojoQuery.insert(hsqldbContext, db, p);
-		
-		assertNotNull(id, "Insert should return generated ID");
-		assertEquals(id, p.id, "ID should be set on object");
+		DB.withConnection(db, c -> {
+			// Insert with explicit context
+			Product p = new Product();
+			p.name = "Test Product";
+			p.price = 100;
+			Long id = PojoQuery.insert(hsqldbContext, c, p);
+			
+			assertNotNull(id, "Insert should return generated ID");
+			assertEquals(id, p.id, "ID should be set on object");
+		});
 	}
 	
 	@Test
@@ -108,24 +105,26 @@ public class TestDbContext {
 		DataSource db = TestDatabase.dropAndRecreate();
 		SchemaGenerator.createTables(db, Product.class);
 		
-		// Insert first
-		Product p = new Product();
-		p.name = "Original Name";
-		p.price = 50;
-		p.id = PojoQuery.insert(hsqldbContext, db, p);
-		
-		// Update with explicit context
-		p.name = "Updated Name";
-		p.price = 75;
-		int affected = PojoQuery.update(hsqldbContext, db, p);
-		
-		assertEquals(1, affected, "Should affect 1 row");
-		
-		// Verify the update via query
-		Product loaded = PojoQuery.build(hsqldbContext, Product.class)
-				.findById(db, p.id);
-		assertEquals("Updated Name", loaded.name);
-		assertEquals(Integer.valueOf(75), loaded.price);
+		DB.withConnection(db, c -> {
+			// Insert first
+			Product p = new Product();
+			p.name = "Original Name";
+			p.price = 50;
+			p.id = PojoQuery.insert(hsqldbContext, c, p);
+			
+			// Update with explicit context
+			p.name = "Updated Name";
+			p.price = 75;
+			int affected = PojoQuery.update(hsqldbContext, c, p);
+			
+			assertEquals(1, affected, "Should affect 1 row");
+			
+			// Verify the update via query
+			Product loaded = PojoQuery.build(hsqldbContext, Product.class)
+					.findById(c, p.id);
+			assertEquals("Updated Name", loaded.name);
+			assertEquals(Integer.valueOf(75), loaded.price);
+		});
 	}
 	
 	@Test
@@ -134,19 +133,21 @@ public class TestDbContext {
 		DataSource db = TestDatabase.dropAndRecreate();
 		SchemaGenerator.createTables(db, Product.class);
 		
-		// Insert first
-		Product p = new Product();
-		p.name = "To Delete";
-		p.price = 99;
-		p.id = PojoQuery.insert(hsqldbContext, db, p);
-		
-		// Delete with explicit context
-		PojoQuery.delete(hsqldbContext, db, p);
-		
-		// Verify deletion
-		Product loaded = PojoQuery.build(hsqldbContext, Product.class)
-				.findById(db, p.id);
-		assertEquals(null, loaded, "Should return null for deleted entity");
+		DB.withConnection(db, c -> {
+			// Insert first
+			Product p = new Product();
+			p.name = "To Delete";
+			p.price = 99;
+			p.id = PojoQuery.insert(hsqldbContext, c, p);
+			
+			// Delete with explicit context
+			PojoQuery.delete(hsqldbContext, c, p);
+			
+			// Verify deletion
+			Product loaded = PojoQuery.build(hsqldbContext, Product.class)
+					.findById(c, p.id);
+			assertEquals(null, loaded, "Should return null for deleted entity");
+		});
 	}
 	
 	@Test 
@@ -155,13 +156,15 @@ public class TestDbContext {
 		DataSource db = TestDatabase.dropAndRecreate();
 		SchemaGenerator.createTables(db, Product.class);
 		
-		// Use low-level DB.insert with explicit context
-		Map<String, Object> values = new HashMap<>();
-		values.put("name", "Low Level Product");
-		values.put("price", 200);
-		Long id = DB.insert(hsqldbContext, db, "product", values);
-		
-		assertNotNull(id, "Insert should return generated ID");
+		DB.withConnection(db, c -> {
+			// Use low-level DB.insert with explicit context
+			Map<String, Object> values = new HashMap<>();
+			values.put("name", "Low Level Product");
+			values.put("price", 200);
+			Long id = DB.insert(hsqldbContext, c, "product", values);
+			
+			assertNotNull(id, "Insert should return generated ID");
+		});
 	}
 	
 	@Test
@@ -170,20 +173,22 @@ public class TestDbContext {
 		DataSource db = TestDatabase.dropAndRecreate();
 		SchemaGenerator.createTables(db, Product.class);
 		
-		// Insert first
-		Map<String, Object> values = new HashMap<>();
-		values.put("name", "Original");
-		values.put("price", 100);
-		Long id = DB.insert(hsqldbContext, db, "product", values);
-		
-		// Update with explicit context
-		Map<String, Object> updateValues = new HashMap<>();
-		updateValues.put("name", "Changed");
-		updateValues.put("price", 150);
-		Map<String, Object> ids = new HashMap<>();
-		ids.put("id", id);
-		
-		int affected = DB.update(hsqldbContext, db, "product", updateValues, ids);
-		assertEquals(1, affected, "Should affect 1 row");
+		DB.withConnection(db, c -> {
+			// Insert first
+			Map<String, Object> values = new HashMap<>();
+			values.put("name", "Original");
+			values.put("price", 100);
+			Long id = DB.insert(hsqldbContext, c, "product", values);
+			
+			// Update with explicit context
+			Map<String, Object> updateValues = new HashMap<>();
+			updateValues.put("name", "Changed");
+			updateValues.put("price", 150);
+			Map<String, Object> ids = new HashMap<>();
+			ids.put("id", id);
+			
+			int affected = DB.update(hsqldbContext, c, "product", updateValues, ids);
+			assertEquals(1, affected, "Should affect 1 row");
+		});
 	}
 }

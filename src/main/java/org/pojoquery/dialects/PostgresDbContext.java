@@ -3,16 +3,16 @@ package org.pojoquery.dialects;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Date;
 import java.util.Map;
 
+import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
-import org.pojoquery.annotations.Column;
-import org.pojoquery.annotations.Lob;
 import org.pojoquery.pipeline.SimpleFieldMapping;
 
 /**
@@ -79,9 +79,9 @@ public class PostgresDbContext implements DbContext {
             return "BOOLEAN";
         }
         if (type == BigDecimal.class) {
-            Column colAnn = field.getAnnotation(Column.class);
-            int precision = (colAnn != null) ? colAnn.precision() : 19;
-            int scale = (colAnn != null) ? colAnn.scale() : 4;
+            AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);
+            int precision = (colMeta != null) ? colMeta.precision : 19;
+            int scale = (colMeta != null) ? colMeta.scale : 4;
             return "NUMERIC(" + precision + "," + scale + ")";
         }
         if (type == BigInteger.class) {
@@ -89,16 +89,19 @@ public class PostgresDbContext implements DbContext {
         }
 
         if (type == String.class) {
-            if (field.getAnnotation(Lob.class) != null) {
+            if (AnnotationHelper.isLob(field)) {
                 return "TEXT";
             }
-            Column colAnn = field.getAnnotation(Column.class);
-            int length = (colAnn != null) ? colAnn.length() : getDefaultVarcharLength();
+            AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);
+            int length = (colMeta != null) ? colMeta.length : getDefaultVarcharLength();
             return "VARCHAR(" + length + ")";
         }
 
-        if (type == Date.class || type == java.sql.Timestamp.class || type == LocalDateTime.class) {
+        if (type == LocalDateTime.class) {
             return "TIMESTAMP";
+        }
+        if (type == Date.class || type == java.sql.Timestamp.class || type == Instant.class) {
+            return "TIMESTAMPTZ";
         }
         if (type == java.sql.Date.class || type == LocalDate.class) {
             return "DATE";

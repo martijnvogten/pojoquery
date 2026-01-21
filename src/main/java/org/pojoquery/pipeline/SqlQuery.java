@@ -178,6 +178,12 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 			}
 			for (SqlField field : fields) {
 				if (marker.equals(field.alias)) {
+					// Check if field expression is a simple {alias.column} pattern (would cause infinite recursion)
+					// In that case, skip field matching and use alias.column handling below
+					String fieldSql = field.expression.getSql();
+					if (fieldSql.matches("\\{[a-zA-Z0-9_\\.]+\\}")) {
+						break; // Fall through to alias.column handling
+					}
 					return resolveAliases(dbContext, field.expression, thisAlias).getSql();
 				}
 			}

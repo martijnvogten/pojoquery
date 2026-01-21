@@ -3,13 +3,22 @@ package org.pojoquery;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.pojoquery.TestUtils.norm;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.pipeline.QueryBuilder;
 
+@ExtendWith(DbContextExtension.class)
 public class TestSchemaPrefixes {
+
+	@BeforeEach
+	public void setUp() {
+		DbContext.setDefault(DbContext.forDialect(DbContext.Dialect.MYSQL));
+	}
 	
 	@Table(value="article", schema="schema1")
 	static class Article {

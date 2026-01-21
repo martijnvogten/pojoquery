@@ -38,7 +38,7 @@ public class OtherIT {
 	public void testBasic() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			Room u = new Room();
 			u.specs = new HashMap<String,Object>();
 			u.specs.put("area", 25);
@@ -57,7 +57,7 @@ public class OtherIT {
 	public void testInheritance() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			BedRoom bedroom = new BedRoom();
 			bedroom.specs = new HashMap<String,Object>();
 			bedroom.specs.put("area", 25);

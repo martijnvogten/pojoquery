@@ -105,7 +105,7 @@ public class SchemaMigrationIT {
         // Phase 1: Create initial table
         SchemaGenerator.createTables(db, ProductV1.class);
         
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             // Insert initial data with V1 entity
             ProductV1 product1 = new ProductV1();
             product1.name = "Widget";
@@ -131,13 +131,13 @@ public class SchemaMigrationIT {
         assertTrue(migrationSql.toLowerCase().contains("price"), "Should add price column");
         
         // Execute the migration
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             for (String ddl : migrationStatements) {
                 DB.executeDDL(c, ddl);
             }
         });
         
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             // Now we can use the V2 entity with new fields
             ProductV2 product2 = new ProductV2();
             product2.name = "Gadget";
@@ -177,13 +177,13 @@ public class SchemaMigrationIT {
         assertTrue(migrationSql2.toLowerCase().contains("category"), "Should add category column");
         
         // Execute the second migration
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             for (String ddl : migrationStatements2) {
                 DB.executeDDL(c, ddl);
             }
         });
         
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             // Use V3 entity with all fields
             ProductV3 product3 = new ProductV3();
             product3.name = "Super Widget";
@@ -220,13 +220,13 @@ public class SchemaMigrationIT {
         assertTrue(migrationSql3.toLowerCase().contains("quantity"), "Should have quantity column");
         
         // Execute the third migration
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             for (String ddl : migrationStatements3) {
                 DB.executeDDL(c, ddl);
             }
         });
         
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             // Create order items referencing existing products
             OrderItem item1 = new OrderItem();
             item1.productId = 1L; // Widget
@@ -296,7 +296,7 @@ public class SchemaMigrationIT {
         // Phase 1: Create initial tables
         SchemaGenerator.createTables(db, CategoryV1.class, ItemV1.class);
         
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             CategoryV1 cat = new CategoryV1();
             cat.name = "Books";
             PojoQuery.insert(c, cat);
@@ -315,14 +315,14 @@ public class SchemaMigrationIT {
         System.out.println("Multi-entity Migration SQL:\n" + String.join("\n", migrationStatements));
         
         // Execute migration
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             for (String ddl : migrationStatements) {
                 DB.executeDDL(c, ddl);
             }
         });
         
         // Verify both entities work with new fields
-        DB.runInTransaction(db, (Connection c) -> {
+        DB.withConnection(db, (Connection c) -> {
             CategoryV2 cat = PojoQuery.build(CategoryV2.class).findById(c, 1L);
             cat.displayOrder = 1;
             PojoQuery.update(c, cat);

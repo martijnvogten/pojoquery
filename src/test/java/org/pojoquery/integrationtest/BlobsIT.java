@@ -37,7 +37,7 @@ public class BlobsIT {
 	public void testBlobInserts() {
 		DataSource db = initDatabase();
 		
-		DB.runInTransaction(db, c -> {
+		DB.withConnection(db, c -> {
 			File f = new File();
 			f.data = new String("Hello world").getBytes();
 			PojoQuery.insert(c, f);
@@ -70,7 +70,7 @@ public class BlobsIT {
 		DataSource db = TestDatabaseProvider.getDataSource();
 		SchemaGenerator.createTables(db, Article.class);
 		
-		DB.runInTransaction(db, (Connection c) -> {
+		DB.withConnection(db, (Connection c) -> {
 			// Create a large text content (larger than typical VARCHAR)
 			StringBuilder sb = new StringBuilder();
 			for (int i = 0; i < 1000; i++) {
