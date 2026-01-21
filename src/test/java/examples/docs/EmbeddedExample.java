@@ -1,5 +1,7 @@
 package examples.docs;
 
+import java.sql.Connection;
+
 import javax.sql.DataSource;
 
 import org.hsqldb.jdbc.JDBCDataSource;
@@ -66,31 +68,33 @@ public class EmbeddedExample {
     public static void main(String[] args) {
         DataSource dataSource = createDatabase();
         SchemaGenerator.createTables(dataSource, Customer.class);
-        insertTestData(dataSource);
-
-        // tag::query[]
-        Customer customer = PojoQuery.build(Customer.class)
-            .addWhere("{customer}.id = ?", 1L)
-            .execute(dataSource)
-            .stream().findFirst().orElse(null);
-
-        if (customer != null) {
-            System.out.println("Customer: " + customer.getName());
-            System.out.println("Ship to: " + customer.getShippingAddress().getStreet() 
-                + ", " + customer.getShippingAddress().getCity());
-            System.out.println("Bill to: " + customer.getBillingAddress().getStreet() 
-                + ", " + customer.getBillingAddress().getCity());
-        }
-        // end::query[]
+        DB.withConnection(dataSource, c -> {
+            insertTestData(c);
+    
+            // tag::query[]
+            Customer customer = PojoQuery.build(Customer.class)
+                .addWhere("{customer}.id = ?", 1L)
+                .execute(c)
+                .stream().findFirst().orElse(null);
+    
+            if (customer != null) {
+                System.out.println("Customer: " + customer.getName());
+                System.out.println("Ship to: " + customer.getShippingAddress().getStreet() 
+                    + ", " + customer.getShippingAddress().getCity());
+                System.out.println("Bill to: " + customer.getBillingAddress().getStreet() 
+                    + ", " + customer.getBillingAddress().getCity());
+            }
+            // end::query[]
+        });
     }
 
-    private static void insertTestData(DataSource db) {
+    private static void insertTestData(Connection c) {
         Customer customer = new Customer(
             "Acme Corp",
             new Address("123 Warehouse Ave", "Seattle", "98101"),
             new Address("456 Finance Blvd", "New York", "10001")
         );
-        PojoQuery.insert(db, customer);
+        PojoQuery.insert(c, customer);
     }
 
     private static DataSource createDatabase() {
