@@ -139,15 +139,13 @@ public class Employee {
     Department department;
 }
 
-// Type-safe queries with compile-time checked field references
-import static com.example.Employee_.*;
+// Type-safe queries with fluent API
+EmployeeQuery q = new EmployeeQuery();
 
-List<Employee> results = new EmployeeQuery()
-    .where(salary).greaterThan(new BigDecimal("50000"))
-    .where(lastName).like("S%")
-    .orderByDesc(salary)
-    .setLimit(10)
-    .list(dataSource);
+List<Employee> results = q
+    .where().salary.gt(new BigDecimal("50000")).and().lastName.like("S%")
+    .orderBy().salary.desc()
+    .list(connection);
 ```
 
 ## Getting Started

@@ -1,4 +1,4 @@
-package org.pojoquery.typedquery.chain;
+package org.pojoquery.typedquery;
 
 /**
  * Represents a field that can be used in ORDER BY clauses.

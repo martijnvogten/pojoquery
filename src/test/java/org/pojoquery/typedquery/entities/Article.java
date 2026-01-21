@@ -1,11 +1,11 @@
 package org.pojoquery.typedquery.entities;
 
-import org.pojoquery.annotations.GenerateFluentQuery;
+import org.pojoquery.annotations.GenerateQuery;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 
 @Table("article")
-@GenerateFluentQuery
+@GenerateQuery
 public class Article {
     @Id
     public Long id;

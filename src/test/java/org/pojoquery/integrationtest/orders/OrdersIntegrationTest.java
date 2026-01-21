@@ -2,7 +2,6 @@ package org.pojoquery.integrationtest.orders;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
 
 import javax.sql.DataSource;
 
@@ -21,34 +20,24 @@ public class OrdersIntegrationTest {
 	public void testOrdersQueries() {
 		DataSource dataSource = initOrdersDatabase();
 		DB.withConnection(dataSource, (conn) -> {
-
-			List<CustomerOrderWithLineItems> result = new CustomerOrderWithLineItemsQuery()
-			.where().discount.greaterThan(0)
-			.and()
-				.begin()
-					.lineItems.quantity.greaterThan(10)
-					.or()
-					.lineItems.vendorPart.price.lessThan(new BigDecimal("1.00"))
-				.end()
-			.and().status.in(OrderStatus.PENDING, OrderStatus.CANCELLED)
-//			.orderBy().lastUpdate.desc()
-			.list(conn);
-			
-			for (CustomerOrderWithLineItems co : result) {
-				System.out.println("Order ID: " + co.getId() + ", Status: " + co.getStatus());
-				if (co.getLineItems() == null) {
-					continue;
-				}
-				for (LineItem li : co.getLineItems()) {
-					System.out.println("  Line Item ID: " + li.getId() + ", Item ID: " + li.getItemId() + ", Quantity: "
-							+ li.getQuantity());
-					VendorPart vp = li.getVendorPart();
-					Part p = vp.getPart();
-					Vendor v = vp.getVendor();
-					System.out.println("    Part: " + p.getPartNumber() + " (" + p.getDescription() + "), Vendor: "
-							+ v.getName() + ", Price: " + vp.getPrice());
-				}
-			}
+			var q = new CustomerOrderWithLineItemsQuery();
+			q.where().discount.gt(0)
+				.and(q.lineItems.quantity.gt(10)
+					.or().lineItems.vendorPart.price.lt(BigDecimal.valueOf(1.00)))
+				.and().status.in(OrderStatus.PENDING, OrderStatus.CANCELLED)
+				.orderBy().lastUpdate.desc()
+				.list(conn).forEach(co -> {
+					System.out.printf("Order ID: %d, Status: %s%n", co.getId(), co.getStatus());
+					for (var li : co.getLineItems()) {
+						System.out.printf("  Line Item ID: %d, Item ID: %d, Quantity: %d%n",
+								li.getId(), li.getItemId(), li.getQuantity());
+						VendorPart vp = li.getVendorPart();
+						Part p = vp.getPart();
+						Vendor v = vp.getVendor();
+						System.out.printf("    Part: %s (%s), Vendor: %s, Price: %s%n",
+								p.getPartNumber(), p.getDescription(), v.getName(), vp.getPrice());
+					}
+				});
 		});
 	}
 

@@ -1,4 +1,4 @@
-package org.pojoquery.typedquery.chain;
+package org.pojoquery.typedquery;
 
 /**
  * Interface for objects that can receive ORDER BY clauses.

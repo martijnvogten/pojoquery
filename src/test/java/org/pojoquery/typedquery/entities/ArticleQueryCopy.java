@@ -16,14 +16,14 @@ import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
 import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.util.FieldHelper;
 
-import org.pojoquery.typedquery.chain.ChainFactory;
-import org.pojoquery.typedquery.chain.ComparableConditionBuilderField;
-import org.pojoquery.typedquery.chain.ConditionBuilder;
-import org.pojoquery.typedquery.chain.ConditionBuilderField;
-import org.pojoquery.typedquery.chain.ConditionBuilderImpl;
-import org.pojoquery.typedquery.chain.ConditionChain;
-import org.pojoquery.typedquery.chain.OrderByField;
-import org.pojoquery.typedquery.chain.OrderByTarget;
+import org.pojoquery.typedquery.ChainFactory;
+import org.pojoquery.typedquery.ComparableConditionBuilderField;
+import org.pojoquery.typedquery.ConditionBuilder;
+import org.pojoquery.typedquery.ConditionBuilderField;
+import org.pojoquery.typedquery.ConditionBuilderImpl;
+import org.pojoquery.typedquery.ConditionChain;
+import org.pojoquery.typedquery.OrderByField;
+import org.pojoquery.typedquery.OrderByTarget;
 
 import static org.pojoquery.SqlExpression.sql;
 

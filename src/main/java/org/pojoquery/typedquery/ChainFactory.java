@@ -1,4 +1,4 @@
-package org.pojoquery.typedquery.chain;
+package org.pojoquery.typedquery;
 
 /**
  * Factory interface for creating condition chains.

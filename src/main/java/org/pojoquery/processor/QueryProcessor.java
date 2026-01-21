@@ -30,7 +30,6 @@ import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.Alias;
 import org.pojoquery.pipeline.CustomizableQueryBuilder;
 import org.pojoquery.pipeline.QueryBuilder;
-import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.pipeline.SqlQuery.SqlField;
 import org.pojoquery.pipeline.SqlQuery.SqlJoin;
 import org.pojoquery.typemodel.ElementTypeModel;
@@ -38,17 +37,18 @@ import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 
 /**
- * Annotation processor that generates type-safe query builders for PojoQuery entities.
- *
- * <p>Uses {@link CustomizableQueryBuilder} at compile time as the single source of truth
- * for query structure and entity metadata. The entity class must be compiled before
- * this processor runs (e.g., entities in main module, processor runs during test-compile).
+ * Annotation processor that generates fluent query builders.
  *
  * <p>For each class annotated with {@code @GenerateQuery}, this processor generates:
  * <ul>
- *   <li>{@code EntityName_} - Static field references for type-safe queries</li>
- *   <li>{@code EntityNameQuery} - Fluent query builder with compile-time generated result mapping</li>
+ *   <li>{@code EntityNameQuery} - Fluent query builder with static condition chains</li>
  * </ul>
+ *
+ * <p>The generated code follows the pattern:
+ * <pre>
+ * BookQuery q = new BookQuery();
+ * q.title.eq("John").and().title.isNotNull().and(q.id.gt(123L))
+ * </pre>
  */
 @SupportedAnnotationTypes("org.pojoquery.annotations.GenerateQuery")
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
@@ -92,15 +92,13 @@ public class QueryProcessor extends AbstractProcessor {
     private void processEntity(TypeElement typeElement) throws Exception {
         GenerateQuery annotation = typeElement.getAnnotation(GenerateQuery.class);
         String querySuffix = annotation.querySuffix();
-        String fieldsSuffix = annotation.fieldsSuffix();
 
         String packageName = getPackageName(typeElement);
         String entityName = typeElement.getSimpleName().toString();
         String qualifiedName = typeElement.getQualifiedName().toString();
-        
+
         // For inner classes, prefix generated class names with enclosing class names
         String classNamePrefix = getEnclosingClassPrefix(typeElement);
-        String fieldsClassName = classNamePrefix + entityName + fieldsSuffix;
         String queryClassName = classNamePrefix + entityName + querySuffix;
 
         // Use ElementTypeModel to process the entity at compile time
@@ -112,12 +110,13 @@ public class QueryProcessor extends AbstractProcessor {
                 "@GenerateQuery requires @Table annotation on entity or its superclasses", typeElement);
             return;
         }
+        String schemaName = tableMapping.get(0).schemaName;
         String tableName = tableMapping.get(0).tableName;
 
         CustomizableQueryBuilder<?, ?> builder = QueryBuilder.from(entityType);
 
         // Extract query structure
-        SqlQuery<?> query = builder.getQuery();
+        var query = builder.getQuery();
         List<SqlField> fields = query.getFields();
         List<SqlJoin> joins = query.getJoins();
         LinkedHashMap<String, Alias> aliases = builder.getAliases();
@@ -127,127 +126,22 @@ public class QueryProcessor extends AbstractProcessor {
             " (" + fields.size() + " fields, " + joins.size() + " joins, " +
             aliases.size() + " aliases)", typeElement);
 
-        // Generate the classes
-        generateFieldsClass(packageName, entityName, fieldsClassName, tableName, fields, aliases);
-        generateQueryClass(packageName, entityName, queryClassName, fieldsClassName, tableName,
+        // Generate the query class
+        generateQueryClass(packageName, entityName, queryClassName, schemaName, tableName,
             fields, joins, aliases);
-        generateWhereBuilderClass(packageName, entityName, queryClassName, fieldsClassName, tableName, fields, aliases);
-        generateInlineSubClauseBuilderClass(packageName, entityName, queryClassName, fieldsClassName, tableName, fields, aliases);
-        generateSubClauseWhereClass(packageName, entityName, queryClassName, fieldsClassName, tableName, fields, aliases);
-        generateOrderByBuilderClass(packageName, entityName, queryClassName, fieldsClassName, tableName, fields, aliases);
     }
 
     // === Code generation ===
 
-    private void generateFieldsClass(String packageName, String entityName,
-            String className, String tableName, List<SqlField> fields,
-            LinkedHashMap<String, Alias> aliases) throws IOException {
-
-        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
-        JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
-
-        try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
-            if (!packageName.isEmpty()) {
-                out.println("package " + packageName + ";");
-                out.println();
-            }
-
-            out.println("import org.pojoquery.typedquery.ComparableQueryField;");
-            out.println("import org.pojoquery.typedquery.QueryField;");
-            out.println();
-            out.println("/**");
-            out.println(" * Generated field references for {@link " + entityName + "}.");
-            out.println(" */");
-            out.println("@SuppressWarnings(\"all\")");
-            out.println("public final class " + className + " {");
-            out.println();
-            out.println("    public static final String TABLE = \"" + tableName + "\";");
-            out.println();
-
-            // Group fields by alias
-            Map<String, List<SqlField>> fieldsByAlias = new LinkedHashMap<>();
-            for (SqlField field : fields) {
-                String alias = extractAliasFromFieldAlias(field.alias);
-                fieldsByAlias.computeIfAbsent(alias, k -> new ArrayList<>()).add(field);
-            }
-
-            // Main entity fields
-            Alias mainAlias = aliases.get(tableName);
-            List<SqlField> mainFields = fieldsByAlias.getOrDefault(tableName, List.of());
-            for (SqlField field : mainFields) {
-                String fieldName = extractFieldNameFromAlias(field.alias);
-                FieldInfo fieldInfo = getFieldInfo(mainAlias, fieldName);
-                String queryFieldClass = fieldInfo.isComparable ? "ComparableQueryField" : "QueryField";
-                out.println("    public static final " + queryFieldClass + "<" + entityName + ", " + fieldInfo.typeName + "> " +
-                    fieldName + " = new " + queryFieldClass + "<>(TABLE, \"" +
-                    fieldName + "\", \"" + fieldName + "\", " + fieldInfo.typeName + ".class);");
-            }
-            out.println();
-
-            // Build tree structure and generate nested classes recursively
-            RelationNode root = buildRelationTree(tableName, fieldsByAlias.keySet());
-            for (RelationNode child : root.children.values()) {
-                generateNestedFieldsClass(out, entityName, tableName, child, fieldsByAlias, aliases, "    ");
-            }
-
-            out.println("    private " + className + "() {}");
-            out.println("}");
-        }
-    }
-
-    /**
-     * Recursively generates nested static classes for relationships.
-     * This ensures proper nesting like: Company_.mainDepartment.head.department
-     */
-    private void generateNestedFieldsClass(PrintWriter out, String entityName, String tableName,
-            RelationNode node, Map<String, List<SqlField>> fieldsByAlias,
-            LinkedHashMap<String, Alias> aliases, String indent) {
-        
-        String alias = node.fullAlias;
-        String relationFieldName = node.name;
-        
-        out.println(indent + "/** Fields for the {@code " + relationFieldName + "} relationship */");
-        out.println(indent + "public static final class " + relationFieldName + " {");
-        out.println(indent + "    public static final String ALIAS = \"" + alias + "\";");
-        out.println();
-
-        Alias relAlias = aliases.get(alias);
-        List<SqlField> relationFields = fieldsByAlias.getOrDefault(alias, List.of());
-        for (SqlField field : relationFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            FieldInfo fieldInfo = getFieldInfo(relAlias, fieldName);
-            String queryFieldClass = fieldInfo.isComparable ? "ComparableQueryField" : "QueryField";
-            String relFieldPath = field.alias.startsWith(tableName + ".")
-                ? field.alias.substring(tableName.length() + 1)
-                : field.alias;
-            out.println(indent + "    public static final " + queryFieldClass + "<" + entityName + ", " + fieldInfo.typeName + "> " +
-                fieldName + " = new " + queryFieldClass + "<>(ALIAS, \"" +
-                fieldName + "\", \"" + relFieldPath + "\", " + fieldInfo.typeName + ".class);");
-        }
-        
-        // Recursively generate nested classes for child relations
-        for (RelationNode child : node.children.values()) {
-            out.println();
-            generateNestedFieldsClass(out, entityName, tableName, child, fieldsByAlias, aliases, indent + "    ");
-        }
-
-        out.println(indent + "    private " + relationFieldName + "() {}");
-        out.println(indent + "}");
-        out.println();
-    }
-
     private void generateQueryClass(String packageName, String entityName,
-            String className, String fieldsClassName, String tableName,
+            String queryClassName, String schemaName, String tableName,
             List<SqlField> fields, List<SqlJoin> joins,
             LinkedHashMap<String, Alias> aliases) throws IOException {
 
-        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
+        String qualifiedName = packageName.isEmpty() ? queryClassName : packageName + "." + queryClassName;
         JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
 
-        // Find ID field for the root entity
-        Alias rootAlias = aliases.get(tableName);
-        FieldModel idField = rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()
-            ? rootAlias.getIdFields().get(0) : null;
+        String chainClassName = queryClassName + "StaticConditionChain";
 
         try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
             if (!packageName.isEmpty()) {
@@ -261,45 +155,137 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("import java.util.HashMap;");
             out.println("import java.util.List;");
             out.println("import java.util.Map;");
-            out.println();
-            out.println("import javax.sql.DataSource;");
+            out.println("import java.util.function.Supplier;");
             out.println();
             out.println("import org.pojoquery.DB;");
             out.println("import org.pojoquery.DbContext;");
             out.println("import org.pojoquery.FieldMapping;");
             out.println("import org.pojoquery.SqlExpression;");
-            out.println("import org.pojoquery.typedquery.TypedQuery;");
+            out.println("import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;");
+            out.println("import org.pojoquery.pipeline.SqlQuery;");
             out.println("import org.pojoquery.util.FieldHelper;");
             out.println();
+            out.println("import org.pojoquery.typedquery.ChainFactory;");
+            out.println("import org.pojoquery.typedquery.ComparableConditionBuilderField;");
+            out.println("import org.pojoquery.typedquery.ConditionBuilder;");
+            out.println("import org.pojoquery.typedquery.ConditionBuilderField;");
+            out.println("import org.pojoquery.typedquery.ConditionBuilderImpl;");
+            out.println("import org.pojoquery.typedquery.ConditionChain;");
+            out.println("import org.pojoquery.typedquery.OrderByField;");
+            out.println("import org.pojoquery.typedquery.OrderByTarget;");
+            out.println();
+            out.println("import static org.pojoquery.SqlExpression.sql;");
+            out.println();
             out.println("/**");
-            out.println(" * Generated type-safe query builder for {@link " + entityName + "}.");
+            out.println(" * Generated fluent query builder for {@link " + entityName + "}.");
+            out.println(" * <p>Usage example:");
+            out.println(" * <pre>");
+            out.println(" * " + queryClassName + " q = new " + queryClassName + "();");
+            out.println(" * q.title.eq(\"John\").and().title.isNotNull();");
+            out.println(" * </pre>");
             out.println(" */");
             out.println("@SuppressWarnings(\"all\")");
-            out.println("public class " + className + " extends TypedQuery<" + entityName + ", " + className + "> {");
+            out.println("public class " + queryClassName + " {");
             out.println();
 
-            // Constructors
-            out.println("    public " + className + "() {");
-            out.println("        super(\"" + tableName + "\");");
+            // Group fields by alias
+            Map<String, List<SqlField>> fieldsByAlias = new LinkedHashMap<>();
+            for (SqlField field : fields) {
+                String alias = extractAliasFromFieldAlias(field.alias);
+                fieldsByAlias.computeIfAbsent(alias, k -> new ArrayList<>()).add(field);
+            }
+
+            // Generate static condition builder fields for main entity
+            Alias mainAlias = aliases.get(tableName);
+            List<SqlField> mainFields = fieldsByAlias.getOrDefault(tableName, List.of());
+            out.println("    // Static condition builder fields for main entity");
+            for (SqlField field : mainFields) {
+                String fieldName = extractFieldNameFromAlias(field.alias);
+                FieldInfo fieldInfo = getFieldInfo(mainAlias, fieldName);
+                String builderClass = fieldInfo.isComparable
+                    ? "ComparableConditionBuilderField"
+                    : "ConditionBuilderField";
+                out.println("    public final " + builderClass + "<" + fieldInfo.typeName + ", " + chainClassName + "> " + fieldName + " =");
+                out.println("            new " + builderClass + "<>(() -> new " + chainClassName + "(), \"" + tableName + "\", \"" + fieldName + "\");");
+            }
+            out.println();
+
+            // Build tree structure for nested relationships
+            RelationNode root = buildRelationTree(tableName, fieldsByAlias.keySet());
+            
+            // Generate nested static field classes for relationships
+            for (RelationNode child : root.children.values()) {
+                generateNestedStaticFields(out, queryClassName, chainClassName, child, fieldsByAlias, aliases, "    ");
+            }
+
+            // Generate the StaticConditionChain inner class
+            generateStaticConditionChainClass(out, queryClassName, chainClassName, tableName, mainFields, mainAlias, fieldsByAlias, aliases, "    ");
+            out.println();
+
+            // Generate the SqlQuery field and initialization
+            out.println("    protected SqlQuery<?> query = new DefaultSqlQuery(DbContext.getDefault());");
+            out.println("    protected DbContext dbContext = DbContext.getDefault();");
+            out.println();
+            out.println("    protected void initializeQuery() {");
+            // Set the table first
+            String tableSchemaArg = schemaName == null ? "null" : "\"" + escapeJava(schemaName) + "\"";
+            out.println("        query.setTable(" + tableSchemaArg + ", \"" + escapeJava(tableName) + "\");");
+            // Add joins
+            for (SqlJoin join : joins) {
+                String joinSchemaArg = join.schema == null ? "null" : "\"" + escapeJava(join.schema) + "\"";
+                String conditionArg = join.joinCondition == null ? "null" :
+                    "SqlExpression.sql(\"" + escapeJava(join.joinCondition.getSql()) + "\")";
+                out.println("        query.addJoin(org.pojoquery.pipeline.SqlQuery.JoinType." + join.joinType.name() +
+                    ", " + joinSchemaArg + ", \"" + escapeJava(join.table) +
+                    "\", \"" + escapeJava(join.alias) + "\", " + conditionArg + ");");
+            }
+            // Then add fields
+            for (SqlField field : fields) {
+                out.println("        query.addField(sql(\"" + escapeJava(field.expression.getSql()) + "\"), \"" + escapeJava(field.alias) + "\");");
+            }
             out.println("    }");
             out.println();
-            out.println("    public " + className + "(DbContext dbContext) {");
-            out.println("        super(dbContext, null, \"" + tableName + "\");");
+
+            // Constructor
+            out.println("    public " + queryClassName + "() {");
+            out.println("        initializeQuery();");
             out.println("    }");
             out.println();
 
-            // initializeQuery - replay exact joins and fields from CustomizableQueryBuilder
-            generateInitializeQuery(out, fields, joins);
-
-            // getEntityClass
-            out.println("    @Override");
-            out.println("    protected Class<" + entityName + "> getEntityClass() {");
-            out.println("        return " + entityName + ".class;");
+            // where() method returning WhereBuilder
+            String whereBuilderClass = queryClassName + "WhereBuilder";
+            out.println("    public " + whereBuilderClass + " where() {");
+            out.println("        return new " + whereBuilderClass + "(this);");
             out.println("    }");
             out.println();
 
-            // list
-            out.println("    @Override");
+            // orderBy() method
+            String orderByBuilderClass = queryClassName + "OrderByBuilder";
+            out.println("    public " + orderByBuilderClass + " orderBy() {");
+            out.println("        return new " + orderByBuilderClass + "();");
+            out.println("    }");
+            out.println();
+
+            // groupBy() method
+            String groupByBuilderClass = queryClassName + "GroupByBuilder";
+            out.println("    public " + groupByBuilderClass + " groupBy() {");
+            out.println("        return new " + groupByBuilderClass + "();");
+            out.println("    }");
+            out.println();
+
+            out.println("    public " + queryClassName + " groupBy(String fieldExpression) {");
+            out.println("        query.addGroupBy(fieldExpression);");
+            out.println("        return this;");
+            out.println("    }");
+            out.println();
+
+            out.println("    public " + queryClassName + " orderBy(String fieldExpression, boolean ascending) {");
+            out.println("        query.addOrderBy(fieldExpression + (ascending ? \" ASC\" : \" DESC\"));");
+            out.println("        return this;");
+            out.println("    }");
+            out.println();
+
+            // list() method
             out.println("    public List<" + entityName + "> list(Connection connection) {");
             out.println("        SqlExpression stmt = query.toStatement();");
             out.println("        List<Map<String, Object>> rows = DB.queryRows(connection, stmt);");
@@ -311,150 +297,82 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("    }");
             out.println();
 
-            // processRowsToEntities - for streaming support
-            out.println("    @Override");
-            out.println("    protected List<" + entityName + "> processRowsToEntities(List<Map<String, Object>> rows) {");
-            out.println("        try {");
-            out.println("            return processRows(rows);");
-            out.println("        } catch (NoSuchFieldException | IllegalAccessException e) {");
-            out.println("            throw new RuntimeException(e);");
-            out.println("        }");
-            out.println("    }");
+            // Generate processRows method
+            generateProcessRows(out, entityName, tableName, fieldsByAlias, aliases);
             out.println();
 
-            // getIdOrderByClause - for streaming support
-            if (idField != null) {
-                out.println("    @Override");
-                out.println("    protected String getIdOrderByClause() {");
-                out.println("        return \"{" + tableName + "." + idField.getName() + "} ASC\";");
-                out.println("    }");
-                out.println();
-            }
-
-            // getPrimaryIdFromRow - for streaming support
-            if (idField != null) {
-                out.println("    @Override");
-                out.println("    protected Object getPrimaryIdFromRow(Map<String, Object> row) {");
-                out.println("        return row.get(\"" + tableName + "." + idField.getName() + "\");");
-                out.println("    }");
-                out.println();
-            }
-
-            // processRows - use Alias metadata from CustomizableQueryBuilder
-            generateProcessRows(out, entityName, tableName, fields, aliases);
-
-            // where() - returns fluent where builder
-            String whereBuilderClass = className + "Where";
-            out.println("    /**");
-            out.println("     * Start a fluent where clause chain.");
-            out.println("     * <p>Example: {@code query.where().lastName.eq(\"Smith\").or().firstName.eq(\"John\")}");
-            out.println("     */");
-            out.println("    public " + whereBuilderClass + " where() {");
-            out.println("        return new " + whereBuilderClass + "(this);");
-            out.println("    }");
+            // Generate GroupByBuilder inner class
+            generateGroupByBuilderClass(out, queryClassName, groupByBuilderClass, tableName, mainFields, "    ");
             out.println();
 
-            // begin() - returns specialized sub-clause builder with where() method
-            String subClauseWhereClass = className + "SubClauseWhere";
-            out.println("    /**");
-            out.println("     * Start a sub-clause group for complex conditions.");
-            out.println("     * <p>Example: {@code query.begin().where().lastName.eq(\"Smith\").or().firstName.eq(\"John\").end()}");
-            out.println("     */");
-            out.println("    @Override");
-            out.println("    public " + className + "SubClauseBuilder begin() {");
-            out.println("        return new " + className + "SubClauseBuilder(this);");
-            out.println("    }");
+            // Generate OrderByBuilder inner class
+            generateOrderByBuilderClass(out, queryClassName, orderByBuilderClass, tableName, mainFields, fieldsByAlias, aliases, "    ");
             out.println();
 
-            // Inner class for specialized SubClauseBuilder
-            out.println("    /**");
-            out.println("     * Specialized sub-clause builder that provides fluent where() method.");
-            out.println("     */");
-            out.println("    public static class " + className + "SubClauseBuilder extends org.pojoquery.typedquery.SubClauseBuilder<" + entityName + ", " + className + "> {");
-            out.println("        public " + className + "SubClauseBuilder(" + className + " parentQuery) {");
-            out.println("            super(parentQuery);");
-            out.println("        }");
-            out.println();
-            out.println("        /**");
-            out.println("         * Start a fluent where clause within this sub-clause group.");
-            out.println("         */");
-            out.println("        public " + subClauseWhereClass + " where() {");
-            out.println("            return new " + subClauseWhereClass + "(this);");
-            out.println("        }");
-            out.println();
-            out.println("        /**");
-            out.println("         * Alias for where() - starts a new condition after previous ones.");
-            out.println("         */");
-            out.println("        public " + subClauseWhereClass + " or() {");
-            out.println("            return where();");
-            out.println("        }");
-            out.println("    }");
+            // Generate delegate class for callback pattern
+            generateDelegateClass(out, entityName, queryClassName, groupByBuilderClass, orderByBuilderClass, "    ");
             out.println();
 
-            // orderBy() - returns fluent orderBy builder
-            String orderByBuilderClass = className + "OrderBy";
-            out.println("    /**");
-            out.println("     * Start a fluent ORDER BY clause chain.");
-            out.println("     * <p>Example: {@code query.orderBy().lastName.asc().firstName.desc()}");
-            out.println("     */");
-            out.println("    public " + orderByBuilderClass + " orderBy() {");
-            out.println("        return new " + orderByBuilderClass + "(this);");
-            out.println("    }");
+            // Generate GroupByField inner class
+            generateGroupByFieldClass(out, queryClassName, groupByBuilderClass, orderByBuilderClass, "    ");
             out.println();
 
-            // findById
-            if (idField != null) {
-                String boxedType = getBoxedType(idField.getType());
-                out.println("    public " + entityName + " findById(DataSource dataSource, " + boxedType + " id) {");
-                out.println("        return where(" + fieldsClassName + "." + idField.getName() + ").is(id).first(dataSource);");
-                out.println("    }");
-                out.println();
-                out.println("    public " + entityName + " findById(Connection connection, " + boxedType + " id) {");
-                out.println("        return where(" + fieldsClassName + "." + idField.getName() + ").is(id).first(connection);");
-                out.println("    }");
-            }
+            // Generate WhereBuilder inner class
+            generateWhereBuilderClass(out, queryClassName, whereBuilderClass, tableName, mainFields, mainAlias, fieldsByAlias, aliases, "    ");
+            out.println();
 
             out.println("}");
         }
     }
 
-    private void generateInitializeQuery(PrintWriter out, List<SqlField> fields, List<SqlJoin> joins) {
-        out.println("    @Override");
-        out.println("    protected void initializeQuery() {");
-
-        // Replay exact joins from CustomizableQueryBuilder
-        for (SqlJoin join : joins) {
-            String schemaArg = join.schema == null ? "null" : "\"" + escapeJava(join.schema) + "\"";
-            String conditionArg = join.joinCondition == null ? "null" :
-                "SqlExpression.sql(\"" + escapeJava(join.joinCondition.getSql()) + "\")";
-            out.println("        query.addJoin(org.pojoquery.pipeline.SqlQuery.JoinType." + join.joinType.name() +
-                ", " + schemaArg + ", \"" + escapeJava(join.table) +
-                "\", \"" + escapeJava(join.alias) + "\", " + conditionArg + ");");
+    /**
+     * Generates nested static field classes for relationships.
+     * Creates inner classes like: public final class author { ... } with condition fields for author.id, author.name, etc.
+     */
+    private void generateNestedStaticFields(PrintWriter out, String queryClassName, String chainClassName,
+            RelationNode node, Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases, String indent) {
+        
+        String relationName = node.name;
+        String aliasName = node.fullAlias;
+        Alias relAlias = aliases.get(aliasName);
+        List<SqlField> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
+        
+        out.println(indent + "/** Static condition builder fields for the {@code " + relationName + "} relationship */");
+        out.println(indent + "public final " + capitalize(relationName) + "Fields " + relationName + " = new " + capitalize(relationName) + "Fields();");
+        out.println();
+        out.println(indent + "public class " + capitalize(relationName) + "Fields {");
+        
+        // Generate condition fields for this relationship
+        for (SqlField field : relationFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias);
+            FieldInfo fieldInfo = getFieldInfo(relAlias, fieldName);
+            String builderClass = fieldInfo.isComparable
+                ? "ComparableConditionBuilderField"
+                : "ConditionBuilderField";
+            out.println(indent + "    public final " + builderClass + "<" + fieldInfo.typeName + ", " + chainClassName + "> " + fieldName + " =");
+            out.println(indent + "            new " + builderClass + "<>(() -> new " + chainClassName + "(), \"" + aliasName + "\", \"" + fieldName + "\");");
         }
-
-        // Replay exact fields from CustomizableQueryBuilder
-        for (SqlField field : fields) {
-            out.println("        query.addField(SqlExpression.sql(\"" + escapeJava(field.expression.getSql()) +
-                "\"), \"" + escapeJava(field.alias) + "\");");
+        
+        // Recursively generate for child relations
+        for (RelationNode child : node.children.values()) {
+            out.println();
+            generateNestedStaticFields(out, queryClassName, chainClassName, child, fieldsByAlias, aliases, indent + "    ");
         }
-
-        out.println("    }");
+        
+        out.println(indent + "}");
         out.println();
     }
 
+    /**
+     * Generates the processRows method for mapping query results to entities.
+     * Similar to QueryProcessor's generateProcessRows.
+     */
     private void generateProcessRows(PrintWriter out, String entityName, String tableName,
-            List<SqlField> fields, LinkedHashMap<String, Alias> aliases) {
+            Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases) {
 
         out.println("    @SuppressWarnings(\"unchecked\")");
         out.println("    private List<" + entityName + "> processRows(List<Map<String, Object>> rows) throws NoSuchFieldException, IllegalAccessException {");
         out.println();
-
-        // Group fields by alias
-        Map<String, List<SqlField>> fieldsByAlias = new LinkedHashMap<>();
-        for (SqlField field : fields) {
-            String alias = extractAliasFromFieldAlias(field.alias);
-            fieldsByAlias.computeIfAbsent(alias, k -> new ArrayList<>()).add(field);
-        }
 
         // Generate field mapping lookups using Alias metadata
         for (Map.Entry<String, Alias> entry : aliases.entrySet()) {
@@ -509,9 +427,9 @@ public class QueryProcessor extends AbstractProcessor {
         out.println("        for (Map<String, Object> row : rows) {");
 
         // Process root entity
-        Alias rootAlias2 = aliases.get(tableName);
-        if (rootAlias2 != null && rootAlias2.getIdFields() != null && !rootAlias2.getIdFields().isEmpty()) {
-            FieldModel rootIdField = rootAlias2.getIdFields().get(0);
+        Alias rootAlias = aliases.get(tableName);
+        if (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()) {
+            FieldModel rootIdField = rootAlias.getIdFields().get(0);
             String rootVarPrefix = "fm" + capitalize(sanitizeVarName(tableName));
 
             out.println("            // Process root entity: " + entityName);
@@ -585,7 +503,6 @@ public class QueryProcessor extends AbstractProcessor {
                 // Parent is a nested entity, look it up from its ById map
                 String parentIdField = parentAlias.getIdFields().get(0).getName();
                 String parentByIdVar = sanitizeVarName(alias.getParentAlias()) + "ById";
-                // Use unique variable names to avoid conflicts with earlier declarations
                 String parentIdVarName = entityVar + "_parentId";
                 String parentVarName = entityVar + "_parent";
                 out.println("                Object " + parentIdVarName + " = row.get(\"" + alias.getParentAlias() + "." + parentIdField + "\");");
@@ -601,6 +518,426 @@ public class QueryProcessor extends AbstractProcessor {
         out.println();
         out.println("        return result;");
         out.println("    }");
+    }
+
+    private void generateStaticConditionChainClass(PrintWriter out, String queryClassName,
+            String chainClassName, String tableName, List<SqlField> mainFields, Alias mainAlias,
+            Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases, String indent) {
+
+        out.println(indent + "/**");
+        out.println(indent + " * Condition chain for building static conditions.");
+        out.println(indent + " * Implements Supplier&lt;SqlExpression&gt; to be used in and()/or() methods.");
+        out.println(indent + " */");
+        out.println(indent + "public class " + chainClassName);
+        out.println(indent + "        implements ConditionChain<" + chainClassName + ">, Supplier<SqlExpression> {");
+        out.println();
+
+        // Inner StaticConditionFields class with main entity fields
+        out.println(indent + "    public class StaticConditionFields {");
+        for (SqlField field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias);
+            FieldInfo fieldInfo = getFieldInfo(mainAlias, fieldName);
+            String builderClass = fieldInfo.isComparable
+                ? "ComparableConditionBuilderField"
+                : "ConditionBuilderField";
+            out.println(indent + "        public final " + builderClass + "<" + fieldInfo.typeName + ", " + chainClassName + "> " + fieldName + " =");
+            out.println(indent + "                new " + builderClass + "<>(() -> " + chainClassName + ".this, \"" + tableName + "\", \"" + fieldName + "\");");
+        }
+        
+        // Add nested relationship field classes
+        RelationNode root = buildRelationTree(tableName, fieldsByAlias.keySet());
+        for (RelationNode child : root.children.values()) {
+            out.println();
+            generateNestedStaticConditionFields(out, chainClassName, child, fieldsByAlias, aliases, indent + "        ");
+        }
+        
+        out.println(indent + "    }");
+        out.println();
+
+        out.println(indent + "    ConditionBuilder builder = new ConditionBuilderImpl();");
+        out.println();
+
+        out.println(indent + "    @Override");
+        out.println(indent + "    public ConditionBuilder getBuilder() {");
+        out.println(indent + "        return builder;");
+        out.println(indent + "    }");
+        out.println();
+
+        out.println(indent + "    public StaticConditionFields and() {");
+        out.println(indent + "        builder.add(sql(\" AND \"));");
+        out.println(indent + "        return new StaticConditionFields();");
+        out.println(indent + "    }");
+        out.println();
+
+        out.println(indent + "    public StaticConditionFields or() {");
+        out.println(indent + "        builder.add(sql(\" OR \"));");
+        out.println(indent + "        return new StaticConditionFields();");
+        out.println(indent + "    }");
+        out.println();
+
+        out.println(indent + "    public " + chainClassName + " and(Supplier<SqlExpression> expr) {");
+        out.println(indent + "        builder.add(sql(\" AND \")).startClause().add(expr.get()).endClause();");
+        out.println(indent + "        return this;");
+        out.println(indent + "    }");
+        out.println();
+
+        out.println(indent + "    public " + chainClassName + " or(Supplier<SqlExpression> expr) {");
+        out.println(indent + "        builder.add(sql(\" OR \")).startClause().add(expr.get()).endClause();");
+        out.println(indent + "        return this;");
+        out.println(indent + "    }");
+        out.println();
+
+        out.println(indent + "    @Override");
+        out.println(indent + "    public " + chainClassName + " getContinuation() {");
+        out.println(indent + "        return this;");
+        out.println(indent + "    }");
+        out.println();
+
+        out.println(indent + "    @Override");
+        out.println(indent + "    public SqlExpression get() {");
+        out.println(indent + "        return SqlExpression.implode(\"\", ((ConditionBuilderImpl) builder).getExpressions());");
+        out.println(indent + "    }");
+        out.println(indent + "}");
+    }
+
+    /**
+     * Generates nested field classes for relationships within StaticConditionFields.
+     */
+    private void generateNestedStaticConditionFields(PrintWriter out, String chainClassName,
+            RelationNode node, Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases, String indent) {
+        
+        String relationName = node.name;
+        String aliasName = node.fullAlias;
+        Alias relAlias = aliases.get(aliasName);
+        List<SqlField> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
+        
+        String innerClassName = capitalize(relationName) + "ConditionFields";
+        out.println(indent + "/** Condition fields for the {@code " + relationName + "} relationship */");
+        out.println(indent + "public final " + innerClassName + " " + relationName + " = new " + innerClassName + "();");
+        out.println();
+        out.println(indent + "public class " + innerClassName + " {");
+        
+        // Generate condition fields for this relationship
+        for (SqlField field : relationFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias);
+            FieldInfo fieldInfo = getFieldInfo(relAlias, fieldName);
+            String builderClass = fieldInfo.isComparable
+                ? "ComparableConditionBuilderField"
+                : "ConditionBuilderField";
+            out.println(indent + "    public final " + builderClass + "<" + fieldInfo.typeName + ", " + chainClassName + "> " + fieldName + " =");
+            out.println(indent + "            new " + builderClass + "<>(() -> " + chainClassName + ".this, \"" + aliasName + "\", \"" + fieldName + "\");");
+        }
+        
+        // Recursively generate for child relations
+        for (RelationNode child : node.children.values()) {
+            out.println();
+            generateNestedStaticConditionFields(out, chainClassName, child, fieldsByAlias, aliases, indent + "    ");
+        }
+        
+        out.println(indent + "}");
+    }
+
+    private void generateGroupByBuilderClass(PrintWriter out, String queryClassName,
+            String groupByBuilderClass, String tableName, List<SqlField> mainFields, String indent) {
+
+        out.println(indent + "public class " + groupByBuilderClass + " {");
+        out.println();
+
+        for (SqlField field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias);
+            out.println(indent + "    public final " + queryClassName + "GroupByField " + fieldName + ";");
+        }
+        out.println();
+
+        out.println(indent + "    public " + groupByBuilderClass + "() {");
+        for (SqlField field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias);
+            out.println(indent + "        this." + fieldName + " = new " + queryClassName + "GroupByField(\"" + tableName + "\", \"" + fieldName + "\");");
+        }
+        out.println(indent + "    }");
+
+        out.println(indent + "}");
+    }
+
+    private void generateOrderByBuilderClass(PrintWriter out, String queryClassName,
+            String orderByBuilderClass, String tableName, List<SqlField> mainFields,
+            Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases, String indent) {
+
+        out.println(indent + "public class " + orderByBuilderClass + " implements OrderByTarget {");
+        out.println();
+
+        // Main entity fields
+        for (SqlField field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias);
+            out.println(indent + "    public final OrderByField<" + queryClassName + "> " + fieldName + ";");
+        }
+        out.println();
+
+        // Nested relationship fields
+        RelationNode root = buildRelationTree(tableName, fieldsByAlias.keySet());
+        for (RelationNode child : root.children.values()) {
+            generateNestedOrderByFields(out, queryClassName, child, fieldsByAlias, aliases, indent + "    ");
+        }
+
+        out.println(indent + "    public " + orderByBuilderClass + "() {");
+        for (SqlField field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias);
+            out.println(indent + "        this." + fieldName + " = new OrderByField<>(this, " + queryClassName + ".this, \"" + tableName + "\", \"" + fieldName + "\");");
+        }
+        out.println(indent + "    }");
+        out.println();
+
+        out.println(indent + "    @Override");
+        out.println(indent + "    public void orderBy(String fieldExpression, boolean ascending) {");
+        out.println(indent + "        query.addOrderBy(fieldExpression + (ascending ? \" ASC\" : \" DESC\"));");
+        out.println(indent + "    }");
+
+        out.println(indent + "}");
+    }
+
+    /**
+     * Generates nested OrderBy field classes for relationships.
+     */
+    private void generateNestedOrderByFields(PrintWriter out, String queryClassName,
+            RelationNode node, Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases, String indent) {
+        
+        String relationName = node.name;
+        String aliasName = node.fullAlias;
+        List<SqlField> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
+        
+        String innerClassName = capitalize(relationName) + "OrderByFields";
+        out.println(indent + "/** OrderBy fields for the {@code " + relationName + "} relationship */");
+        out.println(indent + "public final " + innerClassName + " " + relationName + " = new " + innerClassName + "();");
+        out.println();
+        out.println(indent + "public class " + innerClassName + " {");
+        
+        // Generate OrderBy fields for this relationship
+        for (SqlField field : relationFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias);
+            out.println(indent + "    public final OrderByField<" + queryClassName + "> " + fieldName + " =");
+            out.println(indent + "            new OrderByField<>(" + queryClassName + "OrderByBuilder.this, " + queryClassName + ".this, \"" + aliasName + "\", \"" + fieldName + "\");");
+        }
+        
+        // Recursively generate for child relations
+        for (RelationNode child : node.children.values()) {
+            out.println();
+            generateNestedOrderByFields(out, queryClassName, child, fieldsByAlias, aliases, indent + "    ");
+        }
+        
+        out.println(indent + "}");
+        out.println();
+    }
+
+    private void generateDelegateClass(PrintWriter out, String entityName, String queryClassName,
+            String groupByBuilderClass, String orderByBuilderClass, String indent) {
+
+        out.println(indent + "/**");
+        out.println(indent + " * Delegate class for callback pattern - allows groupBy().field.list() syntax.");
+        out.println(indent + " */");
+        out.println(indent + "private class " + queryClassName + "Delegate {");
+        out.println(indent + "    protected void callback() {}");
+        out.println();
+        out.println(indent + "    public List<" + entityName + "> list(Connection connection) {");
+        out.println(indent + "        callback();");
+        out.println(indent + "        return " + queryClassName + ".this.list(connection);");
+        out.println(indent + "    }");
+        out.println();
+        out.println(indent + "    public " + groupByBuilderClass + " groupBy() {");
+        out.println(indent + "        callback();");
+        out.println(indent + "        return " + queryClassName + ".this.groupBy();");
+        out.println(indent + "    }");
+        out.println();
+        out.println(indent + "    public " + orderByBuilderClass + " orderBy() {");
+        out.println(indent + "        callback();");
+        out.println(indent + "        return " + queryClassName + ".this.orderBy();");
+        out.println(indent + "    }");
+        out.println(indent + "}");
+    }
+
+    private void generateGroupByFieldClass(PrintWriter out, String queryClassName,
+            String groupByBuilderClass, String orderByBuilderClass, String indent) {
+
+        out.println(indent + "public class " + queryClassName + "GroupByField extends " + queryClassName + "Delegate {");
+        out.println(indent + "    private String tableAlias;");
+        out.println(indent + "    private String columnName;");
+        out.println();
+        out.println(indent + "    public " + queryClassName + "GroupByField(String tableAlias, String columnName) {");
+        out.println(indent + "        this.tableAlias = tableAlias;");
+        out.println(indent + "        this.columnName = columnName;");
+        out.println(indent + "    }");
+        out.println();
+        out.println(indent + "    @Override");
+        out.println(indent + "    protected void callback() {");
+        out.println(indent + "        query.addGroupBy(\"{\" + tableAlias + \".\" + columnName + \"}\");");
+        out.println(indent + "    }");
+        out.println(indent + "}");
+    }
+
+    private void generateWhereBuilderClass(PrintWriter out, String queryClassName,
+            String whereBuilderClass, String tableName, List<SqlField> mainFields, Alias mainAlias,
+            Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases, String indent) {
+
+        String terminatorClass = whereBuilderClass + "ConditionTerminator";
+
+        out.println(indent + "/**");
+        out.println(indent + " * Where clause builder for fluent condition chaining.");
+        out.println(indent + " */");
+        out.println(indent + "public class " + whereBuilderClass + " implements ConditionChain<" + whereBuilderClass + "." + terminatorClass + "> {");
+        out.println();
+
+        // Fields for condition building on main entity
+        for (SqlField field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias);
+            FieldInfo fieldInfo = getFieldInfo(mainAlias, fieldName);
+            String builderClass = fieldInfo.isComparable
+                ? "ComparableConditionBuilderField"
+                : "ConditionBuilderField";
+            out.println(indent + "    public final " + builderClass + "<" + fieldInfo.typeName + ", " + terminatorClass + "> " + fieldName + " =");
+            out.println(indent + "            new " + builderClass + "<>(() -> this, \"" + tableName + "\", \"" + fieldName + "\");");
+        }
+        out.println();
+
+        // Nested relationship fields
+        RelationNode root = buildRelationTree(tableName, fieldsByAlias.keySet());
+        for (RelationNode child : root.children.values()) {
+            generateNestedWhereFields(out, queryClassName, whereBuilderClass, terminatorClass, child, fieldsByAlias, aliases, indent + "    ");
+        }
+
+        out.println(indent + "    List<SqlExpression> collectedConditions = new java.util.ArrayList<>();");
+        out.println(indent + "    ConditionBuilder builder = new WhereBuilderImpl();");
+        out.println();
+
+        out.println(indent + "    protected " + whereBuilderClass + "(" + queryClassName + " query) {");
+        out.println(indent + "    }");
+        out.println();
+
+        out.println(indent + "    public void accept(SqlExpression expr) {");
+        out.println(indent + "        collectedConditions.add(expr);");
+        out.println(indent + "    }");
+        out.println();
+
+        // Inner BuilderImpl class
+        out.println(indent + "    public class WhereBuilderImpl implements ConditionBuilder {");
+        out.println(indent + "        public ConditionBuilder startClause() {");
+        out.println(indent + "            collectedConditions.add(sql(\" (\"));");
+        out.println(indent + "            return this;");
+        out.println(indent + "        }");
+        out.println();
+        out.println(indent + "        public ConditionBuilder endClause() {");
+        out.println(indent + "            collectedConditions.add(sql(\") \"));");
+        out.println(indent + "            return this;");
+        out.println(indent + "        }");
+        out.println();
+        out.println(indent + "        @Override");
+        out.println(indent + "        public ConditionBuilder add(SqlExpression expr) {");
+        out.println(indent + "            collectedConditions.add(expr);");
+        out.println(indent + "            return this;");
+        out.println(indent + "        }");
+        out.println(indent + "    }");
+        out.println();
+
+        // ConditionTerminator inner class
+        out.println(indent + "    public class " + terminatorClass + " extends " + queryClassName + "Delegate {");
+        out.println();
+        out.println(indent + "        @Override");
+        out.println(indent + "        protected void callback() {");
+        out.println(indent + "            SqlExpression whereExpr = SqlExpression.implode(\"\", collectedConditions);");
+        out.println(indent + "            collectedConditions.clear();");
+        out.println(indent + "            " + queryClassName + ".this.query.addWhere(whereExpr);");
+        out.println(indent + "        }");
+        out.println();
+        out.println(indent + "        public " + whereBuilderClass + " and() {");
+        out.println(indent + "            builder.add(sql(\" AND \"));");
+        out.println(indent + "            return " + whereBuilderClass + ".this;");
+        out.println(indent + "        }");
+        out.println();
+        out.println(indent + "        public " + whereBuilderClass + " or() {");
+        out.println(indent + "            builder.add(sql(\" OR \"));");
+        out.println(indent + "            return " + whereBuilderClass + ".this;");
+        out.println(indent + "        }");
+        out.println();
+        out.println(indent + "        public " + terminatorClass + " and(Supplier<SqlExpression> expr) {");
+        out.println(indent + "            builder.add(sql(\" AND \")).startClause().add(expr.get()).endClause();");
+        out.println(indent + "            return this;");
+        out.println(indent + "        }");
+        out.println();
+        out.println(indent + "        public " + terminatorClass + " or(Supplier<SqlExpression> expr) {");
+        out.println(indent + "            builder.add(sql(\" OR \")).startClause().add(expr.get()).endClause();");
+        out.println(indent + "            return this;");
+        out.println(indent + "        }");
+        out.println(indent + "    }");
+        out.println();
+
+        out.println(indent + "    @Override");
+        out.println(indent + "    public " + terminatorClass + " getContinuation() {");
+        out.println(indent + "        return new " + terminatorClass + "();");
+        out.println(indent + "    }");
+        out.println();
+
+        out.println(indent + "    @Override");
+        out.println(indent + "    public ConditionBuilder getBuilder() {");
+        out.println(indent + "        return builder;");
+        out.println(indent + "    }");
+
+        out.println(indent + "}");
+    }
+
+    /**
+     * Generates nested Where field classes for relationships.
+     */
+    private void generateNestedWhereFields(PrintWriter out, String queryClassName, String whereBuilderClass,
+            String terminatorClass, RelationNode node, Map<String, List<SqlField>> fieldsByAlias,
+            LinkedHashMap<String, Alias> aliases, String indent) {
+        
+        String relationName = node.name;
+        String aliasName = node.fullAlias;
+        Alias relAlias = aliases.get(aliasName);
+        List<SqlField> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
+        
+        // Find the ID field for the relationship (for isNull/isNotNull checks)
+        String idFieldName = null;
+        if (relAlias != null && relAlias.getIdFields() != null && !relAlias.getIdFields().isEmpty()) {
+            idFieldName = relAlias.getIdFields().get(0).getName();
+        }
+        
+        String innerClassName = capitalize(relationName) + "WhereFields";
+        out.println(indent + "/** Where fields for the {@code " + relationName + "} relationship */");
+        out.println(indent + "public final " + innerClassName + " " + relationName + " = new " + innerClassName + "();");
+        out.println();
+        out.println(indent + "public class " + innerClassName + " {");
+        
+        // Generate condition fields for this relationship
+        for (SqlField field : relationFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias);
+            FieldInfo fieldInfo = getFieldInfo(relAlias, fieldName);
+            String builderClass = fieldInfo.isComparable
+                ? "ComparableConditionBuilderField"
+                : "ConditionBuilderField";
+            out.println(indent + "    public final " + builderClass + "<" + fieldInfo.typeName + ", " + terminatorClass + "> " + fieldName + " =");
+            out.println(indent + "            new " + builderClass + "<>(() -> " + whereBuilderClass + ".this, \"" + aliasName + "\", \"" + fieldName + "\");");
+        }
+        out.println();
+        
+        // Add isNull()/isNotNull() methods to check if the relationship is null
+        if (idFieldName != null) {
+            out.println(indent + "    /** Check if this relationship is null (by checking the ID field) */");
+            out.println(indent + "    public " + terminatorClass + " isNull() {");
+            out.println(indent + "        return " + idFieldName + ".isNull();");
+            out.println(indent + "    }");
+            out.println();
+            out.println(indent + "    /** Check if this relationship is not null (by checking the ID field) */");
+            out.println(indent + "    public " + terminatorClass + " isNotNull() {");
+            out.println(indent + "        return " + idFieldName + ".isNotNull();");
+            out.println(indent + "    }");
+        }
+        
+        // Recursively generate for child relations
+        for (RelationNode child : node.children.values()) {
+            out.println();
+            generateNestedWhereFields(out, queryClassName, whereBuilderClass, terminatorClass, child, fieldsByAlias, aliases, indent + "    ");
+        }
+        
+        out.println(indent + "}");
         out.println();
     }
 
@@ -618,11 +955,6 @@ public class QueryProcessor extends AbstractProcessor {
         return "";
     }
 
-    /**
-     * Gets the prefix for generated class names when the entity is a static inner class.
-     * For example, if the entity is {@code OuterClass.InnerClass}, this returns "OuterClass_".
-     * For top-level classes, returns an empty string.
-     */
     private String getEnclosingClassPrefix(TypeElement typeElement) {
         StringBuilder prefix = new StringBuilder();
         Element enclosing = typeElement.getEnclosingElement();
@@ -633,14 +965,6 @@ public class QueryProcessor extends AbstractProcessor {
         return prefix.toString();
     }
 
-    private String capitalize(String s) {
-        return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
-    }
-
-    private String sanitizeVarName(String alias) {
-        return alias.replace(".", "_").replace("-", "_");
-    }
-
     private String extractAliasFromFieldAlias(String fieldAlias) {
         int lastDot = fieldAlias.lastIndexOf('.');
         return lastDot > 0 ? fieldAlias.substring(0, lastDot) : fieldAlias;
@@ -649,54 +973,6 @@ public class QueryProcessor extends AbstractProcessor {
     private String extractFieldNameFromAlias(String fieldAlias) {
         int lastDot = fieldAlias.lastIndexOf('.');
         return lastDot >= 0 ? fieldAlias.substring(lastDot + 1) : fieldAlias;
-    }
-
-    /**
-     * Represents a node in the relationship tree structure for generating nested classes.
-     * Each node represents an alias and can have child nodes for nested relationships.
-     */
-    private static class RelationNode {
-        final String name;              // Simple name of this relation (e.g., "projects")
-        final String fullAlias;         // Full alias path (e.g., "projects.employee")
-        final Map<String, RelationNode> children = new LinkedHashMap<>();
-
-        RelationNode(String name, String fullAlias) {
-            this.name = name;
-            this.fullAlias = fullAlias;
-        }
-    }
-
-    /**
-     * Builds a tree structure from relation aliases.
-     * For example, given aliases ["projects", "projects.employee"], builds:
-     * root
-     *   └─ projects
-     *        └─ employee
-     */
-    private RelationNode buildRelationTree(String tableName, java.util.Set<String> aliases) {
-        RelationNode root = new RelationNode(tableName, tableName);
-        
-        for (String alias : aliases) {
-            if (alias.equals(tableName)) continue;
-            
-            // Parse the alias path (e.g., "projects.employee" -> ["projects", "employee"])
-            String[] parts = alias.split("\\.");
-            RelationNode current = root;
-            StringBuilder pathBuilder = new StringBuilder();
-            
-            for (int i = 0; i < parts.length; i++) {
-                if (i > 0) pathBuilder.append(".");
-                pathBuilder.append(parts[i]);
-                String currentPath = pathBuilder.toString();
-                
-                if (!current.children.containsKey(parts[i])) {
-                    current.children.put(parts[i], new RelationNode(parts[i], currentPath));
-                }
-                current = current.children.get(parts[i]);
-            }
-        }
-        
-        return root;
     }
 
     private String escapeJava(String s) {
@@ -718,16 +994,12 @@ public class QueryProcessor extends AbstractProcessor {
         if (name.equals("short")) return "Short";
         if (name.equals("byte")) return "Byte";
         if (name.equals("char")) return "Character";
-        // Use simple name for java.lang types, fully qualified for others
         if (name.startsWith("java.lang.")) {
             return type.getSimpleName();
         }
         return name;
     }
 
-    /**
-     * Holds field type information including whether it's Comparable.
-     */
     private static class FieldInfo {
         final String typeName;
         final boolean isComparable;
@@ -738,11 +1010,7 @@ public class QueryProcessor extends AbstractProcessor {
         }
     }
 
-    /**
-     * Known Comparable types - primitives box to Comparable, plus common types.
-     */
-    private static final java.util.Set<String> COMPARABLE_TYPES = java.util.Set.of(
-        // Primitive wrappers (all implement Comparable)
+    private static final Set<String> COMPARABLE_TYPES = Set.of(
         "int", "Integer", "java.lang.Integer",
         "long", "Long", "java.lang.Long",
         "short", "Short", "java.lang.Short",
@@ -750,31 +1018,20 @@ public class QueryProcessor extends AbstractProcessor {
         "double", "Double", "java.lang.Double",
         "float", "Float", "java.lang.Float",
         "char", "Character", "java.lang.Character",
-        // String
         "String", "java.lang.String",
-        // Date/Time types
         "java.time.LocalDate", "java.time.LocalDateTime", "java.time.LocalTime",
         "java.time.Instant", "java.time.ZonedDateTime", "java.time.OffsetDateTime",
         "java.util.Date", "java.sql.Date", "java.sql.Timestamp",
-        // Big numbers
         "java.math.BigDecimal", "java.math.BigInteger",
-        // UUID
         "java.util.UUID"
     );
 
-    /**
-     * Checks if a type is Comparable.
-     */
     private boolean isComparableType(TypeModel type) {
         if (type == null) return false;
         String name = type.getQualifiedName();
         return COMPARABLE_TYPES.contains(name) || type.isEnum();
     }
 
-    /**
-     * Looks up field info (type name and whether it's Comparable) from the Alias's TypeModel.
-     * Walks up the class hierarchy to find inherited fields.
-     */
     private FieldInfo getFieldInfo(Alias alias, String fieldName) {
         if (alias == null) return new FieldInfo("Object", false);
         TypeModel type = alias.getResultType();
@@ -790,479 +1047,60 @@ public class QueryProcessor extends AbstractProcessor {
         return new FieldInfo("Object", false);
     }
 
+    private String capitalize(String s) {
+        return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
+    private String sanitizeVarName(String alias) {
+        return alias.replace(".", "_").replace("-", "_");
+    }
+
     /**
-     * Generates a where builder class for fluent chain-style where clauses.
-     * Example: query.where().lastName.eq("Smith").or().firstName.eq("John")
+     * Represents a node in the relationship tree structure for generating nested classes.
+     * Each node represents an alias and can have child nodes for nested relationships.
      */
-    private void generateWhereBuilderClass(String packageName, String entityName,
-            String queryClassName, String fieldsClassName, String tableName,
-            List<SqlField> fields, LinkedHashMap<String, Alias> aliases) throws IOException {
+    private static class RelationNode {
+        final String name;              // Simple name of this relation (e.g., "author")
+        final String fullAlias;         // Full alias path (e.g., "author" or "comments.author")
+        final Map<String, RelationNode> children = new LinkedHashMap<>();
 
-        String className = queryClassName + "Where";
-        String inlineSubClauseClass = queryClassName + "InlineSubClause";
-        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
-        JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
+        RelationNode(String name, String fullAlias) {
+            this.name = name;
+            this.fullAlias = fullAlias;
+        }
+    }
 
-        try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
-            if (!packageName.isEmpty()) {
-                out.println("package " + packageName + ";");
-                out.println();
-            }
-
-            out.println("import org.pojoquery.typedquery.ComparableQueryField;");
-            out.println("import org.pojoquery.typedquery.QueryField;");
-            out.println("import org.pojoquery.typedquery.WhereChainBuilder;");
-            out.println();
-            out.println("/**");
-            out.println(" * Fluent where clause builder for {@link " + entityName + "}.");
-            out.println(" * <p>Usage: {@code query.where().lastName.eq(\"Smith\").or().firstName.eq(\"John\")}");
-            out.println(" */");
-            out.println("@SuppressWarnings(\"all\")");
-            out.println("public class " + className + " extends WhereChainBuilder<" + entityName + ", " + queryClassName + ", " + className + ", " + inlineSubClauseClass + "> {");
-            out.println();
-
-            // Constructor
-            out.println("    public " + className + "(" + queryClassName + " query) {");
-            out.println("        super(query);");
-            out.println("    }");
-            out.println();
-
-            // Group fields by alias
-            Map<String, List<SqlField>> fieldsByAlias = new LinkedHashMap<>();
-            for (SqlField field : fields) {
-                String alias = extractAliasFromFieldAlias(field.alias);
-                fieldsByAlias.computeIfAbsent(alias, k -> new ArrayList<>()).add(field);
-            }
-
-            // Main entity fields as instance properties
-            Alias mainAlias = aliases.get(tableName);
-            List<SqlField> mainFields = fieldsByAlias.getOrDefault(tableName, List.of());
-            for (SqlField field : mainFields) {
-                String fieldName = extractFieldNameFromAlias(field.alias);
-                FieldInfo fieldInfo = getFieldInfo(mainAlias, fieldName);
+    /**
+     * Builds a tree structure from relation aliases.
+     * For example, given aliases ["author", "comments", "comments.author"], builds:
+     * root
+     *   ├─ author
+     *   └─ comments
+     *        └─ author
+     */
+    private RelationNode buildRelationTree(String tableName, java.util.Set<String> aliases) {
+        RelationNode root = new RelationNode(tableName, tableName);
+        
+        for (String alias : aliases) {
+            if (alias.equals(tableName)) continue;
+            
+            // Parse the alias path (e.g., "comments.author" -> ["comments", "author"])
+            String[] parts = alias.split("\\.");
+            RelationNode current = root;
+            StringBuilder pathBuilder = new StringBuilder();
+            
+            for (int i = 0; i < parts.length; i++) {
+                if (i > 0) pathBuilder.append(".");
+                pathBuilder.append(parts[i]);
+                String currentPath = pathBuilder.toString();
                 
-                String chainFieldType = fieldInfo.isComparable 
-                    ? "ComparableChainField<" + fieldInfo.typeName + ">"
-                    : "ChainField<" + fieldInfo.typeName + ">";
-                
-                out.println("    /** Field: " + fieldName + " */");
-                out.println("    public final " + chainFieldType + " " + fieldName + " = ");
-                out.println("        new " + chainFieldType + "(" + fieldsClassName + "." + fieldName + ");");
+                if (!current.children.containsKey(parts[i])) {
+                    current.children.put(parts[i], new RelationNode(parts[i], currentPath));
+                }
+                current = current.children.get(parts[i]);
             }
-            out.println();
-
-            // Build tree structure and generate nested classes recursively
-            RelationNode root = buildRelationTree(tableName, fieldsByAlias.keySet());
-            for (RelationNode child : root.children.values()) {
-                generateNestedWhereClass(out, fieldsClassName, child, fieldsByAlias, aliases, "    ", fieldsClassName);
-            }
-
-            out.println("    @Override");
-            out.println("    protected " + className + " self() {");
-            out.println("        return this;");
-            out.println("    }");
-            out.println();
-            
-            // Generate createInlineSubClauseBuilder() that returns the correctly-typed InlineSubClauseBuilder
-            out.println("    @Override");
-            out.println("    protected " + inlineSubClauseClass + " createInlineSubClauseBuilder() {");
-            out.println("        return new " + inlineSubClauseClass + "(this);");
-            out.println("    }");
-            out.println("}");
-        }
-    }
-
-    /**
-     * Recursively generates nested where builder classes for relationships.
-     */
-    private void generateNestedWhereClass(PrintWriter out, String fieldsClassName, RelationNode node,
-            Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases,
-            String indent, String fieldsPathPrefix) {
-        
-        String alias = node.fullAlias;
-        String relationFieldName = node.name;
-        String innerClassName = relationFieldName + "Where";
-        // Build the fields class path: e.g., "Employee_.projects.employee"
-        String fieldsPath = fieldsPathPrefix + "." + relationFieldName;
-        
-        out.println(indent + "/** Where builder for the {@code " + relationFieldName + "} relationship */");
-        out.println(indent + "public final " + innerClassName + " " + relationFieldName + " = new " + innerClassName + "();");
-        out.println();
-        out.println(indent + "public class " + innerClassName + " {");
-        
-        Alias relAlias = aliases.get(alias);
-        List<SqlField> relationFields = fieldsByAlias.getOrDefault(alias, List.of());
-        for (SqlField field : relationFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            FieldInfo fieldInfo = getFieldInfo(relAlias, fieldName);
-            
-            String chainFieldType = fieldInfo.isComparable 
-                ? "ComparableChainField<" + fieldInfo.typeName + ">"
-                : "ChainField<" + fieldInfo.typeName + ">";
-            
-            out.println(indent + "    public final " + chainFieldType + " " + fieldName + " = ");
-            out.println(indent + "        new " + chainFieldType + "(" + fieldsPath + "." + fieldName + ");");
         }
         
-        // Recursively generate nested classes for child relations
-        for (RelationNode child : node.children.values()) {
-            out.println();
-            generateNestedWhereClass(out, fieldsClassName, child, fieldsByAlias, aliases, indent + "    ", fieldsPath);
-        }
-        
-        out.println(indent + "    private " + innerClassName + "() {}");
-        out.println(indent + "}");
-        out.println();
-    }
-
-    /**
-     * Generates an InlineSubClauseBuilder class for begin()/end() grouping within where() chains.
-     * Example: query.where().begin().lastName.eq("Smith").or().firstName.eq("John").end().and().age.ge(18)
-     */
-    private void generateInlineSubClauseBuilderClass(String packageName, String entityName,
-            String queryClassName, String fieldsClassName, String tableName,
-            List<SqlField> fields, LinkedHashMap<String, Alias> aliases) throws IOException {
-
-        String whereClassName = queryClassName + "Where";
-        String className = queryClassName + "InlineSubClause";
-        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
-        JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
-
-        try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
-            if (!packageName.isEmpty()) {
-                out.println("package " + packageName + ";");
-                out.println();
-            }
-
-            out.println("import org.pojoquery.typedquery.ComparableQueryField;");
-            out.println("import org.pojoquery.typedquery.InlineSubClauseBuilder;");
-            out.println("import org.pojoquery.typedquery.QueryField;");
-            out.println();
-            out.println("/**");
-            out.println(" * Inline sub-clause builder for {@link " + entityName + "}.");
-            out.println(" * <p>Usage: {@code query.where().begin().lastName.eq(\"Smith\").or().firstName.eq(\"John\").end().and().age.ge(18)}");
-            out.println(" */");
-            out.println("@SuppressWarnings(\"all\")");
-            out.println("public class " + className + " extends InlineSubClauseBuilder<" + entityName + ", " + queryClassName + ", " + whereClassName + ", " + className + "> {");
-            out.println();
-
-            // Constructor
-            out.println("    public " + className + "(" + whereClassName + " parentBuilder) {");
-            out.println("        super(parentBuilder);");
-            out.println("    }");
-            out.println();
-
-            // Group fields by alias
-            Map<String, List<SqlField>> fieldsByAlias = new LinkedHashMap<>();
-            for (SqlField field : fields) {
-                String alias = extractAliasFromFieldAlias(field.alias);
-                fieldsByAlias.computeIfAbsent(alias, k -> new ArrayList<>()).add(field);
-            }
-
-            // Main entity fields as instance properties
-            Alias mainAlias = aliases.get(tableName);
-            List<SqlField> mainFields = fieldsByAlias.getOrDefault(tableName, List.of());
-            for (SqlField field : mainFields) {
-                String fieldName = extractFieldNameFromAlias(field.alias);
-                FieldInfo fieldInfo = getFieldInfo(mainAlias, fieldName);
-                
-                String chainFieldType = fieldInfo.isComparable 
-                    ? "ComparableChainField<" + fieldInfo.typeName + ">"
-                    : "ChainField<" + fieldInfo.typeName + ">";
-                
-                out.println("    /** Field: " + fieldName + " */");
-                out.println("    public final " + chainFieldType + " " + fieldName + " = ");
-                out.println("        new " + chainFieldType + "(" + fieldsClassName + "." + fieldName + ");");
-            }
-            out.println();
-
-            // Build tree structure and generate nested classes recursively
-            RelationNode root = buildRelationTree(tableName, fieldsByAlias.keySet());
-            for (RelationNode child : root.children.values()) {
-                generateNestedInlineSubClauseClass(out, fieldsClassName, child, fieldsByAlias, aliases, "    ", fieldsClassName);
-            }
-
-            out.println("    @Override");
-            out.println("    protected " + className + " self() {");
-            out.println("        return this;");
-            out.println("    }");
-            out.println("}");
-        }
-    }
-
-    /**
-     * Recursively generates nested inline sub-clause builder classes for relationships.
-     */
-    private void generateNestedInlineSubClauseClass(PrintWriter out, String fieldsClassName, RelationNode node,
-            Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases,
-            String indent, String fieldsPathPrefix) {
-        
-        String alias = node.fullAlias;
-        String relationFieldName = node.name;
-        String innerClassName = relationFieldName + "InlineSubClause";
-        // Build the fields class path: e.g., "Employee_.projects.employee"
-        String fieldsPath = fieldsPathPrefix + "." + relationFieldName;
-        
-        out.println(indent + "/** Inline sub-clause builder for the {@code " + relationFieldName + "} relationship */");
-        out.println(indent + "public final " + innerClassName + " " + relationFieldName + " = new " + innerClassName + "();");
-        out.println();
-        out.println(indent + "public class " + innerClassName + " {");
-        
-        Alias relAlias = aliases.get(alias);
-        List<SqlField> relationFields = fieldsByAlias.getOrDefault(alias, List.of());
-        for (SqlField field : relationFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            FieldInfo fieldInfo = getFieldInfo(relAlias, fieldName);
-            
-            String chainFieldType = fieldInfo.isComparable 
-                ? "ComparableChainField<" + fieldInfo.typeName + ">"
-                : "ChainField<" + fieldInfo.typeName + ">";
-            
-            out.println(indent + "    public final " + chainFieldType + " " + fieldName + " = ");
-            out.println(indent + "        new " + chainFieldType + "(" + fieldsPath + "." + fieldName + ");");
-        }
-        
-        // Recursively generate nested classes for child relations
-        for (RelationNode child : node.children.values()) {
-            out.println();
-            generateNestedInlineSubClauseClass(out, fieldsClassName, child, fieldsByAlias, aliases, indent + "    ", fieldsPath);
-        }
-        
-        out.println(indent + "    private " + innerClassName + "() {}");
-        out.println(indent + "}");
-        out.println();
-    }
-
-    /**
-     * Generates a SubClauseWhere builder class for fluent sub-clause building within begin()/end() blocks.
-     * Example: query.begin().where().lastName.eq("Smith").or().firstName.eq("John").end()
-     */
-    private void generateSubClauseWhereClass(String packageName, String entityName,
-            String queryClassName, String fieldsClassName, String tableName,
-            List<SqlField> fields, LinkedHashMap<String, Alias> aliases) throws IOException {
-
-        String className = queryClassName + "SubClauseWhere";
-        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
-        JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
-
-        try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
-            if (!packageName.isEmpty()) {
-                out.println("package " + packageName + ";");
-                out.println();
-            }
-
-            out.println("import org.pojoquery.typedquery.ComparableQueryField;");
-            out.println("import org.pojoquery.typedquery.SubClauseBuilder;");
-            out.println("import org.pojoquery.typedquery.SubClauseWhereBuilder;");
-            out.println("import org.pojoquery.typedquery.QueryField;");
-            out.println();
-            out.println("/**");
-            out.println(" * Fluent sub-clause builder for {@link " + entityName + "}.");
-            out.println(" * <p>Usage: {@code query.begin().where().lastName.eq(\"Smith\").or().firstName.eq(\"John\").end()}");
-            out.println(" */");
-            out.println("@SuppressWarnings(\"all\")");
-            out.println("public class " + className + " extends SubClauseWhereBuilder<" + entityName + ", " + queryClassName + ", " + className + "> {");
-            out.println();
-
-            // Constructor
-            out.println("    public " + className + "(SubClauseBuilder<" + entityName + ", " + queryClassName + "> subClauseBuilder) {");
-            out.println("        super(subClauseBuilder);");
-            out.println("    }");
-            out.println();
-
-            // Group fields by alias
-            Map<String, List<SqlField>> fieldsByAlias = new LinkedHashMap<>();
-            for (SqlField field : fields) {
-                String alias = extractAliasFromFieldAlias(field.alias);
-                fieldsByAlias.computeIfAbsent(alias, k -> new ArrayList<>()).add(field);
-            }
-
-            // Main entity fields as instance properties
-            Alias mainAlias = aliases.get(tableName);
-            List<SqlField> mainFields = fieldsByAlias.getOrDefault(tableName, List.of());
-            for (SqlField field : mainFields) {
-                String fieldName = extractFieldNameFromAlias(field.alias);
-                FieldInfo fieldInfo = getFieldInfo(mainAlias, fieldName);
-                
-                String chainFieldType = fieldInfo.isComparable 
-                    ? "ComparableChainField<" + fieldInfo.typeName + ">"
-                    : "ChainField<" + fieldInfo.typeName + ">";
-                
-                out.println("    /** Field: " + fieldName + " */");
-                out.println("    public final " + chainFieldType + " " + fieldName + " = ");
-                out.println("        new " + chainFieldType + "(" + fieldsClassName + "." + fieldName + ");");
-            }
-            out.println();
-
-            // Build tree structure and generate nested classes recursively
-            RelationNode root = buildRelationTree(tableName, fieldsByAlias.keySet());
-            for (RelationNode child : root.children.values()) {
-                generateNestedOrClauseWhereClass(out, fieldsClassName, child, fieldsByAlias, aliases, "    ", fieldsClassName);
-            }
-
-            out.println("    @Override");
-            out.println("    protected " + className + " self() {");
-            out.println("        return this;");
-            out.println("    }");
-            out.println("}");
-        }
-    }
-
-    /**
-     * Recursively generates nested or-clause where builder classes for relationships.
-     */
-    private void generateNestedOrClauseWhereClass(PrintWriter out, String fieldsClassName, RelationNode node,
-            Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases,
-            String indent, String fieldsPathPrefix) {
-        
-        String alias = node.fullAlias;
-        String relationFieldName = node.name;
-        String innerClassName = relationFieldName + "OrClauseWhere";
-        // Build the fields class path: e.g., "Employee_.projects.employee"
-        String fieldsPath = fieldsPathPrefix + "." + relationFieldName;
-        
-        out.println(indent + "/** Where builder for the {@code " + relationFieldName + "} relationship */");
-        out.println(indent + "public final " + innerClassName + " " + relationFieldName + " = new " + innerClassName + "();");
-        out.println();
-        out.println(indent + "public class " + innerClassName + " {");
-        
-        Alias relAlias = aliases.get(alias);
-        List<SqlField> relationFields = fieldsByAlias.getOrDefault(alias, List.of());
-        for (SqlField field : relationFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            FieldInfo fieldInfo = getFieldInfo(relAlias, fieldName);
-            
-            String chainFieldType = fieldInfo.isComparable 
-                ? "ComparableChainField<" + fieldInfo.typeName + ">"
-                : "ChainField<" + fieldInfo.typeName + ">";
-            
-            out.println(indent + "    public final " + chainFieldType + " " + fieldName + " = ");
-            out.println(indent + "        new " + chainFieldType + "(" + fieldsPath + "." + fieldName + ");");
-        }
-        
-        // Recursively generate nested classes for child relations
-        for (RelationNode child : node.children.values()) {
-            out.println();
-            generateNestedOrClauseWhereClass(out, fieldsClassName, child, fieldsByAlias, aliases, indent + "    ", fieldsPath);
-        }
-        
-        out.println(indent + "    private " + innerClassName + "() {}");
-        out.println(indent + "}");
-        out.println();
-    }
-
-    /**
-     * Generates an orderBy builder class for fluent chain-style orderBy clauses.
-     * Example: query.orderBy().lastName.asc().firstName.desc()
-     */
-    private void generateOrderByBuilderClass(String packageName, String entityName,
-            String queryClassName, String fieldsClassName, String tableName,
-            List<SqlField> fields, LinkedHashMap<String, Alias> aliases) throws IOException {
-
-        String className = queryClassName + "OrderBy";
-        String qualifiedName = packageName.isEmpty() ? className : packageName + "." + className;
-        JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
-
-        try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
-            if (!packageName.isEmpty()) {
-                out.println("package " + packageName + ";");
-                out.println();
-            }
-
-            out.println("import org.pojoquery.typedquery.QueryField;");
-            out.println("import org.pojoquery.typedquery.OrderByBuilder;");
-            out.println();
-            out.println("/**");
-            out.println(" * Fluent ORDER BY clause builder for {@link " + entityName + "}.");
-            out.println(" * <p>Usage: {@code query.orderBy().lastName.asc().firstName.desc()}");
-            out.println(" */");
-            out.println("@SuppressWarnings(\"all\")");
-            out.println("public class " + className + " extends OrderByBuilder<" + entityName + ", " + queryClassName + ", " + className + "> {");
-            out.println();
-
-            // Constructor
-            out.println("    public " + className + "(" + queryClassName + " query) {");
-            out.println("        super(query);");
-            out.println("    }");
-            out.println();
-
-            // Group fields by alias
-            Map<String, List<SqlField>> fieldsByAlias = new LinkedHashMap<>();
-            for (SqlField field : fields) {
-                String alias = extractAliasFromFieldAlias(field.alias);
-                fieldsByAlias.computeIfAbsent(alias, k -> new ArrayList<>()).add(field);
-            }
-
-            // Main entity fields as instance properties
-            Alias mainAlias = aliases.get(tableName);
-            List<SqlField> mainFields = fieldsByAlias.getOrDefault(tableName, List.of());
-            for (SqlField field : mainFields) {
-                String fieldName = extractFieldNameFromAlias(field.alias);
-                
-                out.println("    /** Field: " + fieldName + " */");
-                out.println("    public final OrderByField<" + getFieldTypeName(mainAlias, fieldName) + "> " + fieldName + " = ");
-                out.println("        new OrderByField<>(" + fieldsClassName + "." + fieldName + ");");
-            }
-            out.println();
-
-            // Build tree structure and generate nested classes recursively
-            RelationNode root = buildRelationTree(tableName, fieldsByAlias.keySet());
-            for (RelationNode child : root.children.values()) {
-                generateNestedOrderByClass(out, fieldsClassName, child, fieldsByAlias, aliases, "    ", fieldsClassName);
-            }
-
-            out.println("    @Override");
-            out.println("    protected " + className + " self() {");
-            out.println("        return this;");
-            out.println("    }");
-            out.println("}");
-        }
-    }
-
-    /**
-     * Recursively generates nested orderBy builder classes for relationships.
-     */
-    private void generateNestedOrderByClass(PrintWriter out, String fieldsClassName, RelationNode node,
-            Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases,
-            String indent, String fieldsPathPrefix) {
-        
-        String alias = node.fullAlias;
-        String relationFieldName = node.name;
-        String innerClassName = relationFieldName + "OrderBy";
-        // Build the fields class path: e.g., "Employee_.projects.employee"
-        String fieldsPath = fieldsPathPrefix + "." + relationFieldName;
-        
-        out.println(indent + "/** OrderBy builder for the {@code " + relationFieldName + "} relationship */");
-        out.println(indent + "public final " + innerClassName + " " + relationFieldName + " = new " + innerClassName + "();");
-        out.println();
-        out.println(indent + "public class " + innerClassName + " {");
-        
-        Alias relAlias = aliases.get(alias);
-        List<SqlField> relationFields = fieldsByAlias.getOrDefault(alias, List.of());
-        for (SqlField field : relationFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            
-            out.println(indent + "    public final OrderByField<" + getFieldTypeName(relAlias, fieldName) + "> " + fieldName + " = ");
-            out.println(indent + "        new OrderByField<>(" + fieldsPath + "." + fieldName + ");");
-        }
-        
-        // Recursively generate nested classes for child relations
-        for (RelationNode child : node.children.values()) {
-            out.println();
-            generateNestedOrderByClass(out, fieldsClassName, child, fieldsByAlias, aliases, indent + "    ", fieldsPath);
-        }
-        
-        out.println(indent + "    private " + innerClassName + "() {}");
-        out.println(indent + "}");
-        out.println();
-    }
-
-    /**
-     * Gets the type name for a field (for generic type parameters).
-     */
-    private String getFieldTypeName(Alias alias, String fieldName) {
-        FieldInfo fieldInfo = getFieldInfo(alias, fieldName);
-        return fieldInfo != null ? fieldInfo.typeName : "Object";
+        return root;
     }
 }
-

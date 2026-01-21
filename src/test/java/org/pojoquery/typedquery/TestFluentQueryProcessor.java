@@ -127,8 +127,7 @@ public class TestFluentQueryProcessor {
                     .title.eq("First Article")
                     .and(q.id.eq(1L).or().id.eq(3L))
                     .or().author.isNotNull()
-                    .orderBy()
-                    .title.desc().list(c);
+                    .orderBy().title.desc().list(c);
             
             // All articles have non-null authors, so all 3 should be returned
             assertFalse(articles.isEmpty());

@@ -1,4 +1,4 @@
-package org.pojoquery.typedquery.chain;
+package org.pojoquery.typedquery;
 
 import static org.pojoquery.SqlExpression.sql;
 
@@ -68,6 +68,19 @@ public class ConditionBuilderField<T, C> {
     public C isNotNull() {
         var op = chainFactory.createChain();
         op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} IS NOT NULL"));
+        return op.getContinuation();
+    }
+
+    public C in(@SuppressWarnings("unchecked") T... values) {
+        var op = chainFactory.createChain();
+        StringBuilder placeholders = new StringBuilder();
+        for (int i = 0; i < values.length; i++) {
+            if (i > 0) {
+                placeholders.append(", ");
+            }
+            placeholders.append("?");
+        }
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} IN (" + placeholders + ")", (Object[]) values));
         return op.getContinuation();
     }
 }

@@ -6,35 +6,37 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks an entity class for query builder code generation.
+ * Marks an entity class for fluent query builder code generation.
  *
  * <p>When placed on a class annotated with {@link Table}, the annotation processor
- * will generate:
- * <ul>
- *   <li>A {@code <EntityName>Query} class with a fluent API for type-safe queries</li>
- *   <li>Static field references for use with {@code where()} and {@code orderBy()}</li>
- * </ul>
+ * will generate a query class with fluent static condition chains.
  *
  * <p>Example usage:
  * <pre>{@code
- * @Table("employee")
+ * @Table("book")
  * @GenerateQuery
- * public class Employee {
+ * public class Book {
  *     @Id
  *     public Long id;
- *     public String email;
- *     public String lastName;
+ *     public String title;
  * }
  *
  * // Generated code enables:
- * import static com.example.Employee_.email;
- * import static com.example.Employee_.lastName;
+ * BookQuery q = new BookQuery();
+ * SqlExpression condition = q.title.eq("John").and().title.isNotNull()
+ *     .and(q.id.gt(123L)).get();
  *
- * List<Employee> results = new EmployeeQuery()
- *     .where(email).is("bob@example.com")
- *     .orderBy(lastName)
- *     .list(dataSource);
+ * // Or with where() clause:
+ * q.where().title.eq("John").and().title.isNotNull().orderBy().title.asc();
  * }</pre>
+ *
+ * <p>The generated query class provides:
+ * <ul>
+ *   <li>Static condition builder fields for building conditions outside of query</li>
+ *   <li>A {@code where()} method for fluent where clause building</li>
+ *   <li>An {@code orderBy()} method for fluent ordering</li>
+ *   <li>A {@code groupBy()} method for fluent grouping</li>
+ * </ul>
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.SOURCE)
@@ -42,13 +44,7 @@ public @interface GenerateQuery {
 
     /**
      * The suffix to append to the entity class name for the generated query class.
-     * Defaults to "Query" (e.g., Employee -> EmployeeQuery).
+     * Defaults to "Query" (e.g., Book -> BookQuery).
      */
     String querySuffix() default "Query";
-
-    /**
-     * The suffix to append to the entity class name for the generated fields class.
-     * Defaults to "_" (e.g., Employee -> Employee_).
-     */
-    String fieldsSuffix() default "_";
 }
