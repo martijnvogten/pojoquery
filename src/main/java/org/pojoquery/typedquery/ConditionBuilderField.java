@@ -2,6 +2,8 @@ package org.pojoquery.typedquery;
 
 import static org.pojoquery.SqlExpression.sql;
 
+import java.util.Collections;
+
 /**
  * Represents a field that can be used in condition expressions.
  * Provides basic comparison operations (eq, ne, isNull, isNotNull).
@@ -71,15 +73,10 @@ public class ConditionBuilderField<T, C> {
         return op.getContinuation();
     }
 
+    /** Adds an IN condition with the specified values. */
     public C in(@SuppressWarnings("unchecked") T... values) {
         var op = chainFactory.createChain();
-        StringBuilder placeholders = new StringBuilder();
-        for (int i = 0; i < values.length; i++) {
-            if (i > 0) {
-                placeholders.append(", ");
-            }
-            placeholders.append("?");
-        }
+        String placeholders = String.join(", ", Collections.nCopies(values.length, "?"));
         op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} IN (" + placeholders + ")", (Object[]) values));
         return op.getContinuation();
     }

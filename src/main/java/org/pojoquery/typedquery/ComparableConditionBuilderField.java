@@ -70,4 +70,16 @@ public class ComparableConditionBuilderField<T, C> extends ConditionBuilderField
         op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} LIKE ?", pattern));
         return op.getContinuation();
     }
+
+    public C notLike(String pattern) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} NOT LIKE ?", pattern));
+        return op.getContinuation();
+    }
+
+    public C between(T start, T end) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} BETWEEN ? AND ?", start, end));
+        return op.getContinuation();
+    }
 }

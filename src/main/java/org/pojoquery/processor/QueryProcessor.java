@@ -173,6 +173,7 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("import org.pojoquery.typedquery.ConditionChain;");
             out.println("import org.pojoquery.typedquery.OrderByField;");
             out.println("import org.pojoquery.typedquery.OrderByTarget;");
+            out.println("import org.pojoquery.typedquery.TypedQuery;");
             out.println();
             out.println("import static org.pojoquery.SqlExpression.sql;");
             out.println();
@@ -185,7 +186,7 @@ public class QueryProcessor extends AbstractProcessor {
             out.println(" * </pre>");
             out.println(" */");
             out.println("@SuppressWarnings(\"all\")");
-            out.println("public class " + queryClassName + " {");
+            out.println("public class " + queryClassName + " extends TypedQuery<" + entityName + ", " + queryClassName + "> {");
             out.println();
 
             // Group fields by alias
@@ -222,10 +223,8 @@ public class QueryProcessor extends AbstractProcessor {
             generateStaticConditionChainClass(out, queryClassName, chainClassName, tableName, mainFields, mainAlias, fieldsByAlias, aliases, "    ");
             out.println();
 
-            // Generate the SqlQuery field and initialization
-            out.println("    protected SqlQuery<?> query = new DefaultSqlQuery(DbContext.getDefault());");
-            out.println("    protected DbContext dbContext = DbContext.getDefault();");
-            out.println();
+            // initializeQuery() - overrides TypedQuery method
+            out.println("    @Override");
             out.println("    protected void initializeQuery() {");
             // Set the table first
             String tableSchemaArg = schemaName == null ? "null" : "\"" + escapeJava(schemaName) + "\"";
@@ -285,20 +284,20 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("    }");
             out.println();
 
-            // list() method
-            out.println("    public List<" + entityName + "> list(Connection connection) {");
-            out.println("        SqlExpression stmt = query.toStatement();");
-            out.println("        List<Map<String, Object>> rows = DB.queryRows(connection, stmt);");
-            out.println("        try {");
-            out.println("            return processRows(rows);");
-            out.println("        } catch (NoSuchFieldException | IllegalAccessException e) {");
-            out.println("            throw new RuntimeException(e);");
-            out.println("        }");
-            out.println("    }");
+            // Generate processRows method (overrides TypedQuery abstract method)
+            generateProcessRows(out, entityName, tableName, fieldsByAlias, aliases);
             out.println();
 
-            // Generate processRows method
-            generateProcessRows(out, entityName, tableName, fieldsByAlias, aliases);
+            // Generate processRowStreaming method (overrides TypedQuery for streaming support)
+            generateProcessRowStreaming(out, entityName, tableName, fieldsByAlias, aliases);
+            out.println();
+
+            // Generate getPrimaryKeyFromRow method (overrides TypedQuery for streaming support)
+            generateGetPrimaryKeyFromRow(out, tableName, aliases);
+            out.println();
+
+            // Generate getIdFieldName method (overrides TypedQuery abstract method)
+            generateGetIdFieldName(out, tableName, aliases);
             out.println();
 
             // Generate GroupByBuilder inner class
@@ -370,8 +369,9 @@ public class QueryProcessor extends AbstractProcessor {
     private void generateProcessRows(PrintWriter out, String entityName, String tableName,
             Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases) {
 
+        out.println("    @Override");
         out.println("    @SuppressWarnings(\"unchecked\")");
-        out.println("    private List<" + entityName + "> processRows(List<Map<String, Object>> rows) throws NoSuchFieldException, IllegalAccessException {");
+        out.println("    protected List<" + entityName + "> processRows(List<Map<String, Object>> rows) throws NoSuchFieldException, IllegalAccessException {");
         out.println();
 
         // Generate field mapping lookups using Alias metadata
@@ -517,6 +517,190 @@ public class QueryProcessor extends AbstractProcessor {
         out.println("        }");
         out.println();
         out.println("        return result;");
+        out.println("    }");
+    }
+
+    /**
+     * Generates the processRowStreaming method for streaming row processing with entity accumulation.
+     * This method processes a single row and accumulates it into the entity cache.
+     */
+    private void generateProcessRowStreaming(PrintWriter out, String entityName, String tableName,
+            Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases) {
+
+        out.println("    @Override");
+        out.println("    @SuppressWarnings(\"unchecked\")");
+        out.println("    protected " + entityName + " processRowStreaming(Map<String, Object> row, Map<Object, Object> entityCache) throws NoSuchFieldException, IllegalAccessException {");
+        out.println();
+
+        // Generate field mapping lookups using Alias metadata
+        for (Map.Entry<String, Alias> entry : aliases.entrySet()) {
+            String aliasName = entry.getKey();
+            Alias alias = entry.getValue();
+            if (alias.getIsEmbedded()) continue;
+
+            String className = alias.getResultType().getSimpleName();
+            String varPrefix = "fm" + capitalize(sanitizeVarName(aliasName));
+
+            List<SqlField> aliasFields = fieldsByAlias.get(aliasName);
+            if (aliasFields != null) {
+                out.println("        // " + className + " field mappings");
+                for (SqlField field : aliasFields) {
+                    String fieldName = extractFieldNameFromAlias(field.alias);
+                    String varName = varPrefix + capitalize(fieldName);
+                    out.println("        FieldMapping " + varName + " = dbContext.getFieldMapping(FieldHelper.getField(" +
+                        className + ".class, \"" + fieldName + "\"));");
+                }
+                out.println();
+            }
+
+            // Link field for relationships
+            FieldModel linkField = alias.getLinkField();
+            if (linkField != null && alias.getParentAlias() != null) {
+                Alias parentAlias = aliases.get(alias.getParentAlias());
+                if (parentAlias != null) {
+                    String parentClassName = parentAlias.getResultType().getSimpleName();
+                    String linkFieldName = linkField.getName();
+                    String linkFieldVar = "f" + capitalize(sanitizeVarName(alias.getParentAlias())) + capitalize(linkFieldName);
+                    out.println("        // Link field: " + alias.getParentAlias() + "." + linkFieldName);
+                    out.println("        Field " + linkFieldVar + " = FieldHelper.getField(" + parentClassName + ".class, \"" + linkFieldName + "\");");
+                    out.println("        " + linkFieldVar + ".setAccessible(true);");
+                    out.println();
+                }
+            }
+        }
+
+        // Variable to hold the root entity
+        out.println("        " + entityName + " rootEntity = null;");
+        out.println();
+
+        // Process root entity
+        Alias rootAlias = aliases.get(tableName);
+        if (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()) {
+            FieldModel rootIdField = rootAlias.getIdFields().get(0);
+            String rootVarPrefix = "fm" + capitalize(sanitizeVarName(tableName));
+
+            out.println("        // Process root entity: " + entityName);
+            out.println("        Object " + sanitizeVarName(tableName) + "Id = row.get(\"" + tableName + "." + rootIdField.getName() + "\");");
+            out.println("        if (" + sanitizeVarName(tableName) + "Id != null) {");
+            out.println("            " + entityName + " " + sanitizeVarName(tableName) + " = (" + entityName + ") entityCache.get(" + sanitizeVarName(tableName) + "Id);");
+            out.println("            if (" + sanitizeVarName(tableName) + " == null) {");
+            out.println("                " + sanitizeVarName(tableName) + " = new " + entityName + "();");
+
+            List<SqlField> rootFields = fieldsByAlias.get(tableName);
+            if (rootFields != null) {
+                for (SqlField field : rootFields) {
+                    String fieldName = extractFieldNameFromAlias(field.alias);
+                    String fmVar = rootVarPrefix + capitalize(fieldName);
+                    out.println("                " + fmVar + ".apply(" + sanitizeVarName(tableName) + ", row.get(\"" + field.alias + "\"));");
+                }
+            }
+
+            out.println("                entityCache.put(" + sanitizeVarName(tableName) + "Id, " + sanitizeVarName(tableName) + ");");
+            out.println("            }");
+            out.println("            rootEntity = " + sanitizeVarName(tableName) + ";");
+        }
+
+        // Process related aliases
+        for (Map.Entry<String, Alias> entry : aliases.entrySet()) {
+            String aliasName = entry.getKey();
+            Alias alias = entry.getValue();
+
+            if (aliasName.equals(tableName) || alias.getIsEmbedded()) continue;
+            if (alias.getParentAlias() == null || alias.getLinkField() == null) continue;
+            if (alias.getIdFields() == null || alias.getIdFields().isEmpty()) continue;
+
+            String className = alias.getResultType().getSimpleName();
+            FieldModel aliasIdField = alias.getIdFields().get(0);
+
+            String aliasVarPrefix = "fm" + capitalize(sanitizeVarName(aliasName));
+            String entityVar = sanitizeVarName(aliasName);
+            String parentVar = sanitizeVarName(alias.getParentAlias());
+            String linkFieldName = alias.getLinkField().getName();
+            String linkFieldVar = "f" + capitalize(sanitizeVarName(alias.getParentAlias())) + capitalize(linkFieldName);
+
+            out.println();
+            out.println("            // Process relationship: " + aliasName + " (" + className + ")");
+            out.println("            Object " + entityVar + "Id = row.get(\"" + aliasName + "." + aliasIdField.getName() + "\");");
+            out.println("            if (" + entityVar + "Id != null) {");
+            out.println("                " + className + " " + entityVar + " = (" + className + ") entityCache.get(" + entityVar + "Id);");
+            out.println("                if (" + entityVar + " == null) {");
+            out.println("                    " + entityVar + " = new " + className + "();");
+
+            List<SqlField> aliasFields = fieldsByAlias.get(aliasName);
+            if (aliasFields != null) {
+                for (SqlField field : aliasFields) {
+                    String fieldName = extractFieldNameFromAlias(field.alias);
+                    String fmVar = aliasVarPrefix + capitalize(fieldName);
+                    out.println("                    " + fmVar + ".apply(" + entityVar + ", row.get(\"" + field.alias + "\"));");
+                }
+            }
+
+            out.println("                    entityCache.put(" + entityVar + "Id, " + entityVar + ");");
+            out.println("                }");
+            out.println();
+            out.println("                // Link to parent");
+            // For nested relationships, we need to look up the parent from the cache
+            Alias parentAlias = aliases.get(alias.getParentAlias());
+            if (alias.getParentAlias().equals(tableName)) {
+                // Parent is the root entity, use the variable directly
+                out.println("                FieldHelper.putValueIntoField(" + parentVar + ", " + linkFieldVar + ", " + entityVar + ");");
+            } else if (parentAlias != null && parentAlias.getIdFields() != null && !parentAlias.getIdFields().isEmpty()) {
+                // Parent is a nested entity, look it up from the cache
+                String parentIdField = parentAlias.getIdFields().get(0).getName();
+                String parentIdVarName = entityVar + "_parentId";
+                String parentVarName = entityVar + "_parent";
+                out.println("                Object " + parentIdVarName + " = row.get(\"" + alias.getParentAlias() + "." + parentIdField + "\");");
+                out.println("                " + parentAlias.getResultType().getSimpleName() + " " + parentVarName + " = (" + parentAlias.getResultType().getSimpleName() + ") entityCache.get(" + parentIdVarName + ");");
+                out.println("                if (" + parentVarName + " != null) {");
+                out.println("                    FieldHelper.putValueIntoField(" + parentVarName + ", " + linkFieldVar + ", " + entityVar + ");");
+                out.println("                }");
+            }
+            out.println("            }");
+        }
+
+        // Close root entity null check
+        if (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()) {
+            out.println("        }");
+        }
+
+        out.println();
+        out.println("        return rootEntity;");
+        out.println("    }");
+    }
+
+    /**
+     * Generates the getPrimaryKeyFromRow method for extracting the primary key from a row.
+     */
+    private void generateGetPrimaryKeyFromRow(PrintWriter out, String tableName,
+            LinkedHashMap<String, Alias> aliases) {
+
+        Alias rootAlias = aliases.get(tableName);
+        String idFieldName = "id";
+        if (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()) {
+            idFieldName = rootAlias.getIdFields().get(0).getName();
+        }
+
+        out.println("    @Override");
+        out.println("    protected Object getPrimaryKeyFromRow(Map<String, Object> row) {");
+        out.println("        return row.get(\"" + tableName + "." + idFieldName + "\");");
+        out.println("    }");
+    }
+
+    /**
+     * Generates the getIdFieldName method for returning the primary key field name.
+     */
+    private void generateGetIdFieldName(PrintWriter out, String tableName,
+            LinkedHashMap<String, Alias> aliases) {
+
+        Alias rootAlias = aliases.get(tableName);
+        String idFieldName = "id";
+        if (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()) {
+            idFieldName = rootAlias.getIdFields().get(0).getName();
+        }
+
+        out.println("    @Override");
+        out.println("    protected String getIdFieldName() {");
+        out.println("        return \"" + tableName + "." + idFieldName + "\";");
         out.println("    }");
     }
 
@@ -740,6 +924,16 @@ public class QueryProcessor extends AbstractProcessor {
         out.println(indent + "    public List<" + entityName + "> list(Connection connection) {");
         out.println(indent + "        callback();");
         out.println(indent + "        return " + queryClassName + ".this.list(connection);");
+        out.println(indent + "    }");
+        out.println();
+        out.println(indent + "    public " + entityName + " first(Connection connection) {");
+        out.println(indent + "        callback();");
+        out.println(indent + "        return " + queryClassName + ".this.first(connection);");
+        out.println(indent + "    }");
+        out.println();
+        out.println(indent + "    public void stream(Connection connection, java.util.function.Consumer<" + entityName + "> consumer) {");
+        out.println(indent + "        callback();");
+        out.println(indent + "        " + queryClassName + ".this.stream(connection, consumer);");
         out.println(indent + "    }");
         out.println();
         out.println(indent + "    public " + groupByBuilderClass + " groupBy() {");
