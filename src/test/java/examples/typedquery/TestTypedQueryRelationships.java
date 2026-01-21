@@ -6,8 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import static examples.typedquery.EmployeeWithRelations_.projects;
-
 import java.sql.Connection;
 
 import javax.sql.DataSource;

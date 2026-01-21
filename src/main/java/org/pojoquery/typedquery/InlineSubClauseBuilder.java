@@ -53,7 +53,6 @@ public abstract class InlineSubClauseBuilder<E, Q extends TypedQuery<E, Q>,
      * Finishes the sub-clause and adds the grouped condition to the parent builder.
      * Returns the parent's ChainResult so chaining can continue with .or() or .and().
      */
-    @SuppressWarnings("unchecked")
     protected WhereChainBuilder<E, Q, W, ?>.ChainResult finishAndReturnToParent() {
         Condition<E> condition = buildCondition();
         if (condition != null) {
@@ -88,7 +87,6 @@ public abstract class InlineSubClauseBuilder<E, Q extends TypedQuery<E, Q>,
          * Ends the sub-clause group and returns to the parent where builder's ChainResult.
          * This allows chaining like: .end().or().begin()...
          */
-        @SuppressWarnings("unchecked")
         public WhereChainBuilder<E, Q, W, ?>.ChainResult end() {
             return finishAndReturnToParent();
         }

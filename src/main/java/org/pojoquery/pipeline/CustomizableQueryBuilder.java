@@ -52,7 +52,6 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 
 	private static final java.util.regex.Pattern ALIAS_PATTERN = java.util.regex.Pattern.compile("\\{([a-zA-Z0-9_\\.]+)\\}");
 
-	@SuppressWarnings("serial")
 	public static class Values extends HashMap<String,Object> {
 
 		public Values() {

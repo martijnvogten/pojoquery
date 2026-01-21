@@ -38,7 +38,7 @@ import com.mysql.cj.jdbc.MysqlDataSource;
  * <p>HSQLDB tests always run. MySQL and PostgreSQL tests require Docker.</p>
  * <p>If Docker is not available, MySQL/PostgreSQL tests are skipped.</p>
  */
-@Disabled("Disabled: takes too long to run with Docker containers")
+@Disabled("Disabled: takes too long to run automatically on every build")
 public class MultiDialectIT {
 
     // Testcontainers - lazily initialized only when Docker is available
@@ -53,6 +53,7 @@ public class MultiDialectIT {
     private static int hsqldbCounter = 0;
 
     @BeforeAll
+    @SuppressWarnings("resource")
     public static void checkDocker() {
         try {
             // Try starting MySQL container - this will fail if Docker is not available

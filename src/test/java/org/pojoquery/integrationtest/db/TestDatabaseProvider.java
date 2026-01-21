@@ -76,6 +76,7 @@ public class TestDatabaseProvider {
         System.out.println("[TestDatabaseProvider] Using HSQLDB (in-memory)");
     }
     
+    @SuppressWarnings("resource") // Container lifecycle managed by Testcontainers
     private static void initMySQL() {
         System.out.println("[TestDatabaseProvider] Starting MySQL container...");
         mysqlContainer = new MySQLContainer<>("mysql:8.0")
@@ -95,6 +96,7 @@ public class TestDatabaseProvider {
         System.out.println("[TestDatabaseProvider] MySQL container started at: " + mysqlContainer.getJdbcUrl());
     }
     
+    @SuppressWarnings("resource") // Container lifecycle managed by Testcontainers
     private static void initPostgres() {
         System.out.println("[TestDatabaseProvider] Starting PostgreSQL container...");
         postgresContainer = new PostgreSQLContainer<>("postgres:15")
