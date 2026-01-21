@@ -22,31 +22,44 @@ See [this article](https://martijnvogten.github.io/2025/04/16/the-basic-mistake-
 - Automatic SQL generation from POJO structure
 - Convention-based relationship mapping (one-to-one, one-to-many, many-to-many)
 - Custom joins via `@Link`, `@Join`, and `@JoinCondition`
-- Fluent query API with `addWhere()`, `addOrderBy()`, `setLimit()`, `addJoin()`
+- Fluent query API with `addWhere()`, `addOrderBy()`, `setLimit()`, `addJoin()`, `addGroupBy()`
 - Alias resolution with curly braces `{table.field}` for readable conditions
+- `findById()` for convenient single-record lookups
+
+**Type-Safe Query Generation** (compile-time)
+- `@GenerateQuery` annotation generates type-safe query builders
+- Compile-time field references with `where()` and `orderBy()` methods
+- Fluent condition API: `eq()`, `ne()`, `gt()`, `lt()`, `between()`, `in()`, `like()`, `isNull()`, etc.
+- Composable conditions with `and()`, `or()`, and `begin()...end()` grouping
 
 **CRUD Operations**
-- Insert, update, and delete with automatic multi-table inheritance handling
+- Insert, update, upsert, and delete with automatic multi-table inheritance handling
 - `@NoUpdate` to exclude fields from updates
 - Transaction support via `DB.runInTransaction()`
+- Optimistic locking via `HasVersion` interface with `StaleObjectException`
 
-**Schema Generation**
-- Generate `CREATE TABLE` statements from entity classes
-- Generate `ALTER TABLE` migration statements for schema updates
+**Schema Generation & Migration**
+- Generate `CREATE TABLE` statements from entity classes with `SchemaGenerator.createTables()`
+- Generate `ALTER TABLE` migration statements with `SchemaGenerator.generateMigrationStatements()`
+- Automatic foreign key constraint generation
 - `@Column` for length, precision, scale, nullable, and unique constraints
 
 **Advanced Mapping**
 - Table-per-subclass inheritance (`@SubClasses`)
+- Single table inheritance (`@SubClasses` + `@DiscriminatorColumn`)
 - Embedded objects (`@Embedded`) with optional column prefix
 - Dynamic columns (`@Other`) for schemaless patterns
 - Custom SQL expressions (`@Select`) and aggregation (`@GroupBy`)
 - Large objects (`@Lob`) for CLOB/BLOB support
+- Field name mapping (`@FieldName`) for column name customization
+- `@Transient` to exclude fields from persistence
 
 **Performance & Flexibility**
-- Streaming API for large result sets without memory issues
+- Streaming API (`executeStreaming()`) for large result sets without memory issues
 - No lazy loading, no proxies—predictable SQL, predictable behavior
 - Multi-dialect support (MySQL, PostgreSQL, HSQLDB)
 - JPA annotation compatibility (`jakarta.persistence` and `javax.persistence`)
+- Custom type mapping via `FieldMapping` and `DbContextBuilder`
 
 ## Quick Example
 
@@ -58,7 +71,10 @@ class Order {
     @Id Long id;
     LocalDate orderDate;
     Customer customer;           // Joins on customer_id → customer.id
-    List<OrderLine> lines;       // Joins on order.id → order_line.order_id
+}
+
+class OrderDetail extends Order {
+    List<OrderLine> lines;       // Put association in subclass to prevent cycles
 }
 
 @Table("customer")
@@ -71,6 +87,7 @@ class Customer {
 @Table("order_line")
 class OrderLine {
     @Id Long id;
+    Order order;
     Product product;             // Joins on product_id → product.id
     int quantity;
     BigDecimal unitPrice;
@@ -87,13 +104,14 @@ class Product {
 Generate the database schema from your entities:
 
 ```java
-SchemaGenerator.createTables(dataSource, Order.class, Customer.class, OrderLine.class, Product.class);
+SchemaGenerator.createTables(dataSource, OrderDetail.class, Customer.class, OrderLine.class, Product.class);
 ```
+PojoQuery generates proper `CREATE TABLE` statements with foreign keys, and queries join all tables automatically with proper quoting and aliases.
 
 Query with a fluent API:
 
 ```java
-List<Order> orders = PojoQuery.build(Order.class)
+List<Order> orders = PojoQuery.build(OrderDetail.class)
     .addWhere("{customer}.name LIKE ?", "%Acme%")
     .addWhere("{lines.product}.sku = ?", "WIDGET-42")
     .addOrderBy("{order}.orderDate DESC")
@@ -101,7 +119,7 @@ List<Order> orders = PojoQuery.build(Order.class)
     .execute(dataSource);
 
 // All data is eagerly loaded—no lazy loading surprises
-for (Order order : orders) {
+for (OrderDetail order : orders) {
     System.out.println(order.customer.name + " ordered on " + order.orderDate);
     for (OrderLine line : order.lines) {
         System.out.println("  " + line.quantity + "x " + line.product.name);
@@ -109,7 +127,28 @@ for (Order order : orders) {
 }
 ```
 
-PojoQuery generates proper `CREATE TABLE` statements with foreign keys, and queries join all four tables automatically with proper quoting and aliases.
+Or use generated type-safe queries with `@GenerateQuery`:
+
+```java
+@Table("employee")
+@GenerateQuery
+public class Employee {
+    @Id Long id;
+    String lastName;
+    BigDecimal salary;
+    Department department;
+}
+
+// Type-safe queries with compile-time checked field references
+import static com.example.Employee_.*;
+
+List<Employee> results = new EmployeeQuery()
+    .where(salary).greaterThan(new BigDecimal("50000"))
+    .where(lastName).like("S%")
+    .orderByDesc(salary)
+    .setLimit(10)
+    .list(dataSource);
+```
 
 ## Getting Started
 
@@ -132,6 +171,41 @@ implementation 'org.pojoquery:pojoquery:4.1.0-BETA'
 ```
 
 For more details, see the [PojoQuery docs](https://pojoquery.org).
+
+## Additional Features
+
+### Schema Migration
+
+Generate ALTER TABLE statements by comparing entity classes against the current database schema:
+
+```java
+SchemaInfo schemaInfo = SchemaInfo.fromDataSource(dataSource);
+List<String> migrations = SchemaGenerator.generateMigrationStatements(schemaInfo, Employee.class);
+for (String ddl : migrations) {
+    DB.executeDDL(dataSource, ddl);
+}
+```
+
+### Streaming Large Result Sets
+
+Process results one at a time without loading everything into memory:
+
+```java
+PojoQuery.build(Order.class)
+    .addOrderBy("{order}.id")
+    .executeStreaming(dataSource, order -> {
+        processOrder(order);  // Called as each Order completes
+    });
+```
+
+### Transactions
+
+```java
+DB.runInTransaction(dataSource, connection -> {
+    PojoQuery.insert(connection, newOrder);
+    PojoQuery.update(connection, existingCustomer);
+});
+```
 
 ## Building from Source
 
