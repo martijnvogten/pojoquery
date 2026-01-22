@@ -67,6 +67,14 @@ public abstract class TypedQuery<T, Q extends TypedQuery<T, Q>> {
     protected abstract String getIdFieldName();
 
     /**
+     * Get the entity class for this query.
+     * Implemented by generated subclasses.
+     *
+     * @return the entity class
+     */
+    protected abstract Class<T> getEntityClass();
+
+    /**
      * Get the primary key value from a row for the root entity.
      * Used by streaming to detect when we've moved to a new entity.
      * 
@@ -117,6 +125,31 @@ public abstract class TypedQuery<T, Q extends TypedQuery<T, Q>> {
      */
     public T first(Connection connection) {
         List<T> results = list(connection);
+        return results.isEmpty() ? null : results.get(0);
+    }
+
+    /**
+     * Build the WHERE condition for finding an entity by its ID.
+     * Implemented by generated subclasses based on the entity's @Id field(s).
+     *
+     * @param id the ID value (or composite ID object)
+     * @return the SQL expression for the ID condition
+     */
+    protected abstract SqlExpression buildIdCondition(Object id);
+
+    /**
+     * Find an entity by its ID.
+     *
+     * @param connection the database connection
+     * @param id the ID of the entity to find
+     * @return the entity, or null if not found
+     */
+    public T findById(Connection connection, Object id) {
+        query.getWheres().add(buildIdCondition(id));
+        List<T> results = list(connection);
+        if (results.size() > 1) {
+            throw new RuntimeException("More than one result found in findById on class " + getEntityClass().getName());
+        }
         return results.isEmpty() ? null : results.get(0);
     }
 

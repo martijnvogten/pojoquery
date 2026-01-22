@@ -300,6 +300,14 @@ public class QueryProcessor extends AbstractProcessor {
             generateGetIdFieldName(out, tableName, aliases);
             out.println();
 
+            // Generate buildIdCondition method (overrides TypedQuery abstract method)
+            generateBuildIdCondition(out, tableName, aliases);
+            out.println();
+
+            // Generate getEntityClass method (overrides TypedQuery abstract method)
+            generateGetEntityClass(out, entityName);
+            out.println();
+
             // Generate GroupByBuilder inner class
             generateGroupByBuilderClass(out, queryClassName, groupByBuilderClass, tableName, mainFields, "    ");
             out.println();
@@ -704,6 +712,34 @@ public class QueryProcessor extends AbstractProcessor {
         out.println("    }");
     }
 
+    /**
+     * Generates the buildIdCondition method for finding entities by ID.
+     */
+    private void generateBuildIdCondition(PrintWriter out, String tableName,
+            LinkedHashMap<String, Alias> aliases) {
+
+        Alias rootAlias = aliases.get(tableName);
+        String idFieldName = "id";
+        if (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()) {
+            idFieldName = rootAlias.getIdFields().get(0).getName();
+        }
+
+        out.println("    @Override");
+        out.println("    protected SqlExpression buildIdCondition(Object id) {");
+        out.println("        return SqlExpression.sql(\"{" + tableName + "." + idFieldName + "} = ?\", id);");
+        out.println("    }");
+    }
+
+    /**
+     * Generates the getEntityClass method for returning the entity class.
+     */
+    private void generateGetEntityClass(PrintWriter out, String entityName) {
+        out.println("    @Override");
+        out.println("    protected Class<" + entityName + "> getEntityClass() {");
+        out.println("        return " + entityName + ".class;");
+        out.println("    }");
+    }
+
     private void generateStaticConditionChainClass(PrintWriter out, String queryClassName,
             String chainClassName, String tableName, List<SqlField> mainFields, Alias mainAlias,
             Map<String, List<SqlField>> fieldsByAlias, LinkedHashMap<String, Alias> aliases, String indent) {
@@ -929,6 +965,11 @@ public class QueryProcessor extends AbstractProcessor {
         out.println(indent + "    public " + entityName + " first(Connection connection) {");
         out.println(indent + "        callback();");
         out.println(indent + "        return " + queryClassName + ".this.first(connection);");
+        out.println(indent + "    }");
+        out.println();
+        out.println(indent + "    public " + entityName + " findById(Connection connection, Object id) {");
+        out.println(indent + "        callback();");
+        out.println(indent + "        return " + queryClassName + ".this.findById(connection, id);");
         out.println(indent + "    }");
         out.println();
         out.println(indent + "    public void stream(Connection connection, java.util.function.Consumer<" + entityName + "> consumer) {");
