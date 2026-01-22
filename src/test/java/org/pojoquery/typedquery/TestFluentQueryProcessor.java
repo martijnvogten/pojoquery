@@ -92,15 +92,22 @@ public class TestFluentQueryProcessor {
     public void testSimpleQuery() {
         DB.withConnection(dataSource, (Connection c) -> {
             ArticleQuery q = new ArticleQuery();
-            
+
             List<Article> articles = q.list(c);
-            
+
             assertEquals(3, articles.size());
             System.out.println("Found " + articles.size() + " articles");
             for (Article article : articles) {
-                System.out.println("  - " + article.title + " by " + (article.author != null ? article.author.name : "null"));
+                System.out.println(
+                        "  - " + article.title + " by " + (article.author != null ? article.author.name : "null"));
             }
         });
+    }
+
+    @Test
+    public void testComparingFields() {
+        ArticleQuery q = new ArticleQuery();
+        q.where().title.eq(q.author.name).and().id.gt(1L);
     }
 
     @Test
@@ -112,7 +119,7 @@ public class TestFluentQueryProcessor {
             ArticleQueryStaticConditionChain cond = q.title.eq("henk");
             assertEquals("{article.title} = ?", cond.get().getSql());
             assertEquals("henk", cond.get().getParameters().iterator().next());
-            
+
             assertEquals(1, articles.size());
             assertEquals("First Article", articles.get(0).title);
             assertEquals("Alice", articles.get(0).author.name);
@@ -128,7 +135,7 @@ public class TestFluentQueryProcessor {
                     .and(q.id.eq(1L).or().id.eq(3L))
                     .or().author.isNotNull()
                     .orderBy().title.desc().list(c);
-            
+
             // All articles have non-null authors, so all 3 should be returned
             assertFalse(articles.isEmpty());
             System.out.println("Query with complex conditions returned " + articles.size() + " articles");
@@ -143,7 +150,7 @@ public class TestFluentQueryProcessor {
         DB.withConnection(dataSource, (Connection c) -> {
             ArticleQuery q = new ArticleQuery();
             List<Article> articles = q.where().author.name.eq("Alice").list(c);
-            
+
             assertEquals(2, articles.size());
             for (Article article : articles) {
                 assertEquals("Alice", article.author.name);

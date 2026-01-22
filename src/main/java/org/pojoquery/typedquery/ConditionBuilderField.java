@@ -43,6 +43,28 @@ public class ConditionBuilderField<T, C> {
     }
 
     /**
+     * Adds an equality condition comparing to another field.
+     * @param other the field to compare against
+     * @return the continuation for fluent chaining
+     */
+    public C eq(ConditionBuilderField<T, ?> other) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} = {" + other.tableAlias + "." + other.columnName + "}"));
+        return op.getContinuation();
+    }
+
+    /**
+     * Adds an equality condition comparing to an expression.
+     * @param expr the expression to compare against
+     * @return the continuation for fluent chaining
+     */
+    public C eq(FieldExpression<T> expr) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} = " + expr.getSql(), expr.getParameters().toArray()));
+        return op.getContinuation();
+    }
+
+    /**
      * Adds a not-equal condition.
      * @param other the value to compare against
      * @return the continuation for fluent chaining
@@ -50,6 +72,28 @@ public class ConditionBuilderField<T, C> {
     public C ne(T other) {
         var op = chainFactory.createChain();
         op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} <> ?", other));
+        return op.getContinuation();
+    }
+
+    /**
+     * Adds a not-equal condition comparing to another field.
+     * @param other the field to compare against
+     * @return the continuation for fluent chaining
+     */
+    public C ne(ConditionBuilderField<T, ?> other) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} <> {" + other.tableAlias + "." + other.columnName + "}"));
+        return op.getContinuation();
+    }
+
+    /**
+     * Adds a not-equal condition comparing to an expression.
+     * @param expr the expression to compare against
+     * @return the continuation for fluent chaining
+     */
+    public C ne(FieldExpression<T> expr) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} <> " + expr.getSql(), expr.getParameters().toArray()));
         return op.getContinuation();
     }
 

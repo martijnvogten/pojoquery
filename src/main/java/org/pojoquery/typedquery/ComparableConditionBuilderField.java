@@ -33,6 +33,28 @@ public class ComparableConditionBuilderField<T, C> extends ConditionBuilderField
     }
 
     /**
+     * Adds a greater-than condition comparing to another field.
+     * @param other the field to compare against
+     * @return the continuation for fluent chaining
+     */
+    public C gt(ConditionBuilderField<T, ?> other) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} > {" + other.tableAlias + "." + other.columnName + "}"));
+        return op.getContinuation();
+    }
+
+    /**
+     * Adds a greater-than condition comparing to an expression.
+     * @param expr the expression to compare against
+     * @return the continuation for fluent chaining
+     */
+    public C gt(FieldExpression<T> expr) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} > " + expr.getSql(), expr.getParameters().toArray()));
+        return op.getContinuation();
+    }
+
+    /**
      * Adds a less-than condition.
      * @param other the value to compare against
      * @return the continuation for fluent chaining
@@ -40,6 +62,28 @@ public class ComparableConditionBuilderField<T, C> extends ConditionBuilderField
     public C lt(T other) {
         var op = chainFactory.createChain();
         op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} < ?", other));
+        return op.getContinuation();
+    }
+
+    /**
+     * Adds a less-than condition comparing to another field.
+     * @param other the field to compare against
+     * @return the continuation for fluent chaining
+     */
+    public C lt(ConditionBuilderField<T, ?> other) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} < {" + other.tableAlias + "." + other.columnName + "}"));
+        return op.getContinuation();
+    }
+
+    /**
+     * Adds a less-than condition comparing to an expression.
+     * @param expr the expression to compare against
+     * @return the continuation for fluent chaining
+     */
+    public C lt(FieldExpression<T> expr) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} < " + expr.getSql(), expr.getParameters().toArray()));
         return op.getContinuation();
     }
 
@@ -55,6 +99,28 @@ public class ComparableConditionBuilderField<T, C> extends ConditionBuilderField
     }
 
     /**
+     * Adds a greater-than-or-equal condition comparing to another field.
+     * @param other the field to compare against
+     * @return the continuation for fluent chaining
+     */
+    public C ge(ConditionBuilderField<T, ?> other) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} >= {" + other.tableAlias + "." + other.columnName + "}"));
+        return op.getContinuation();
+    }
+
+    /**
+     * Adds a greater-than-or-equal condition comparing to an expression.
+     * @param expr the expression to compare against
+     * @return the continuation for fluent chaining
+     */
+    public C ge(FieldExpression<T> expr) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} >= " + expr.getSql(), expr.getParameters().toArray()));
+        return op.getContinuation();
+    }
+
+    /**
      * Adds a less-than-or-equal condition.
      * @param other the value to compare against
      * @return the continuation for fluent chaining
@@ -62,6 +128,28 @@ public class ComparableConditionBuilderField<T, C> extends ConditionBuilderField
     public C le(T other) {
         var op = chainFactory.createChain();
         op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} <= ?", other));
+        return op.getContinuation();
+    }
+
+    /**
+     * Adds a less-than-or-equal condition comparing to another field.
+     * @param other the field to compare against
+     * @return the continuation for fluent chaining
+     */
+    public C le(ConditionBuilderField<T, ?> other) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} <= {" + other.tableAlias + "." + other.columnName + "}"));
+        return op.getContinuation();
+    }
+
+    /**
+     * Adds a less-than-or-equal condition comparing to an expression.
+     * @param expr the expression to compare against
+     * @return the continuation for fluent chaining
+     */
+    public C le(FieldExpression<T> expr) {
+        var op = chainFactory.createChain();
+        op.getBuilder().add(sql("{" + tableAlias + "." + columnName + "} <= " + expr.getSql(), expr.getParameters().toArray()));
         return op.getContinuation();
     }
 
