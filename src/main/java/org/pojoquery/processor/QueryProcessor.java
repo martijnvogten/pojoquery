@@ -166,6 +166,7 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("import org.pojoquery.util.FieldHelper;");
             out.println();
             out.println("import org.pojoquery.typedquery.ChainFactory;");
+            out.println("import org.pojoquery.typedquery.ChainableExpression;");
             out.println("import org.pojoquery.typedquery.ComparableConditionBuilderField;");
             out.println("import org.pojoquery.typedquery.ConditionBuilder;");
             out.println("import org.pojoquery.typedquery.ConditionBuilderField;");
@@ -256,6 +257,23 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("    public " + whereBuilderClass + " where() {");
             out.println("        return new " + whereBuilderClass + "(this);");
             out.println("    }");
+            out.println();
+
+            // where(Supplier<SqlExpression>) method returning ConditionTerminator for chaining
+            String terminatorClass = whereBuilderClass + "." + whereBuilderClass + "ConditionTerminator";
+            out.println("    /**");
+            out.println("     * Adds a where condition from a static condition chain and returns a terminator for continued chaining.");
+            out.println("     * <p>Example: {@code q.where(q.concat(q.author.name, \" \", q.author.email).eq(\"James Brown\")).and().author.isNotNull()}");
+            out.println("     */");
+            out.println("    public " + terminatorClass + " where(Supplier<SqlExpression> condition) {");
+            out.println("        " + whereBuilderClass + " whereBuilder = new " + whereBuilderClass + "(this);");
+            out.println("        whereBuilder.builder.add(condition.get());");
+            out.println("        return whereBuilder.getContinuation();");
+            out.println("    }");
+            out.println();
+
+            // Generate SQL function methods that delegate to base class helpers
+            generateSqlFunctionMethods(out, chainClassName);
             out.println();
 
             // orderBy() method
@@ -737,6 +755,83 @@ public class QueryProcessor extends AbstractProcessor {
         out.println("    @Override");
         out.println("    protected Class<" + entityName + "> getEntityClass() {");
         out.println("        return " + entityName + ".class;");
+        out.println("    }");
+    }
+
+    /**
+     * Generates SQL function methods that delegate to base class helper methods.
+     * These preserve the specific chain type for proper fluent chaining.
+     */
+    private void generateSqlFunctionMethods(PrintWriter out, String chainClassName) {
+        String chainFactory = "() -> new " + chainClassName + "()";
+        
+        out.println("    // === SQL function methods with chainable return types ===");
+        out.println();
+        
+        out.println("    /**");
+        out.println("     * Creates a CONCAT expression from the given parts.");
+        out.println("     * Parts can be ConditionBuilderField instances or literal values.");
+        out.println("     * <p>Example: {@code q.where(q.concat(q.firstName, \" \", q.lastName).eq(\"John Doe\").and().id.gt(1L))}");
+        out.println("     */");
+        out.println("    public ChainableExpression<String, " + chainClassName + "> concat(Object... parts) {");
+        out.println("        return buildConcat(" + chainFactory + ", parts);");
+        out.println("    }");
+        out.println();
+        
+        out.println("    /**");
+        out.println("     * Creates a LOWER expression.");
+        out.println("     * <p>Example: {@code q.where(q.lower(q.email).eq(\"john@example.com\"))}");
+        out.println("     */");
+        out.println("    public ChainableExpression<String, " + chainClassName + "> lower(Object part) {");
+        out.println("        return buildSingleArgFunction(\"LOWER\", " + chainFactory + ", part);");
+        out.println("    }");
+        out.println();
+        
+        out.println("    /**");
+        out.println("     * Creates an UPPER expression.");
+        out.println("     */");
+        out.println("    public ChainableExpression<String, " + chainClassName + "> upper(Object part) {");
+        out.println("        return buildSingleArgFunction(\"UPPER\", " + chainFactory + ", part);");
+        out.println("    }");
+        out.println();
+        
+        out.println("    /**");
+        out.println("     * Creates a TRIM expression.");
+        out.println("     */");
+        out.println("    public ChainableExpression<String, " + chainClassName + "> trim(Object part) {");
+        out.println("        return buildSingleArgFunction(\"TRIM\", " + chainFactory + ", part);");
+        out.println("    }");
+        out.println();
+        
+        out.println("    /**");
+        out.println("     * Creates a LENGTH expression.");
+        out.println("     */");
+        out.println("    public ChainableExpression<Number, " + chainClassName + "> length(Object part) {");
+        out.println("        return buildSingleArgFunction(\"LENGTH\", " + chainFactory + ", part);");
+        out.println("    }");
+        out.println();
+        
+        out.println("    /**");
+        out.println("     * Creates a COALESCE expression.");
+        out.println("     */");
+        out.println("    public <V> ChainableExpression<V, " + chainClassName + "> coalesce(Object... parts) {");
+        out.println("        return buildMultiArgFunction(\"COALESCE\", " + chainFactory + ", parts);");
+        out.println("    }");
+        out.println();
+        
+        out.println("    /**");
+        out.println("     * Creates an ABS expression.");
+        out.println("     */");
+        out.println("    public <V extends Number> ChainableExpression<V, " + chainClassName + "> abs(Object part) {");
+        out.println("        return buildSingleArgFunction(\"ABS\", " + chainFactory + ", part);");
+        out.println("    }");
+        out.println();
+        
+        out.println("    /**");
+        out.println("     * Creates a SUBSTRING expression.");
+        out.println("     */");
+        out.println("    public ChainableExpression<String, " + chainClassName + "> substring(Object part, int start, int len) {");
+        out.println("        return buildSubstring(" + chainFactory + ", part, start, len);");
         out.println("    }");
     }
 

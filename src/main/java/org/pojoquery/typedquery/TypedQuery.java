@@ -292,4 +292,60 @@ public abstract class TypedQuery<T, Q extends TypedQuery<T, Q>> {
     public DbContext getDbContext() {
         return dbContext;
     }
+
+    // === SQL function helper methods for generated subclasses ===
+
+    /**
+     * Helper method for building CONCAT expressions.
+     * Used by generated subclasses to avoid code duplication.
+     */
+    protected static <C extends ConditionChain<C>> ChainableExpression<String, C> buildConcat(ChainFactory<C> chainFactory, Object... parts) {
+        StringBuilder sql = new StringBuilder("CONCAT(");
+        List<Object> parameters = new ArrayList<>();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) sql.append(", ");
+            ChainableExpression.appendPart(sql, parameters, parts[i]);
+        }
+        sql.append(")");
+        return new ChainableExpression<>(sql.toString(), parameters, chainFactory);
+    }
+
+    /**
+     * Helper method for building single-argument SQL function expressions.
+     * Used by generated subclasses to avoid code duplication.
+     */
+    protected static <V, C extends ConditionChain<C>> ChainableExpression<V, C> buildSingleArgFunction(String functionName, ChainFactory<C> chainFactory, Object part) {
+        StringBuilder sql = new StringBuilder(functionName).append("(");
+        List<Object> parameters = new ArrayList<>();
+        ChainableExpression.appendPart(sql, parameters, part);
+        sql.append(")");
+        return new ChainableExpression<>(sql.toString(), parameters, chainFactory);
+    }
+
+    /**
+     * Helper method for building multi-argument SQL function expressions.
+     * Used by generated subclasses to avoid code duplication.
+     */
+    protected static <V, C extends ConditionChain<C>> ChainableExpression<V, C> buildMultiArgFunction(String functionName, ChainFactory<C> chainFactory, Object... parts) {
+        StringBuilder sql = new StringBuilder(functionName).append("(");
+        List<Object> parameters = new ArrayList<>();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) sql.append(", ");
+            ChainableExpression.appendPart(sql, parameters, parts[i]);
+        }
+        sql.append(")");
+        return new ChainableExpression<>(sql.toString(), parameters, chainFactory);
+    }
+
+    /**
+     * Helper method for building SUBSTRING expressions.
+     * Used by generated subclasses to avoid code duplication.
+     */
+    protected static <C extends ConditionChain<C>> ChainableExpression<String, C> buildSubstring(ChainFactory<C> chainFactory, Object part, int start, int len) {
+        StringBuilder sql = new StringBuilder("SUBSTRING(");
+        List<Object> parameters = new ArrayList<>();
+        ChainableExpression.appendPart(sql, parameters, part);
+        sql.append(", ").append(start).append(", ").append(len).append(")");
+        return new ChainableExpression<>(sql.toString(), parameters, chainFactory);
+    }
 }

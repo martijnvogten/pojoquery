@@ -108,6 +108,10 @@ public class TestFluentQueryProcessor {
     public void testComparingFields() {
         ArticleQuery q = new ArticleQuery();
         q.where().title.eq(q.author.name).and().id.gt(1L);
+
+        // This test demonstrates chainable SQL functions
+        ArticleQueryStaticConditionChain cond = q.lower(q.concat(q.author.name, " ", q.author.email)).eq(q.lower("James Brown")).and().id.lt(10L);
+        System.out.println(cond.get().getSql());
     }
 
     @Test
