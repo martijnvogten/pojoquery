@@ -155,6 +155,7 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("import java.util.HashMap;");
             out.println("import java.util.List;");
             out.println("import java.util.Map;");
+            out.println("import java.util.Optional;");
             out.println("import java.util.function.Supplier;");
             out.println();
             out.println("import org.pojoquery.DB;");
@@ -1057,12 +1058,12 @@ public class QueryProcessor extends AbstractProcessor {
         out.println(indent + "        return " + queryClassName + ".this.list(connection);");
         out.println(indent + "    }");
         out.println();
-        out.println(indent + "    public " + entityName + " first(Connection connection) {");
+        out.println(indent + "    public Optional<" + entityName + "> first(Connection connection) {");
         out.println(indent + "        callback();");
         out.println(indent + "        return " + queryClassName + ".this.first(connection);");
         out.println(indent + "    }");
         out.println();
-        out.println(indent + "    public " + entityName + " findById(Connection connection, Object id) {");
+        out.println(indent + "    public Optional<" + entityName + "> findById(Connection connection, Object id) {");
         out.println(indent + "        callback();");
         out.println(indent + "        return " + queryClassName + ".this.findById(connection, id);");
         out.println(indent + "    }");

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 import org.pojoquery.DB;
@@ -121,11 +122,11 @@ public abstract class TypedQuery<T, Q extends TypedQuery<T, Q>> {
      * Execute the query and return the first result, if any.
      *
      * @param connection the database connection
-     * @return the first result, or null if no results
+     * @return the first result, or empty if no results
      */
-    public T first(Connection connection) {
+    public Optional<T> first(Connection connection) {
         List<T> results = list(connection);
-        return results.isEmpty() ? null : results.get(0);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
     /**
@@ -142,15 +143,15 @@ public abstract class TypedQuery<T, Q extends TypedQuery<T, Q>> {
      *
      * @param connection the database connection
      * @param id the ID of the entity to find
-     * @return the entity, or null if not found
+     * @return the entity, or empty if not found
      */
-    public T findById(Connection connection, Object id) {
+    public Optional<T> findById(Connection connection, Object id) {
         query.getWheres().add(buildIdCondition(id));
         List<T> results = list(connection);
         if (results.size() > 1) {
             throw new RuntimeException("More than one result found in findById on class " + getEntityClass().getName());
         }
-        return results.isEmpty() ? null : results.get(0);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
     /**
