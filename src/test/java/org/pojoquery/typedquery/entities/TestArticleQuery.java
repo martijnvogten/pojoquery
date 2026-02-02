@@ -556,4 +556,41 @@ public class TestArticleQuery {
         });
     }
 
+    @Test
+    void testListIds() {
+        DB.withConnection(dataSource, (Connection c) -> {
+            Person alice = insertPerson(c, "Alice", "alice@example.com");
+            Person bob = insertPerson(c, "Bob", "bob@example.com");
+            Article a1 = insertArticle(c, "Article One", "Content 1", alice);
+            Article a2 = insertArticle(c, "Article Two", "Content 2", bob);
+            Article a3 = insertArticle(c, "Article Three", "Content 3", alice);
+
+            // listIds returns all IDs
+            ArticleQuery q1 = new ArticleQuery();
+            List<Long> allIds = q1.listIds(c);
+            assertEquals(3, allIds.size());
+            assertTrue(allIds.contains(a1.id));
+            assertTrue(allIds.contains(a2.id));
+            assertTrue(allIds.contains(a3.id));
+
+            // listIds with where clause
+            ArticleQuery q2 = new ArticleQuery();
+            List<Long> filteredIds = q2.where().author.name.eq("Alice").listIds(c);
+            assertEquals(2, filteredIds.size());
+            assertTrue(filteredIds.contains(a1.id));
+            assertTrue(filteredIds.contains(a3.id));
+            assertFalse(filteredIds.contains(a2.id));
+        });
+    }
+
+    // @Test
+    // void testInnerQuery() {
+    //     DB.withConnection(dataSource, (Connection c) -> {
+    //         Person alice = insertPerson(c, "Alice", "alice@example.com");
+    //         Article a1 = insertArticle(c, "Article One", "Content 1", alice);
+    //         Article a2 = insertArticle(c, "Article Two", "Content 2", alice);
+
+    //         new ArticleQuery().where().author.id.in(new PersonQuery().where().name.eq("Alice")).list(c);
+    //     });
+    // }
 }

@@ -18,9 +18,10 @@ import org.pojoquery.pipeline.SqlQuery;
  * Abstract base class for generated typed query builders.
  * 
  * @param <T> the entity type this query returns
+ * @param <PK> the primary key type for the entity
  * @param <Q> the concrete query class type (for fluent method chaining)
  */
-public abstract class TypedQuery<T, Q extends TypedQuery<T, Q>> {
+public abstract class TypedQuery<T, PK, Q extends TypedQuery<T, PK, Q>> {
 
     protected SqlQuery<?> query = new DefaultSqlQuery(DbContext.getDefault());
     protected DbContext dbContext = DbContext.getDefault();
@@ -145,13 +146,34 @@ public abstract class TypedQuery<T, Q extends TypedQuery<T, Q>> {
      * @param id the ID of the entity to find
      * @return the entity, or empty if not found
      */
-    public Optional<T> findById(Connection connection, Object id) {
+    public Optional<T> findById(Connection connection, PK id) {
         query.getWheres().add(buildIdCondition(id));
         List<T> results = list(connection);
         if (results.size() > 1) {
             throw new RuntimeException("More than one result found in findById on class " + getEntityClass().getName());
         }
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
+    /**
+     * Execute the query and return only the primary key values.
+     * This is more efficient than loading full entities when you only need IDs.
+     *
+     * @param connection the database connection
+     * @return the list of primary key values matching the query
+     */
+    @SuppressWarnings("unchecked")
+    public List<PK> listIds(Connection connection) {
+        return (List<PK>) DB.queryColumns(connection, buildListIdsStatement()).get(0);
+    }
+
+    /**
+     * Build a SQL statement that selects only the primary key field(s).
+     *
+     * @return the SQL expression for selecting IDs
+     */
+    protected SqlExpression buildListIdsStatement() {
+        return query.toListIdsStatement(SqlExpression.sql("{" + getIdFieldName() + "}"));
     }
 
     /**

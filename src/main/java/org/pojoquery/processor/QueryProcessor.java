@@ -188,7 +188,16 @@ public class QueryProcessor extends AbstractProcessor {
             out.println(" * </pre>");
             out.println(" */");
             out.println("@SuppressWarnings(\"all\")");
-            out.println("public class " + queryClassName + " extends TypedQuery<" + entityName + ", " + queryClassName + "> {");
+            
+            // Determine the primary key type
+            Alias rootAlias = aliases.get(tableName);
+            String pkType = "Object";
+            if (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()) {
+                FieldModel idField = rootAlias.getIdFields().get(0);
+                pkType = getBoxedType(idField.getType());
+            }
+            
+            out.println("public class " + queryClassName + " extends TypedQuery<" + entityName + ", " + pkType + ", " + queryClassName + "> {");
             out.println();
 
             // Group fields by alias
@@ -273,6 +282,14 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("    public List<" + entityName + "> list(Connection connection) {");
             out.println("        applyPendingConditions();");
             out.println("        return super.list(connection);");
+            out.println("    }");
+            out.println();
+
+            // Override listIds() to apply pending conditions
+            out.println("    @Override");
+            out.println("    public List<" + pkType + "> listIds(Connection connection) {");
+            out.println("        applyPendingConditions();");
+            out.println("        return super.listIds(connection);");
             out.println("    }");
             out.println();
 
@@ -365,7 +382,7 @@ public class QueryProcessor extends AbstractProcessor {
             out.println();
 
             // Generate delegate class for callback pattern
-            generateDelegateClass(out, entityName, queryClassName, groupByBuilderClass, orderByBuilderClass, "    ");
+            generateDelegateClass(out, entityName, queryClassName, pkType, groupByBuilderClass, orderByBuilderClass, "    ");
             out.println();
 
             // Generate GroupByField inner class
@@ -1074,7 +1091,7 @@ public class QueryProcessor extends AbstractProcessor {
     }
 
     private void generateDelegateClass(PrintWriter out, String entityName, String queryClassName,
-            String groupByBuilderClass, String orderByBuilderClass, String indent) {
+            String pkType, String groupByBuilderClass, String orderByBuilderClass, String indent) {
 
         out.println(indent + "/**");
         out.println(indent + " * Delegate class for callback pattern - allows groupBy().field.list() syntax.");
@@ -1087,12 +1104,17 @@ public class QueryProcessor extends AbstractProcessor {
         out.println(indent + "        return " + queryClassName + ".this.list(connection);");
         out.println(indent + "    }");
         out.println();
+        out.println(indent + "    public List<" + pkType + "> listIds(Connection connection) {");
+        out.println(indent + "        callback();");
+        out.println(indent + "        return " + queryClassName + ".this.listIds(connection);");
+        out.println(indent + "    }");
+        out.println();
         out.println(indent + "    public Optional<" + entityName + "> first(Connection connection) {");
         out.println(indent + "        callback();");
         out.println(indent + "        return " + queryClassName + ".this.first(connection);");
         out.println(indent + "    }");
         out.println();
-        out.println(indent + "    public Optional<" + entityName + "> findById(Connection connection, Object id) {");
+        out.println(indent + "    public Optional<" + entityName + "> findById(Connection connection, " + pkType + " id) {");
         out.println(indent + "        callback();");
         out.println(indent + "        return " + queryClassName + ".this.findById(connection, id);");
         out.println(indent + "    }");

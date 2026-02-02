@@ -156,6 +156,11 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 		return (SQ)this;
 	}
 
+	public SqlExpression toListIdsStatement(SqlExpression idFieldExpression) {
+		SqlExpression resolved = resolveAliases(dbContext, idFieldExpression, table);
+		return toStatement(new SqlExpression("SELECT\n DISTINCT " + resolved.getSql()), schema, table, joins, wheres, groupBy, orderBy, offset, rowCount);
+	}
+
 	public SqlExpression toStatement() {
 		List<SqlExpression> fieldExpressions = new ArrayList<SqlExpression>();
 		for(SqlField field : fields) {

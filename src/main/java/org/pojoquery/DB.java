@@ -213,6 +213,17 @@ public interface DB {
         return new Columns(execute(conn, QueryType.SELECT, sql, Arrays.asList(params), new ColumnProcessor()));
     }
 
+	/**
+     * Queries columns from the database using a connection, SQL, and parameters.
+     * 
+     * @param conn the database connection
+     * @param queryStatement the SQL expression to execute
+     * @return the queried columns
+     */
+    public static Columns queryColumns(Connection conn, SqlExpression queryStatement) {
+        return new Columns(execute(conn, QueryType.SELECT, queryStatement.getSql(), queryStatement.getParameters(), new ColumnProcessor()));
+    }
+
     /**
      * Queries columns from the database using a data source, SQL, and parameters.
      * 

@@ -135,7 +135,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	}
 
 	public SqlExpression buildListIdsStatement(List<FieldModel> idFields) {
-		return query.toStatement(new SqlExpression("SELECT DISTINCT " + implode("\n , ", getFieldNames(query.getTable(), idFields))), query.getSchema(), query.getTable(), query.getJoins(), query.getWheres(), null, query.getOrderBy(), query.getOffset(), query.getRowCount());
+		return query.toListIdsStatement(new SqlExpression(implode("\n , ", getFieldNames(query.getTable(), idFields))));
 	}
 
 	/** Backward compatible overload that accepts {@code List<Field>} */
