@@ -253,9 +253,35 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("    }");
             out.println();
 
-            // where() method returning WhereBuilder
+            // collectedConditions on the query itself, and applyPendingConditions method
             String whereBuilderClass = queryClassName + "WhereBuilder";
+            out.println("    /** Collected WHERE conditions - lives on query for direct access from builders. */");
+            out.println("    protected final List<SqlExpression> collectedConditions = new java.util.ArrayList<>();");
+            out.println();
+            out.println("    /** Applies any pending where conditions to the query. */");
+            out.println("    protected void applyPendingConditions() {");
+            out.println("        if (!collectedConditions.isEmpty()) {");
+            out.println("            SqlExpression whereExpr = SqlExpression.implode(\"\", collectedConditions);");
+            out.println("            collectedConditions.clear();");
+            out.println("            query.addWhere(whereExpr);");
+            out.println("        }");
+            out.println("    }");
+            out.println();
+
+            // Override list() to apply pending conditions
+            out.println("    @Override");
+            out.println("    public List<" + entityName + "> list(Connection connection) {");
+            out.println("        applyPendingConditions();");
+            out.println("        return super.list(connection);");
+            out.println("    }");
+            out.println();
+
+            // where() method returning WhereBuilder - reuses the same conditions list
+            // Auto-adds AND if conditions already exist
             out.println("    public " + whereBuilderClass + " where() {");
+            out.println("        if (!collectedConditions.isEmpty()) {");
+            out.println("            collectedConditions.add(sql(\" AND \"));");
+            out.println("        }");
             out.println("        return new " + whereBuilderClass + "(this);");
             out.println("    }");
             out.println();
@@ -267,6 +293,9 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("     * <p>Example: {@code q.where(q.concat(q.author.name, \" \", q.author.email).eq(\"James Brown\")).and().author.isNotNull()}");
             out.println("     */");
             out.println("    public " + terminatorClass + " where(Supplier<SqlExpression> condition) {");
+            out.println("        if (!collectedConditions.isEmpty()) {");
+            out.println("            collectedConditions.add(sql(\" AND \"));");
+            out.println("        }");
             out.println("        " + whereBuilderClass + " whereBuilder = new " + whereBuilderClass + "(this);");
             out.println("        whereBuilder.builder.add(condition.get());");
             out.println("        return whereBuilder.getContinuation();");
@@ -1134,7 +1163,7 @@ public class QueryProcessor extends AbstractProcessor {
             generateNestedWhereFields(out, queryClassName, whereBuilderClass, terminatorClass, child, fieldsByAlias, aliases, indent + "    ");
         }
 
-        out.println(indent + "    List<SqlExpression> collectedConditions = new java.util.ArrayList<>();");
+        // Reference query's collectedConditions directly
         out.println(indent + "    ConditionBuilder builder = new WhereBuilderImpl();");
         out.println();
 
@@ -1142,40 +1171,28 @@ public class QueryProcessor extends AbstractProcessor {
         out.println(indent + "    }");
         out.println();
 
-        out.println(indent + "    public void accept(SqlExpression expr) {");
-        out.println(indent + "        collectedConditions.add(expr);");
-        out.println(indent + "    }");
-        out.println();
-
-        // Inner BuilderImpl class
+        // Inner BuilderImpl class - writes to query's collectedConditions
         out.println(indent + "    public class WhereBuilderImpl implements ConditionBuilder {");
         out.println(indent + "        public ConditionBuilder startClause() {");
-        out.println(indent + "            collectedConditions.add(sql(\" (\"));");
+        out.println(indent + "            " + queryClassName + ".this.collectedConditions.add(sql(\" (\"));");
         out.println(indent + "            return this;");
         out.println(indent + "        }");
         out.println();
         out.println(indent + "        public ConditionBuilder endClause() {");
-        out.println(indent + "            collectedConditions.add(sql(\") \"));");
+        out.println(indent + "            " + queryClassName + ".this.collectedConditions.add(sql(\") \"));");
         out.println(indent + "            return this;");
         out.println(indent + "        }");
         out.println();
         out.println(indent + "        @Override");
         out.println(indent + "        public ConditionBuilder add(SqlExpression expr) {");
-        out.println(indent + "            collectedConditions.add(expr);");
+        out.println(indent + "            " + queryClassName + ".this.collectedConditions.add(expr);");
         out.println(indent + "            return this;");
         out.println(indent + "        }");
         out.println(indent + "    }");
         out.println();
 
-        // ConditionTerminator inner class
+        // ConditionTerminator inner class - callback now handled by delegate's applyPendingConditions
         out.println(indent + "    public class " + terminatorClass + " extends " + queryClassName + "Delegate {");
-        out.println();
-        out.println(indent + "        @Override");
-        out.println(indent + "        protected void callback() {");
-        out.println(indent + "            SqlExpression whereExpr = SqlExpression.implode(\"\", collectedConditions);");
-        out.println(indent + "            collectedConditions.clear();");
-        out.println(indent + "            " + queryClassName + ".this.query.addWhere(whereExpr);");
-        out.println(indent + "        }");
         out.println();
         out.println(indent + "        public " + whereBuilderClass + " and() {");
         out.println(indent + "            builder.add(sql(\" AND \"));");

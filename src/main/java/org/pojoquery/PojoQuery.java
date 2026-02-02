@@ -77,9 +77,9 @@ import org.slf4j.LoggerFactory;
  * <h2>Static CRUD Methods</h2>
  * <p>For simple operations, use the static convenience methods:</p>
  * <ul>
- *   <li>{@link #insert(DataSource, Object)} - Insert a new entity</li>
- *   <li>{@link #update(DataSource, Object)} - Update an existing entity</li>
- *   <li>{@link #delete(DataSource, Object)} - Delete an entity</li>
+ *   <li>{@link #insert(Connection, Object)} - Insert a new entity</li>
+ *   <li>{@link #update(Connection, Object)} - Update an existing entity</li>
+ *   <li>{@link #delete(Connection, Object)} - Delete an entity</li>
  * </ul>
  * 
  * <p>For finding by ID, build a query and use the instance method:</p>
