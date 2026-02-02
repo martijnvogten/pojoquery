@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 import javax.sql.DataSource;
@@ -20,8 +21,8 @@ import org.pojoquery.annotations.NoUpdate;
 import org.pojoquery.annotations.Other;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
-import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
 import org.pojoquery.pipeline.CustomizableQueryBuilder;
+import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
@@ -446,64 +447,25 @@ public class PojoQuery<T> {
 		handler.flush();
 	}
 
-	public static <PK> PK insert(Connection conn, Class<?> type, Object o) {
-		return insert(DbContext.getDefault(), conn, null, type, o);
-	}
-
-	public static <PK> PK insert(DbContext context, Connection conn, Class<?> type, Object o) {
-		return insert(context, conn, null, type, o);
-	}
-
-	/**
-	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
-	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
-	 */
-	@Deprecated
-	public static <PK> PK insert(DataSource db, Class<?> type, Object o) {
-		return insert(DbContext.getDefault(), null, db, type, o);
-	}
-
-	/**
-	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
-	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
-	 */
-	@Deprecated
-	public static <PK> PK insert(DbContext context, DataSource db, Class<?> type, Object o) {
-		return insert(context, null, db, type, o);
-	}
-
-	/**
-	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
-	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
-	 */
-	@Deprecated
-	public static <PK> PK insert(DataSource db, Object o) {
-		Objects.requireNonNull(o, "entity must not be null");
-		return insert(DbContext.getDefault(), db, o.getClass(), o);
-	}
-
-	/**
-	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
-	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
-	 */
-	@Deprecated
-	public static <PK> PK insert(DbContext context, DataSource db, Object o) {
-		Objects.requireNonNull(o, "entity must not be null");
-		return insert(context, db, o.getClass(), o);
-	}
-
 	public static <PK> PK insert(Connection connection, Object o) {
-		Objects.requireNonNull(o, "entity must not be null");
-		return insert(DbContext.getDefault(), connection, o.getClass(), o);
+		return insertInternal(DbContext.getDefault(), connection, o.getClass(), o);
 	}
 
 	public static <PK> PK insert(DbContext context, Connection connection, Object o) {
 		Objects.requireNonNull(o, "entity must not be null");
-		return insert(context, connection, o.getClass(), o);
+		return insertInternal(context, connection, o.getClass(), o);
 	}
 
-	@SuppressWarnings("deprecation")
-	private static <PK> PK insert(DbContext context, Connection conn, DataSource db, Class<?> type, Object o) {
+	public static <PK> PK insertCascading(Connection connection, Object o) {
+		return insertCascading(DbContext.getDefault(), connection, o);
+	}
+
+	public static <PK> PK insertCascading(DbContext context, Connection connection, Object o) {
+		Objects.requireNonNull(o, "entity must not be null");
+		return CascadingUpdater.insert(context, connection, o);
+	}
+
+	static <PK> PK insertInternal(DbContext context, Connection conn, Class<?> type, Object o) {
 		// If the class hierarchy contains multiple tables, create separate
 		// inserts
 		List<TableMapping> tables = QueryBuilder.determineTableMapping(type);
@@ -513,11 +475,7 @@ public class PojoQuery<T> {
 
 		if (tables.size() == 1) {
 			PK ids;
-			if (conn != null) {
-				ids = DB.insert(context, conn, tables.get(0).tableName, extractValues(type, o));
-			} else {
-				ids = DB.insert(context, db, tables.get(0).tableName, extractValues(type, o));
-			}
+			ids = DB.insert(context, conn, tables.get(0).tableName, extractValues(type, o));
 			if (ids != null) {
 				applyGeneratedId(o, ids);
 			}
@@ -526,11 +484,7 @@ public class PojoQuery<T> {
 			TableMapping topType = tables.remove(0);
 			Map<String, Object> values = extractValues(topType.getReflectionClass(), o);
 			PK ids;
-			if (conn != null) {
-				ids = DB.insert(context, conn, topType.tableName, values);
-			} else {
-				ids = DB.insert(context, db, topType.tableName, values);
-			}
+			ids = DB.insert(context, conn, topType.tableName, values);
 			if (ids != null) {
 				applyGeneratedId(o, ids);
 			}
@@ -544,11 +498,7 @@ public class PojoQuery<T> {
 				TableMapping supertype = tables.remove(0);
 				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.getReflectionClass() : type, o, topType.getReflectionClass());
 				subvals.put(idField, ids);
-				if (conn != null) {
-					DB.insert(context, conn, supertype.tableName, subvals);
-				} else {
-					DB.insert(context, db, supertype.tableName, subvals);
-				}
+				DB.insert(context, conn, supertype.tableName, subvals);
 				topType = supertype;
 			}
 			return ids;
@@ -556,64 +506,25 @@ public class PojoQuery<T> {
 
 	}
 
-	/**
-	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
-	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
-	 */
-	@Deprecated
-	public static int update(DataSource db, Object object) {
-		Objects.requireNonNull(object, "entity must not be null");
-		return update(DbContext.getDefault(), null, db, object.getClass(), object);
-	}
-
-	/**
-	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
-	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
-	 */
-	@Deprecated
-	public static int update(DbContext context, DataSource db, Object object) {
-		Objects.requireNonNull(object, "entity must not be null");
-		return update(context, null, db, object.getClass(), object);
-	}
-
 	public static int update(Connection connection, Object object) {
-		Objects.requireNonNull(object, "entity must not be null");
-		return update(DbContext.getDefault(), connection, null, object.getClass(), object);
+		return update(DbContext.getDefault(), connection, object);
 	}
 
 	public static int update(DbContext context, Connection connection, Object object) {
 		Objects.requireNonNull(object, "entity must not be null");
-		return update(context, connection, null, object.getClass(), object);
+		return updateInternal(context, connection, object.getClass(), object);
 	}
 
-	/**
-	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
-	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
-	 */
-	@Deprecated
-	public static int update(DataSource db, Class<?> type, Object object) {
-		return update(DbContext.getDefault(), null, db, type, object);
+	public static int updateCascading(Connection connection, Object object) {
+		return CascadingUpdater.update(DbContext.getDefault(), connection, object);
 	}
 
-	/**
-	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
-	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
-	 */
-	@Deprecated
-	public static int update(DbContext context, DataSource db, Class<?> type, Object object) {
-		return update(context, null, db, type, object);
+	public static int updateCascading(DbContext context, Connection connection, Object object) {
+		Objects.requireNonNull(object, "entity must not be null");
+		return CascadingUpdater.update(context, connection, object);
 	}
 
-	public static int update(Connection connection, Class<?> type, Object object) {
-		return update(DbContext.getDefault(), connection, null, type, object);
-	}
-
-	public static int update(DbContext context, Connection connection, Class<?> type, Object object) {
-		return update(context, connection, null, type, object);
-	}
-
-	@SuppressWarnings("deprecation")
-	private static int update(DbContext context, Connection conn, DataSource db, Class<?> type, Object o) {
+	static int updateInternal(DbContext context, Connection conn, Class<?> type, Object o) {
 		// If the class hierarchy contains multiple tables, create separate
 		// inserts
 		List<TableMapping> tables = QueryBuilder.determineTableMapping(type);
@@ -635,12 +546,7 @@ public class PojoQuery<T> {
 				ids.put("version", currentVersion);
 			}
 
-			int affectedRows;
-			if (conn != null) {
-				affectedRows = DB.update(context, conn, tables.get(0).tableName, values, ids);
-			} else {
-				affectedRows = DB.update(context, db, tables.get(0).tableName, values, ids);
-			}
+			int affectedRows = DB.update(context, conn, tables.get(0).tableName, values, ids);
 			if (o instanceof HasVersion && affectedRows == 0) {
 				throw new StaleObjectException();
 			}
@@ -658,11 +564,7 @@ public class PojoQuery<T> {
 				topIds.put("version", currentVersion);
 			}
 
-			if (conn != null) {
-				affectedRows = DB.update(context, conn, topType.tableName, values, topIds);
-			} else {
-				affectedRows = DB.update(context, db, topType.tableName, values, topIds);
-			}
+			affectedRows = DB.update(context, conn, topType.tableName, values, topIds);
 			
 			if (affectedRows == 0) {
 				throw new StaleObjectException();
@@ -671,11 +573,7 @@ public class PojoQuery<T> {
 			while (tables.size() > 0) {
 				TableMapping supertype = tables.remove(0);
 				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.getReflectionClass() : type, o, topType.getReflectionClass());
-				if (conn != null) {
-					DB.update(context, conn, supertype.tableName, subvals, ids);
-				} else {
-					DB.update(context, db, supertype.tableName, subvals, ids);
-				}
+				DB.update(context, conn, supertype.tableName, subvals, ids);
 				topType = supertype;
 			}
 			return affectedRows;
@@ -803,7 +701,7 @@ public class PojoQuery<T> {
 	 * @param id the ID of the entity
 	 * @return the entity, or null if not found
 	 */
-	public T findById(Connection connection, Object id) {
+	public Optional<T> findById(Connection connection, Object id) {
 		query.getWheres().addAll(QueryBuilder.buildIdCondition(dbContext, resultClass, id));
 		return returnSingleRow(execute(connection));
 	}
@@ -815,42 +713,28 @@ public class PojoQuery<T> {
 	 * @param id the ID of the entity
 	 * @return the entity, or null if not found
 	 */
-	public T findById(DataSource db, Object id) {
+	public Optional<T> findById(DataSource db, Object id) {
 		query.getWheres().addAll(QueryBuilder.buildIdCondition(dbContext, resultClass, id));
 		return returnSingleRow(execute(db));
 	}
 
 	public static void delete(Connection conn, Object entity) {
 		Objects.requireNonNull(entity, "entity must not be null");
-		delete(DbContext.getDefault(), conn, null, entity);
+		delete(DbContext.getDefault(), conn, entity);
+	}
+	
+	public static void deleteCascading(Connection conn, Object entity) {
+		Objects.requireNonNull(entity, "entity must not be null");
+		deleteCascading(DbContext.getDefault(), conn, entity);
+	}
+	
+	public static void deleteCascading(DbContext context, Connection conn, Object entity) {
+		Objects.requireNonNull(entity, "entity must not be null");
+		CascadingUpdater.delete(context, conn, entity);
 	}
 	
 	public static void delete(DbContext context, Connection conn, Object entity) {
 		Objects.requireNonNull(entity, "entity must not be null");
-		delete(context, conn, null, entity);
-	}
-	
-	/**
-	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
-	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
-	 */
-	@Deprecated
-	public static void delete(DataSource db, Object entity) {
-		Objects.requireNonNull(entity, "entity must not be null");
-		delete(DbContext.getDefault(), db, entity);
-	}
-	
-	/**
-	 * @deprecated Use {@link DB#runInTransaction(DataSource, DB.Transaction)} with the Connection-based overload instead.
-	 *             DataSource methods auto-commit each operation, which can lead to inconsistent data.
-	 */
-	@Deprecated
-	public static void delete(DbContext context, DataSource db, Object entity) {
-		Objects.requireNonNull(entity, "entity must not be null");
-		delete(context, null, db, entity);
-	}
-	
-	private static void delete(DbContext context, Connection conn, DataSource db, Object entity) {
 		try {
 			List<TableMapping> mapping = QueryBuilder.determineTableMapping(entity.getClass());
 			List<Field> idFields = QueryBuilder.determineIdFields(entity.getClass());
@@ -866,43 +750,34 @@ public class PojoQuery<T> {
 					}
 					whereCondition.add(new SqlExpression(context.quoteObjectNames(table.tableName, field.getName()) + "=?", Arrays.asList(idvalue)));
 				}
-				if (db != null) {
-					executeDelete(context, null, db, table.tableName, whereCondition);
-				} else {
-					executeDelete(context, conn, null, table.tableName, whereCondition);
-				}
+				executeDelete(context, conn, table.tableName, whereCondition);
 			}
 		} catch (IllegalArgumentException | IllegalAccessException e) {
 			throw new MappingException(e);
 		}
 	}
 	
-	public static void deleteById(DbContext context, DataSource db, Class<?> clz, Object id) {
+	public static void deleteById(DbContext context, Class<?> clz, Object id) {
 		for (TableMapping table : QueryBuilder.determineTableMapping(clz)) {
 			List<SqlExpression> wheres = QueryBuilder.buildIdCondition(context, table.getReflectionClass(), id);
-			executeDelete(context, null, db, table.tableName, wheres);
+			executeDelete(context, null, table.tableName, wheres);
 		}
 	}
 
-	@SuppressWarnings("deprecation")
-	private static void executeDelete(DbContext context, Connection conn, DataSource db, String tableName, List<SqlExpression> where) {
+	private static void executeDelete(DbContext context, Connection conn, String tableName, List<SqlExpression> where) {
 		SqlExpression wheres = SqlExpression.implode(" AND ", where);
 		SqlExpression deleteStatement = new SqlExpression("DELETE FROM " + context.quoteObjectNames(tableName) + " WHERE " + wheres.getSql(), wheres.getParameters());
-		if (db != null) {
-			DB.update(db, deleteStatement);
-		} else {
-			DB.update(conn, deleteStatement);
-		}
+		DB.update(conn, deleteStatement);
 	}
 
-	private T returnSingleRow(List<T> resultList) {
+	private Optional<T> returnSingleRow(List<T> resultList) {
 		if (resultList.size() == 1) {
-			return resultList.get(0);
+			return Optional.of(resultList.get(0));
 		}
 		if (resultList.size() > 1) {
 			throw new RuntimeException("More than one result found in findById on class " + resultClass.getName());
 		}
-		return null;
+		return Optional.empty();
 	}
 	
 	/**
@@ -918,15 +793,15 @@ public class PojoQuery<T> {
 	/**
 	 * Lists the IDs of the entities in the query result.
 	 *
-	 * @param db the DataSource
+	 * @param conn the database connection
 	 * @param <PK> the type of the primary key
 	 * @return the list of IDs
 	 */
 	@SuppressWarnings("unchecked")
-	public <PK> List<PK> listIds(DataSource db) {
+	public <PK> List<PK> listIds(Connection conn) {
 		List<Field> idFields = QueryBuilder.determineIdFields(resultClass);
 		SqlExpression stmt = queryBuilder.buildListIdsStatementFromFields(idFields);
-		List<Map<String, Object>> rows = DB.queryRows(db, stmt);
+		List<Map<String, Object>> rows = DB.queryRows(conn, stmt);
 		if (idFields.size() > 1) {
 			return (List<PK>) rows;
 		}
@@ -940,12 +815,12 @@ public class PojoQuery<T> {
 	/**
 	 * Counts the total number of rows in the query result.
 	 *
-	 * @param db the DataSource
+	 * @param conn the database connection
 	 * @return the total count
 	 */
-	public int countTotal(DataSource db) {
+	public int countTotal(Connection conn) {
 		SqlExpression stmt = queryBuilder.buildCountStatement();
-		List<Map<String, Object>> rows = DB.queryRows(db, stmt);
+		List<Map<String, Object>> rows = DB.queryRows(conn, stmt);
 		return ((Long) rows.get(0).values().iterator().next()).intValue();
 	}
 }

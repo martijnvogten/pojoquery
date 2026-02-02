@@ -65,7 +65,7 @@ public class FieldAliasesInWhereIT {
 			PojoQuery.insert(c, room);
 			Assertions.assertEquals((Long)1L, room.id);
 			
-			Room loaded = PojoQuery.build(Room.class).findById(c, room.id);
+			Room loaded = PojoQuery.build(Room.class).findById(c, room.id).orElseThrow();
 			Assertions.assertNotNull(loaded.house);
 			
 			{

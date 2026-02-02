@@ -57,7 +57,7 @@ public class InheritanceExample {
 			// end::query[]
 			
 			// tag::find-by-id[]
-			BedRoom foundBr = PojoQuery.build(BedRoom.class).findById(c, 1L);
+			BedRoom foundBr = PojoQuery.build(BedRoom.class).findById(c, 1L).orElseThrow();
 			System.out.println("Bedroom with " + foundBr.numberOfBeds + " beds.");
 			// end::find-by-id[]
 			

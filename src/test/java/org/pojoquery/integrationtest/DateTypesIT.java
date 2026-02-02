@@ -89,7 +89,7 @@ public class DateTypesIT {
 			Assertions.assertNotNull(event.id);
 			
 			// Query back and verify
-			EventWithDates loaded = PojoQuery.build(EventWithDates.class).findById(c, event.id);
+			EventWithDates loaded = PojoQuery.build(EventWithDates.class).findById(c, event.id).orElseThrow();
 			
 			Assertions.assertNotNull(loaded);
 			Assertions.assertEquals("Test Event", loaded.name);
@@ -126,7 +126,7 @@ public class DateTypesIT {
 			
 			PojoQuery.insert(c, event);
 			
-			EventWithDates loaded = PojoQuery.build(EventWithDates.class).findById(c, event.id);
+			EventWithDates loaded = PojoQuery.build(EventWithDates.class).findById(c, event.id).orElseThrow();
 			Assertions.assertEquals(testInstant, loaded.instant);
 		});
 	}
@@ -144,7 +144,7 @@ public class DateTypesIT {
 			
 			PojoQuery.insert(c, event);
 			
-			EventWithDates loaded = PojoQuery.build(EventWithDates.class).findById(c, event.id);
+			EventWithDates loaded = PojoQuery.build(EventWithDates.class).findById(c, event.id).orElseThrow();
 			Assertions.assertEquals(testDateTime, loaded.localDateTime);
 		});
 	}
@@ -162,7 +162,7 @@ public class DateTypesIT {
 			
 			PojoQuery.insert(c, event);
 			
-			EventWithDates loaded = PojoQuery.build(EventWithDates.class).findById(c, event.id);
+			EventWithDates loaded = PojoQuery.build(EventWithDates.class).findById(c, event.id).orElseThrow();
 			Assertions.assertEquals(testDate, loaded.localDate);
 		});
 	}
@@ -180,7 +180,7 @@ public class DateTypesIT {
 			
 			PojoQuery.insert(c, event);
 			
-			EventWithDates loaded = PojoQuery.build(EventWithDates.class).findById(c, event.id);
+			EventWithDates loaded = PojoQuery.build(EventWithDates.class).findById(c, event.id).orElseThrow();
 			Assertions.assertEquals(testTime, loaded.localTime);
 		});
 	}
@@ -196,7 +196,7 @@ public class DateTypesIT {
 			
 			PojoQuery.insert(c, event);
 			
-			EventWithDates loaded = PojoQuery.build(EventWithDates.class).findById(c, event.id);
+			EventWithDates loaded = PojoQuery.build(EventWithDates.class).findById(c, event.id).orElseThrow();
 			
 			Assertions.assertEquals("Event with nulls", loaded.name);
 			Assertions.assertNull(loaded.legacyDate);

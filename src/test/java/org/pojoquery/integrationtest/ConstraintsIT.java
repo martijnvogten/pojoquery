@@ -114,7 +114,7 @@ public class ConstraintsIT {
             Assertions.assertNotNull(account.id, "Account should be inserted with generated ID");
             
             // Verify it was saved correctly
-            Account loaded = PojoQuery.build(Account.class).findById(c, account.id);
+            Account loaded = PojoQuery.build(Account.class).findById(c, account.id).orElseThrow();
             Assertions.assertEquals("johndoe", loaded.username);
             Assertions.assertEquals("john@example.com", loaded.email);
             Assertions.assertNull(loaded.bio);
@@ -217,7 +217,7 @@ public class ConstraintsIT {
             Assertions.assertNotNull(product.id);
             
             // Verify it was saved with correct FK
-            Product loaded = PojoQuery.build(Product.class).findById(c, product.id);
+            Product loaded = PojoQuery.build(Product.class).findById(c, product.id).orElseThrow();
             Assertions.assertEquals("Laptop", loaded.name);
             Assertions.assertNotNull(loaded.category);
             Assertions.assertEquals(category.id, loaded.category.id);
@@ -239,7 +239,7 @@ public class ConstraintsIT {
             Assertions.assertNotNull(product.id);
             
             // Verify it was saved
-            Product loaded = PojoQuery.build(Product.class).findById(c, product.id);
+            Product loaded = PojoQuery.build(Product.class).findById(c, product.id).orElseThrow();
             Assertions.assertEquals("Uncategorized Product", loaded.name);
         });
     }
@@ -289,7 +289,7 @@ public class ConstraintsIT {
             Assertions.assertNotNull(item.id);
             
             // Verify it was saved
-            OrderItem loaded = PojoQuery.build(OrderItem.class).findById(c, item.id);
+            OrderItem loaded = PojoQuery.build(OrderItem.class).findById(c, item.id).orElseThrow();
             Assertions.assertEquals(2, loaded.quantity);
             Assertions.assertNotNull(loaded.product);
         });
@@ -313,7 +313,7 @@ public class ConstraintsIT {
             
             PojoQuery.insert(c, product);
             
-            Product loaded = PojoQuery.build(Product.class).findById(c, product.id);
+            Product loaded = PojoQuery.build(Product.class).findById(c, product.id).orElseThrow();
             // Compare with scale consideration
             Assertions.assertEquals(0, new BigDecimal("12345678.99").compareTo(loaded.price));
         });

@@ -2,10 +2,12 @@ package org.pojoquery;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.pojoquery.TestUtils.norm;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import javax.sql.DataSource;
 
@@ -121,7 +123,7 @@ public class TestDbContext {
 			
 			// Verify the update via query
 			Product loaded = PojoQuery.build(hsqldbContext, Product.class)
-					.findById(c, p.id);
+					.findById(c, p.id).orElseThrow();
 			assertEquals("Updated Name", loaded.name);
 			assertEquals(Integer.valueOf(75), loaded.price);
 		});
@@ -144,9 +146,9 @@ public class TestDbContext {
 			PojoQuery.delete(hsqldbContext, c, p);
 			
 			// Verify deletion
-			Product loaded = PojoQuery.build(hsqldbContext, Product.class)
+			Optional<Product> loaded = PojoQuery.build(hsqldbContext, Product.class)
 					.findById(c, p.id);
-			assertEquals(null, loaded, "Should return null for deleted entity");
+			assertTrue(loaded.isEmpty(), "Should return empty for deleted entity");
 		});
 	}
 	

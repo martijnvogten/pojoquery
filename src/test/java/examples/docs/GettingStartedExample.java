@@ -2,6 +2,7 @@ package examples.docs;
 
 import java.sql.Connection;
 import java.util.List;
+import java.util.Optional;
 
 import javax.sql.DataSource;
 
@@ -128,7 +129,7 @@ public class GettingStartedExample {
             // tag::query-findbyid[]
             // Find by ID
             Employee found = PojoQuery.build(Employee.class)
-                .findById(c, alice.id);
+                .findById(c, alice.id).orElseThrow();
             
             System.out.println("\nFound by ID: " + found.getFullName());
             // end::query-findbyid[]
@@ -153,7 +154,7 @@ public class GettingStartedExample {
             // tag::query-with-collection[]
             // Query department with all its employees using the subclass
             DepartmentWithEmployees dept = PojoQuery.build(DepartmentWithEmployees.class)
-                .findById(c, engineering.id);
+                .findById(c, engineering.id).orElseThrow();
             
             System.out.println("\nDepartment: " + dept.name + " (" + dept.location + ")");
             System.out.println("Employees:");

@@ -201,7 +201,7 @@ public class MultiDialectIT {
             assertNotNull(user.id, "User should have an ID after insert");
             assertTrue(user.id > 0, "User ID should be positive");
             
-            User loaded = PojoQuery.build(User.class).findById(c, user.id);
+            User loaded = PojoQuery.build(User.class).findById(c, user.id).orElseThrow();
             assertNotNull(loaded, "User should be found");
             assertEquals("alice", loaded.username);
             assertEquals("alice@example.com", loaded.email);
@@ -221,7 +221,7 @@ public class MultiDialectIT {
             user.active = false;
             PojoQuery.update(c, user);
             
-            User loaded = PojoQuery.build(User.class).findById(c, user.id);
+            User loaded = PojoQuery.build(User.class).findById(c, user.id).orElseThrow();
             assertEquals("bob.updated@example.com", loaded.email);
             assertEquals(Boolean.FALSE, loaded.active);
         });
@@ -238,7 +238,7 @@ public class MultiDialectIT {
             
             PojoQuery.delete(c, user);
             
-            User loaded = PojoQuery.build(User.class).findById(c, id);
+            User loaded = PojoQuery.build(User.class).findById(c, id).orElseThrow();
             assertNull(loaded, "User should be deleted");
         });
     }
@@ -293,7 +293,7 @@ public class MultiDialectIT {
             
             assertNotNull(article.id, "Article should have an ID");
             
-            Article loaded = PojoQuery.build(Article.class).findById(c, article.id);
+            Article loaded = PojoQuery.build(Article.class).findById(c, article.id).orElseThrow();
             assertNotNull(loaded, "Article should be found");
             assertEquals("Test Article", loaded.title);
             assertEquals(largeContent, loaded.content);
@@ -313,7 +313,7 @@ public class MultiDialectIT {
             article.title = "Updated Title";
             PojoQuery.update(c, article);
             
-            Article loaded = PojoQuery.build(Article.class).findById(c, article.id);
+            Article loaded = PojoQuery.build(Article.class).findById(c, article.id).orElseThrow();
             assertEquals("Updated Title", loaded.title);
             assertEquals(updatedContent, loaded.content);
         });
@@ -329,7 +329,7 @@ public class MultiDialectIT {
             // email and active are null
             PojoQuery.insert(c, user);
             
-            User loaded = PojoQuery.build(User.class).findById(c, user.id);
+            User loaded = PojoQuery.build(User.class).findById(c, user.id).orElseThrow();
             assertEquals("nulltest", loaded.username);
             assertNull(loaded.email, "Email should be null");
             assertNull(loaded.active, "Active should be null");

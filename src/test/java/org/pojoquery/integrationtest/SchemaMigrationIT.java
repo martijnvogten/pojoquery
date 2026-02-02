@@ -113,7 +113,7 @@ public class SchemaMigrationIT {
             assertNotNull(product1.id, "ID should be auto-generated");
             
             // Verify we can query the data
-            ProductV1 loaded = PojoQuery.build(ProductV1.class).findById(c, product1.id);
+            ProductV1 loaded = PojoQuery.build(ProductV1.class).findById(c, product1.id).orElseThrow();
             assertEquals("Widget", loaded.name);
         });
         
@@ -146,19 +146,19 @@ public class SchemaMigrationIT {
             PojoQuery.insert(c, product2);
             
             // Query using V2 entity
-            ProductV2 loaded = PojoQuery.build(ProductV2.class).findById(c, product2.id);
+            ProductV2 loaded = PojoQuery.build(ProductV2.class).findById(c, product2.id).orElseThrow();
             assertEquals("Gadget", loaded.name);
             assertEquals("A useful gadget", loaded.description);
             assertEquals(29.99, loaded.price, 0.001);
             
             // Update the original product with new fields
-            ProductV2 original = PojoQuery.build(ProductV2.class).findById(c, 1L);
+            ProductV2 original = PojoQuery.build(ProductV2.class).findById(c, 1L).orElseThrow();
             original.description = "The original widget";
             original.price = 19.99;
             PojoQuery.update(c, original);
             
             // Verify update
-            ProductV2 updated = PojoQuery.build(ProductV2.class).findById(c, 1L);
+            ProductV2 updated = PojoQuery.build(ProductV2.class).findById(c, 1L).orElseThrow();
             assertEquals("Widget", updated.name);
             assertEquals("The original widget", updated.description);
             assertEquals(19.99, updated.price, 0.001);
@@ -198,7 +198,7 @@ public class SchemaMigrationIT {
             assertEquals(3, allProducts.size());
             
             // Find the new product
-            ProductV3 superWidget = PojoQuery.build(ProductV3.class).findById(c, product3.id);
+            ProductV3 superWidget = PojoQuery.build(ProductV3.class).findById(c, product3.id).orElseThrow();
             assertEquals("Super Widget", superWidget.name);
             assertEquals("The best widget ever", superWidget.description);
             assertEquals(99.99, superWidget.price, 0.001);
@@ -251,7 +251,7 @@ public class SchemaMigrationIT {
             assertEquals(3, allItems.size());
             
             // Verify order item data
-            OrderItem loadedItem1 = PojoQuery.build(OrderItem.class).findById(c, item1.id);
+            OrderItem loadedItem1 = PojoQuery.build(OrderItem.class).findById(c, item1.id).orElseThrow();
             assertEquals(Long.valueOf(1L), loadedItem1.productId);
             assertEquals(Integer.valueOf(5), loadedItem1.quantity);
             assertEquals(19.99, loadedItem1.unitPrice, 0.001);
@@ -323,20 +323,20 @@ public class SchemaMigrationIT {
         
         // Verify both entities work with new fields
         DB.withConnection(db, (Connection c) -> {
-            CategoryV2 cat = PojoQuery.build(CategoryV2.class).findById(c, 1L);
+            CategoryV2 cat = PojoQuery.build(CategoryV2.class).findById(c, 1L).orElseThrow();
             cat.displayOrder = 1;
             PojoQuery.update(c, cat);
             
-            ItemV2 item = PojoQuery.build(ItemV2.class).findById(c, 1L);
+            ItemV2 item = PojoQuery.build(ItemV2.class).findById(c, 1L).orElseThrow();
             item.author = "Some Author";
             item.pageCount = 500;
             PojoQuery.update(c, item);
             
             // Verify
-            CategoryV2 loadedCat = PojoQuery.build(CategoryV2.class).findById(c, 1L);
+            CategoryV2 loadedCat = PojoQuery.build(CategoryV2.class).findById(c, 1L).orElseThrow();
             assertEquals(Integer.valueOf(1), loadedCat.displayOrder);
             
-            ItemV2 loadedItem = PojoQuery.build(ItemV2.class).findById(c, 1L);
+            ItemV2 loadedItem = PojoQuery.build(ItemV2.class).findById(c, 1L).orElseThrow();
             assertEquals("Some Author", loadedItem.author);
             assertEquals(Integer.valueOf(500), loadedItem.pageCount);
         });

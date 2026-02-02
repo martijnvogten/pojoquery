@@ -47,7 +47,7 @@ public class OtherIT {
 			
 			PojoQuery<Room> build = PojoQuery.build(Room.class);
 			build.addField(SqlExpression.sql("{room}.area"), "room.area");
-			Room loaded = build.findById(c, u.id);
+			Room loaded = build.findById(c, u.id).orElseThrow();
 			Assertions.assertNotNull(loaded.specs);
 			Assertions.assertEquals(25, loaded.specs.get("area"));
 		});
@@ -68,7 +68,7 @@ public class OtherIT {
 			
 			PojoQuery<BedRoom> build = PojoQuery.build(BedRoom.class);
 			build.addField(SqlExpression.sql("{room}.area"), "bedroom.area");
-			Room loaded = build.findById(c, bedroom.id);
+			Room loaded = build.findById(c, bedroom.id).orElseThrow();
 			Assertions.assertNotNull(loaded.specs);
 			Assertions.assertEquals(25, loaded.specs.get("area"));
 		});

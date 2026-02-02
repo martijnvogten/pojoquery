@@ -267,11 +267,11 @@ public class SingleTableInheritanceIT {
 			));
 			
 			// findById should return the correct subclass type
-			Vehicle foundCar = PojoQuery.build(Vehicle.class).findById(c, carId);
+			Vehicle foundCar = PojoQuery.build(Vehicle.class).findById(c, carId).orElseThrow();
 			assertTrue(foundCar instanceof Car, "findById should return Car instance");
 			assertEquals("Audi", foundCar.brand);
 			
-			Vehicle foundMoto = PojoQuery.build(Vehicle.class).findById(c, motoId);
+			Vehicle foundMoto = PojoQuery.build(Vehicle.class).findById(c, motoId).orElseThrow();
 			assertTrue(foundMoto instanceof Motorcycle, "findById should return Motorcycle instance");
 			assertEquals("Ducati", foundMoto.brand);
 		});

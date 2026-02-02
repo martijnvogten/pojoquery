@@ -33,7 +33,7 @@ public class LocalDateIT {
 			PojoQuery.insert(c, u);
 			Assertions.assertEquals((Long)1L, u.id);
 			
-			User loaded = PojoQuery.build(User.class).findById(c, u.id);
+			User loaded = PojoQuery.build(User.class).findById(c, u.id).orElseThrow();
 			Assertions.assertEquals(LocalDate.of(2015, 4, 15), loaded.dateOfBirth);
 		});
 	}
