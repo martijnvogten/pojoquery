@@ -1,5 +1,5 @@
 name: pojoquery
-version: v4.1.0-BETA
+version: v4.2.0-BETA
 title: PojoQuery Docs
 description: 'Docs for PojoQuery - A lightweight Java library for working with relational databases using POJOs'
 start_page: index.adoc
