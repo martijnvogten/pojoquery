@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -70,7 +69,6 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		}
 	}
 
-	private LinkedHashMap<String,Alias> subClasses = new LinkedHashMap<>();
 	private LinkedHashMap<String,Alias> aliases = new LinkedHashMap<>();
 	private Map<String, List<String>> keysByAlias = new HashMap<String, List<String>>();
 	private Map<String,FieldMapping> fieldMappings = new LinkedHashMap<>();
@@ -255,7 +253,6 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 					Alias subClassAlias = new Alias(linkAlias, mapping.type, alias, thisIdField, determineIdFields(mapping.type));
 					subClassAlias.setIsASubClass(true);
 					aliases.put(linkAlias, subClassAlias);
-					subClasses.put(linkAlias, subClassAlias);
 
 					// Also add the idfield of the linked alias, so we have at least one
 					addField(new SqlExpression("{" + linkAlias + "." + idField + "}"), linkAlias + "." + idField, thisIdField);
@@ -763,11 +760,6 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		}
 	}
 
-	public List<T> processRowsStreaming(Callable<Map<String,Object>> rowProvider) {
-
-		return new ArrayList<>();
-	}
-
 	public List<T> processRows(List<Map<String, Object>> rows) {
 		try {
 			List<T> result = new ArrayList<T>(rows.size());
@@ -965,8 +957,6 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 				if (values == null || allNulls(values)) {
 					continue;
 				}
-				a.getParentAlias();
-			} else {
 			}
 			result.put(alias, values);
 		}
@@ -1272,14 +1262,9 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	 * Determines ID fields for a class. Returns reflection Field objects for backward compatibility.
 	 */
 	public static List<Field> determineIdFields(Class<?> clz) {
-		List<FieldModel> idFields = determineIdFields(new ReflectionTypeModel(clz));
-		List<Field> result = new ArrayList<>();
-		for (FieldModel f : idFields) {
-			if (f instanceof ReflectionFieldModel) {
-				result.add(((ReflectionFieldModel) f).getReflectionField());
-			}
-		}
-		return result;
+		return determineIdFields(new ReflectionTypeModel(clz)).stream()
+			.map(f -> ((ReflectionFieldModel) f).getReflectionField())
+			.toList();
 	}
 
 	/**
