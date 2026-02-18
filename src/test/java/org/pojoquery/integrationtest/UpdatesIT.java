@@ -104,13 +104,7 @@ public class UpdatesIT {
 
 			// Now query
 			UserDetail read = PojoQuery.build(UserDetail.class).findById(c, 1L).orElseThrow();
-			Assertions.assertEquals(0, read.roles.size()); // Correct, pojoquery does not update collections
-			
-			// Now insert the role
-			DB.insert(c, "user_roles", Map.of("user_id", u.id, "role", Role.EDITOR));
-			
-			UserDetail read1 = PojoQuery.build(UserDetail.class).findById(c, 1L).orElseThrow();
-			Assertions.assertEquals(1, read1.roles.size());
+			Assertions.assertEquals(1, read.roles.size());
 			
 			u.username = "john";
 			PojoQuery.update(c, u);

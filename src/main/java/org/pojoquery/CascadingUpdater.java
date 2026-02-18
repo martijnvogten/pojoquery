@@ -10,7 +10,6 @@ import java.util.Objects;
 import java.util.Set;
 
 import org.pojoquery.annotations.Cascade;
-import org.pojoquery.annotations.CascadeType;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.pipeline.CustomizableQueryBuilder;
@@ -43,7 +42,7 @@ import org.pojoquery.pipeline.QueryBuilder;
  *     @Id Long id;
  *     String orderNumber;
  *     
- *     @Cascade(CascadeType.ALL)
+ *     @Cascade
  *     List<LineItem> lineItems;
  * }
  * 
@@ -63,13 +62,26 @@ import org.pojoquery.pipeline.QueryBuilder;
  * This can be customized using the {@link Link} annotation.</p>
  * 
  * @see Cascade
- * @see CascadeType
  * @see PojoQuery#update(Connection, Object)
  */
 final class CascadingUpdater {
     
     private CascadingUpdater() {
         // Utility class, no instantiation
+    }
+    
+    /**
+     * Updates an entity and cascades operations to related collections.
+     * 
+     * <p>Uses the default {@link DbContext}.</p>
+     * 
+     * @param connection the database connection
+     * @param entity the entity to update
+     * @return the number of rows affected for the main entity
+     * @throws MappingException if there's a mapping error
+     */
+    static int update(Connection connection, Object entity) {
+        return update(DbContext.getDefault(), connection, entity);
     }
     
     /**
@@ -90,7 +102,7 @@ final class CascadingUpdater {
         int affectedRows = PojoQuery.updateInternal(context, connection, entity.getClass(), entity);
         
         // Then process cascaded collections
-        processCascadedCollections(context, connection, entity, CascadeOperation.MERGE);
+        processCascadedCollections(context, connection, entity, CascadeOperation.UPDATE);
         
         return affectedRows;
     }
@@ -157,7 +169,7 @@ final class CascadingUpdater {
     }
     
     private enum CascadeOperation {
-        PERSIST, MERGE, REMOVE
+        PERSIST, UPDATE, REMOVE
     }
     
     private static void processCascadedCollections(DbContext context, Connection connection, 
@@ -171,51 +183,151 @@ final class CascadingUpdater {
         }
         
         for (Field field : QueryBuilder.collectFieldsOfClass(entityClass)) {
+            // Handle @Cascade annotated fields (one-to-many owned relationships)
             Cascade cascadeAnn = field.getAnnotation(Cascade.class);
-            if (cascadeAnn == null) {
+            if (cascadeAnn != null) {
+                processCascadeField(context, connection, entity, entityClass, parentId, field, operation);
                 continue;
             }
             
-            Set<CascadeType> cascadeTypes = new HashSet<>(Arrays.asList(cascadeAnn.value()));
-            boolean shouldCascade = cascadeTypes.contains(CascadeType.ALL) || 
-                    (operation == CascadeOperation.PERSIST && cascadeTypes.contains(CascadeType.PERSIST)) ||
-                    (operation == CascadeOperation.MERGE && cascadeTypes.contains(CascadeType.MERGE)) ||
-                    (operation == CascadeOperation.REMOVE && cascadeTypes.contains(CascadeType.REMOVE));
-            
-            if (!shouldCascade) {
-                continue;
-            }
-            
-            if (!Collection.class.isAssignableFrom(field.getType())) {
-                // For now, only support collections. Single entity references could be added later.
-                continue;
-            }
-            
-            Class<?> componentType = getCollectionComponentType(field);
-            if (componentType == null || !CustomizableQueryBuilder.isLinkedClass(componentType)) {
-                continue;
-            }
-            
-            field.setAccessible(true);
-            Collection<?> collection;
-            try {
-                collection = (Collection<?>) field.get(entity);
-            } catch (IllegalAccessException e) {
-                throw new MappingException("Cannot access field " + field.getName(), e);
-            }
-            
-            switch (operation) {
-                case PERSIST:
-                    cascadeInsert(context, connection, collection, entity, entityClass, componentType, field);
-                    break;
-                case MERGE:
-                    cascadeMerge(context, connection, collection, entity, entityClass, componentType, field);
-                    break;
-                case REMOVE:
-                    cascadeDelete(context, connection, parentId, entityClass, componentType, field);
-                    break;
+            // Handle @Link annotated fields with linktable (many-to-many relationships)
+            Link linkAnn = field.getAnnotation(Link.class);
+            if (linkAnn != null && !Link.NONE.equals(linkAnn.linktable())) {
+                processLinkTableField(context, connection, entity, entityClass, parentId, field, linkAnn, operation);
             }
         }
+    }
+    
+    private static void processCascadeField(DbContext context, Connection connection,
+            Object entity, Class<?> entityClass, Object parentId, Field field, CascadeOperation operation) {
+        
+        if (!Collection.class.isAssignableFrom(field.getType())) {
+            // For now, only support collections. Single entity references could be added later.
+            return;
+        }
+        
+        Class<?> componentType = getCollectionComponentType(field);
+        if (componentType == null || !CustomizableQueryBuilder.isLinkedClass(componentType)) {
+            return;
+        }
+        
+        field.setAccessible(true);
+        Collection<?> collection;
+        try {
+            collection = (Collection<?>) field.get(entity);
+        } catch (IllegalAccessException e) {
+            throw new MappingException("Cannot access field " + field.getName(), e);
+        }
+        
+        switch (operation) {
+            case PERSIST:
+                cascadeInsert(context, connection, collection, entity, entityClass, componentType, field);
+                break;
+            case UPDATE:
+                cascadeUpdate(context, connection, collection, entity, entityClass, componentType, field);
+                break;
+            case REMOVE:
+                cascadeDelete(context, connection, parentId, entityClass, componentType, field);
+                break;
+        }
+    }
+    
+    private static void processLinkTableField(DbContext context, Connection connection,
+            Object entity, Class<?> entityClass, Object parentId, Field field, Link linkAnn, CascadeOperation operation) {
+        
+        if (!Collection.class.isAssignableFrom(field.getType())) {
+            return;
+        }
+        
+        Class<?> componentType = getCollectionComponentType(field);
+        if (componentType == null) {
+            return;
+        }
+        
+        field.setAccessible(true);
+        Collection<?> collection;
+        try {
+            collection = (Collection<?>) field.get(entity);
+        } catch (IllegalAccessException e) {
+            throw new MappingException("Cannot access field " + field.getName(), e);
+        }
+        
+        String linkTable = linkAnn.linktable();
+        String linkSchema = linkAnn.linkschema();
+        
+        // Determine link field names using shared utility methods
+        String parentLinkField = CustomizableQueryBuilder.determineLinkTableOwnerColumn(entityClass, linkAnn);
+        
+        // Check if this is a value collection (using fetchColumn) or entity collection
+        boolean isValueCollection = !Link.NONE.equals(linkAnn.fetchColumn());
+        String foreignLinkField = CustomizableQueryBuilder.determineLinkTableForeignColumn(
+                isValueCollection ? null : componentType, linkAnn);
+        
+        switch (operation) {
+            case PERSIST:
+            case UPDATE:
+                syncLinkTable(context, connection, linkSchema, linkTable, parentLinkField, foreignLinkField, 
+                        parentId, collection, componentType, isValueCollection);
+                break;
+            case REMOVE:
+                deleteLinkTableRows(context, connection, linkSchema, linkTable, parentLinkField, parentId);
+                break;
+        }
+    }
+    
+    private static void syncLinkTable(DbContext context, Connection connection,
+            String linkSchema, String linkTable, String parentLinkField, String foreignLinkField,
+            Object parentId, Collection<?> collection, Class<?> componentType, boolean isValueCollection) {
+        
+        // Delete existing rows for this parent
+        deleteLinkTableRows(context, connection, linkSchema, linkTable, parentLinkField, parentId);
+        
+        // Insert new rows
+        if (collection != null) {
+            for (Object item : collection) {
+                if (item == null) continue;
+                
+                Object foreignValue;
+                if (isValueCollection) {
+                    // For value collections (enums, strings, etc.), use the item value directly
+                    foreignValue = item instanceof Enum ? ((Enum<?>) item).name() : item;
+                } else {
+                    // For entity collections, get the entity ID
+                    foreignValue = getEntityId(item);
+                    if (foreignValue == null) {
+                        throw new MappingException("Cannot link to entity without ID: " + componentType.getName());
+                    }
+                }
+                
+                insertLinkTableRow(context, connection, linkSchema, linkTable, 
+                        parentLinkField, foreignLinkField, parentId, foreignValue);
+            }
+        }
+    }
+    
+    private static void deleteLinkTableRows(DbContext context, Connection connection,
+            String linkSchema, String linkTable, String parentLinkField, Object parentId) {
+        
+        String fullTableName = linkSchema != null && !linkSchema.isEmpty()
+                ? context.quoteObjectNames(linkSchema) + "." + context.quoteObjectNames(linkTable)
+                : context.quoteObjectNames(linkTable);
+        
+        String sql = "DELETE FROM " + fullTableName + " WHERE " + context.quoteObjectNames(parentLinkField) + " = ?";
+        DB.update(connection, new SqlExpression(sql, Arrays.asList(parentId)));
+    }
+    
+    private static void insertLinkTableRow(DbContext context, Connection connection,
+            String linkSchema, String linkTable, String parentLinkField, String foreignLinkField,
+            Object parentId, Object foreignId) {
+        
+        String fullTableName = linkSchema != null && !linkSchema.isEmpty()
+                ? context.quoteObjectNames(linkSchema) + "." + context.quoteObjectNames(linkTable)
+                : context.quoteObjectNames(linkTable);
+        
+        String sql = "INSERT INTO " + fullTableName + " (" 
+                + context.quoteObjectNames(parentLinkField) + ", " 
+                + context.quoteObjectNames(foreignLinkField) + ") VALUES (?, ?)";
+        DB.update(connection, new SqlExpression(sql, Arrays.asList(parentId, foreignId)));
     }
     
     private static void cascadeInsert(DbContext context, Connection connection, 
@@ -237,7 +349,7 @@ final class CascadingUpdater {
         }
     }
     
-    private static void cascadeMerge(DbContext context, Connection connection, 
+    private static void cascadeUpdate(DbContext context, Connection connection, 
             Collection<?> collection, Object parentEntity, Class<?> parentClass,
             Class<?> componentType, Field field) {
         
@@ -350,8 +462,8 @@ final class CascadingUpdater {
         // Look for entity reference field that points to parent class
         for (Field f : QueryBuilder.collectFieldsOfClass(childClass)) {
             if (f.getType().isAssignableFrom(parentClass) || parentClass.isAssignableFrom(f.getType())) {
-                // This is an entity reference to the parent
-                String sqlName = CustomizableQueryBuilder.determineSqlFieldName(f);
+                // This is an entity reference to the parent - use link field naming (fieldName_id)
+                String sqlName = CustomizableQueryBuilder.determineLinkFieldName(f);
                 return new ForeignKeyInfo(f, sqlName, true);
             }
         }

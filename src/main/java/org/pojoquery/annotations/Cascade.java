@@ -6,13 +6,13 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Specifies which operations should be cascaded to the target of an association.
+ * Marks a collection field for cascading operations.
  * 
- * <p>This annotation is used to mark collection or entity reference fields that should
- * have operations cascaded when using {@link org.pojoquery.CascadingUpdater}.</p>
+ * <p>When present on a collection field, the {@link org.pojoquery.CascadingUpdater}
+ * will automatically cascade insert, update, and delete operations to the
+ * target entities.</p>
  * 
- * <p>When {@link CascadeType#MERGE} or {@link CascadeType#ALL} is specified,
- * the {@code CascadingUpdater.update()} method will:</p>
+ * <p>The {@code CascadingUpdater.update()} method will:</p>
  * <ul>
  *   <li>Insert new items (items with null or zero ID)</li>
  *   <li>Update existing items (items with non-null ID that exist in database)</li>
@@ -26,7 +26,7 @@ import java.lang.annotation.Target;
  *     @Id Long id;
  *     String orderNumber;
  *     
- *     @Cascade(CascadeType.ALL)
+ *     @Cascade
  *     List<LineItem> lineItems;
  * }
  * 
@@ -47,21 +47,12 @@ import java.lang.annotation.Target;
  * }</pre>
  * 
  * <h2>Orphan Removal</h2>
- * <p>When using {@link CascadeType#MERGE} or {@link CascadeType#ALL}, items that
- * exist in the database but are not present in the collection will be deleted.
- * This is similar to JPA's {@code orphanRemoval = true} behavior.</p>
+ * <p>Items that exist in the database but are not present in the collection
+ * will be deleted. This is similar to JPA's {@code orphanRemoval = true} behavior.</p>
  * 
- * @see CascadeType
  * @see org.pojoquery.CascadingUpdater
  */
 @Target({ElementType.FIELD, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Cascade {
-    
-    /**
-     * The cascade operation types to apply.
-     * 
-     * @return array of cascade types
-     */
-    CascadeType[] value() default {};
 }

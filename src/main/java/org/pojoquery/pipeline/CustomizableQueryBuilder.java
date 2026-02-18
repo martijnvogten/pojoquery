@@ -414,6 +414,68 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		return columnName != null ? columnName : f.getName();
 	}
 
+	/**
+	 * Determines the SQL column name for a foreign key (link) field.
+	 * Checks @JoinColumn and @Link(linkfield) first, then falls back to @Column,
+	 * and finally defaults to fieldName_id.
+	 */
+	public static String determineLinkFieldName(Field f) {
+		Objects.requireNonNull(f, "field must not be null");
+		// Check for @JoinColumn or @Link(linkfield) first
+		String joinColumnName = AnnotationHelper.getJoinColumnName(f);
+		if (joinColumnName != null) {
+			return joinColumnName;
+		}
+		// Fall back to @FieldName or @Column(name)
+		String columnName = AnnotationHelper.getColumnName(f);
+		if (columnName != null) {
+			return columnName;
+		}
+		return f.getName() + "_id";
+	}
+
+	/**
+	 * Determines the owner (parent) column name for a link table.
+	 * Uses @Link(linkfield) if specified, otherwise defaults to tableName_id.
+	 * 
+	 * @param ownerClass the class that owns the collection field
+	 * @param linkAnn the @Link annotation on the collection field
+	 * @return the column name for the owner's foreign key in the link table
+	 */
+	public static String determineLinkTableOwnerColumn(Class<?> ownerClass, Link linkAnn) {
+		if (linkAnn != null && !Link.NONE.equals(linkAnn.linkfield())) {
+			return linkAnn.linkfield();
+		}
+		List<TableMapping> mappings = determineTableMapping(ownerClass);
+		return mappings.isEmpty() ? ownerClass.getSimpleName().toLowerCase() + "_id" : mappings.get(0).tableName + "_id";
+	}
+
+	/**
+	 * Determines the foreign (target) column name for a link table.
+	 * Uses @Link(foreignlinkfield) if specified, otherwise defaults to tableName_id.
+	 * For value collections, uses @Link(fetchColumn) instead.
+	 * 
+	 * @param foreignClass the target class of the collection (may be null for value collections)
+	 * @param linkAnn the @Link annotation on the collection field
+	 * @return the column name for the target's foreign key in the link table
+	 */
+	public static String determineLinkTableForeignColumn(Class<?> foreignClass, Link linkAnn) {
+		// Check for fetchColumn first (value collections like enums)
+		if (linkAnn != null && !Link.NONE.equals(linkAnn.fetchColumn())) {
+			return linkAnn.fetchColumn();
+		}
+		if (linkAnn != null && !Link.NONE.equals(linkAnn.foreignlinkfield())) {
+			return linkAnn.foreignlinkfield();
+		}
+		if (foreignClass != null) {
+			List<TableMapping> mappings = determineTableMapping(foreignClass);
+			if (!mappings.isEmpty()) {
+				return mappings.get(0).tableName + "_id";
+			}
+		}
+		return null;
+	}
+
 	private String joinMany(String alias, SqlQuery<?> result, FieldModel f, TypeModel componentType) {
 		TableMapping tableMapping = lookupTableMapping(componentType);
 		String idField = determineIdField(f.getDeclaringType()).getName();
