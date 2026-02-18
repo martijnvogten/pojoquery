@@ -338,15 +338,41 @@ final class CascadingUpdater {
             return;
         }
         
+        Object parentId = getEntityId(parentEntity);
+        ForeignKeyInfo fkInfo = findForeignKeyInfo(componentType, parentClass, field);
+        
         for (Object item : collection) {
             if (item == null) continue;
             
-            // Set the foreign key to parent
-            setForeignKey(item, parentEntity, parentClass, field);
+            // Try to set the foreign key to parent via field
+            boolean fkSetViaField = setForeignKey(item, parentEntity, parentClass, field);
             
             // Insert the child
             PojoQuery.insertInternal(context, connection, item.getClass(), item);
+            
+            // If FK couldn't be set via field (no field in child class), update via SQL
+            if (!fkSetViaField && parentId != null && fkInfo != null) {
+                Object itemId = getEntityId(item);
+                if (itemId != null) {
+                    updateForeignKeyColumn(context, connection, componentType, fkInfo.sqlColumnName, itemId, parentId);
+                }
+            }
+            
+            // Recursively process the child's own @Cascade collections
+            processCascadedCollections(context, connection, item, CascadeOperation.PERSIST);
         }
+    }
+    
+    private static void updateForeignKeyColumn(DbContext context, Connection connection,
+            Class<?> childClass, String fkColumn, Object childId, Object parentId) {
+        String tableName = AnnotationHelper.getTableName(childClass);
+        Field idField = QueryBuilder.determineIdField(childClass);
+        String idColumnName = CustomizableQueryBuilder.determineSqlFieldName(idField);
+        
+        String sql = "UPDATE " + context.quoteObjectNames(tableName) 
+                + " SET " + context.quoteObjectNames(fkColumn) + " = ?"
+                + " WHERE " + context.quoteObjectNames(idColumnName) + " = ?";
+        DB.update(connection, new SqlExpression(sql, Arrays.asList(parentId, childId)));
     }
     
     private static void cascadeUpdate(DbContext context, Connection connection, 
@@ -368,12 +394,20 @@ final class CascadingUpdater {
                 
                 Object itemId = getEntityId(item);
                 
-                // Set the foreign key to parent
-                setForeignKey(item, parentEntity, parentClass, field);
+                // Try to set the foreign key to parent via field
+                boolean fkSetViaField = setForeignKey(item, parentEntity, parentClass, field);
                 
                 if (itemId == null || isZeroId(itemId)) {
                     // New item - insert
                     PojoQuery.insert(context, connection, item);
+                    
+                    // If FK couldn't be set via field, update via SQL after insert
+                    if (!fkSetViaField && parentId != null && fkInfo != null) {
+                        Object newItemId = getEntityId(item);
+                        if (newItemId != null) {
+                            updateForeignKeyColumn(context, connection, componentType, fkInfo.sqlColumnName, newItemId, parentId);
+                        }
+                    }
                 } else {
                     // Existing item - update
                     PojoQuery.update(context, connection, item);
@@ -395,8 +429,8 @@ final class CascadingUpdater {
         
         ForeignKeyInfo fkInfo = findForeignKeyInfo(componentType, parentClass, field);
         
-        // Delete all children with this parent ID
-        deleteChildrenByParentId(context, connection, componentType, fkInfo.sqlColumnName, parentId);
+        // Delete all children with this parent ID (with cascade support for nested collections)
+        deleteChildrenWithCascade(context, connection, componentType, fkInfo.sqlColumnName, parentId);
     }
     
     private static Object getEntityId(Object entity) {
@@ -452,11 +486,10 @@ final class CascadingUpdater {
         // Check for @Link annotation on the collection field
         Link linkAnn = collectionField.getAnnotation(Link.class);
         if (linkAnn != null && !Link.NONE.equals(linkAnn.foreignlinkfield())) {
-            String fkFieldName = linkAnn.foreignlinkfield();
-            Field fkField = findField(childClass, fkFieldName);
-            if (fkField != null) {
-                return new ForeignKeyInfo(fkField, fkFieldName, false);
-            }
+            String fkColumnName = linkAnn.foreignlinkfield();
+            Field fkField = findField(childClass, fkColumnName);
+            // Return with the specified column name even if no field exists (field may be null)
+            return new ForeignKeyInfo(fkField, fkColumnName, false);
         }
         
         // Look for entity reference field that points to parent class
@@ -492,16 +525,20 @@ final class CascadingUpdater {
         return new ForeignKeyInfo(null, expectedFieldName, false);
     }
     
-    private static void setForeignKey(Object item, Object parentEntity, Class<?> parentClass, Field collectionField) {
+    /**
+     * Sets the foreign key on the child item by setting a field value.
+     * @return true if the FK was set via field, false if no field exists (requires SQL update)
+     */
+    private static boolean setForeignKey(Object item, Object parentEntity, Class<?> parentClass, Field collectionField) {
         Object parentId = getEntityId(parentEntity);
         if (parentId == null) {
-            return;
+            return false;
         }
         
         Class<?> itemClass = item.getClass();
         ForeignKeyInfo fkInfo = findForeignKeyInfo(itemClass, parentClass, collectionField);
         
-        if (fkInfo != null) {
+        if (fkInfo != null && fkInfo.field != null) {
             fkInfo.field.setAccessible(true);
             try {
                 if (fkInfo.isEntityRef) {
@@ -511,10 +548,12 @@ final class CascadingUpdater {
                     // Set the parent ID directly
                     fkInfo.field.set(item, parentId);
                 }
+                return true;
             } catch (IllegalAccessException e) {
                 throw new MappingException("Cannot set foreign key field " + fkInfo.field.getName(), e);
             }
         }
+        return false;
     }
     
     private static Field findField(Class<?> clazz, String fieldName) {
@@ -554,6 +593,22 @@ final class CascadingUpdater {
     private static void deleteChildById(DbContext context, Connection connection, 
             Class<?> componentType, Object id) {
         
+        // First, recursively delete any nested @Cascade collections
+        // We need to process any @Cascade fields on the component type
+        for (Field field : QueryBuilder.collectFieldsOfClass(componentType)) {
+            Cascade cascadeAnn = field.getAnnotation(Cascade.class);
+            if (cascadeAnn != null && Collection.class.isAssignableFrom(field.getType())) {
+                Class<?> nestedType = getCollectionComponentType(field);
+                if (nestedType != null && CustomizableQueryBuilder.isLinkedClass(nestedType)) {
+                    // Delete nested children first
+                    ForeignKeyInfo nestedFkInfo = findForeignKeyInfo(nestedType, componentType, field);
+                    if (nestedFkInfo != null) {
+                        deleteChildrenWithCascade(context, connection, nestedType, nestedFkInfo.sqlColumnName, id);
+                    }
+                }
+            }
+        }
+        
         String tableName = AnnotationHelper.getTableName(componentType);
         Field idField = QueryBuilder.determineIdField(componentType);
         String idFieldName = CustomizableQueryBuilder.determineSqlFieldName(idField);
@@ -562,6 +617,30 @@ final class CascadingUpdater {
                      " WHERE " + context.quoteObjectNames(idFieldName) + " = ?";
         
         DB.update(connection, new SqlExpression(sql, Arrays.asList(id)));
+    }
+    
+    private static void deleteChildrenWithCascade(DbContext context, Connection connection, 
+            Class<?> componentType, String foreignKeyField, Object parentId) {
+        
+        // First check if this type has nested @Cascade collections
+        boolean hasNestedCascade = false;
+        for (Field field : QueryBuilder.collectFieldsOfClass(componentType)) {
+            if (field.getAnnotation(Cascade.class) != null && Collection.class.isAssignableFrom(field.getType())) {
+                hasNestedCascade = true;
+                break;
+            }
+        }
+        
+        if (hasNestedCascade) {
+            // Need to get IDs first and delete each with cascade
+            Set<Object> childIds = getExistingChildIds(context, connection, componentType, foreignKeyField, parentId);
+            for (Object childId : childIds) {
+                deleteChildById(context, connection, componentType, childId);
+            }
+        } else {
+            // No nested cascades, simple bulk delete
+            deleteChildrenByParentId(context, connection, componentType, foreignKeyField, parentId);
+        }
     }
     
     private static void deleteChildrenByParentId(DbContext context, Connection connection, 

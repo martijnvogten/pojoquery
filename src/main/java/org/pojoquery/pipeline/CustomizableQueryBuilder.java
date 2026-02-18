@@ -1273,9 +1273,23 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 
 	public static List<FieldModel> collectFieldsOfClass(TypeModel type, TypeModel stopAtSuperType) {
 		List<FieldModel> result = new ArrayList<FieldModel>();
+		Set<String> seenFieldNames = new HashSet<>();
 		TypeModel current = type;
+		// Walk from subclass to superclass, collecting fields
+		// If a subclass declares a field with the same name as a superclass field,
+		// the subclass version takes precedence (specialization)
 		while (current != null && (stopAtSuperType == null || !current.isSameType(stopAtSuperType))) {
-			result.addAll(0, filterFields(current));
+			List<FieldModel> currentFields = filterFields(current);
+			// Add fields from current class at the front, but skip if already seen
+			// (a subclass already declared a field with that name)
+			List<FieldModel> toAdd = new ArrayList<>();
+			for (FieldModel f : currentFields) {
+				if (!seenFieldNames.contains(f.getName())) {
+					seenFieldNames.add(f.getName());
+					toAdd.add(f);
+				}
+			}
+			result.addAll(0, toAdd);
 			current = current.getSuperclass();
 		}
 		return result;
