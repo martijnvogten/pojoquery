@@ -93,7 +93,7 @@ public class UsersExample {
 			john.firstName = "John";
 			john.lastName = "Ewbank";
 			john.email = "john@ewbank.nl";
-			john.id = PojoQuery.insert(con, john);
+			PojoQuery.insert(con, john);
 			
 			// Give John the USER role
 			addRole(con, john.getRef(), Role.USER);
@@ -105,7 +105,7 @@ public class UsersExample {
 			alice.email = "alice@admin.com";
 			alice.createdBy = john.getRef();
 			alice.creationDate = new Date();
-			alice.id = PojoQuery.insert(con, alice);
+			PojoQuery.insert(con, alice);
 
 			// Give Alice both USER and ADMIN roles
 			addRole(con, alice.getRef(), Role.USER);

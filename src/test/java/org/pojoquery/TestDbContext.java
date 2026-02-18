@@ -112,7 +112,7 @@ public class TestDbContext {
 			Product p = new Product();
 			p.name = "Original Name";
 			p.price = 50;
-			p.id = PojoQuery.insert(hsqldbContext, c, p);
+			PojoQuery.insert(hsqldbContext, c, p);
 			
 			// Update with explicit context
 			p.name = "Updated Name";
@@ -140,7 +140,7 @@ public class TestDbContext {
 			Product p = new Product();
 			p.name = "To Delete";
 			p.price = 99;
-			p.id = PojoQuery.insert(hsqldbContext, c, p);
+			PojoQuery.insert(hsqldbContext, c, p);
 			
 			// Delete with explicit context
 			PojoQuery.delete(hsqldbContext, c, p);

@@ -34,33 +34,33 @@ public class BlogDb {
 			john.email = "john@ewbank.nl";
 			john.firstName = "John";
 			john.lastName = "Ewbank";
-			john.id = PojoQuery.insert(c, john);
+			PojoQuery.insert(c, john);
 			
 			User albert = new User();
 			albert.email = "albert@einstein.com";
 			albert.firstName = "Albert";
 			albert.lastName = "Einstein";
-			albert.id = PojoQuery.insert(c, albert);
+			PojoQuery.insert(c, albert);
 			
 			Article article = new Article();
 			article.title = "King's song";
 			article.content = "I wrote it";
 			article.author_id = john.id;
-			article.id = PojoQuery.insert(c, article);
+			PojoQuery.insert(c, article);
 			
 			Comment ilikeit = new Comment();
 			ilikeit.author_id = john.id;
 			ilikeit.article_id = article.id;
 			ilikeit.comment = "I like it too!";
 			ilikeit.submitdate = new Date();
-			ilikeit.id = PojoQuery.insert(c, ilikeit);
+			PojoQuery.insert(c, ilikeit);
 			
 			Comment imagination = new Comment();
 			imagination.author_id = albert.id;
 			imagination.article_id = article.id;
 			imagination.comment = "Imagination is more important than knowledge.";
 			imagination.submitdate = new Date();
-			imagination.id = PojoQuery.insert(c, imagination);
+			PojoQuery.insert(c, imagination);
 		});
 	}
 
