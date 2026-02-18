@@ -105,7 +105,7 @@ public class TestCascadingUpdater {
             order.lineItems.add(new LineItem("Gadget", 3));
             
             // Insert with cascade
-            CascadingUpdater.insert(c, order);
+            PojoQuery.insert(c, order);
             
             // Verify order was inserted
             assertNotNull(order.id);
@@ -129,7 +129,7 @@ public class TestCascadingUpdater {
             OrderWithLineItems order = new OrderWithLineItems();
             order.orderNumber = "ORD-002";
             order.lineItems.add(new LineItem("Original", 1));
-            PojoQuery.insertCascading(c, order);
+            PojoQuery.insert(c, order);
             
             Long orderId = order.id;
             Long originalItemId = order.lineItems.get(0).id;
@@ -147,7 +147,7 @@ public class TestCascadingUpdater {
             order.lineItems.add(new LineItem("NewItem", 10));
             
             // Update with cascade
-            PojoQuery.updateCascading(c, order);
+            PojoQuery.update(c, order);
             
             // Verify both items exist
             List<LineItem> items = PojoQuery.build(LineItem.class)
@@ -168,7 +168,7 @@ public class TestCascadingUpdater {
             order.orderNumber = "ORD-003";
             order.lineItems.add(new LineItem("Keep", 1));
             order.lineItems.add(new LineItem("Remove", 2));
-            PojoQuery.insertCascading(c, order);
+            PojoQuery.insert(c, order);
             
             Long orderId = order.id;
             
@@ -188,7 +188,7 @@ public class TestCascadingUpdater {
             assertEquals(1, order.lineItems.size());
             
             // Update with cascade
-            PojoQuery.updateCascading(c, order);
+            PojoQuery.update(c, order);
             
             // Verify only "Keep" item remains (orphan removal)
             List<LineItem> items = PojoQuery.build(LineItem.class)
@@ -207,7 +207,7 @@ public class TestCascadingUpdater {
             OrderWithLineItems order = new OrderWithLineItems();
             order.orderNumber = "ORD-004";
             order.lineItems.add(new LineItem("Product", 5));
-            PojoQuery.insertCascading(c, order);
+            PojoQuery.insert(c, order);
             
             Long orderId = order.id;
             
@@ -225,7 +225,7 @@ public class TestCascadingUpdater {
             order.lineItems.get(0).productName = "ModifiedProduct";
             
             // Update with cascade
-            PojoQuery.updateCascading(c, order);
+            PojoQuery.update(c, order);
             
             // Verify modification
             List<LineItem> items = PojoQuery.build(LineItem.class)
@@ -246,7 +246,7 @@ public class TestCascadingUpdater {
             order.orderNumber = "ORD-005";
             order.lineItems.add(new LineItem("Item1", 1));
             order.lineItems.add(new LineItem("Item2", 2));
-            PojoQuery.insertCascading(c, order);
+            PojoQuery.insert(c, order);
             
             Long orderId = order.id;
             
@@ -279,7 +279,7 @@ public class TestCascadingUpdater {
             order.orderNumber = "ORD-006";
             order.lineItems.add(new LineItem("Item1", 1));
             order.lineItems.add(new LineItem("Item2", 2));
-            PojoQuery.insertCascading(c, order);
+            PojoQuery.insert(c, order);
             
             Long orderId = order.id;
             
@@ -291,7 +291,7 @@ public class TestCascadingUpdater {
             order.lineItems = new ArrayList<>();  // Empty collection
             
             // Update with cascade (should delete all items)
-            PojoQuery.updateCascading(c, order);
+            PojoQuery.update(c, order);
             
             // Verify all items are deleted
             List<LineItem> items = PojoQuery.build(LineItem.class)
@@ -309,7 +309,7 @@ public class TestCascadingUpdater {
             OrderWithLineItems order = new OrderWithLineItems();
             order.orderNumber = "ORD-007";
             order.lineItems.add(new LineItem("Item1", 1));
-            PojoQuery.insertCascading(c, order);
+            PojoQuery.insert(c, order);
             
             Long orderId = order.id;
             
@@ -321,7 +321,7 @@ public class TestCascadingUpdater {
             order.lineItems = null;  // Null collection
             
             // Update with cascade (should delete all items)
-            PojoQuery.updateCascading(c, order);
+            PojoQuery.update(c, order);
             
             // Verify all items are deleted
             List<LineItem> items = PojoQuery.build(LineItem.class)
@@ -341,7 +341,7 @@ public class TestCascadingUpdater {
             order.lineItems.add(new LineItem("Keep", 1));
             order.lineItems.add(new LineItem("Modify", 2));
             order.lineItems.add(new LineItem("Delete", 3));
-            PojoQuery.insertCascading(c, order);
+            PojoQuery.insert(c, order);
             
             Long orderId = order.id;
             
@@ -368,7 +368,7 @@ public class TestCascadingUpdater {
             order.lineItems.add(new LineItem("New", 10));
             
             // Update
-            PojoQuery.updateCascading(c, order);
+            PojoQuery.update(c, order);
             
             // Verify results
             List<LineItem> items = PojoQuery.build(LineItem.class)

@@ -448,21 +448,21 @@ public class PojoQuery<T> {
 	}
 
 	public static <PK> PK insert(Connection connection, Object o) {
-		return insertInternal(DbContext.getDefault(), connection, o.getClass(), o);
+		return insertCascading(DbContext.getDefault(), connection, o);
 	}
 
 	public static <PK> PK insert(DbContext context, Connection connection, Object o) {
 		Objects.requireNonNull(o, "entity must not be null");
-		return insertInternal(context, connection, o.getClass(), o);
+		return insertCascading(context, connection, o);
 	}
 
-	public static <PK> PK insertCascading(Connection connection, Object o) {
-		return insertCascading(DbContext.getDefault(), connection, o);
-	}
-
-	public static <PK> PK insertCascading(DbContext context, Connection connection, Object o) {
+	private static <PK> PK insertCascading(DbContext context, Connection connection, Object o) {
 		Objects.requireNonNull(o, "entity must not be null");
 		return CascadingUpdater.insert(context, connection, o);
+	}
+
+	static <PK> PK insertInternal(DbContext context, Connection conn, Object o) {
+		return insertInternal(context, conn, o.getClass(), o);
 	}
 
 	static <PK> PK insertInternal(DbContext context, Connection conn, Class<?> type, Object o) {
@@ -507,19 +507,15 @@ public class PojoQuery<T> {
 	}
 
 	public static int update(Connection connection, Object object) {
-		return update(DbContext.getDefault(), connection, object);
+		return updateCascading(DbContext.getDefault(), connection, object);
 	}
 
 	public static int update(DbContext context, Connection connection, Object object) {
 		Objects.requireNonNull(object, "entity must not be null");
-		return updateInternal(context, connection, object.getClass(), object);
+		return updateCascading(context, connection, object);
 	}
 
-	public static int updateCascading(Connection connection, Object object) {
-		return CascadingUpdater.update(DbContext.getDefault(), connection, object);
-	}
-
-	public static int updateCascading(DbContext context, Connection connection, Object object) {
+	static int updateCascading(DbContext context, Connection connection, Object object) {
 		Objects.requireNonNull(object, "entity must not be null");
 		return CascadingUpdater.update(context, connection, object);
 	}

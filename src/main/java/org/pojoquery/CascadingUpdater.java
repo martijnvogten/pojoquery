@@ -87,7 +87,7 @@ final class CascadingUpdater {
         Objects.requireNonNull(entity, "entity must not be null");
         
         // First, update the main entity
-        int affectedRows = PojoQuery.update(context, connection, entity);
+        int affectedRows = PojoQuery.updateInternal(context, connection, entity.getClass(), entity);
         
         // Then process cascaded collections
         processCascadedCollections(context, connection, entity, CascadeOperation.MERGE);
@@ -128,7 +128,7 @@ final class CascadingUpdater {
         Objects.requireNonNull(entity, "entity must not be null");
         
         // First, insert the main entity
-        PK pk = PojoQuery.insert(context, connection, entity);
+        PK pk = PojoQuery.insertInternal(context, connection, entity);
         
         // Then process cascaded collections
         processCascadedCollections(context, connection, entity, CascadeOperation.PERSIST);
