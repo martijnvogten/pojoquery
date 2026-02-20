@@ -3,24 +3,18 @@ package org.pojoquery;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.pojoquery.TestUtils.norm;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.DbContextExtension;
-import org.pojoquery.pipeline.QueryBuilder;
+import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
+import org.pojoquery.pipeline.QueryBuilder;
 
-@ExtendWith(DbContextExtension.class)
+@UseDialect(Dialect.MYSQL)
 public class TestFieldExpressionAliasInWhere {
 
-	@BeforeEach
-	public void setup() {
-		DbContext.setDefault(DbContext.forDialect(Dialect.MYSQL));
-	}
 	@Table("article")
 	static class Article {
 		@Id

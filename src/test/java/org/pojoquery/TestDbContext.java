@@ -13,17 +13,14 @@ import javax.sql.DataSource;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.integrationtest.db.TestDatabase;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.schema.SchemaGenerator;
 
-@ExtendWith(DbContextExtension.class)
 public class TestDbContext {
 
 	@BeforeEach

@@ -319,7 +319,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 						if (f.getAnnotation(JoinCondition.class) != null) {
 							joinCondition = f.getAnnotation(JoinCondition.class).value();
 						} else {
-							idField = determineIdField(type).getName();
+							idField = determineSqlFieldName(determineIdField(type));
 						}
 
 						joinMany(query, alias, f.getName(), linkAnn.linkschema(), linkAnn.linktable(), idField, foreignlinkfieldname, joinCondition);
@@ -335,7 +335,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 						// Many to many
 						String linkTableAlias = alias + "_" + f.getName();
 						String linkAlias = isRoot ? linkTableAlias : (alias + "." + linkTableAlias);
-						String idField = determineIdField(type).getName();
+						String idField = determineSqlFieldName(determineIdField(type));
 						String linkfieldname = linkAnn.linkfield();
 						if (Link.NONE.equals(linkfieldname)) {
 							linkfieldname = linkFieldName(type);
@@ -348,7 +348,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 						query.addJoin(JoinType.LEFT, linkAnn.linkschema(), linkAnn.linktable(), linkAlias, joinCondition);
 
 						String foreignLinkAlias = isRoot ? f.getName() : (alias + "." + f.getName());
-						String foreignIdField = determineIdField(componentType).getName();
+						String foreignIdField = determineSqlFieldName(determineIdField(componentType));
 						String foreignlinkfieldname = linkAnn.foreignlinkfield();
 						if (Link.NONE.equals(foreignlinkfieldname)) {
 							foreignlinkfieldname = linkFieldName(componentType);
@@ -552,7 +552,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 			joinCondition = new SqlExpression(resolveJoinConditionAliases(f.getAnnotation(JoinCondition.class).value(), linkFieldAlias, linkAlias, null));
 		} else {
 			FieldModel idField = determineIdField(type);
-			joinCondition = new SqlExpression("{" + linkFieldAlias + "." + linkField + "} = {" + linkAlias + "." + idField.getName() + "}");
+			joinCondition = new SqlExpression("{" + linkFieldAlias + "." + linkField + "} = {" + linkAlias + "." + determineSqlFieldName(idField) + "}");
 		}
 		result.addJoin(JoinType.LEFT, table.schemaName, table.tableName, linkAlias, joinCondition);
 		return linkAlias;

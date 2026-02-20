@@ -7,24 +7,21 @@ import static org.pojoquery.TestUtils.norm;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.schema.SchemaGenerator;
 
 /**
  * Tests for single table inheritance support using @DiscriminatorColumn.
  */
+@UseDialect(Dialect.MYSQL)
 public class TestSingleTableInheritance {
 
-	@BeforeEach
-	public void setup() {
-		DbContext.setDefault(DbContext.forDialect(Dialect.MYSQL));
-	}
 	static class Entity {
 		@Id
 		Long id;

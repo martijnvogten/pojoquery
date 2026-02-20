@@ -4,10 +4,13 @@ import static org.pojoquery.TestUtils.norm;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.pipeline.QueryBuilder;
 
+@UseDialect(Dialect.MYSQL)
 public class TestCount {
 
 	@Table("article")

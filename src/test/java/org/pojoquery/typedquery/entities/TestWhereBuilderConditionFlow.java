@@ -1,6 +1,7 @@
 package org.pojoquery.typedquery.entities;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.util.List;
@@ -10,31 +11,22 @@ import javax.sql.DataSource;
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.DbContext.Dialect;
-import org.pojoquery.DbContext.QuoteStyle;
-import org.pojoquery.DbContextBuilder;
-import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.schema.SchemaGenerator;
 
 /**
  * Tests that expose shortcomings in the WhereBuilder condition flow.
  * These tests verify that conditions are properly applied in all code paths.
  */
-@ExtendWith(DbContextExtension.class)
 public class TestWhereBuilderConditionFlow {
 
     private DataSource dataSource;
 
     @BeforeEach
     void setup() {
-        DbContext.setDefault(new DbContextBuilder()
-                .dialect(Dialect.HSQLDB)
-                .withQuoteStyle(QuoteStyle.ANSI)
-                .quoteObjectNames(true)
-                .build());
+        DbContext.setDefault(DbContext.forDialect(Dialect.HSQLDB));
 
         JDBCDataSource ds = new JDBCDataSource();
         ds.setUrl("jdbc:hsqldb:mem:condition_flow_test_" + System.nanoTime());

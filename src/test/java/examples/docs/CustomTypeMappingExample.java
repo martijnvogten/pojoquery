@@ -76,7 +76,7 @@ public class CustomTypeMappingExample {
             
             // Query back by UUID using {alias} syntax for proper quoting
             List<Document> found = PojoQuery.build(Document.class)
-                .addWhere("{document}.documentId = ?", doc.documentId)
+                .addWhere("{document.documentId} = ?", doc.documentId)
                 .execute(c);
             
             System.out.println("Found " + found.size() + " document(s)");

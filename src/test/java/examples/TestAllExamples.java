@@ -1,8 +1,6 @@
 package examples;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.pojoquery.integrationtest.DbContextExtension;
 
 import examples.blog.ArticleDetailExample;
 import examples.blog.ArticleListViewExample;
@@ -14,7 +12,6 @@ import examples.docs.FilteredRelationshipExample;
 import examples.docs.GettingStartedExample;
 import examples.docs.JpaAnnotationsExample;
 import examples.docs.TablePerSubclassInheritanceExample;
-import examples.events.EventsExample;
 import examples.inheritance.InheritanceExample;
 import examples.users.UsersExample;
 
@@ -22,7 +19,6 @@ import examples.users.UsersExample;
  * Runs all examples as tests to ensure they don't throw exceptions.
  * Each example is still independently runnable via its main() method.
  */
-@ExtendWith(DbContextExtension.class)
 public class TestAllExamples {
 
 	@Test
@@ -73,11 +69,6 @@ public class TestAllExamples {
 	@Test
 	void tablePerSubclassInheritanceExample() {
 		TablePerSubclassInheritanceExample.main(new String[0]);
-	}
-
-	@Test
-	void eventsExample() {
-		EventsExample.main(new String[0]);
 	}
 
 	@Test

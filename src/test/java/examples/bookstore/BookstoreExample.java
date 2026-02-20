@@ -83,7 +83,7 @@ public class BookstoreExample {
 
             // 4. Query with automatic joins - the POJO shape defines what you get!
             List<BookDetail> books = PojoQuery.build(BookDetail.class)
-                    .addWhere("{author}.country = ?", "UK")
+                    .addWhere("{author.country} = ?", "UK")
                     .execute(c);
 
             for (BookDetail book : books) {

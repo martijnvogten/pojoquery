@@ -14,8 +14,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.DbContext.Dialect;
-import org.pojoquery.DbContextBuilder;
-import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.schema.SchemaGenerator;
@@ -27,7 +25,6 @@ import org.pojoquery.typedquery.entities.Person;
 /**
  * Test for the FluentQueryProcessor - tests the generated code pattern.
  */
-@ExtendWith(DbContextExtension.class)
 public class TestFluentQueryProcessor {
 
     private DataSource dataSource;
@@ -35,11 +32,7 @@ public class TestFluentQueryProcessor {
     @BeforeEach
     void setup() {
         // Set up HSQLDB with ANSI quoting
-        DbContext.setDefault(new DbContextBuilder()
-                .dialect(Dialect.HSQLDB)
-                .withQuoteStyle(QuoteStyle.ANSI)
-                .quoteObjectNames(true)
-                .build());
+        DbContext.setDefault(DbContext.forDialect(Dialect.HSQLDB));
 
         // Create unique in-memory database
         JDBCDataSource ds = new JDBCDataSource();

@@ -13,7 +13,6 @@ import javax.sql.DataSource;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.FieldName;
@@ -25,7 +24,6 @@ import org.pojoquery.schema.SchemaGenerator;
 /**
  * Integration tests for all supported date/time types.
  */
-@ExtendWith(DbContextExtension.class)
 public class DateTypesIT {
 
 	@Table("event_with_dates")

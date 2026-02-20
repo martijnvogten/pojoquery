@@ -8,9 +8,7 @@ import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DbContext;
 import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.annotations.DiscriminatorColumn;
@@ -22,16 +20,10 @@ import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.dialects.PostgresDbContext;
-import org.pojoquery.integrationtest.DbContextExtension;
+import org.pojoquery.integrationtest.UseDialect;
 
-@ExtendWith(DbContextExtension.class)
+@UseDialect(DbContext.Dialect.MYSQL)
 public class TestSchemaGenerator {
-
-    @BeforeEach
-    public void setUp() {
-        // Ensure MySQL dialect is used (default) - tests depend on backtick quoting
-        DbContext.setDefault(DbContext.forDialect(DbContext.Dialect.MYSQL));
-    }
 
     @Table("users")
     public static class User {

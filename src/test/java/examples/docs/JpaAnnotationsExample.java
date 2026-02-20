@@ -27,6 +27,7 @@ public class JpaAnnotationsExample {
     @Table(name = "customers")
     public static class Customer {
         @Id
+        @Column(name = "customer_id")
         Long id;
 
         @Column(name = "full_name", length = 100, nullable = false)
@@ -124,18 +125,17 @@ public class JpaAnnotationsExample {
             PojoQuery.insert(c, customer);
 
             // Both JPA and PojoQuery annotated entities work identically
-            Customer loaded = PojoQuery.build(Customer.class)
-                .addWhere("{customers}.id = ?", customer.id)
+            PojoQuery.build(Customer.class)
+                .addWhere("{customers.customer_id} = ?", customer.id)
                 .execute(c)
-                .stream().findFirst().orElse(null);
-
-            if (loaded != null) {
-                System.out.println("Customer: " + loaded.getName());
-                System.out.println("Email: " + loaded.getEmail());
-                if (loaded.getPrimaryAddress() != null) {
-                    System.out.println("Address: " + loaded.getPrimaryAddress().getStreet());
-                }
-            }
+                .stream().findFirst().ifPresent(cust -> {
+                    System.out.println("Loaded using JPA annotations: " + cust.getName());
+                    System.out.println("Customer: " + cust.getName());
+                    System.out.println("Email: " + cust.getEmail());
+                    if (cust.getPrimaryAddress() != null) {
+                        System.out.println("Address: " + cust.getPrimaryAddress().getStreet());
+                    }
+                });
         });
     }
 

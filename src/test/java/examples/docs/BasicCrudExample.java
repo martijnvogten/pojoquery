@@ -54,7 +54,7 @@ public class BasicCrudExample {
 
             // --- Query ---
             User existingUser = PojoQuery.build(User.class)
-                .addWhere("{app_user}.id = ?", newUser.getId())
+                .addWhere("{app_user.id} = ?", newUser.getId())
                 .execute(c)
                 .stream().findFirst().orElse(null);
 

@@ -8,7 +8,6 @@ import javax.sql.DataSource;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
@@ -20,7 +19,6 @@ import org.pojoquery.schema.SchemaGenerator;
 /**
  * Integration tests for streaming query execution with consumer-based processing.
  */
-@ExtendWith(DbContextExtension.class)
 public class StreamingIT {
 
 	@Table("author")
@@ -70,7 +68,7 @@ public class StreamingIT {
 		List<Author> streamedAuthors = new ArrayList<>();
 		
 		PojoQuery.build(Author.class)
-			.addOrderBy("{author}.name ASC")
+			.addOrderBy("{author.name} ASC")
 			.executeStreaming(db, author -> {
 				streamedAuthors.add(author);
 			});
@@ -127,7 +125,7 @@ public class StreamingIT {
 		// Order by author's name - a field from the primary entity
 		// This is the recommended way to use streaming with ordering
 		PojoQuery.build(AuthorWithBooks.class)
-			.addOrderBy("{author}.name ASC")
+			.addOrderBy("{author.name} ASC")
 			.executeStreaming(db, author -> {
 				streamedAuthors.add(author);
 			});
@@ -156,7 +154,7 @@ public class StreamingIT {
 		// Ordering by a field in a joined table should throw an exception
 		MappingException exception = Assertions.assertThrows(MappingException.class, () -> {
 			PojoQuery.build(AuthorWithBooks.class)
-				.addOrderBy("{books}.publicationYear ASC")
+				.addOrderBy("{books.publicationYear} ASC")
 				.executeStreaming(db, author -> {
 					// Should not reach here
 				});
@@ -175,7 +173,7 @@ public class StreamingIT {
 		List<Author> streamedAuthors = new ArrayList<>();
 		
 		PojoQuery.build(Author.class)
-			.addWhere("{author}.id = ?", -1) // No match
+			.addWhere("{author.id} = ?", -1) // No match
 			.executeStreaming(db, author -> {
 				streamedAuthors.add(author);
 			});
@@ -194,7 +192,7 @@ public class StreamingIT {
 		List<AuthorWithBooks> streamedAuthors = new ArrayList<>();
 		
 		PojoQuery.build(AuthorWithBooks.class)
-			.addWhere("{author}.name = ?", "Agatha Christie")
+			.addWhere("{author.name} = ?", "Agatha Christie")
 			.executeStreaming(db, author -> {
 				streamedAuthors.add(author);
 			});
@@ -232,13 +230,13 @@ public class StreamingIT {
 
 		// Get results using regular execute
 		List<AuthorWithBooks> regularResults = PojoQuery.build(AuthorWithBooks.class)
-			.addOrderBy("{author}.name ASC")
+			.addOrderBy("{author.name} ASC")
 			.execute(db);
 
 		// Get results using streaming
 		List<AuthorWithBooks> streamedResults = new ArrayList<>();
 		PojoQuery.build(AuthorWithBooks.class)
-			.addOrderBy("{author}.name ASC")
+			.addOrderBy("{author.name} ASC")
 			.executeStreaming(db, streamedResults::add);
 
 		// Both should have same number of entities

@@ -104,7 +104,7 @@ public class GettingStartedExample {
             // tag::query-all[]
             // Query all employees with their department, sorted by last name
             List<Employee> allEmployees = PojoQuery.build(Employee.class)
-                .addOrderBy("{employee}.lastName ASC")
+                .addOrderBy("{employee.lastName} ASC")
                 .execute(c);
             
             System.out.println("\nAll employees:");
@@ -116,7 +116,7 @@ public class GettingStartedExample {
             // tag::query-filter[]
             // Query with a filter
             List<Employee> filtered = PojoQuery.build(Employee.class)
-                .addWhere("{employee}.lastName LIKE ?", "A%")
+                .addWhere("{employee.lastName} LIKE ?", "A%")
                 .execute(c);
             
             System.out.println("\nEmployees with last name starting with 'A':");

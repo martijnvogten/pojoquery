@@ -44,7 +44,7 @@ public class InheritanceExample {
 			BedRoom br = insertData(c);
 
 			// tag::query[]
-			PojoQuery<Room> q = PojoQuery.build(Room.class).addWhere("{room}.area > ?", 40.0);
+			PojoQuery<Room> q = PojoQuery.build(Room.class).addWhere("{room.area} > ?", 40.0);
 			System.out.println(q.toSql());
 			
 			List<Room> rooms = q.execute(c);

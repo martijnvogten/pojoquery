@@ -96,7 +96,7 @@ public class TablePerSubclassInheritanceExample {
             // tag::query-subclass[]
             // You can also query directly for a subclass
             List<Employee> employees = PojoQuery.build(Employee.class)
-                .addWhere("{employee}.department = ?", "Sales")
+                .addWhere("{employee.department} = ?", "Sales")
                 .execute(c);
             
             for (Employee emp : employees) {

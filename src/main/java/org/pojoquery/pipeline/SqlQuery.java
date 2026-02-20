@@ -181,6 +181,11 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 			if ("this".equals(marker)) {
 				return context.quoteAlias(thisAlias);
 			}
+			// Handle {this.column} patterns (e.g., "this.id" -> "tablealias"."id")
+			if (marker.startsWith("this.")) {
+				String columnName = marker.substring(5);
+				return context.quoteAlias(thisAlias) + "." + context.quoteObjectNames(columnName);
+			}
 			for (SqlField field : fields) {
 				if (marker.equals(field.alias)) {
 					// Check if field expression is a simple {alias.column} pattern (would cause infinite recursion)

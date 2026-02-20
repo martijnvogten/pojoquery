@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import java.util.stream.Stream;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -23,11 +22,6 @@ import org.pojoquery.annotations.Table;
  */
 public class TestSchemaGeneratorDialects {
 
-    @BeforeEach
-	public void setup() {
-		DbContext.setDefault(DbContext.forDialect(Dialect.HSQLDB));
-	}
-	
     @Table("users")
     public static class User {
         @Id Long id;
@@ -234,7 +228,7 @@ public class TestSchemaGeneratorDialects {
                     "MySQL FK should reference users table");
                 break;
             case HSQLDB:
-                assertTrue(sql.contains("REFERENCES users(id)"), 
+                assertTrue(sql.contains("REFERENCES \"users\"(\"id\")"), 
                     "HSQLDB FK should reference users table");
                 break;
             case POSTGRES:
@@ -265,7 +259,7 @@ public class TestSchemaGeneratorDialects {
                     "MySQL FK should reference authors table");
                 break;
             case HSQLDB:
-                assertTrue(sql.contains("FOREIGN KEY (authors_id) REFERENCES authors(id)"), 
+                assertTrue(sql.contains("FOREIGN KEY (\"authors_id\") REFERENCES \"authors\"(\"id\")"), 
                     "HSQLDB FK should reference authors table");
                 break;
             case POSTGRES:
@@ -300,11 +294,11 @@ public class TestSchemaGeneratorDialects {
                     "MySQL link table should have FK to tags via ALTER");
                 break;
             case HSQLDB:
-                assertTrue(sql.contains("post_tag"), "HSQLDB link table should exist");
-                assertTrue(sql.contains("ALTER TABLE post_tag ADD FOREIGN KEY (posts_id) REFERENCES posts(id);"), 
+                assertTrue(sql.contains("\"post_tag\""), "HSQLDB link table should exist");
+                assertTrue(sql.contains("ALTER TABLE \"post_tag\" ADD FOREIGN KEY (\"posts_id\") REFERENCES \"posts\"(\"id\");"), 
                     "HSQLDB link table should have FK to posts via ALTER");
-                assertTrue(sql.contains("ALTER TABLE tags ADD FOREIGN KEY (tags_id) REFERENCES tags(id);") || 
-                    sql.contains("ALTER TABLE post_tag ADD FOREIGN KEY (tags_id) REFERENCES tags(id);"), 
+                assertTrue(sql.contains("ALTER TABLE \"tags\" ADD FOREIGN KEY (\"tags_id\") REFERENCES \"tags\"(\"id\");") || 
+                    sql.contains("ALTER TABLE \"post_tag\" ADD FOREIGN KEY (\"tags_id\") REFERENCES \"tags\"(\"id\");"), 
                     "HSQLDB link table should have FK to tags via ALTER");
                 break;
             case POSTGRES:
@@ -354,7 +348,7 @@ public class TestSchemaGeneratorDialects {
                     "MySQL username should be NOT NULL UNIQUE");
                 break;
             case HSQLDB:
-                assertTrue(sql.contains("username VARCHAR(255) NOT NULL UNIQUE"), 
+                assertTrue(sql.contains("\"username\" VARCHAR(255) NOT NULL UNIQUE"), 
                     "HSQLDB username should be NOT NULL UNIQUE");
                 break;
             case POSTGRES:
@@ -382,7 +376,7 @@ public class TestSchemaGeneratorDialects {
                     "MySQL email should be VARCHAR(100)");
                 break;
             case HSQLDB:
-                assertTrue(sql.contains("email VARCHAR(100)"), 
+                assertTrue(sql.contains("\"email\" VARCHAR(100)"), 
                     "HSQLDB email should be VARCHAR(100)");
                 break;
             case POSTGRES:
@@ -410,7 +404,7 @@ public class TestSchemaGeneratorDialects {
                     "MySQL balance should be DECIMAL(10,2)");
                 break;
             case HSQLDB:
-                assertTrue(sql.contains("balance DECIMAL(10,2)"), 
+                assertTrue(sql.contains("\"balance\" DECIMAL(10,2)"), 
                     "HSQLDB balance should be DECIMAL(10,2)");
                 break;
             case POSTGRES:

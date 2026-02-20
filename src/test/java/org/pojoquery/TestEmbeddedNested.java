@@ -12,8 +12,10 @@ import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.pipeline.QueryBuilder;
 
+@UseDialect(Dialect.MYSQL)
 public class TestEmbeddedNested {
 	
 	@Table("country")

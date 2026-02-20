@@ -11,7 +11,6 @@ import javax.sql.DataSource;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.TestUtils;
@@ -22,7 +21,6 @@ import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
-@ExtendWith(DbContextExtension.class)
 public class JoinConditionsIT {
 
 	@Table("person")

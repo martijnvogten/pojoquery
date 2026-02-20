@@ -675,8 +675,9 @@ public class PojoQuery<T> {
 		}
 		Map<String, Object> ids = new HashMap<String, Object>();
 		for (Field f : idFields) {
-			ids.put(f.getName(), values.get(f.getName()));
-			values.remove(f.getName());
+			String columnName = CustomizableQueryBuilder.determineSqlFieldName(f);
+			ids.put(columnName, values.get(columnName));
+			values.remove(columnName);
 		}
 		return ids;
 	}

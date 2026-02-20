@@ -15,20 +15,16 @@ import javax.sql.DataSource;
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DbContext.Dialect;
-import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.annotations.Cascade;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.schema.SchemaGenerator;
 
 /**
  * Tests for CascadingUpdater with Owner/Pet/Visit domain.
  */
-@ExtendWith(DbContextExtension.class)
 public class TestCascadingUpdaterPets {
 
     private DataSource dataSource;
@@ -105,13 +101,8 @@ public class TestCascadingUpdaterPets {
 
     @BeforeEach
     void setup() {
-        // Set up HSQLDB with ANSI quoting
-        DbContext.setDefault(new DbContextBuilder()
-                .dialect(Dialect.HSQLDB)
-                .withQuoteStyle(QuoteStyle.ANSI)
-                .quoteObjectNames(true)
-                .build());
-
+        DbContext.setDefault(DbContext.forDialect(Dialect.HSQLDB));
+        
         // Create unique in-memory database
         JDBCDataSource ds = new JDBCDataSource();
         ds.setUrl("jdbc:hsqldb:mem:cascade_pets_test_" + System.nanoTime());

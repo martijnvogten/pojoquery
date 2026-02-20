@@ -7,25 +7,18 @@ import static org.pojoquery.TestUtils.norm;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.DbContextExtension;
+import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.schema.SchemaGenerator;
 
-@ExtendWith(DbContextExtension.class)
+@UseDialect(DbContext.Dialect.MYSQL)
 public class TestEmbedded {
 
-	@BeforeEach
-	public void setUp() {
-		DbContext.setDefault(DbContext.forDialect(DbContext.Dialect.MYSQL));
-	}
-	
 	@Table("country")
 	static class Country {
 		@Id

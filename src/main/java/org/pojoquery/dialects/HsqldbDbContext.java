@@ -17,7 +17,7 @@ import org.pojoquery.pipeline.SimpleFieldMapping;
 
 /**
  * DbContext implementation for HSQLDB (HyperSQL Database).
- * Uses no quoting for case-insensitive identifiers, but quotes aliases with ANSI style.
+ * Uses ANSI quoting style for identifiers.
  * Ideal for testing and embedded database scenarios.
  */
 public class HsqldbDbContext implements DbContext {
@@ -29,7 +29,7 @@ public class HsqldbDbContext implements DbContext {
 
     @Override
     public QuoteStyle getQuoteStyle() {
-        return QuoteStyle.NONE;
+        return QuoteStyle.ANSI;
     }
 
     @Override
@@ -39,17 +39,14 @@ public class HsqldbDbContext implements DbContext {
             if (i > 0) {
                 ret.append(".");
             }
-            // No quoting - identifiers will be case-insensitive
-            ret.append(names[i]);
+            ret.append(QuoteStyle.ANSI.quote(names[i]));
         }
         return ret.toString();
     }
 
     @Override
     public String quoteAlias(String alias) {
-        // Quote aliases with ANSI double quotes to preserve the dot separator
-        // (e.g., "event.eventID") while keeping table/column names unquoted
-        return "\"" + alias + "\"";
+        return QuoteStyle.ANSI.quote(alias);
     }
 
     @Override

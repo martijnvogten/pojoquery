@@ -73,7 +73,7 @@ public class EmbeddedExample {
     
             // tag::query[]
             Customer customer = PojoQuery.build(Customer.class)
-                .addWhere("{customer}.id = ?", 1L)
+                .addWhere("{customer.id} = ?", 1L)
                 .execute(c)
                 .stream().findFirst().orElse(null);
     

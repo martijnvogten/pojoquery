@@ -6,14 +6,11 @@ import java.time.LocalDate;
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
-import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
-@ExtendWith(DbContextExtension.class)
 public class OrdersIntegrationTest {
 
 	@Test

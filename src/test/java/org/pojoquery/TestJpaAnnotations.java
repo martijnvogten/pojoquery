@@ -13,10 +13,10 @@ import javax.sql.DataSource;
 
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.DbContext.QuoteStyle;
-import org.pojoquery.integrationtest.DbContextExtension;
+import org.pojoquery.annotations.FieldName;
+import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.schema.SchemaGenerator;
 
 import jakarta.persistence.Column;
@@ -32,7 +32,7 @@ import jakarta.persistence.Transient;
  * This verifies the AnnotationHelper correctly reads JPA annotations as alternatives
  * to PojoQuery's native annotations.
  */
-@ExtendWith(DbContextExtension.class)
+@UseDialect(Dialect.HSQLDB)
 public class TestJpaAnnotations {
 
     // ========== Test Entities with JPA Annotations ==========
@@ -40,6 +40,7 @@ public class TestJpaAnnotations {
     @Table(name = "jpa_user")
     public static class JpaUser {
         @Id
+        @Column(name = "user_id")
         Long id;
 
         @Column(name = "user_name", length = 100, unique = true)
@@ -71,6 +72,7 @@ public class TestJpaAnnotations {
     @Table(name = "jpa_simple_order")
     public static class JpaSimpleOrder {
         @Id
+        @FieldName("order_id")
         Long id;
 
         @Column(precision = 10, scale = 2)
@@ -90,6 +92,7 @@ public class TestJpaAnnotations {
     @Table(name = "jpa_company")
     public static class JpaCompany {
         @Id
+        @Column(name = "company_id")
         Long id;
 
         String name;
@@ -111,7 +114,7 @@ public class TestJpaAnnotations {
         String sql = String.join("\n", statements);
 
         // Should use @Id field as primary key
-        assertTrue(sql.contains("PRIMARY KEY (id)"),
+        assertTrue(sql.contains("PRIMARY KEY (user_id)"),
             "Should use JPA @Id field as primary key. Generated SQL:\n" + sql);
     }
 
@@ -379,10 +382,10 @@ public class TestJpaAnnotations {
 
             // Verify data was inserted with correct column names
             List<Map<String, Object>> rows = DB.queryRows(c, 
-                new SqlExpression("SELECT * FROM jpa_user WHERE id = ?", List.of(id)));
+                new SqlExpression("SELECT * FROM \"jpa_user\" WHERE \"user_id\" = ?", List.of(id)));
             assertEquals(1, rows.size());
-            assertEquals("john_doe", rows.get(0).get("USER_NAME")); // JPA @Column(name=...)
-            assertEquals("john@example.com", rows.get(0).get("EMAIL"));
+            assertEquals("john_doe", rows.get(0).get("user_name")); // JPA @Column(name=...)
+            assertEquals("john@example.com", rows.get(0).get("email"));
         });
     }
 
@@ -407,9 +410,9 @@ public class TestJpaAnnotations {
 
             // Verify update used correct column names
             List<Map<String, Object>> rows = DB.queryRows(c,
-                new SqlExpression("SELECT * FROM jpa_user WHERE id = ?", List.of(user.id)));
-            assertEquals("jane_smith", rows.get(0).get("USER_NAME"));
-            assertEquals("jane.smith@example.com", rows.get(0).get("EMAIL"));
+                new SqlExpression("SELECT * FROM \"jpa_user\" WHERE \"user_id\" = ?", List.of(user.id)));
+            assertEquals("jane_smith", rows.get(0).get("user_name"));
+            assertEquals("jane.smith@example.com", rows.get(0).get("email"));
         });
     }
 
@@ -435,9 +438,9 @@ public class TestJpaAnnotations {
 
             // Verify foreign key column used @JoinColumn name
             List<Map<String, Object>> rows = DB.queryRows(c,
-                new SqlExpression("SELECT * FROM jpa_simple_order WHERE id = ?", List.of(orderId)));
+                new SqlExpression("SELECT * FROM \"jpa_simple_order\" WHERE \"order_id\" = ?", List.of(orderId)));
             assertEquals(1, rows.size());
-            assertEquals(customer.id, rows.get(0).get("BUYER_ID")); // JPA @JoinColumn(name=...)
+            assertEquals(customer.id, rows.get(0).get("buyer_id")); // JPA @JoinColumn(name=...)
         });
     }
 
@@ -460,11 +463,11 @@ public class TestJpaAnnotations {
 
             // Verify embedded fields were inserted without prefix (true JPA behavior)
             List<Map<String, Object>> rows = DB.queryRows(c,
-                new SqlExpression("SELECT * FROM jpa_company WHERE id = ?", List.of(id)));
+                new SqlExpression("SELECT * FROM \"jpa_company\" WHERE \"company_id\" = ?", List.of(id)));
             assertEquals(1, rows.size());
-            assertEquals("123 Main St", rows.get(0).get("STREET")); // No prefix
-            assertEquals("Springfield", rows.get(0).get("CITY"));
-            assertEquals("12345", rows.get(0).get("ZIPCODE"));
+            assertEquals("123 Main St", rows.get(0).get("street")); // No prefix
+            assertEquals("Springfield", rows.get(0).get("city"));
+            assertEquals("12345", rows.get(0).get("zipCode"));
         });
     }
 
@@ -487,7 +490,7 @@ public class TestJpaAnnotations {
 
             // Query back using PojoQuery
             List<JpaSimpleOrder> orders = PojoQuery.build(JpaSimpleOrder.class)
-                .addWhere("{jpa_simple_order}.id = ?", order.id)
+                .addWhere("{order_id} = ?", order.id)
                 .execute(c);
 
             assertEquals(1, orders.size());

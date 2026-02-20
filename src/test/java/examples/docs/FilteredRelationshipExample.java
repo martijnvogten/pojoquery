@@ -84,11 +84,11 @@ public class FilteredRelationshipExample {
         String title;
 
         @Link(linktable = "event_person", linkfield = "event_id", foreignlinkfield = "person_id")
-        @JoinCondition("{this}.id = {linktable}.event_id AND {linktable}.role = 'visitor'")
+        @JoinCondition("{this.id} = {linktable.event_id} AND {linktable.role} = 'visitor'")
         List<Person> visitors;
 
         @Link(linktable = "event_person", linkfield = "event_id", foreignlinkfield = "person_id")
-        @JoinCondition("{this}.id = {linktable}.event_id AND {linktable}.role = 'organizer'")
+        @JoinCondition("{this.id} = {linktable.event_id} AND {linktable.role} = 'organizer'")
         List<Person> organizers;
 
         public Long getId() { return id; }
