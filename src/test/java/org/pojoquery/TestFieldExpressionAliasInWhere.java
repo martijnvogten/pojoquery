@@ -89,4 +89,99 @@ public class TestFieldExpressionAliasInWhere {
 					"""), 
 				norm(query.toStatement().getSql()));
 	}
+	
+	@Test
+	public void testAliasesInGroupBy() {
+		
+		DefaultSqlQuery query = QueryBuilder.from(Article.class).getQuery();
+		query.addGroupBy("{author.fullName}");
+		
+		assertEquals(
+				norm("""
+					SELECT
+					 `article`.`id` AS `article.id`,
+					 LOWER(`article`.title) AS `article.title`,
+					 `author`.`id` AS `author.id`,
+					 `author`.`firstName` AS `author.firstName`,
+					 `author`.`lastName` AS `author.lastName`,
+					 CONCAT(`author`.firstName, ' ', `author`.lastName) AS `author.fullName`
+					FROM `article` AS `article`
+					 LEFT JOIN `person` AS `author` ON `article`.`author_id` = `author`.`id`
+					GROUP BY CONCAT(`author`.firstName, ' ', `author`.lastName)
+					"""), 
+				norm(query.toStatement().getSql()));
+	}
+	
+	@Test
+	public void testAliasesInOrderBy() {
+		
+		DefaultSqlQuery query = QueryBuilder.from(Article.class).getQuery();
+		query.addOrderBy("{author.fullName} ASC");
+		
+		assertEquals(
+				norm("""
+					SELECT
+					 `article`.`id` AS `article.id`,
+					 LOWER(`article`.title) AS `article.title`,
+					 `author`.`id` AS `author.id`,
+					 `author`.`firstName` AS `author.firstName`,
+					 `author`.`lastName` AS `author.lastName`,
+					 CONCAT(`author`.firstName, ' ', `author`.lastName) AS `author.fullName`
+					FROM `article` AS `article`
+					 LEFT JOIN `person` AS `author` ON `article`.`author_id` = `author`.`id`
+					ORDER BY CONCAT(`author`.firstName, ' ', `author`.lastName) ASC
+					"""), 
+				norm(query.toStatement().getSql()));
+	}
+	
+	@Test
+	public void testAliasesInOrderByDeeper() {
+		
+		DefaultSqlQuery query = QueryBuilder.from(Book.class).getQuery();
+		query.addOrderBy("{articles.author.fullName} DESC");
+		
+		assertEquals(
+				norm("""
+					SELECT
+					 `book`.`id` AS `book.id`,
+					 `articles`.`id` AS `articles.id`,
+					 LOWER(`articles`.title) AS `articles.title`,
+					 `articles.author`.`id` AS `articles.author.id`,
+					 `articles.author`.`firstName` AS `articles.author.firstName`,
+					 `articles.author`.`lastName` AS `articles.author.lastName`,
+					 CONCAT(`articles.author`.firstName, ' ', `articles.author`.lastName) AS `articles.author.fullName`
+					FROM `book` AS `book`
+					 LEFT JOIN `article` AS `articles` ON `book`.`id` = `articles`.`book_id`
+					 LEFT JOIN `person` AS `articles.author` ON `articles`.`author_id` = `articles.author`.`id`
+					ORDER BY CONCAT(`articles.author`.firstName, ' ', `articles.author`.lastName) DESC
+					"""), 
+				norm(query.toStatement().getSql()));
+	}
+	
+	@Test
+	public void testAliasesInJoinCondition() {
+		
+		DefaultSqlQuery query = QueryBuilder.from(Article.class).getQuery();
+		query.addJoin(
+			org.pojoquery.pipeline.SqlQuery.JoinType.LEFT,
+			"audit_log",
+			"audit",
+			SqlExpression.sql("{audit.entity_name} = {author.fullName}")
+		);
+		
+		assertEquals(
+				norm("""
+					SELECT
+					 `article`.`id` AS `article.id`,
+					 LOWER(`article`.title) AS `article.title`,
+					 `author`.`id` AS `author.id`,
+					 `author`.`firstName` AS `author.firstName`,
+					 `author`.`lastName` AS `author.lastName`,
+					 CONCAT(`author`.firstName, ' ', `author`.lastName) AS `author.fullName`
+					FROM `article` AS `article`
+					 LEFT JOIN `person` AS `author` ON `article`.`author_id` = `author`.`id`
+					 LEFT JOIN `audit_log` AS `audit` ON `audit`.`entity_name` = CONCAT(`author`.firstName, ' ', `author`.lastName)
+					"""), 
+				norm(query.toStatement().getSql()));
+	}
 }

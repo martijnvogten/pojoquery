@@ -478,7 +478,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 
 	private String joinMany(String alias, SqlQuery<?> result, FieldModel f, TypeModel componentType) {
 		TableMapping tableMapping = lookupTableMapping(componentType);
-		String idField = determineIdField(f.getDeclaringType()).getName();
+		String idField = determineSqlFieldName(determineIdField(f.getDeclaringType()));
 
 		String linkField = linkFieldName(f.getDeclaringType());
 		Link linkAnn = f.getAnnotation(Link.class);

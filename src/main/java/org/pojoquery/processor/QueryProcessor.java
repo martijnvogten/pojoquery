@@ -213,12 +213,13 @@ public class QueryProcessor extends AbstractProcessor {
             out.println("    // Static condition builder fields for main entity");
             for (SqlField field : mainFields) {
                 String fieldName = extractFieldNameFromAlias(field.alias);
+                String columnName = extractColumnNameFromExpression(field);
                 FieldInfo fieldInfo = getFieldInfo(mainAlias, fieldName);
                 String builderClass = fieldInfo.isComparable
                     ? "ComparableConditionBuilderField"
                     : "ConditionBuilderField";
                 out.println("    public final " + builderClass + "<" + fieldInfo.typeName + ", " + chainClassName + "> " + fieldName + " =");
-                out.println("            new " + builderClass + "<>(() -> new " + chainClassName + "(), \"" + tableName + "\", \"" + fieldName + "\");");
+                out.println("            new " + builderClass + "<>(() -> new " + chainClassName + "(), \"" + tableName + "\", \"" + columnName + "\");");
             }
             out.println();
 
@@ -358,15 +359,15 @@ public class QueryProcessor extends AbstractProcessor {
             out.println();
 
             // Generate getPrimaryKeyFromRow method (overrides TypedQuery for streaming support)
-            generateGetPrimaryKeyFromRow(out, tableName, aliases);
+            generateGetPrimaryKeyFromRow(out, tableName, aliases, fieldsByAlias);
             out.println();
 
             // Generate getIdFieldName method (overrides TypedQuery abstract method)
-            generateGetIdFieldName(out, tableName, aliases);
+            generateGetIdFieldName(out, tableName, aliases, fieldsByAlias);
             out.println();
 
             // Generate buildIdCondition method (overrides TypedQuery abstract method)
-            generateBuildIdCondition(out, tableName, aliases);
+            generateBuildIdCondition(out, tableName, aliases, fieldsByAlias);
             out.println();
 
             // Generate getEntityClass method (overrides TypedQuery abstract method)
@@ -417,12 +418,13 @@ public class QueryProcessor extends AbstractProcessor {
         // Generate condition fields for this relationship
         for (SqlField field : relationFields) {
             String fieldName = extractFieldNameFromAlias(field.alias);
+            String columnName = extractColumnNameFromExpression(field);
             FieldInfo fieldInfo = getFieldInfo(relAlias, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"
                 : "ConditionBuilderField";
             out.println(indent + "    public final " + builderClass + "<" + fieldInfo.typeName + ", " + chainClassName + "> " + fieldName + " =");
-            out.println(indent + "            new " + builderClass + "<>(() -> new " + chainClassName + "(), \"" + aliasName + "\", \"" + fieldName + "\");");
+            out.println(indent + "            new " + builderClass + "<>(() -> new " + chainClassName + "(), \"" + aliasName + "\", \"" + columnName + "\");");
         }
         
         // Recursively generate for child relations
@@ -745,17 +747,16 @@ public class QueryProcessor extends AbstractProcessor {
      * Generates the getPrimaryKeyFromRow method for extracting the primary key from a row.
      */
     private void generateGetPrimaryKeyFromRow(PrintWriter out, String tableName,
-            LinkedHashMap<String, Alias> aliases) {
+            LinkedHashMap<String, Alias> aliases, Map<String, List<SqlField>> fieldsByAlias) {
 
         Alias rootAlias = aliases.get(tableName);
-        String idFieldName = "id";
-        if (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()) {
-            idFieldName = rootAlias.getIdFields().get(0).getName();
-        }
+        FieldModel idField = (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty())
+            ? rootAlias.getIdFields().get(0) : null;
+        String idColumnName = findIdColumnName(tableName, idField, fieldsByAlias);
 
         out.println("    @Override");
         out.println("    protected Object getPrimaryKeyFromRow(Map<String, Object> row) {");
-        out.println("        return row.get(\"" + tableName + "." + idFieldName + "\");");
+        out.println("        return row.get(\"" + tableName + "." + idColumnName + "\");");
         out.println("    }");
     }
 
@@ -763,17 +764,16 @@ public class QueryProcessor extends AbstractProcessor {
      * Generates the getIdFieldName method for returning the primary key field name.
      */
     private void generateGetIdFieldName(PrintWriter out, String tableName,
-            LinkedHashMap<String, Alias> aliases) {
+            LinkedHashMap<String, Alias> aliases, Map<String, List<SqlField>> fieldsByAlias) {
 
         Alias rootAlias = aliases.get(tableName);
-        String idFieldName = "id";
-        if (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()) {
-            idFieldName = rootAlias.getIdFields().get(0).getName();
-        }
+        FieldModel idField = (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty())
+            ? rootAlias.getIdFields().get(0) : null;
+        String idColumnName = findIdColumnName(tableName, idField, fieldsByAlias);
 
         out.println("    @Override");
         out.println("    protected String getIdFieldName() {");
-        out.println("        return \"" + tableName + "." + idFieldName + "\";");
+        out.println("        return \"" + tableName + "." + idColumnName + "\";");
         out.println("    }");
     }
 
@@ -781,17 +781,16 @@ public class QueryProcessor extends AbstractProcessor {
      * Generates the buildIdCondition method for finding entities by ID.
      */
     private void generateBuildIdCondition(PrintWriter out, String tableName,
-            LinkedHashMap<String, Alias> aliases) {
+            LinkedHashMap<String, Alias> aliases, Map<String, List<SqlField>> fieldsByAlias) {
 
         Alias rootAlias = aliases.get(tableName);
-        String idFieldName = "id";
-        if (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty()) {
-            idFieldName = rootAlias.getIdFields().get(0).getName();
-        }
+        FieldModel idField = (rootAlias != null && rootAlias.getIdFields() != null && !rootAlias.getIdFields().isEmpty())
+            ? rootAlias.getIdFields().get(0) : null;
+        String idColumnName = findIdColumnName(tableName, idField, fieldsByAlias);
 
         out.println("    @Override");
         out.println("    protected SqlExpression buildIdCondition(Object id) {");
-        out.println("        return SqlExpression.sql(\"{" + tableName + "." + idFieldName + "} = ?\", id);");
+        out.println("        return SqlExpression.sql(\"{" + tableName + "." + idColumnName + "} = ?\", id);");
         out.println("    }");
     }
 
@@ -898,12 +897,13 @@ public class QueryProcessor extends AbstractProcessor {
         out.println(indent + "    public class StaticConditionFields {");
         for (SqlField field : mainFields) {
             String fieldName = extractFieldNameFromAlias(field.alias);
+            String columnName = extractColumnNameFromExpression(field);
             FieldInfo fieldInfo = getFieldInfo(mainAlias, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"
                 : "ConditionBuilderField";
             out.println(indent + "        public final " + builderClass + "<" + fieldInfo.typeName + ", " + chainClassName + "> " + fieldName + " =");
-            out.println(indent + "                new " + builderClass + "<>(() -> " + chainClassName + ".this, \"" + tableName + "\", \"" + fieldName + "\");");
+            out.println(indent + "                new " + builderClass + "<>(() -> " + chainClassName + ".this, \"" + tableName + "\", \"" + columnName + "\");");
         }
         
         // Add nested relationship field classes
@@ -982,12 +982,13 @@ public class QueryProcessor extends AbstractProcessor {
         // Generate condition fields for this relationship
         for (SqlField field : relationFields) {
             String fieldName = extractFieldNameFromAlias(field.alias);
+            String columnName = extractColumnNameFromExpression(field);
             FieldInfo fieldInfo = getFieldInfo(relAlias, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"
                 : "ConditionBuilderField";
             out.println(indent + "    public final " + builderClass + "<" + fieldInfo.typeName + ", " + chainClassName + "> " + fieldName + " =");
-            out.println(indent + "            new " + builderClass + "<>(() -> " + chainClassName + ".this, \"" + aliasName + "\", \"" + fieldName + "\");");
+            out.println(indent + "            new " + builderClass + "<>(() -> " + chainClassName + ".this, \"" + aliasName + "\", \"" + columnName + "\");");
         }
         
         // Recursively generate for child relations
@@ -1014,7 +1015,8 @@ public class QueryProcessor extends AbstractProcessor {
         out.println(indent + "    public " + groupByBuilderClass + "() {");
         for (SqlField field : mainFields) {
             String fieldName = extractFieldNameFromAlias(field.alias);
-            out.println(indent + "        this." + fieldName + " = new " + queryClassName + "GroupByField(\"" + tableName + "\", \"" + fieldName + "\");");
+            String columnName = extractColumnNameFromExpression(field);
+            out.println(indent + "        this." + fieldName + " = new " + queryClassName + "GroupByField(\"" + tableName + "\", \"" + columnName + "\");");
         }
         out.println(indent + "    }");
 
@@ -1044,7 +1046,8 @@ public class QueryProcessor extends AbstractProcessor {
         out.println(indent + "    public " + orderByBuilderClass + "() {");
         for (SqlField field : mainFields) {
             String fieldName = extractFieldNameFromAlias(field.alias);
-            out.println(indent + "        this." + fieldName + " = new OrderByField<>(this, " + queryClassName + ".this, \"" + tableName + "\", \"" + fieldName + "\");");
+            String columnName = extractColumnNameFromExpression(field);
+            out.println(indent + "        this." + fieldName + " = new OrderByField<>(this, " + queryClassName + ".this, \"" + tableName + "\", \"" + columnName + "\");");
         }
         out.println(indent + "    }");
         out.println();
@@ -1076,8 +1079,9 @@ public class QueryProcessor extends AbstractProcessor {
         // Generate OrderBy fields for this relationship
         for (SqlField field : relationFields) {
             String fieldName = extractFieldNameFromAlias(field.alias);
+            String columnName = extractColumnNameFromExpression(field);
             out.println(indent + "    public final OrderByField<" + queryClassName + "> " + fieldName + " =");
-            out.println(indent + "            new OrderByField<>(" + queryClassName + "OrderByBuilder.this, " + queryClassName + ".this, \"" + aliasName + "\", \"" + fieldName + "\");");
+            out.println(indent + "            new OrderByField<>(" + queryClassName + "OrderByBuilder.this, " + queryClassName + ".this, \"" + aliasName + "\", \"" + columnName + "\");");
         }
         
         // Recursively generate for child relations
@@ -1170,12 +1174,13 @@ public class QueryProcessor extends AbstractProcessor {
         // Fields for condition building on main entity
         for (SqlField field : mainFields) {
             String fieldName = extractFieldNameFromAlias(field.alias);
+            String columnName = extractColumnNameFromExpression(field);
             FieldInfo fieldInfo = getFieldInfo(mainAlias, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"
                 : "ConditionBuilderField";
             out.println(indent + "    public final " + builderClass + "<" + fieldInfo.typeName + ", " + terminatorClass + "> " + fieldName + " =");
-            out.println(indent + "            new " + builderClass + "<>(() -> this, \"" + tableName + "\", \"" + fieldName + "\");");
+            out.println(indent + "            new " + builderClass + "<>(() -> this, \"" + tableName + "\", \"" + columnName + "\");");
         }
         out.println();
 
@@ -1279,12 +1284,13 @@ public class QueryProcessor extends AbstractProcessor {
         // Generate condition fields for this relationship
         for (SqlField field : relationFields) {
             String fieldName = extractFieldNameFromAlias(field.alias);
+            String columnName = extractColumnNameFromExpression(field);
             FieldInfo fieldInfo = getFieldInfo(relAlias, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"
                 : "ConditionBuilderField";
             out.println(indent + "    public final " + builderClass + "<" + fieldInfo.typeName + ", " + terminatorClass + "> " + fieldName + " =");
-            out.println(indent + "            new " + builderClass + "<>(() -> " + whereBuilderClass + ".this, \"" + aliasName + "\", \"" + fieldName + "\");");
+            out.println(indent + "            new " + builderClass + "<>(() -> " + whereBuilderClass + ".this, \"" + aliasName + "\", \"" + columnName + "\");");
         }
         out.println();
         
@@ -1343,6 +1349,53 @@ public class QueryProcessor extends AbstractProcessor {
     private String extractFieldNameFromAlias(String fieldAlias) {
         int lastDot = fieldAlias.lastIndexOf('.');
         return lastDot >= 0 ? fieldAlias.substring(lastDot + 1) : fieldAlias;
+    }
+
+    /**
+     * Finds the SQL column name for an ID field by looking it up in the fieldsByAlias map.
+     * Falls back to the Java field name if not found.
+     */
+    private String findIdColumnName(String tableName, FieldModel idField, Map<String, List<SqlField>> fieldsByAlias) {
+        if (idField == null) return "id";
+        String javaFieldName = idField.getName();
+        
+        // Look for the ID field in the SqlFields for this alias
+        List<SqlField> tableFields = fieldsByAlias.get(tableName);
+        if (tableFields != null) {
+            for (SqlField sqlField : tableFields) {
+                // Check if this SqlField corresponds to the ID field
+                String fieldNameFromAlias = extractFieldNameFromAlias(sqlField.alias);
+                if (fieldNameFromAlias.equals(javaFieldName)) {
+                    // Found it - extract the actual SQL column name from the expression
+                    return extractColumnNameFromExpression(sqlField);
+                }
+            }
+        }
+        
+        // Fallback to Java field name
+        return javaFieldName;
+    }
+
+    /**
+     * Extracts the actual SQL column name from a SqlField's expression.
+     * For expressions like "{article.article_title}", returns "article_title".
+     * Falls back to extracting from alias if expression doesn't contain curly braces.
+     */
+    private String extractColumnNameFromExpression(SqlField field) {
+        String sql = field.expression.getSql();
+        // Pattern is like {alias.columnName}
+        int start = sql.indexOf('{');
+        int end = sql.indexOf('}');
+        if (start >= 0 && end > start) {
+            String fieldExpr = sql.substring(start + 1, end);
+            int dot = fieldExpr.lastIndexOf('.');
+            if (dot >= 0) {
+                return fieldExpr.substring(dot + 1);
+            }
+            return fieldExpr;
+        }
+        // Fallback to alias extraction
+        return extractFieldNameFromAlias(field.alias);
     }
 
     private String escapeJava(String s) {

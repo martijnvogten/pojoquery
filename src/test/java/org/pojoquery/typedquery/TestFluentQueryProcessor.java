@@ -1,6 +1,7 @@
 package org.pojoquery.typedquery;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.sql.Connection;
 import java.util.List;
@@ -10,12 +11,10 @@ import javax.sql.DataSource;
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.PojoQuery;
-import org.pojoquery.integrationtest.DbContextExtension;
 import org.pojoquery.schema.SchemaGenerator;
 import org.pojoquery.typedquery.entities.Article;
 import org.pojoquery.typedquery.entities.ArticleQuery;
@@ -114,7 +113,7 @@ public class TestFluentQueryProcessor {
             List<Article> articles = q.where().title.eq("First Article").list(c);
 
             ArticleQueryStaticConditionChain cond = q.title.eq("henk");
-            assertEquals("{article.title} = ?", cond.get().getSql());
+            assertEquals("{article.article_title} = ?", cond.get().getSql());
             assertEquals("henk", cond.get().getParameters().iterator().next());
 
             assertEquals(1, articles.size());

@@ -167,7 +167,8 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 			if (field.alias == null) {
 				fieldExpressions.add(field.expression);
 			} else {
-				SqlExpression resolved = resolveAliases(dbContext, field.expression, table);
+				// Pass field.alias to prevent self-referential resolution
+				SqlExpression resolved = resolveAliasesInternal(dbContext, field.expression, table, field.alias);
 				String sql = resolved.getSql() + " AS " + dbContext.quoteAlias(field.alias);
 				fieldExpressions.add(new SqlExpression(sql, resolved.getParameters()));
 			}
@@ -177,26 +178,20 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 	}
 
 	private SqlExpression resolveAliases(DbContext context, SqlExpression sql, String thisAlias) {
+		return resolveAliasesInternal(context, sql, thisAlias, null);
+	}
+	
+	private SqlExpression resolveAliasesInternal(DbContext context, SqlExpression sql, String thisAlias, String currentFieldAlias) {
 		return new SqlExpression(CurlyMarkers.processMarkers(sql.getSql(), marker -> {
 			if ("this".equals(marker)) {
 				return context.quoteAlias(thisAlias);
 			}
-			// Handle {this.column} patterns (e.g., "this.id" -> "tablealias"."id")
+			// Handle {this.fieldName} patterns - replace 'this' with the current alias and continue processing
 			if (marker.startsWith("this.")) {
-				String columnName = marker.substring(5);
-				return context.quoteAlias(thisAlias) + "." + context.quoteObjectNames(columnName);
+				String fieldName = marker.substring(5);
+				marker = thisAlias + "." + fieldName;
 			}
-			for (SqlField field : fields) {
-				if (marker.equals(field.alias)) {
-					// Check if field expression is a simple {alias.column} pattern (would cause infinite recursion)
-					// In that case, skip field matching and use alias.column handling below
-					String fieldSql = field.expression.getSql();
-					if (fieldSql.matches("\\{[a-zA-Z0-9_\\.]+\\}")) {
-						break; // Fall through to alias.column handling
-					}
-					return resolveAliases(dbContext, field.expression, thisAlias).getSql();
-				}
-			}
+			
 			// Check if marker is a known table/join alias (which may contain dots)
 			if (marker.equals(table)) {
 				return context.quoteAlias(marker);
@@ -206,9 +201,57 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 					return context.quoteAlias(marker);
 				}
 			}
+			
+			int lastDotIndex = marker.lastIndexOf('.');
+			
+			// Check if marker matches a field alias with a complex expression (like @Select)
+			// Complex expressions need field alias lookup; simple {alias.column} expressions don't
+			if (!marker.equals(currentFieldAlias)) {
+				for (SqlField field : fields) {
+					if (marker.equals(field.alias)) {
+						String fieldSql = field.expression.getSql();
+						// For simple {alias.column} patterns, check if we should prefer direct table.column resolution
+						if (fieldSql.matches("\\{[a-zA-Z0-9_\\.]+\\}")) {
+							String innerMarker = fieldSql.substring(1, fieldSql.length() - 1);
+							int dotIndex = innerMarker.lastIndexOf('.');
+							if (dotIndex > 0) {
+								String expressionTableAlias = innerMarker.substring(0, dotIndex);
+								String sqlColumnName = innerMarker.substring(dotIndex + 1);
+								// Check if the marker's prefix is a known table/join alias different from the expression's alias
+								// This handles inheritance: {bedroom.id} should resolve to "bedroom"."id", not follow to "room"."id"
+								if (lastDotIndex > 0) {
+									String markerTablePrefix = marker.substring(0, lastDotIndex);
+									if (!markerTablePrefix.equals(expressionTableAlias)) {
+										boolean isPrefixKnownAlias = markerTablePrefix.equals(table);
+										if (!isPrefixKnownAlias) {
+											for (SqlJoin j : joins) {
+												if (markerTablePrefix.equals(j.alias)) {
+													isPrefixKnownAlias = true;
+													break;
+												}
+											}
+										}
+										if (isPrefixKnownAlias) {
+											// Marker prefix is a different known alias - resolve as direct table.column
+											String markerColumnName = marker.substring(lastDotIndex + 1);
+											return context.quoteAlias(markerTablePrefix) + "." + context.quoteObjectNames(markerColumnName);
+										}
+									}
+								}
+								// Same table alias or prefix not known - use the expression's alias
+								return context.quoteAlias(expressionTableAlias) + "." + context.quoteObjectNames(sqlColumnName);
+							}
+						}
+						// For complex expressions (like @Select), resolve recursively
+						// Determine the table alias by finding the join alias for this field
+						int lastDot = marker.lastIndexOf('.');
+						String resolveAlias = lastDot > 0 ? marker.substring(0, lastDot) : thisAlias;
+						return resolveAliasesInternal(context, field.expression, resolveAlias, field.alias).getSql();
+					}
+				}
+			}
 			// Handle alias.column patterns (e.g., "events.festivalID" -> "events"."festivalID")
 			// Use last dot to split alias from column name since aliases can contain dots
-			int lastDotIndex = marker.lastIndexOf('.');
 			if (lastDotIndex > 0) {
 				String tableAlias = marker.substring(0, lastDotIndex);
 				String columnName = marker.substring(lastDotIndex + 1);
