@@ -24,9 +24,11 @@ import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
 import org.pojoquery.SqlExpression;
+import org.pojoquery.annotations.Aggregate;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
+import org.pojoquery.annotations.From;
 import org.pojoquery.annotations.GroupBy;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Join;
@@ -37,6 +39,7 @@ import org.pojoquery.annotations.OrderBy;
 import org.pojoquery.annotations.Other;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.SubClasses;
+import org.pojoquery.annotations.Subquery;
 import org.pojoquery.annotations.Transient;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
@@ -93,7 +96,13 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		this.dbContext = query.getDbContext();
 		this.resultType = type;
 		this.query = query;
-		final TableMapping tableMapping = lookupTableMapping(type);
+		
+		// Check for @From annotation - if present, use the source type for building
+		// the query structure (tables/joins) while using resultType for field selection
+		From fromAnn = type.getAnnotation(From.class);
+		TypeModel sourceType = fromAnn != null ? new ReflectionTypeModel(fromAnn.value()) : type;
+		
+		final TableMapping tableMapping = lookupTableMapping(sourceType);
 		query.setTable(tableMapping.schemaName, tableMapping.tableName);
 		List<Join> joinAnns = getJoinAnnotations(type);
 		for (Join joinAnn : joinAnns) {
@@ -113,7 +122,14 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		}
 
 		rootAlias = query.getTable();
-		addClass(type, rootAlias, null, null);
+		
+		if (fromAnn != null) {
+			// Build query structure from source type, but select fields from result type
+			addClass(sourceType, rootAlias, null, null);
+			addFieldsFromResultType(type, rootAlias);
+		} else {
+			addClass(type, rootAlias, null, null);
+		}
 	}
 
 	private List<Join> getJoinAnnotations(TypeModel type) {
@@ -386,9 +402,15 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 						aliases.get(subClassAlias).setOtherField(f);
 					}
 				}
+			} else if (f.getAnnotation(Subquery.class) != null) {
+				// Process @Subquery field by building a derived table join
+				processSubqueryField(f, f.getAnnotation(Subquery.class), alias);
 			} else {
 				SqlExpression selectExpression;
-				if (f.getAnnotation(Select.class) != null) {
+				Aggregate aggAnn = f.getAnnotation(Aggregate.class);
+				if (aggAnn != null) {
+					selectExpression = new SqlExpression(resolveJoinConditionAliases(aggAnn.value(), alias, null, null));
+				} else if (f.getAnnotation(Select.class) != null) {
 					selectExpression = new SqlExpression(resolveJoinConditionAliases(f.getAnnotation(Select.class).value(), alias, null, null));
 				} else {
 					String fieldName = determineSqlFieldName(f);
@@ -397,6 +419,283 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 				addField(selectExpression, fieldsAlias + "." + f.getName(), f);
 			}
 		}
+	}
+
+	/**
+	 * Adds fields from result type when using @From annotation.
+	 * The source type's structure (joins) is already built; this method adds
+	 * field selections from the result type, supporting @Aggregate expressions
+	 * and @Subquery fields for derived table joins.
+	 */
+	private void addFieldsFromResultType(TypeModel resultType, String rootAlias) {
+		// Clear field mappings added by addClass (we only want result type fields)
+		fieldMappings.clear();
+		query.getFields().clear();
+		
+		boolean hasAggregates = false;
+		List<String> nonAggregateFields = new ArrayList<>();
+		Set<String> referencedAliases = new HashSet<>();
+		List<SubqueryFieldInfo> subqueryFields = new ArrayList<>();
+		
+		for (FieldModel f : collectFieldsOfClass(resultType, null)) {
+			if (f instanceof ReflectionFieldModel) {
+				((ReflectionFieldModel) f).getReflectionField().setAccessible(true);
+			}
+			
+			if (f.getAnnotation(Transient.class) != null) {
+				continue;
+			}
+			if (f.isStatic()) {
+				continue;
+			}
+			
+			Aggregate aggAnn = f.getAnnotation(Aggregate.class);
+			Select selectAnn = f.getAnnotation(Select.class);
+			Subquery subqueryAnn = f.getAnnotation(Subquery.class);
+			
+			if (subqueryAnn != null) {
+				// Collect subquery fields for later processing
+				subqueryFields.add(new SubqueryFieldInfo(f, subqueryAnn));
+				continue;
+			}
+			
+			SqlExpression selectExpression;
+			if (aggAnn != null) {
+				hasAggregates = true;
+				String resolved = resolveJoinConditionAliases(aggAnn.value(), rootAlias, null, null);
+				selectExpression = new SqlExpression(resolved);
+				collectReferencedAliases(resolved, referencedAliases);
+			} else if (selectAnn != null) {
+				String resolved = resolveJoinConditionAliases(selectAnn.value(), rootAlias, null, null);
+				selectExpression = new SqlExpression(resolved);
+				nonAggregateFields.add(selectExpression.getSql());
+				collectReferencedAliases(resolved, referencedAliases);
+			} else {
+				String fieldName = determineSqlFieldName(f);
+				selectExpression = new SqlExpression("{" + rootAlias + "." + fieldName + "}");
+				nonAggregateFields.add("{" + rootAlias + "." + fieldName + "}");
+				referencedAliases.add(rootAlias);
+			}
+			
+			addField(selectExpression, rootAlias + "." + f.getName(), f);
+		}
+		
+		// Auto-add GROUP BY for non-aggregate fields when aggregates are present
+		if (hasAggregates && !nonAggregateFields.isEmpty()) {
+			for (String field : nonAggregateFields) {
+				query.addGroupBy(field);
+			}
+		}
+		
+		// Prune unused joins to prevent row multiplication
+		pruneUnusedJoins(referencedAliases, rootAlias);
+		
+		// Process subquery fields (add derived table joins)
+		for (SubqueryFieldInfo sqInfo : subqueryFields) {
+			processSubqueryField(sqInfo.field, sqInfo.annotation, rootAlias);
+		}
+	}
+	
+	/**
+	 * Helper class to store subquery field information for later processing.
+	 */
+	private static class SubqueryFieldInfo {
+		final FieldModel field;
+		final Subquery annotation;
+		
+		SubqueryFieldInfo(FieldModel field, Subquery annotation) {
+			this.field = field;
+			this.annotation = annotation;
+		}
+	}
+	
+	/**
+	 * Processes a @Subquery field by building a derived table join.
+	 * The field's type must have @From and @Aggregate annotations.
+	 * Supports both single-object fields and collection (List) fields for to-many relationships.
+	 */
+	private void processSubqueryField(FieldModel field, Subquery subqueryAnn, String rootAlias) {
+		TypeModel fieldType = field.getType();
+		String subqueryAlias = field.getName();
+		String joinOn = subqueryAnn.joinOn();
+		
+		// Check if this is a to-many (collection) subquery
+		boolean isToMany = isListOrArray(fieldType);
+		TypeModel subqueryType = isToMany ? getCollectionComponentType(field) : fieldType;
+		
+		// The subquery type should have @From annotation
+		From fromAnn = subqueryType.getAnnotation(From.class);
+		if (fromAnn == null) {
+			throw new MappingException("@Subquery field '" + field.getName() + "' type must have @From annotation");
+		}
+		
+		// Build the subquery with simple column aliases (no table prefix)
+		SqlExpression subquerySql = buildSubqueryStatement(subqueryType);
+		
+		// Add the subquery as a derived table join
+		// Join condition: {subqueryAlias.joinOn} = {rootAlias.joinOn}
+		SqlExpression joinCondition = new SqlExpression(
+			"{" + subqueryAlias + "." + joinOn + "} = {" + rootAlias + "." + joinOn + "}"
+		);
+		query.addSubqueryJoin(SqlQuery.JoinType.LEFT, subquerySql, subqueryAlias, joinCondition);
+		
+		// For to-many: need id fields for deduplication in result mapping
+		List<FieldModel> idFields = isToMany ? determineIdFields(subqueryType) : Collections.emptyList();
+		
+		// Register the subquery alias for result mapping
+		Alias newAlias = new Alias(subqueryAlias, subqueryType, rootAlias, field, idFields);
+		if (!isToMany) {
+			newAlias.setIsEmbedded(true);  // Treat single-object like embedded for result mapping
+		}
+		aliases.put(subqueryAlias, newAlias);
+		
+		// Add field selections for subquery fields
+		for (FieldModel sqField : collectFieldsOfClass(subqueryType, null)) {
+			if (sqField.getAnnotation(Transient.class) != null || sqField.isStatic()) {
+				continue;
+			}
+			
+			String fieldAlias = subqueryAlias + "." + sqField.getName();
+			SqlExpression fieldExpr = new SqlExpression("{" + fieldAlias + "}");
+			addField(fieldExpr, fieldAlias, sqField);
+		}
+	}
+	
+	/**
+	 * Builds a subquery statement with simple column aliases (just field names, not prefixed).
+	 * This is used for @Subquery derived table joins.
+	 */
+	private SqlExpression buildSubqueryStatement(TypeModel subqueryType) {
+		From fromAnn = subqueryType.getAnnotation(From.class);
+		TypeModel sourceType = fromAnn != null ? new ReflectionTypeModel(fromAnn.value()) : subqueryType;
+		
+		// Build a temporary query for the subquery
+		SqlQuery<?> subquery = new DefaultSqlQuery(dbContext);
+		CustomizableQueryBuilder<?,?> subqueryBuilder = new CustomizableQueryBuilder<>(subquery, sourceType);
+		
+		// Clear the auto-generated fields - we'll add them with simple aliases
+		subquery.getFields().clear();
+		
+		String subqueryRootAlias = subquery.getTable();
+		boolean hasAggregates = false;
+		List<String> nonAggregateFields = new ArrayList<>();
+		Set<String> referencedAliases = new HashSet<>();
+		
+		for (FieldModel f : collectFieldsOfClass(subqueryType, null)) {
+			if (f.getAnnotation(Transient.class) != null || f.isStatic()) {
+				continue;
+			}
+			
+			Aggregate aggAnn = f.getAnnotation(Aggregate.class);
+			Select selectAnn = f.getAnnotation(Select.class);
+			
+			String simpleAlias = f.getName();  // Just the field name, no prefix
+			SqlExpression selectExpression;
+			
+			if (aggAnn != null) {
+				hasAggregates = true;
+				String resolved = subqueryBuilder.resolveJoinConditionAliases(aggAnn.value(), subqueryRootAlias, null, null);
+				selectExpression = new SqlExpression(resolved);
+				collectReferencedAliases(resolved, referencedAliases);
+			} else if (selectAnn != null) {
+				String resolved = subqueryBuilder.resolveJoinConditionAliases(selectAnn.value(), subqueryRootAlias, null, null);
+				selectExpression = new SqlExpression(resolved);
+				nonAggregateFields.add(selectExpression.getSql());
+				collectReferencedAliases(resolved, referencedAliases);
+			} else {
+				String fieldName = determineSqlFieldName(f);
+				selectExpression = new SqlExpression("{" + subqueryRootAlias + "." + fieldName + "}");
+				nonAggregateFields.add("{" + subqueryRootAlias + "." + fieldName + "}");
+				referencedAliases.add(subqueryRootAlias);
+			}
+			
+			// Add field with simple alias (just field name)
+			subquery.addField(selectExpression, simpleAlias);
+		}
+		
+		// Auto-add GROUP BY for non-aggregate fields when aggregates are present
+		if (hasAggregates && !nonAggregateFields.isEmpty()) {
+			for (String field : nonAggregateFields) {
+				subquery.addGroupBy(field);
+			}
+		}
+		
+		// Prune unused joins
+		subqueryBuilder.pruneUnusedJoins(referencedAliases, subqueryRootAlias);
+		
+		return subquery.toStatement();
+	}
+	
+	/**
+	 * Extracts all aliases referenced in an expression using {alias.field} syntax.
+	 */
+	private void collectReferencedAliases(String expression, Set<String> aliases) {
+		java.util.regex.Matcher matcher = ALIAS_PATTERN.matcher(expression);
+		while (matcher.find()) {
+			String fullMatch = matcher.group(1);
+			// Extract the alias part (everything before the last dot, or the whole thing if no field)
+			int lastDot = fullMatch.lastIndexOf('.');
+			if (lastDot > 0) {
+				aliases.add(fullMatch.substring(0, lastDot));
+			} else {
+				aliases.add(fullMatch);
+			}
+		}
+	}
+	
+	/**
+	 * Removes joins that aren't referenced by any field expression.
+	 * Computes transitive closure: if join A is needed and its condition references join B, 
+	 * then B is also needed.
+	 */
+	private void pruneUnusedJoins(Set<String> referencedAliases, String rootAlias) {
+		List<SqlQuery.SqlJoin> joins = query.getJoins();
+		if (joins.isEmpty()) {
+			return;
+		}
+		
+		// Build dependency map: which joins does each join's condition reference?
+		Map<String, Set<String>> joinDependencies = new HashMap<>();
+		for (SqlQuery.SqlJoin join : joins) {
+			Set<String> deps = new HashSet<>();
+			if (join.joinCondition != null) {
+				collectReferencedAliases(join.joinCondition.getSql(), deps);
+			}
+			// Remove self-reference and root alias from dependencies
+			deps.remove(join.alias);
+			deps.remove(rootAlias);
+			joinDependencies.put(join.alias, deps);
+		}
+		
+		// Compute transitive closure of required aliases
+		Set<String> requiredAliases = new HashSet<>(referencedAliases);
+		requiredAliases.add(rootAlias);
+		
+		boolean changed = true;
+		while (changed) {
+			changed = false;
+			for (SqlQuery.SqlJoin join : joins) {
+				if (requiredAliases.contains(join.alias)) {
+					// This join is needed, so its dependencies are also needed
+					Set<String> deps = joinDependencies.get(join.alias);
+					if (deps != null) {
+						for (String dep : deps) {
+							if (!requiredAliases.contains(dep)) {
+								requiredAliases.add(dep);
+								changed = true;
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		// Filter joins to only keep required ones
+		List<SqlQuery.SqlJoin> prunedJoins = joins.stream()
+			.filter(j -> requiredAliases.contains(j.alias))
+			.collect(Collectors.toList());
+		
+		query.setJoins(prunedJoins);
 	}
 
 	public static String determineSqlFieldName(FieldModel f) {
@@ -1360,14 +1659,9 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	public static List<Field> collectFieldsOfClass(Class<?> clz, Class<?> stopAtSuperClass) {
 		TypeModel type = new ReflectionTypeModel(clz);
 		TypeModel stopType = stopAtSuperClass != null ? new ReflectionTypeModel(stopAtSuperClass) : null;
-		List<FieldModel> fields = collectFieldsOfClass(type, stopType);
-		List<Field> result = new ArrayList<>();
-		for (FieldModel f : fields) {
-			if (f instanceof ReflectionFieldModel) {
-				result.add(((ReflectionFieldModel) f).getReflectionField());
-			}
-		}
-		return result;
+		return collectFieldsOfClass(type, stopType).stream()
+			.map(f -> ((ReflectionFieldModel) f).getReflectionField())
+			.toList();
 	}
 
 	/**

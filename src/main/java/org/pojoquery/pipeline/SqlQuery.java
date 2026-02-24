@@ -56,13 +56,34 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 		public final String table;
 		public final String alias;
 		public final SqlExpression joinCondition;
+		public final SqlExpression subquery; // For derived table joins
 
 		public SqlJoin(JoinType type, String schemaName, String tableName, String alias, SqlExpression joinCondition) {
+			this(type, schemaName, tableName, alias, joinCondition, null);
+		}
+
+		/**
+		 * Creates a subquery (derived table) join.
+		 * @param type join type (LEFT, RIGHT, INNER)
+		 * @param subquery the SELECT statement for the derived table
+		 * @param alias the alias for the subquery
+		 * @param joinCondition the ON clause
+		 */
+		public SqlJoin(JoinType type, SqlExpression subquery, String alias, SqlExpression joinCondition) {
+			this(type, null, null, alias, joinCondition, subquery);
+		}
+
+		private SqlJoin(JoinType type, String schemaName, String tableName, String alias, SqlExpression joinCondition, SqlExpression subquery) {
 			this.joinType = type;
 			this.schema = "".equals(schemaName) ? null : schemaName;
 			this.table = tableName;
 			this.alias = alias;
 			this.joinCondition = joinCondition;
+			this.subquery = subquery;
+		}
+
+		public boolean isSubquery() {
+			return subquery != null;
 		}
 	}
 
@@ -276,12 +297,21 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 
 		ArrayList<SqlExpression> joinExpressions = new ArrayList<SqlExpression>();
 		for(SqlJoin j : joins) {
-			String sql = j.joinType.name() + " JOIN " + DB.prefixAndQuoteTableName(dbContext, j.schema, j.table) + " AS " + dbContext.quoteAlias(j.alias);
+			String sql;
+			List<Object> joinParams = new ArrayList<>();
+			if (j.isSubquery()) {
+				// Derived table join: LEFT JOIN (SELECT ...) AS alias ON ...
+				sql = j.joinType.name() + " JOIN (" + j.subquery.getSql() + ") AS " + dbContext.quoteAlias(j.alias);
+				Iterables.addAll(joinParams, j.subquery.getParameters());
+			} else {
+				sql = j.joinType.name() + " JOIN " + DB.prefixAndQuoteTableName(dbContext, j.schema, j.table) + " AS " + dbContext.quoteAlias(j.alias);
+			}
 			SqlExpression resolved = resolveAliases(dbContext, j.joinCondition, table);
 			if (j.joinCondition != null) {
 				sql += " ON " + resolved.getSql();
 			}
-			SqlExpression expr = new SqlExpression(sql, resolved.getParameters());
+			Iterables.addAll(joinParams, resolved.getParameters());
+			SqlExpression expr = new SqlExpression(sql, joinParams);
 			joinExpressions.add(expr);
 		}
 		SqlExpression joinsClause = SqlExpression.implode("\n ", joinExpressions);
@@ -347,6 +377,17 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 
 	public void addJoin(JoinType type, String schemaName, String tableName, String alias, SqlExpression joinCondition) {
 		joins.add(new SqlJoin(type, schemaName, tableName, alias, joinCondition));
+	}
+
+	/**
+	 * Adds a subquery (derived table) join.
+	 * @param type join type (LEFT, RIGHT, INNER)
+	 * @param subquery the SELECT statement for the derived table
+	 * @param alias the alias for the subquery
+	 * @param joinCondition the ON clause
+	 */
+	public void addSubqueryJoin(JoinType type, SqlExpression subquery, String alias, SqlExpression joinCondition) {
+		joins.add(new SqlJoin(type, subquery, alias, joinCondition));
 	}
 
 	public void setTable(String schemaName, String tableName) {
