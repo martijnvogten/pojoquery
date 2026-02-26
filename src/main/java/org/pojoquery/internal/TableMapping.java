@@ -1,12 +1,8 @@
 package org.pojoquery.internal;
 
-import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.pojoquery.typemodel.FieldModel;
-import org.pojoquery.typemodel.ReflectionFieldModel;
-import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
 public class TableMapping {
@@ -22,31 +18,16 @@ public class TableMapping {
 		this.fields = fields;
 	}
 
-	/**
-	 * Returns the runtime Class for this mapping.
-	 * @throws IllegalStateException if the type is not a ReflectionTypeModel
-	 */
-	public Class<?> getReflectionClass() {
-		if (type instanceof ReflectionTypeModel) {
-			return ((ReflectionTypeModel) type).getReflectionClass();
-		}
-		throw new IllegalStateException("Cannot get reflection class from non-reflection type: " + type);
+	public TypeModel getType() {
+		return type;
 	}
-
+	
 	/**
-	 * Returns the fields as runtime Field objects.
-	 * @throws IllegalStateException if any field is not a ReflectionFieldModel
+	 * Returns the fields as FieldModel objects.
+	 * @return the list of FieldModel objects
 	 */
-	public List<Field> getReflectionFields() {
-		List<Field> result = new ArrayList<>();
-		for (FieldModel f : fields) {
-			if (f instanceof ReflectionFieldModel) {
-				result.add(((ReflectionFieldModel) f).getReflectionField());
-			} else {
-				throw new IllegalStateException("Cannot get reflection field from non-reflection field: " + f);
-			}
-		}
-		return result;
+	public List<FieldModel> getFields() {
+		return fields;
 	}
 
 	@Override

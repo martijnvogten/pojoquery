@@ -84,14 +84,23 @@ public interface TypeModel {
     TypeModel getTypeArgument();
 
     /**
-     * Returns true if this type has a table mapping (i.e., has @Table annotation
-     * either directly or on a superclass).
+     * Returns true if this type represents a Map type.
      */
-    boolean hasTableMapping();
+    boolean isMap();
 
     /**
      * Returns true if this type represents a type that can be compared for equality
      * with the given type.
      */
     boolean isSameType(TypeModel other);
+
+    /**
+     * Extracts Class[] values from an annotation attribute and returns them as TypeModels.
+     * This is used to read annotation attributes like {@code @SubClasses(value = {A.class, B.class})}.
+     *
+     * @param annotation the annotation instance
+     * @param attributeName the name of the attribute containing Class[] values
+     * @return list of TypeModels for the classes referenced in the annotation attribute
+     */
+    List<TypeModel> getTypeValuesFromAnnotation(Annotation annotation, String attributeName);
 }

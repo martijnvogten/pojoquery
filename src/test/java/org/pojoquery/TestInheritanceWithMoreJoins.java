@@ -35,7 +35,7 @@ public class TestInheritanceWithMoreJoins {
 		Double area;
 		House house;
 		
-		@JoinCondition("{this}.id = {windows}.room_id")
+		@JoinCondition("{this.id} = {windows}.`room_id`")
 		Window[] windows;
 	}
 	
@@ -85,7 +85,7 @@ public class TestInheritanceWithMoreJoins {
 					 INNER JOIN `room` AS `room` ON `room`.`id` = `bedroom`.`id`
 					 LEFT JOIN `bed` AS `beds` ON `bedroom`.`id` = `beds`.`bedroom_id`
 					 LEFT JOIN `house` AS `house` ON `room`.`house_id` = `house`.`id`
-					 LEFT JOIN `window` AS `windows` ON `room`.id = `windows`.room_id
+					 LEFT JOIN `window` AS `windows` ON `room`.`id` = `windows`.`room_id`
 					"""),
 				norm(sql));
 	}
@@ -112,7 +112,7 @@ public class TestInheritanceWithMoreJoins {
 					FROM `apartment` AS `apartment`
 					 LEFT JOIN `room` AS `rooms` ON `apartment`.`id` = `rooms`.`apartment_id`
 					 LEFT JOIN `house` AS `rooms.house` ON `rooms`.`house_id` = `rooms.house`.`id`
-					 LEFT JOIN `window` AS `rooms.windows` ON `rooms`.id = `rooms.windows`.room_id
+					 LEFT JOIN `window` AS `rooms.windows` ON `rooms`.`id` = `rooms.windows`.`room_id`
 					 LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.`id` = `rooms`.`id`
 					 LEFT JOIN `bed` AS `rooms.bedroom.beds` ON `rooms.bedroom`.`id` = `rooms.bedroom.beds`.`bedroom_id`
 					 LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.`id` = `rooms`.`id`

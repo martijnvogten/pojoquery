@@ -28,7 +28,7 @@ import org.pojoquery.util.Strings;
  * <h2>Using with PojoQuery</h2>
  * <pre>{@code
  * PojoQuery.build(User.class)
- *     .addWhere(SqlExpression.sql("{user}.status = ?", "active"))
+ *     .addWhere(SqlExpression.sql("{user.status} = ?", "active"))
  *     .addField(SqlExpression.sql("COUNT(*)"), "totalCount")
  *     .execute(dataSource);
  * }</pre>

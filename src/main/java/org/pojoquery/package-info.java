@@ -28,7 +28,7 @@
  * 
  * // 3. Query
  * List<User> users = PojoQuery.build(User.class)
- *     .addWhere("{users}.name LIKE ?", "%John%")
+ *     .addWhere("{users.name} LIKE ?", "%John%")
  *     .execute(dataSource);
  * 
  * // 4. Insert

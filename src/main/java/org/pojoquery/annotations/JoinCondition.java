@@ -17,7 +17,7 @@ import java.lang.annotation.RetentionPolicy;
  *     String title;
  *     
  *     @Link(linktable = "event_person")
- *     @JoinCondition("{this}.id = {linktable}.event_id AND {linktable}.role = 'active'")
+ *     @JoinCondition("{this.id} = {linktable.event_id} AND {linktable.role} = 'active'")
  *     List<Person> activeParticipants;
  * }
  * }</pre>

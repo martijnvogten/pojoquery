@@ -14,6 +14,11 @@ import org.pojoquery.annotations.Link;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.pipeline.CustomizableQueryBuilder;
 import org.pojoquery.pipeline.QueryBuilder;
+import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.ReflectionFieldModel;
+import org.pojoquery.typemodel.ReflectionTypeModel;
+import org.pojoquery.typemodel.TypeModel;
+import org.pojoquery.util.Types;
 
 /**
  * Provides cascading update functionality for entities with related collections.
@@ -143,7 +148,7 @@ final class CascadingUpdater {
         PK pk = PojoQuery.insertInternal(context, connection, entity);
         
         // Then process cascaded collections
-        processCascadedCollections(context, connection, entity, CascadeOperation.PERSIST);
+        processCascadedCollections(context, connection, entity, CascadeOperation.INSERT);
         
         return pk;
     }
@@ -169,20 +174,20 @@ final class CascadingUpdater {
     }
     
     private enum CascadeOperation {
-        PERSIST, UPDATE, REMOVE
+        INSERT, UPDATE, REMOVE
     }
     
     private static void processCascadedCollections(DbContext context, Connection connection, 
             Object entity, CascadeOperation operation) {
         
-        Class<?> entityClass = entity.getClass();
+        TypeModel entityClass = new ReflectionTypeModel(entity.getClass());
         Object parentId = getEntityId(entity);
         
-        if (parentId == null && operation != CascadeOperation.PERSIST) {
-            throw new MappingException("Cannot cascade operations for entity without ID: " + entityClass.getName());
+        if (parentId == null && operation != CascadeOperation.INSERT) {
+            throw new MappingException("Cannot cascade operations for entity without ID: " + entityClass.getQualifiedName());
         }
         
-        for (Field field : QueryBuilder.collectFieldsOfClass(entityClass)) {
+        for (FieldModel field : QueryBuilder.collectFieldsOfClass(entityClass)) {
             // Handle @Cascade annotated fields (one-to-many owned relationships)
             Cascade cascadeAnn = field.getAnnotation(Cascade.class);
             if (cascadeAnn != null) {
@@ -199,28 +204,26 @@ final class CascadingUpdater {
     }
     
     private static void processCascadeField(DbContext context, Connection connection,
-            Object entity, Class<?> entityClass, Object parentId, Field field, CascadeOperation operation) {
+            Object entity, TypeModel entityClass, Object parentId, FieldModel field, CascadeOperation operation) {
         
-        if (!Collection.class.isAssignableFrom(field.getType())) {
-            // For now, only support collections. Single entity references could be added later.
-            return;
+        if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
+            throw new RuntimeException("Only collections are supported for @Cascade fields. Invalid field: " + field.getName());
         }
         
-        Class<?> componentType = getCollectionComponentType(field);
+        TypeModel componentType = Types.getCollectionComponentType(field);
         if (componentType == null || !CustomizableQueryBuilder.isLinkedClass(componentType)) {
             return;
         }
         
-        field.setAccessible(true);
         Collection<?> collection;
         try {
-            collection = (Collection<?>) field.get(entity);
+            collection = (Collection<?>) ((ReflectionFieldModel)field).getReflectionField().get(entity);
         } catch (IllegalAccessException e) {
             throw new MappingException("Cannot access field " + field.getName(), e);
         }
         
         switch (operation) {
-            case PERSIST:
+            case INSERT:
                 cascadeInsert(context, connection, collection, entity, entityClass, componentType, field);
                 break;
             case UPDATE:
@@ -233,21 +236,17 @@ final class CascadingUpdater {
     }
     
     private static void processLinkTableField(DbContext context, Connection connection,
-            Object entity, Class<?> entityClass, Object parentId, Field field, Link linkAnn, CascadeOperation operation) {
-        
-        if (!Collection.class.isAssignableFrom(field.getType())) {
-            return;
-        }
-        
-        Class<?> componentType = getCollectionComponentType(field);
+            Object entity, TypeModel entityClass, Object parentId, FieldModel field, Link linkAnn, CascadeOperation operation) {
+        TypeModel componentType = Types.getCollectionComponentType(field);
         if (componentType == null) {
             return;
         }
         
-        field.setAccessible(true);
         Collection<?> collection;
         try {
-            collection = (Collection<?>) field.get(entity);
+            Field f = ((ReflectionFieldModel)field).getReflectionField();
+            f.setAccessible(true);
+            collection = (Collection<?>) f.get(entity);
         } catch (IllegalAccessException e) {
             throw new MappingException("Cannot access field " + field.getName(), e);
         }
@@ -264,7 +263,7 @@ final class CascadingUpdater {
                 isValueCollection ? null : componentType, linkAnn);
         
         switch (operation) {
-            case PERSIST:
+            case INSERT:
             case UPDATE:
                 syncLinkTable(context, connection, linkSchema, linkTable, parentLinkField, foreignLinkField, 
                         parentId, collection, componentType, isValueCollection);
@@ -277,7 +276,7 @@ final class CascadingUpdater {
     
     private static void syncLinkTable(DbContext context, Connection connection,
             String linkSchema, String linkTable, String parentLinkField, String foreignLinkField,
-            Object parentId, Collection<?> collection, Class<?> componentType, boolean isValueCollection) {
+            Object parentId, Collection<?> collection, TypeModel componentType, boolean isValueCollection) {
         
         // Delete existing rows for this parent
         deleteLinkTableRows(context, connection, linkSchema, linkTable, parentLinkField, parentId);
@@ -295,7 +294,7 @@ final class CascadingUpdater {
                     // For entity collections, get the entity ID
                     foreignValue = getEntityId(item);
                     if (foreignValue == null) {
-                        throw new MappingException("Cannot link to entity without ID: " + componentType.getName());
+                        throw new MappingException("Cannot link to entity without ID: " + componentType.getQualifiedName());
                     }
                 }
                 
@@ -331,8 +330,8 @@ final class CascadingUpdater {
     }
     
     private static void cascadeInsert(DbContext context, Connection connection, 
-            Collection<?> collection, Object parentEntity, Class<?> parentClass,
-            Class<?> componentType, Field field) {
+            Collection<?> collection, Object parentEntity, TypeModel parentClass,
+            TypeModel componentType, FieldModel field) {
         
         if (collection == null || collection.isEmpty()) {
             return;
@@ -359,14 +358,14 @@ final class CascadingUpdater {
             }
             
             // Recursively process the child's own @Cascade collections
-            processCascadedCollections(context, connection, item, CascadeOperation.PERSIST);
+            processCascadedCollections(context, connection, item, CascadeOperation.INSERT);
         }
     }
     
     private static void updateForeignKeyColumn(DbContext context, Connection connection,
-            Class<?> childClass, String fkColumn, Object childId, Object parentId) {
+            TypeModel childClass, String fkColumn, Object childId, Object parentId) {
         String tableName = AnnotationHelper.getTableName(childClass);
-        Field idField = QueryBuilder.determineIdField(childClass);
+        FieldModel idField = QueryBuilder.determineIdField(childClass);
         String idColumnName = CustomizableQueryBuilder.determineSqlFieldName(idField);
         
         String sql = "UPDATE " + context.quoteObjectNames(tableName) 
@@ -376,8 +375,8 @@ final class CascadingUpdater {
     }
     
     private static void cascadeUpdate(DbContext context, Connection connection, 
-            Collection<?> collection, Object parentEntity, Class<?> parentClass,
-            Class<?> componentType, Field field) {
+            Collection<?> collection, Object parentEntity, TypeModel parentClass,
+            TypeModel componentType, FieldModel field) {
         
         Object parentId = getEntityId(parentEntity);
         ForeignKeyInfo fkInfo = findForeignKeyInfo(componentType, parentClass, field);
@@ -425,7 +424,7 @@ final class CascadingUpdater {
     }
     
     private static void cascadeDelete(DbContext context, Connection connection, 
-            Object parentId, Class<?> parentClass, Class<?> componentType, Field field) {
+            Object parentId, TypeModel parentClass, TypeModel componentType, FieldModel field) {
         
         ForeignKeyInfo fkInfo = findForeignKeyInfo(componentType, parentClass, field);
         
@@ -434,15 +433,16 @@ final class CascadingUpdater {
     }
     
     private static Object getEntityId(Object entity) {
-        List<Field> idFields = QueryBuilder.determineIdFields(entity.getClass());
+        List<FieldModel> idFields = QueryBuilder.determineIdFields(new ReflectionTypeModel(entity.getClass()));
         if (idFields.isEmpty()) {
             return null;
         }
         
-        Field idField = idFields.get(0);
-        idField.setAccessible(true);
+        FieldModel idField = idFields.get(0);
+        Field f = ((ReflectionFieldModel)idField).getReflectionField();
+        f.setAccessible(true);
         try {
-            return idField.get(entity);
+            return f.get(entity);
         } catch (IllegalAccessException e) {
             throw new MappingException("Cannot access ID field", e);
         }
@@ -455,46 +455,34 @@ final class CascadingUpdater {
         return false;
     }
     
-    private static Class<?> getCollectionComponentType(Field field) {
-        java.lang.reflect.Type genericType = field.getGenericType();
-        if (genericType instanceof java.lang.reflect.ParameterizedType) {
-            java.lang.reflect.ParameterizedType pt = (java.lang.reflect.ParameterizedType) genericType;
-            java.lang.reflect.Type[] typeArgs = pt.getActualTypeArguments();
-            if (typeArgs.length > 0 && typeArgs[0] instanceof Class) {
-                return (Class<?>) typeArgs[0];
-            }
-        }
-        return null;
-    }
-    
     /**
      * Information about a foreign key relationship from child to parent.
      */
     private static class ForeignKeyInfo {
-        final Field field;           // The field on the child class
+        final FieldModel field;           // The field on the child class
         final String sqlColumnName;  // The SQL column name (e.g., "order_id")
         final boolean isEntityRef;   // True if field is an entity reference, false if direct ID
         
-        ForeignKeyInfo(Field field, String sqlColumnName, boolean isEntityRef) {
+        ForeignKeyInfo(FieldModel field, String sqlColumnName, boolean isEntityRef) {
             this.field = field;
             this.sqlColumnName = sqlColumnName;
             this.isEntityRef = isEntityRef;
         }
     }
     
-    private static ForeignKeyInfo findForeignKeyInfo(Class<?> childClass, Class<?> parentClass, Field collectionField) {
+    private static ForeignKeyInfo findForeignKeyInfo(TypeModel childClass, TypeModel parentClass, FieldModel collectionField) {
         // Check for @Link annotation on the collection field
         Link linkAnn = collectionField.getAnnotation(Link.class);
         if (linkAnn != null && !Link.NONE.equals(linkAnn.foreignlinkfield())) {
             String fkColumnName = linkAnn.foreignlinkfield();
-            Field fkField = findField(childClass, fkColumnName);
+            FieldModel fkField = findField(childClass, fkColumnName);
             // Return with the specified column name even if no field exists (field may be null)
             return new ForeignKeyInfo(fkField, fkColumnName, false);
         }
         
         // Look for entity reference field that points to parent class
-        for (Field f : QueryBuilder.collectFieldsOfClass(childClass)) {
-            if (f.getType().isAssignableFrom(parentClass) || parentClass.isAssignableFrom(f.getType())) {
+        for (FieldModel f : QueryBuilder.collectFieldsOfClass(childClass)) {
+            if (Types.isAssignableFrom(f.getType(), parentClass) || Types.isAssignableFrom(parentClass, f.getType())) {
                 // This is an entity reference to the parent - use link field naming (fieldName_id)
                 String sqlName = CustomizableQueryBuilder.determineLinkFieldName(f);
                 return new ForeignKeyInfo(f, sqlName, true);
@@ -508,16 +496,16 @@ final class CascadingUpdater {
         }
         String expectedFieldName = tableName + "_id";
         
-        Field fkField = findField(childClass, expectedFieldName);
+        FieldModel fkField = findField(childClass, expectedFieldName);
         if (fkField != null) {
             return new ForeignKeyInfo(fkField, expectedFieldName, false);
         }
         
         // Also try with @FieldName annotation
-        for (Field f : QueryBuilder.collectFieldsOfClass(childClass)) {
+        for (FieldModel f : QueryBuilder.collectFieldsOfClass(childClass)) {
             String sqlName = CustomizableQueryBuilder.determineSqlFieldName(f);
             if (expectedFieldName.equals(sqlName) || (tableName + "_id").equals(sqlName)) {
-                return new ForeignKeyInfo(f, sqlName, Number.class.isAssignableFrom(f.getType()) || f.getType().isPrimitive());
+                return new ForeignKeyInfo(f, sqlName, Number.class.isAssignableFrom(((ReflectionTypeModel)f.getType()).getReflectionClass()) || f.getType().isPrimitive());
             }
         }
         
@@ -529,24 +517,25 @@ final class CascadingUpdater {
      * Sets the foreign key on the child item by setting a field value.
      * @return true if the FK was set via field, false if no field exists (requires SQL update)
      */
-    private static boolean setForeignKey(Object item, Object parentEntity, Class<?> parentClass, Field collectionField) {
+    private static boolean setForeignKey(Object item, Object parentEntity, TypeModel parentClass, FieldModel collectionField) {
         Object parentId = getEntityId(parentEntity);
         if (parentId == null) {
             return false;
         }
         
-        Class<?> itemClass = item.getClass();
+        TypeModel itemClass = new ReflectionTypeModel(item.getClass());
         ForeignKeyInfo fkInfo = findForeignKeyInfo(itemClass, parentClass, collectionField);
         
         if (fkInfo != null && fkInfo.field != null) {
-            fkInfo.field.setAccessible(true);
+            Field f = ((ReflectionFieldModel)fkInfo.field).getReflectionField();
+            f.setAccessible(true);
             try {
                 if (fkInfo.isEntityRef) {
                     // Set the parent entity reference
-                    fkInfo.field.set(item, parentEntity);
+                    f.set(item, parentEntity);
                 } else {
                     // Set the parent ID directly
-                    fkInfo.field.set(item, parentId);
+                    f.set(item, parentId);
                 }
                 return true;
             } catch (IllegalAccessException e) {
@@ -556,8 +545,8 @@ final class CascadingUpdater {
         return false;
     }
     
-    private static Field findField(Class<?> clazz, String fieldName) {
-        for (Field f : QueryBuilder.collectFieldsOfClass(clazz)) {
+    private static FieldModel findField(TypeModel clazz, String fieldName) {
+        for (FieldModel f : QueryBuilder.collectFieldsOfClass(clazz)) {
             if (f.getName().equals(fieldName)) {
                 return f;
             }
@@ -566,12 +555,12 @@ final class CascadingUpdater {
     }
     
     private static Set<Object> getExistingChildIds(DbContext context, Connection connection, 
-            Class<?> componentType, String foreignKeyField, Object parentId) {
+            TypeModel componentType, String foreignKeyField, Object parentId) {
         
         Set<Object> ids = new HashSet<>();
         
         String tableName = AnnotationHelper.getTableName(componentType);
-        Field idField = QueryBuilder.determineIdField(componentType);
+        FieldModel idField = QueryBuilder.determineIdField(componentType);
         String idFieldName = CustomizableQueryBuilder.determineSqlFieldName(idField);
         
         // Build query: SELECT id FROM child_table WHERE parent_id = ?
@@ -591,14 +580,14 @@ final class CascadingUpdater {
     }
     
     private static void deleteChildById(DbContext context, Connection connection, 
-            Class<?> componentType, Object id) {
+            TypeModel componentType, Object id) {
         
         // First, recursively delete any nested @Cascade collections
         // We need to process any @Cascade fields on the component type
-        for (Field field : QueryBuilder.collectFieldsOfClass(componentType)) {
+        for (FieldModel field : QueryBuilder.collectFieldsOfClass(componentType)) {
             Cascade cascadeAnn = field.getAnnotation(Cascade.class);
-            if (cascadeAnn != null && Collection.class.isAssignableFrom(field.getType())) {
-                Class<?> nestedType = getCollectionComponentType(field);
+            if (cascadeAnn != null && CustomizableQueryBuilder.isListOrArray(field.getType())) {
+                TypeModel nestedType = Types.getCollectionComponentType(field);
                 if (nestedType != null && CustomizableQueryBuilder.isLinkedClass(nestedType)) {
                     // Delete nested children first
                     ForeignKeyInfo nestedFkInfo = findForeignKeyInfo(nestedType, componentType, field);
@@ -610,7 +599,7 @@ final class CascadingUpdater {
         }
         
         String tableName = AnnotationHelper.getTableName(componentType);
-        Field idField = QueryBuilder.determineIdField(componentType);
+        FieldModel idField = QueryBuilder.determineIdField(componentType);
         String idFieldName = CustomizableQueryBuilder.determineSqlFieldName(idField);
         
         String sql = "DELETE FROM " + context.quoteObjectNames(tableName) + 
@@ -620,12 +609,12 @@ final class CascadingUpdater {
     }
     
     private static void deleteChildrenWithCascade(DbContext context, Connection connection, 
-            Class<?> componentType, String foreignKeyField, Object parentId) {
+            TypeModel componentType, String foreignKeyField, Object parentId) {
         
         // First check if this type has nested @Cascade collections
         boolean hasNestedCascade = false;
-        for (Field field : QueryBuilder.collectFieldsOfClass(componentType)) {
-            if (field.getAnnotation(Cascade.class) != null && Collection.class.isAssignableFrom(field.getType())) {
+        for (FieldModel field : QueryBuilder.collectFieldsOfClass(componentType)) {
+            if (field.getAnnotation(Cascade.class) != null && CustomizableQueryBuilder.isListOrArray(field.getType())) {
                 hasNestedCascade = true;
                 break;
             }
@@ -644,7 +633,7 @@ final class CascadingUpdater {
     }
     
     private static void deleteChildrenByParentId(DbContext context, Connection connection, 
-            Class<?> componentType, String foreignKeyField, Object parentId) {
+            TypeModel componentType, String foreignKeyField, Object parentId) {
         
         String tableName = AnnotationHelper.getTableName(componentType);
         

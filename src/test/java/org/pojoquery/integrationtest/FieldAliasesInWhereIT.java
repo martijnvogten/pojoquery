@@ -70,7 +70,7 @@ public class FieldAliasesInWhereIT {
 			
 			{
 				List<Room> results = PojoQuery.build(Room.class)
-					.addWhere(SqlExpression.sql("{house.owner}.name = ?", "John Lennon"))
+					.addWhere(SqlExpression.sql("{house.owner.name} = ?", "John Lennon"))
 					.execute(c);
 				
 				Assertions.assertEquals(1, results.size());

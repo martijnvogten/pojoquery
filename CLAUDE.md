@@ -63,8 +63,8 @@ Three `DbContext` implementations in `src/main/java/org/pojoquery/dialects/`:
 Use curly braces `{alias}` in WHERE/ORDER BY clauses. PojoQuery resolves these to properly quoted identifiers:
 ```java
 PojoQuery.build(Article.class)
-    .addWhere("{article}.id = ?", 123L)
-    .addOrderBy("{comments}.submitdate DESC")
+    .addWhere("{article.id} = ?", 123L)
+    .addOrderBy("{comments.submitdate} DESC")
 ```
 
 ## Testing

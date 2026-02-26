@@ -269,7 +269,7 @@ public class MultiDialectIT {
             PojoQuery.insert(c, new User("active2", "a2@example.com"));
             
             List<User> activeUsers = PojoQuery.build(User.class)
-                    .addWhere("active = ?", true)
+                    .addWhere("{active} = ?", true)
                     .execute(c);
             
             assertEquals(2, activeUsers.size());

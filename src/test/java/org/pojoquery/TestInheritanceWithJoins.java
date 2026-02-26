@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.pojoquery.TestUtils.norm;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -17,6 +16,8 @@ import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.QueryBuilder;
+import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.ReflectionTypeModel;
 
 @UseDialect(Dialect.MYSQL)
 public class TestInheritanceWithJoins {
@@ -70,18 +71,18 @@ public class TestInheritanceWithJoins {
 	public void testBuildTableHierarchy() throws Exception {
 		// When querying a superclasses, we want a list of all tables
 		// and fields per table
-		List<TableMapping> mapping = QueryBuilder.determineTableMapping(Room.class);
+		List<TableMapping> mapping = QueryBuilder.determineTableMapping(new ReflectionTypeModel(Room.class));
 		Assertions.assertEquals(1, mapping.size());
-		Assertions.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area"), Room.class.getDeclaredField("house")), mapping.get(0).getReflectionFields());
+		Assertions.assertEquals(List.of("id", "area", "house"), fieldNames(mapping.get(0)));
 
-		List<TableMapping> bedroom = QueryBuilder.determineTableMapping(BedRoom.class);
+		List<TableMapping> bedroom = QueryBuilder.determineTableMapping(new ReflectionTypeModel(BedRoom.class));
 		Assertions.assertEquals(2, bedroom.size());
-		Assertions.assertEquals(Arrays.asList(Entity.class.getDeclaredField("id"), Room.class.getDeclaredField("area"), Room.class.getDeclaredField("house")), bedroom.get(0).getReflectionFields());
-		Assertions.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds")), bedroom.get(1).getReflectionFields());
+		Assertions.assertEquals(List.of("id", "area", "house"), fieldNames(bedroom.get(0)));
+		Assertions.assertEquals(List.of("numberOfBeds"), fieldNames(bedroom.get(1)));
 
-		List<TableMapping> luxury = QueryBuilder.determineTableMapping(LuxuryBedRoom.class);
+		List<TableMapping> luxury = QueryBuilder.determineTableMapping(new ReflectionTypeModel(LuxuryBedRoom.class));
 		Assertions.assertEquals(2, luxury.size());
-		Assertions.assertEquals(Arrays.asList(BedRoom.class.getDeclaredField("numberOfBeds"), LuxuryBedRoom.class.getDeclaredField("tvScreenSize")), luxury.get(1).getReflectionFields());
+		Assertions.assertEquals(List.of("numberOfBeds", "tvScreenSize"), fieldNames(luxury.get(1)));
 	}
 	
 	@Test
@@ -211,4 +212,7 @@ public class TestInheritanceWithJoins {
 		
 	}
 	
+	private List<String> fieldNames(TableMapping mapping) {
+		return mapping.getFields().stream().map(FieldModel::getName).toList();
+	}
 }

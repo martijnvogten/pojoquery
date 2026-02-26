@@ -8,12 +8,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Date;
-import java.util.Map;
 
 import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
 import org.pojoquery.pipeline.SimpleFieldMapping;
+import org.pojoquery.typemodel.FieldModel;
 
 /**
  * DbContext implementation for HSQLDB (HyperSQL Database).
@@ -60,41 +60,41 @@ public class HsqldbDbContext implements DbContext {
 	}
 
     @Override
-    public String mapJavaTypeToSql(Field field) {
-        Class<?> type = field.getType();
+    public String mapJavaTypeToSql(FieldModel field) {
+        String type = field.getType().getQualifiedName();
 
-        if (type == Long.class || type == long.class) {
+        if (type.equals(Long.class.getName()) || type.equals(long.class.getName())) {
             return "BIGINT";
         }
-        if (type == Integer.class || type == int.class) {
+        if (type.equals(Integer.class.getName()) || type.equals(int.class.getName())) {
             return "INT";
         }
-        if (type == Short.class || type == short.class) {
+        if (type.equals(Short.class.getName()) || type.equals(short.class.getName())) {
             return "SMALLINT";
         }
-        if (type == Byte.class || type == byte.class) {
+        if (type.equals(Byte.class.getName()) || type.equals(byte.class.getName())) {
             return "TINYINT";
         }
-        if (type == Double.class || type == double.class) {
+        if (type.equals(Double.class.getName()) || type.equals(double.class.getName())) {
             return "DOUBLE";
         }
-        if (type == Float.class || type == float.class) {
+        if (type.equals(Float.class.getName()) || type.equals(float.class.getName())) {
             return "FLOAT";
         }
-        if (type == Boolean.class || type == boolean.class) {
+        if (type.equals(Boolean.class.getName()) || type.equals(boolean.class.getName())) {
             return "BOOLEAN";
         }
-        if (type == BigDecimal.class) {
+        if (type.equals(BigDecimal.class.getName())) {
             AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);
             int precision = (colMeta != null) ? colMeta.precision : 19;
             int scale = (colMeta != null) ? colMeta.scale : 4;
             return "DECIMAL(" + precision + "," + scale + ")";
         }
-        if (type == BigInteger.class) {
+        if (type.equals(BigInteger.class.getName())) {
             return "BIGINT";
         }
 
-        if (type == String.class) {
+        if (type.equals(String.class.getName())) {
             if (AnnotationHelper.isLob(field)) {
                 return "CLOB";
             }
@@ -103,26 +103,26 @@ public class HsqldbDbContext implements DbContext {
             return "VARCHAR(" + length + ")";
         }
 
-        if (type == Date.class || type == LocalDateTime.class || type == Instant.class || type == java.sql.Timestamp.class) {
+        if (type.equals(Date.class.getName()) || type.equals(LocalDateTime.class.getName()) || type.equals(Instant.class.getName()) || type.equals(java.sql.Timestamp.class.getName())) {
             return "TIMESTAMP";
         }
-        if (type == LocalDate.class || type == java.sql.Date.class) {
+        if (type.equals(LocalDate.class.getName()) || type.equals(java.sql.Date.class.getName())) {
             return "DATE";
         }
-        if (type == LocalTime.class || type == java.sql.Time.class) {
+        if (type.equals(LocalTime.class.getName()) || type.equals(java.sql.Time.class.getName())) {
             return "TIME";
         }
 
-        if (type == byte[].class) {
+        if (type.equals(byte[].class.getName())) {
             return "BLOB";
         }
 
-        if (type.isEnum()) {
+        if (field.getType().isEnum()) {
             return "VARCHAR(" + getDefaultVarcharLength() + ")";
         }
 
         // HSQLDB doesn't have native JSON, use CLOB
-        if (Map.class.isAssignableFrom(type)) {
+        if (field.getType().isMap()) {
             return "CLOB";
         }
 

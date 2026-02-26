@@ -73,7 +73,7 @@ public class ReflectionFieldModel implements FieldModel {
         if ((field.getModifiers() & Modifier.TRANSIENT) != 0) {
             return true;
         }
-        return AnnotationHelper.isTransient(field);
+        return AnnotationHelper.isTransient(this);
     }
 
     // ========== Runtime-specific methods ==========

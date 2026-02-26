@@ -18,7 +18,7 @@ import java.lang.annotation.RetentionPolicy;
  *     String firstName;
  *     String lastName;
  *     
- *     @Select("CONCAT({this}.first_name, ' ', {this}.last_name)")
+ *     @Select("CONCAT({this.first_name}, ' ', {this.last_name})")
  *     String fullName;  // Computed from first + last name
  * }
  * }</pre>
@@ -32,7 +32,7 @@ import java.lang.annotation.RetentionPolicy;
  *     @Select("COUNT(*)")
  *     Integer orderCount;
  *     
- *     @Select("SUM({this}.total)")
+ *     @Select("SUM({this.total})")
  *     BigDecimal totalAmount;
  * }
  * }</pre>

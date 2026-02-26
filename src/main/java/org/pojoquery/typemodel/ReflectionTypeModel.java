@@ -2,12 +2,9 @@ package org.pojoquery.typemodel;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-
-import org.pojoquery.AnnotationHelper;
 
 /**
  * Implementation of {@link TypeModel} that wraps a runtime {@link Class}.
@@ -106,8 +103,8 @@ public class ReflectionTypeModel implements TypeModel {
     }
 
     @Override
-    public boolean hasTableMapping() {
-        return AnnotationHelper.hasTableAnnotation(clazz);
+    public boolean isMap() {
+        return java.util.Map.class.isAssignableFrom(clazz);
     }
 
     @Override
@@ -116,6 +113,21 @@ public class ReflectionTypeModel implements TypeModel {
             return getQualifiedName().equals(other.getQualifiedName());
         }
         return clazz.equals(((ReflectionTypeModel) other).clazz);
+    }
+
+    @Override
+    public List<TypeModel> getTypeValuesFromAnnotation(Annotation annotation, String attributeName) {
+        try {
+            java.lang.reflect.Method method = annotation.annotationType().getMethod(attributeName);
+            Class<?>[] classes = (Class<?>[]) method.invoke(annotation);
+            List<TypeModel> result = new ArrayList<>();
+            for (Class<?> c : classes) {
+                result.add(new ReflectionTypeModel(c));
+            }
+            return result;
+        } catch (NoSuchMethodException | IllegalAccessException | java.lang.reflect.InvocationTargetException e) {
+            throw new RuntimeException("Failed to extract " + attributeName + " from annotation " + annotation, e);
+        }
     }
 
     // ========== Runtime-specific methods ==========
@@ -154,47 +166,5 @@ public class ReflectionTypeModel implements TypeModel {
     @Override
     public String toString() {
         return "ReflectionTypeModel[" + clazz.getName() + "]";
-    }
-
-    // ========== Static utility methods ==========
-
-    /**
-     * Filters out static and transient fields from a class.
-     * Static import friendly version of the filtering logic.
-     */
-    public static List<FieldModel> filterFields(Class<?> clz) {
-        List<FieldModel> result = new ArrayList<>();
-        for (Field f : clz.getDeclaredFields()) {
-            if ((f.getModifiers() & Modifier.STATIC) > 0) {
-                continue;
-            }
-            if ((f.getModifiers() & Modifier.TRANSIENT) > 0) {
-                continue;
-            }
-            if (AnnotationHelper.isTransient(f)) {
-                continue;
-            }
-            result.add(new ReflectionFieldModel(f));
-        }
-        return result;
-    }
-
-    /**
-     * Collects fields from a class up to (but not including) a stop class.
-     */
-    public static List<FieldModel> collectFieldsOfClass(Class<?> clz, Class<?> stopAtSuperClass) {
-        List<FieldModel> result = new ArrayList<>();
-        while (clz != null && !clz.equals(stopAtSuperClass)) {
-            result.addAll(0, filterFields(clz));
-            clz = clz.getSuperclass();
-        }
-        return result;
-    }
-
-    /**
-     * Collects all fields from a class hierarchy.
-     */
-    public static List<FieldModel> collectFieldsOfClass(Class<?> type) {
-        return collectFieldsOfClass(type, null);
     }
 }

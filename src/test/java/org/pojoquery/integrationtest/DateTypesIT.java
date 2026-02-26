@@ -225,7 +225,7 @@ public class DateTypesIT {
 			
 			// Query by specific date
 			List<EventWithDates> results = PojoQuery.build(EventWithDates.class)
-				.addWhere("{event_with_dates}.local_date = ?", targetDate)
+				.addWhere("{event_with_dates.local_date} = ?", targetDate)
 				.execute(c);
 			
 			Assertions.assertEquals(1, results.size());
@@ -258,7 +258,7 @@ public class DateTypesIT {
 			
 			// Query by exact instant
 			List<EventWithDates> results = PojoQuery.build(EventWithDates.class)
-				.addWhere("{event_with_dates}.instant = ?", targetInstant)
+				.addWhere("{event_with_dates.instant} = ?", targetInstant)
 				.execute(c);
 			
 			Assertions.assertEquals(1, results.size());

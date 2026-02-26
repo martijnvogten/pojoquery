@@ -13,6 +13,7 @@ import java.util.Map;
 import org.pojoquery.dialects.HsqldbDbContext;
 import org.pojoquery.dialects.MysqlDbContext;
 import org.pojoquery.dialects.PostgresDbContext;
+import org.pojoquery.typemodel.FieldModel;
 
 /**
  * Defines database-specific behavior for PojoQuery operations.
@@ -227,8 +228,8 @@ public interface DbContext {
 	 *              columns)
 	 * @return the SQL type string
 	 */
-	default String mapJavaTypeToSql(Field field) {
-		Class<?> type = field.getType();
+	default String mapJavaTypeToSql(FieldModel field) {
+		Class<?> type = field.getType().getClass();
 
 		if (type == Long.class || type == long.class) {
 			return "BIGINT";

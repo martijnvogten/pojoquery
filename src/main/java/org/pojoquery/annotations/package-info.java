@@ -38,7 +38,7 @@
  *     @Column(length = 50, nullable = false)
  *     String firstName;
  *     
- *     @Select("CONCAT({this}.first_name, ' ', {this}.last_name)")
+ *     @Select("CONCAT({this.first_name}, ' ', {this.last_name})")
  *     String fullName;
  *     
  *     @Embedded(prefix = "address_")

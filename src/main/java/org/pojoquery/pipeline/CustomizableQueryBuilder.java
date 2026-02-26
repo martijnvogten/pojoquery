@@ -4,10 +4,8 @@ import static org.pojoquery.util.Strings.implode;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -153,10 +151,10 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	}
 
 	/** Backward compatible overload that accepts {@code List<Field>} */
-	public SqlExpression buildListIdsStatementFromFields(List<Field> idFields) {
+	public SqlExpression buildListIdsStatementFromFields(List<FieldModel> idFields) {
 		List<FieldModel> fieldModels = new ArrayList<>();
-		for (Field f : idFields) {
-			fieldModels.add(new ReflectionFieldModel(f));
+		for (FieldModel fieldModel : idFields) {
+			fieldModels.add(new ReflectionFieldModel(((ReflectionFieldModel) fieldModel).getReflectionField()));
 		}
 		return buildListIdsStatement(fieldModels);
 	}
@@ -240,10 +238,8 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 				discriminatorValues.put(type.getSimpleName(), type);
 
 				// Add fields for all subclasses (from same table, no JOINs)
-				for (Class<?> subClass : subClassesAnn.value()) {
-					TypeModel subType = new ReflectionTypeModel(subClass);
+				for (TypeModel subType : type.getTypeValuesFromAnnotation(subClassesAnn, "value")) {
 					discriminatorValues.put(subType.getSimpleName(), subType);
-					// Add subclass-specific fields from the same table
 					addFieldsForSingleTableInheritance(alias, subType, type);
 				}
 
@@ -705,20 +701,11 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	}
 
 	/**
-	 * Determines the SQL field name for a reflection Field. Backward compatible version.
-	 */
-	public static String determineSqlFieldName(Field f) {
-		Objects.requireNonNull(f, "field must not be null");
-		String columnName = AnnotationHelper.getColumnName(f);
-		return columnName != null ? columnName : f.getName();
-	}
-
-	/**
 	 * Determines the SQL column name for a foreign key (link) field.
 	 * Checks @JoinColumn and @Link(linkfield) first, then falls back to @Column,
 	 * and finally defaults to fieldName_id.
 	 */
-	public static String determineLinkFieldName(Field f) {
+	public static String determineLinkFieldName(FieldModel f) {
 		Objects.requireNonNull(f, "field must not be null");
 		// Check for @JoinColumn or @Link(linkfield) first
 		String joinColumnName = AnnotationHelper.getJoinColumnName(f);
@@ -741,7 +728,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	 * @param linkAnn the @Link annotation on the collection field
 	 * @return the column name for the owner's foreign key in the link table
 	 */
-	public static String determineLinkTableOwnerColumn(Class<?> ownerClass, Link linkAnn) {
+	public static String determineLinkTableOwnerColumn(TypeModel ownerClass, Link linkAnn) {
 		if (linkAnn != null && !Link.NONE.equals(linkAnn.linkfield())) {
 			return linkAnn.linkfield();
 		}
@@ -758,7 +745,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	 * @param linkAnn the @Link annotation on the collection field
 	 * @return the column name for the target's foreign key in the link table
 	 */
-	public static String determineLinkTableForeignColumn(Class<?> foreignClass, Link linkAnn) {
+	public static String determineLinkTableForeignColumn(TypeModel foreignClass, Link linkAnn) {
 		// Check for fetchColumn first (value collections like enums)
 		if (linkAnn != null && !Link.NONE.equals(linkAnn.fetchColumn())) {
 			return linkAnn.fetchColumn();
@@ -870,7 +857,17 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 				String rest = marker.substring("this.".length());
 				return "{" + alias + "." + rest + "}";
 			} else if (marker.contains(".")) {
-				// Handle alias.column patterns - keep as marker for resolveAliases to handle
+				// Handle alias.column patterns - check if it refers to the linkAlias
+				int dotIndex = marker.indexOf('.');
+				String markerAlias = marker.substring(0, dotIndex);
+				String rest = marker.substring(dotIndex + 1);
+				
+				// If linkAlias ends with the marker alias (e.g., linkAlias="articles.authors" and markerAlias="authors"),
+				// resolve to the full linkAlias
+				if (linkAlias != null && (linkAlias.equals(markerAlias) || linkAlias.endsWith("." + markerAlias))) {
+					return "{" + linkAlias + "." + rest + "}";
+				}
+				// Otherwise keep as marker for resolveAliases to handle
 				return "{" + marker + "}";
 			} else {
 				// Simple field reference - prefix with current alias if not at root level
@@ -1623,86 +1620,4 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		}
 		return idFields.get(0);
 	}
-
-	// ========== Backward compatibility methods using Class<?> ==========
-
-	/**
-	 * Determines table mappings for a class. This method is kept for backward compatibility.
-	 */
-	public static List<TableMapping> determineTableMapping(Class<?> clz) {
-		return determineTableMapping(new ReflectionTypeModel(clz));
-	}
-
-	/**
-	 * Determines ID fields for a class. Returns reflection Field objects for backward compatibility.
-	 */
-	public static List<Field> determineIdFields(Class<?> clz) {
-		return determineIdFields(new ReflectionTypeModel(clz)).stream()
-			.map(f -> ((ReflectionFieldModel) f).getReflectionField())
-			.toList();
-	}
-
-	/**
-	 * Determines the single ID field for a class. Returns reflection Field for backward compatibility.
-	 */
-	public static Field determineIdField(Class<?> clz) {
-		FieldModel f = determineIdField(new ReflectionTypeModel(clz));
-		if (f instanceof ReflectionFieldModel) {
-			return ((ReflectionFieldModel) f).getReflectionField();
-		}
-		throw new MappingException("ID field is not a reflection field");
-	}
-
-	/**
-	 * Collects fields from a class up to a stop class. Returns reflection Field objects for backward compatibility.
-	 */
-	public static List<Field> collectFieldsOfClass(Class<?> clz, Class<?> stopAtSuperClass) {
-		TypeModel type = new ReflectionTypeModel(clz);
-		TypeModel stopType = stopAtSuperClass != null ? new ReflectionTypeModel(stopAtSuperClass) : null;
-		return collectFieldsOfClass(type, stopType).stream()
-			.map(f -> ((ReflectionFieldModel) f).getReflectionField())
-			.toList();
-	}
-
-	/**
-	 * Collects all fields from a class. Returns reflection Field objects for backward compatibility.
-	 */
-	public static Iterable<Field> collectFieldsOfClass(Class<?> type) {
-		return collectFieldsOfClass(type, (Class<?>) null);
-	}
-
-	/**
-	 * Filters fields from a class. Returns reflection Field objects for backward compatibility.
-	 */
-	public static Collection<Field> filterFields(Class<?> clz) {
-		List<Field> result = new ArrayList<Field>();
-		for (Field f : clz.getDeclaredFields()) {
-			if ((f.getModifiers() & Modifier.STATIC) > 0) {
-				continue;
-			}
-			if ((f.getModifiers() & Modifier.TRANSIENT) > 0) {
-				continue;
-			}
-			if (AnnotationHelper.isTransient(f)) {
-				continue;
-			}
-			result.add(f);
-		}
-		return result;
-	}
-
-	/**
-	 * Checks if a type is a list or array. Backward compatible version.
-	 */
-	public static boolean isListOrArray(Class<?> type) {
-		return isListOrArray(new ReflectionTypeModel(type));
-	}
-
-	/**
-	 * Builds ID condition for a class. Backward compatible version.
-	 */
-	public static List<SqlExpression> buildIdCondition(DbContext context, Class<?> clz, Object id) {
-		return buildIdCondition(context, new ReflectionTypeModel(clz), id);
-	}
-
 }

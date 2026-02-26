@@ -42,7 +42,7 @@ public class SchemaPrefixesIT {
 
 		// HSQLDB uses CREATE SCHEMA
 		for (String schema : schemas) {
-			DB.executeDDL(dataSource, "CREATE SCHEMA " + schema + " AUTHORIZATION DBA");
+			DB.executeDDL(dataSource, "CREATE SCHEMA \"" + schema + "\" AUTHORIZATION DBA");
 		}
 
 		return dataSource;
@@ -81,10 +81,10 @@ public class SchemaPrefixesIT {
 					"title", "How to awesomize stuff"
 				)
 			);
-			results = DB.queryRows(c, "SELECT title FROM schema1.article WHERE id=1");
+			results = DB.queryRows(c, "SELECT \"title\" FROM \"schema1\".\"article\" WHERE \"id\"=1");
 			Assertions.assertEquals(1, results.size());
 			// HSQLDB returns column names in uppercase
-			Assertions.assertEquals("How to awesomize stuff", results.get(0).get("TITLE"));
+			Assertions.assertEquals("How to awesomize stuff", results.get(0).get("title"));
 			// Use update instead of upsert since we know the record exists
 			DB.update(
 				c,
@@ -97,9 +97,9 @@ public class SchemaPrefixesIT {
 					"id", 1
 				)
 			);
-			results = DB.queryRows(c, "SELECT title FROM schema1.article WHERE id=1");
+			results = DB.queryRows(c, "SELECT \"title\" FROM \"schema1\".\"article\" WHERE \"id\"=1");
 			Assertions.assertEquals(1, results.size());
-			Assertions.assertEquals("How to awesomize stuff even better", results.get(0).get("TITLE"));
+			Assertions.assertEquals("How to awesomize stuff even better", results.get(0).get("title"));
 			DB.update(
 				c,
 				"schema1",
@@ -112,14 +112,14 @@ public class SchemaPrefixesIT {
 				)
 			);
 
-			results = DB.queryRows(c, "SELECT title FROM schema1.article WHERE id=1");
+			results = DB.queryRows(c, "SELECT \"title\" FROM \"schema1\".\"article\" WHERE \"id\"=1");
 			Assertions.assertEquals(1, results.size());
-			Assertions.assertEquals("How to awesomize stuff to the max", results.get(0).get("TITLE"));
+			Assertions.assertEquals("How to awesomize stuff to the max", results.get(0).get("title"));
 
 			DB.insert(c, "schema1", "article", Map.of("id", 2, "title", "Part II - how to make sure stuff works"));
 			DB.insert(c, "schema2", "book", Map.of("id", 1, "title", "Great lessons from the beyond"));
 
-			DB.update(c, new SqlExpression("UPDATE schema1.article SET book_id=1"));
+			DB.update(c, new SqlExpression("UPDATE \"schema1\".\"article\" SET \"book_id\"=1"));
 
 			List<Book> books = PojoQuery.build(Book.class).execute(c);
 

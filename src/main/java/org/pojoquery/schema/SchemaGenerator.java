@@ -1,7 +1,7 @@
 package org.pojoquery.schema;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,6 +23,9 @@ import org.pojoquery.schema.ForeignKeyInfo.DeferredForeignKey;
 import org.pojoquery.schema.ForeignKeyInfo.InferredForeignKey;
 import org.pojoquery.schema.ForeignKeyInfo.LinkTableInfo;
 import org.pojoquery.schema.ForeignKeyInfo.MergedColumnAnnotations;
+import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.ReflectionTypeModel;
+import org.pojoquery.typemodel.TypeModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,10 +66,10 @@ public class SchemaGenerator {
         LOG.debug("Generating CREATE TABLE statements for {}", entityClass.getName());
         Set<String> generatedTables = new HashSet<>();
         List<String> statements = new ArrayList<>();
-        Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
+        Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
         List<LinkTableInfo> linkTables = new ArrayList<>();
         List<DeferredForeignKey> deferredForeignKeys = new ArrayList<>();
-        generateCreateTableStatements(entityClass, dbContext, generatedTables, statements, inferredForeignKeys, linkTables, deferredForeignKeys);
+        generateCreateTableStatements(new ReflectionTypeModel(entityClass), dbContext, generatedTables, statements, inferredForeignKeys, linkTables, deferredForeignKeys);
         
         // Generate link tables (without FK constraints)
         for (LinkTableInfo linkTable : linkTables) {
@@ -87,8 +90,8 @@ public class SchemaGenerator {
         return statements;
     }
     
-    private static void generateCreateTableStatements(Class<?> entityClass, DbContext dbContext, 
-            Set<String> generatedTables, List<String> statements, Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys,
+    private static void generateCreateTableStatements(TypeModel entityClass, DbContext dbContext, 
+            Set<String> generatedTables, List<String> statements, Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys,
             List<LinkTableInfo> linkTables, List<DeferredForeignKey> deferredForeignKeys) {
         // Delegate to the internal method with null for merged annotations (single-class case)
         generateCreateTableStatementsInternal(entityClass, dbContext, generatedTables, statements, 
@@ -120,23 +123,26 @@ public class SchemaGenerator {
      * @return list of CREATE TABLE statements
      */
     public static List<String> generateCreateTableStatements(DbContext dbContext, Class<?>... entityClasses) {
+        TypeModel[] typeModels = Arrays.stream(entityClasses)
+                                       .map(ReflectionTypeModel::new)
+                                       .toArray(TypeModel[]::new);
         Set<String> generatedTables = new HashSet<>();
         List<String> statements = new ArrayList<>();
-        Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
+        Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
         List<LinkTableInfo> linkTables = new ArrayList<>();
         List<DeferredForeignKey> deferredForeignKeys = new ArrayList<>();
         
         // Collect merged column annotations for tables that have multiple class mappings
         Map<String, Map<String, MergedColumnAnnotations>> tableColumnAnnotations = new HashMap<>();
-        collectMergedColumnAnnotations(entityClasses, tableColumnAnnotations);
+        collectMergedColumnAnnotations(typeModels, tableColumnAnnotations);
         
         // First pass: scan all classes for collection fields to build the inferred foreign keys map
-        for (Class<?> entityClass : entityClasses) {
+        for (TypeModel entityClass : typeModels) {
             ForeignKeyScanner.scanForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
         }
         
         // Second pass: generate CREATE TABLE statements (without FK constraints)
-        for (Class<?> entityClass : entityClasses) {
+        for (TypeModel entityClass : typeModels) {
             generateCreateTableStatementsInternal(entityClass, dbContext, generatedTables, statements, 
                 inferredForeignKeys, linkTables, deferredForeignKeys, tableColumnAnnotations);
         }
@@ -161,8 +167,8 @@ public class SchemaGenerator {
     /**
      * Internal method that generates CREATE TABLE statements for a single entity class.
      */
-    private static void generateCreateTableStatementsInternal(Class<?> entityClass, DbContext dbContext, 
-            Set<String> generatedTables, List<String> statements, Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys,
+    private static void generateCreateTableStatementsInternal(TypeModel entityClass, DbContext dbContext, 
+            Set<String> generatedTables, List<String> statements, Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys,
             List<LinkTableInfo> linkTables, List<DeferredForeignKey> deferredForeignKeys,
             Map<String, Map<String, MergedColumnAnnotations>> tableColumnAnnotations) {
         // Scan for collection fields that imply foreign keys in other tables
@@ -170,7 +176,7 @@ public class SchemaGenerator {
         
         List<TableMapping> tableMappings = QueryBuilder.determineTableMapping(entityClass);
         if (tableMappings.isEmpty()) {
-            throw new IllegalArgumentException("Class " + entityClass.getName() + " must have a @Table annotation");
+            throw new IllegalArgumentException("Class " + entityClass.getSimpleName() + " must have a @Table annotation");
         }
         
         for (TableMapping mapping : tableMappings) {
@@ -184,7 +190,7 @@ public class SchemaGenerator {
             generatedTables.add(fullTableName);
             
             // Get inferred foreign keys for this class
-            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.getReflectionClass());
+            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.getType());
             
             // Get merged column annotations for this table (may be null for single-class generation)
             Map<String, MergedColumnAnnotations> mergedAnnotations = null;
@@ -217,17 +223,17 @@ public class SchemaGenerator {
                         generatedTables.remove(parentTableName);
 
                         // Regenerate with STI info
-                        List<Field> stiFields = new ArrayList<>();
-                        for (Class<?> subClass : subClassesAnn.value()) {
+                        List<FieldModel> stiFields = new ArrayList<>();
+                        for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnn, "value")) {
                             // Collect fields declared only in the subclass
-                            for (Field f : QueryBuilder.collectFieldsOfClass(subClass, entityClass)) {
+                            for (FieldModel f : QueryBuilder.collectFieldsOfClass(subClass, entityClass)) {
                                 if (!isLinkedField(f) && !CustomizableQueryBuilder.isListOrArray(f.getType())) {
                                     stiFields.add(f);
                                 }
                             }
                         }
 
-                        List<InferredForeignKey> fks = inferredForeignKeys.get(parentMapping.getReflectionClass());
+                        List<InferredForeignKey> fks = inferredForeignKeys.get(parentMapping.getType());
                         Map<String, MergedColumnAnnotations> mergedAnnotations = null;
                         if (tableColumnAnnotations != null) {
                             String tableKey = (parentMapping.schemaName != null ? parentMapping.schemaName + "." : "") + parentMapping.tableName;
@@ -241,7 +247,7 @@ public class SchemaGenerator {
                 }
             } else {
                 // Table-per-subclass inheritance: generate separate tables for each subclass
-                for (Class<?> subClass : subClassesAnn.value()) {
+                for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnn, "value")) {
                     generateCreateTableStatementsInternal(subClass, dbContext, generatedTables, statements,
                             inferredForeignKeys, linkTables, deferredForeignKeys, tableColumnAnnotations);
                 }
@@ -252,9 +258,9 @@ public class SchemaGenerator {
     /**
      * Collects merged column annotations from all classes that map to the same table.
      */
-    private static void collectMergedColumnAnnotations(Class<?>[] entityClasses, 
+    private static void collectMergedColumnAnnotations(TypeModel[] entityClasses, 
             Map<String, Map<String, MergedColumnAnnotations>> tableColumnAnnotations) {
-        for (Class<?> entityClass : entityClasses) {
+        for (TypeModel entityClass : entityClasses) {
             List<TableMapping> tableMappings = QueryBuilder.determineTableMapping(entityClass);
             for (TableMapping mapping : tableMappings) {
                 String tableKey = (mapping.schemaName != null ? mapping.schemaName + "." : "") + mapping.tableName;
@@ -262,7 +268,7 @@ public class SchemaGenerator {
                     .computeIfAbsent(tableKey, k -> new HashMap<>());
                 
                 // Process fields from this mapping
-                for (Field field : mapping.getReflectionFields()) {
+                for (FieldModel field : mapping.getFields()) {
                     String columnName = QueryBuilder.determineSqlFieldName(field).toLowerCase();
                     MergedColumnAnnotations merged = columnMap.computeIfAbsent(columnName, k -> new MergedColumnAnnotations());
                     AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
@@ -371,13 +377,13 @@ public class SchemaGenerator {
         Set<String> existingFkColumns = new HashSet<>(); // Track FK columns to avoid duplicates
         
         // Determine if we have a composite key from the overall class hierarchy
-        List<Field> idFields = QueryBuilder.determineIdFields(mapping.getReflectionClass());
+        List<FieldModel> idFields = QueryBuilder.determineIdFields(mapping.getType());
         boolean isCompositeKey = idFields.size() > 1;
         
         // Check if this is a subclass table (not the root table with @Id fields)
         // In table-per-subclass, the subclass table needs the ID field from parent as FK/PK
         boolean hasIdFieldInThisMapping = false;
-        for (Field field : mapping.getReflectionFields()) {
+        for (FieldModel field : mapping.getFields()) {
             if (AnnotationHelper.isId(field)) {
                 hasIdFieldInThisMapping = true;
                 break;
@@ -387,7 +393,7 @@ public class SchemaGenerator {
         // If this mapping doesn't have its own @Id field but the class has inherited @Id,
         // we need to add the ID field as a non-auto-increment primary key (foreign key to parent)
         if (!hasIdFieldInThisMapping && !idFields.isEmpty()) {
-            for (Field idField : idFields) {
+            for (FieldModel idField : idFields) {
                 String columnName = QueryBuilder.determineSqlFieldName(idField);
                 // Add as NOT NULL (not auto-increment - it references the parent table)
                 String columnDef = formatColumnDefinition(columnName, idField.getType(), false, dbContext, idField, mergedAnnotations);
@@ -397,7 +403,7 @@ public class SchemaGenerator {
             }
         }
         
-        for (Field field : mapping.getReflectionFields()) {
+        for (FieldModel field : mapping.getFields()) {
             // Handle embedded fields
             if (AnnotationHelper.isEmbedded(field)) {
                 String prefix = QueryBuilder.determinePrefix(field);
@@ -420,11 +426,11 @@ public class SchemaGenerator {
                     
                     // Defer foreign key constraint for single entity references
                     if (!existingFkColumns.contains(columnName.toLowerCase())) {
-                        Class<?> linkedType = field.getType();
+                        TypeModel linkedType = field.getType();
                         List<TableMapping> linkedMappings = QueryBuilder.determineTableMapping(linkedType);
                         if (!linkedMappings.isEmpty()) {
                             TableMapping linkedMapping = linkedMappings.get(0);
-                            List<Field> linkedIdFields = QueryBuilder.determineIdFields(linkedType);
+                            List<FieldModel> linkedIdFields = QueryBuilder.determineIdFields(linkedType);
                             if (!linkedIdFields.isEmpty()) {
                                 String refColumn = QueryBuilder.determineSqlFieldName(linkedIdFields.get(0));
                                 deferredForeignKeys.add(new DeferredForeignKey(
@@ -507,7 +513,7 @@ public class SchemaGenerator {
     private static String generateCreateTableForMappingWithSTI(TableMapping mapping, DbContext dbContext,
             List<InferredForeignKey> inferredForeignKeys, List<DeferredForeignKey> deferredForeignKeys,
             Map<String, MergedColumnAnnotations> mergedAnnotations, String discriminatorColumnName,
-            List<Field> stiFields) {
+            List<FieldModel> stiFields) {
         StringBuilder sb = new StringBuilder();
 
         String tableName = getFullTableName(mapping, dbContext);
@@ -522,11 +528,11 @@ public class SchemaGenerator {
         Set<String> existingFkColumns = new HashSet<>();
 
         // Determine if we have a composite key
-        List<Field> idFields = QueryBuilder.determineIdFields(mapping.getReflectionClass());
+        List<FieldModel> idFields = QueryBuilder.determineIdFields(mapping.getType());
         boolean isCompositeKey = idFields.size() > 1;
 
         // Process fields from the mapping (parent class fields)
-        for (Field field : mapping.getReflectionFields()) {
+        for (FieldModel field : mapping.getFields()) {
             // Handle embedded fields
             if (field.getAnnotation(Embedded.class) != null) {
                 Embedded embedded = field.getAnnotation(Embedded.class);
@@ -547,11 +553,11 @@ public class SchemaGenerator {
                     }
 
                     if (!existingFkColumns.contains(columnName.toLowerCase())) {
-                        Class<?> linkedType = field.getType();
+                        TypeModel linkedType = field.getType();
                         List<TableMapping> linkedMappings = QueryBuilder.determineTableMapping(linkedType);
                         if (!linkedMappings.isEmpty()) {
                             TableMapping linkedMapping = linkedMappings.get(0);
-                            List<Field> linkedIdFields = QueryBuilder.determineIdFields(linkedType);
+                            List<FieldModel> linkedIdFields = QueryBuilder.determineIdFields(linkedType);
                             if (!linkedIdFields.isEmpty()) {
                                 String refColumn = QueryBuilder.determineSqlFieldName(linkedIdFields.get(0));
                                 deferredForeignKeys.add(new DeferredForeignKey(
@@ -583,7 +589,7 @@ public class SchemaGenerator {
         existingColumnNames.add(discriminatorColumnName.toLowerCase());
 
         // Add fields from subclasses (single table inheritance)
-        for (Field field : stiFields) {
+        for (FieldModel field : stiFields) {
             String columnName = QueryBuilder.determineSqlFieldName(field);
             if (!existingColumnNames.contains(columnName.toLowerCase())) {
                 // Subclass fields are nullable (since not all rows will be of that subclass)
@@ -639,12 +645,12 @@ public class SchemaGenerator {
         return sb.toString();
     }
 
-    private static void addEmbeddedColumns(Class<?> embeddedClass, String prefix,
+    private static void addEmbeddedColumns(TypeModel embeddedClass, String prefix,
             List<String> columnDefinitions, List<String> primaryKeyColumns, Set<String> existingColumnNames,
             DbContext dbContext, boolean isCompositeKey, Map<String, MergedColumnAnnotations> mergedAnnotations) {
         // Use QueryBuilder's filterFields which already handles static, transient, and @Transient
-        Collection<Field> fields = QueryBuilder.filterFields(embeddedClass);
-        for (Field field : fields) {
+        Collection<FieldModel> fields = QueryBuilder.filterFields(embeddedClass);
+        for (FieldModel field : fields) {
             // Recursively handle nested embedded
             if (AnnotationHelper.isEmbedded(field)) {
                 String nestedPrefix = prefix + QueryBuilder.determinePrefix(field);
@@ -682,8 +688,8 @@ public class SchemaGenerator {
         }
     }
     
-    private static boolean isLinkedField(Field field) {
-        Class<?> type = field.getType();
+    private static boolean isLinkedField(FieldModel field) {
+        TypeModel type = field.getType();
         // Check if it's a collection (list, set, etc.) - reuse QueryBuilder's logic
         if (CustomizableQueryBuilder.isListOrArray(type)) {
             return true;
@@ -696,7 +702,7 @@ public class SchemaGenerator {
         return CustomizableQueryBuilder.isLinkedClass(type);
     }
     
-    private static String determineForeignKeyColumnName(Field field) {
+    private static String determineForeignKeyColumnName(FieldModel field) {
         // First check @Link(linkfield=...) then JPA @JoinColumn(name=...)
         String columnName = AnnotationHelper.getJoinColumnName(field);
         if (columnName != null) {
@@ -715,7 +721,7 @@ public class SchemaGenerator {
         return sb.toString();
     }
     
-    private static String formatForeignKeyColumnDefinition(String columnName, DbContext dbContext, Field field) {
+    private static String formatForeignKeyColumnDefinition(String columnName, DbContext dbContext, FieldModel field) {
         StringBuilder sb = new StringBuilder();
         sb.append(dbContext.quoteObjectNames(columnName));
         sb.append(" ");
@@ -738,8 +744,8 @@ public class SchemaGenerator {
         return sb.toString();
     }
 
-    private static String formatColumnDefinition(String columnName, Class<?> type, boolean autoIncrement, 
-            DbContext dbContext, Field field, Map<String, MergedColumnAnnotations> mergedAnnotations) {
+    private static String formatColumnDefinition(String columnName, TypeModel type, boolean autoIncrement, 
+            DbContext dbContext, FieldModel field, Map<String, MergedColumnAnnotations> mergedAnnotations) {
         StringBuilder sb = new StringBuilder();
         sb.append(dbContext.quoteObjectNames(columnName));
         sb.append(" ");
@@ -844,7 +850,11 @@ public class SchemaGenerator {
      * @return list of DDL statements
      */
     public static List<String> generateMigrationStatements(SchemaInfo schemaInfo, Class<?>... entityClasses) {
-        return generateMigrationStatements(schemaInfo, DbContext.getDefault(), entityClasses);
+        TypeModel[] typeModels = new TypeModel[entityClasses.length];
+        for (int i = 0; i < entityClasses.length; i++) {
+            typeModels[i] = new ReflectionTypeModel(entityClasses[i]);
+        }
+        return generateMigrationStatements(schemaInfo, DbContext.getDefault(), typeModels);
     }
     
     /**
@@ -857,20 +867,20 @@ public class SchemaGenerator {
      * @param entityClasses the entity classes to generate DDL for
      * @return list of DDL statements
      */
-    public static List<String> generateMigrationStatements(SchemaInfo schemaInfo, DbContext dbContext, Class<?>... entityClasses) {
+    public static List<String> generateMigrationStatements(SchemaInfo schemaInfo, DbContext dbContext, TypeModel... entityClasses) {
         Set<String> processedTables = new HashSet<>();
         List<String> statements = new ArrayList<>();
-        Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
+        Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
         List<LinkTableInfo> linkTables = new ArrayList<>();
         List<DeferredForeignKey> deferredForeignKeys = new ArrayList<>();
         
         // First pass: scan all classes for collection fields to build the inferred foreign keys map
-        for (Class<?> entityClass : entityClasses) {
+        for (TypeModel entityClass : entityClasses) {
             ForeignKeyScanner.scanForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
         }
         
         // Second pass: generate DDL statements
-        for (Class<?> entityClass : entityClasses) {
+        for (TypeModel entityClass : entityClasses) {
             generateMigrationStatements(entityClass, schemaInfo, dbContext, processedTables, statements, inferredForeignKeys, linkTables, deferredForeignKeys);
         }
         
@@ -899,15 +909,15 @@ public class SchemaGenerator {
         return statements;
     }
     
-    private static void generateMigrationStatements(Class<?> entityClass, SchemaInfo schemaInfo, DbContext dbContext,
-            Set<String> processedTables, List<String> statements, Map<Class<?>, List<InferredForeignKey>> inferredForeignKeys,
+    private static void generateMigrationStatements(TypeModel entityClass, SchemaInfo schemaInfo, DbContext dbContext,
+            Set<String> processedTables, List<String> statements, Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys,
             List<LinkTableInfo> linkTables, List<DeferredForeignKey> deferredForeignKeys) {
         // Scan for inferred foreign keys
         ForeignKeyScanner.scanForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
         
         List<TableMapping> tableMappings = QueryBuilder.determineTableMapping(entityClass);
         if (tableMappings.isEmpty()) {
-            throw new IllegalArgumentException("Class " + entityClass.getName() + " must have a @Table annotation");
+            throw new IllegalArgumentException("Class " + entityClass.getSimpleName() + " must have a @Table annotation");
         }
         
         for (TableMapping mapping : tableMappings) {
@@ -919,7 +929,7 @@ public class SchemaGenerator {
             processedTables.add(fullTableName);
             
             // Get inferred foreign keys for this class
-            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.getReflectionClass());
+            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.getType());
             
             // Check if table exists
             SchemaInfo.TableInfo existingTable = schemaInfo.getTable(mapping.schemaName, mapping.tableName);
@@ -937,7 +947,7 @@ public class SchemaGenerator {
         // Handle @SubClasses annotation for table-per-subclass inheritance
         SubClasses subClassesAnn = entityClass.getAnnotation(SubClasses.class);
         if (subClassesAnn != null) {
-            for (Class<?> subClass : subClassesAnn.value()) {
+            for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnn, "value")) {
                 generateMigrationStatements(subClass, schemaInfo, dbContext, processedTables, statements, inferredForeignKeys, linkTables, deferredForeignKeys);
             }
         }
@@ -1011,12 +1021,12 @@ public class SchemaGenerator {
         Set<String> existingColumnNames = new HashSet<>();
         
         // Determine if we have a composite key from the overall class hierarchy
-        List<Field> idFields = QueryBuilder.determineIdFields(mapping.getReflectionClass());
+        List<FieldModel> idFields = QueryBuilder.determineIdFields(mapping.getType());
         boolean isCompositeKey = idFields.size() > 1;
         
         // Check if this is a subclass table
         boolean hasIdFieldInThisMapping = false;
-        for (Field field : mapping.getReflectionFields()) {
+        for (FieldModel field : mapping.getFields()) {
             if (AnnotationHelper.isId(field)) {
                 hasIdFieldInThisMapping = true;
                 break;
@@ -1025,7 +1035,7 @@ public class SchemaGenerator {
 
         // Add ID fields if needed (for subclass tables)
         if (!hasIdFieldInThisMapping && !idFields.isEmpty()) {
-            for (Field idField : idFields) {
+            for (FieldModel idField : idFields) {
                 String columnName = QueryBuilder.determineSqlFieldName(idField);
                 String sqlType = dbContext.mapJavaTypeToSql(idField);
                 columns.add(new ColumnDefinition(columnName, sqlType, false, true));
@@ -1034,7 +1044,7 @@ public class SchemaGenerator {
         }
 
         // Process fields
-        for (Field field : mapping.getReflectionFields()) {
+        for (FieldModel field : mapping.getFields()) {
             // Handle embedded fields
             if (AnnotationHelper.isEmbedded(field)) {
                 String prefix = QueryBuilder.determinePrefix(field);
@@ -1090,10 +1100,10 @@ public class SchemaGenerator {
         return columns;
     }
     
-    private static void addEmbeddedColumnsToList(Class<?> embeddedClass, String prefix,
+    private static void addEmbeddedColumnsToList(TypeModel embeddedClass, String prefix,
             List<ColumnDefinition> columns, Set<String> existingColumnNames, DbContext dbContext, boolean isCompositeKey) {
-        Collection<Field> fields = QueryBuilder.filterFields(embeddedClass);
-        for (Field field : fields) {
+        Collection<FieldModel> fields = QueryBuilder.filterFields(embeddedClass);
+        for (FieldModel field : fields) {
             if (AnnotationHelper.isEmbedded(field)) {
                 // Get prefix from PojoQuery @Embedded if present, otherwise use empty string (JPA @Embedded has no prefix)
                 Embedded nested = field.getAnnotation(Embedded.class);

@@ -112,9 +112,9 @@ Query with a fluent API:
 
 ```java
 List<Order> orders = PojoQuery.build(OrderDetail.class)
-    .addWhere("{customer}.name LIKE ?", "%Acme%")
-    .addWhere("{lines.product}.sku = ?", "WIDGET-42")
-    .addOrderBy("{order}.orderDate DESC")
+    .addWhere("{customer.name} LIKE ?", "%Acme%")
+    .addWhere("{lines.product.sku} = ?", "WIDGET-42")
+    .addOrderBy("{order.orderDate} DESC")
     .setLimit(10)
     .execute(dataSource);
 
@@ -190,7 +190,7 @@ Process results one at a time without loading everything into memory:
 
 ```java
 PojoQuery.build(Order.class)
-    .addOrderBy("{order}.id")
+    .addOrderBy("{order.id}")
     .executeStreaming(dataSource, order -> {
         processOrder(order);  // Called as each Order completes
     });

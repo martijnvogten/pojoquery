@@ -44,7 +44,7 @@ public class ForeignValueFieldsIT {
 		Long id;	
 		
 		@Link(linktable="poule_weightclass", fetchColumn="weightclass")
-		@JoinCondition("{this}.id = {linktable}.poule_id AND {linktable}.weightclass > -32")
+		@JoinCondition("{this.id} = {linktable.poule_id} AND {linktable.weightclass} > -32")
 		Integer[] weightClasses;
 	}
 
@@ -57,7 +57,7 @@ public class ForeignValueFieldsIT {
 			insertTestData(c);
 			
 			PojoQuery<Poule> query = PojoQuery.build(Poule.class)
-					.addWhere("id = ? ", 1);
+					.addWhere("{id} = ? ", 1);
 			
 			List<Poule> result = query.execute(c);
 			Assertions.assertEquals(1, result.size());
@@ -74,7 +74,7 @@ public class ForeignValueFieldsIT {
 			insertTestData(c);
 			
 			PojoQuery<PouleWithHeavyWeights> query = PojoQuery.build(PouleWithHeavyWeights.class)
-					.addWhere("id = ? ", 1);
+					.addWhere("{id} = ? ", 1);
 			
 			List<PouleWithHeavyWeights> result = query.execute(c);
 			Assertions.assertEquals(1, result.get(0).weightClasses.length);

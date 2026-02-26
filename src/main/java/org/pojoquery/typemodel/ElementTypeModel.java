@@ -15,8 +15,6 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 
-import org.pojoquery.AnnotationHelper;
-
 /**
  * TypeModel implementation for annotation processing.
  * Wraps a TypeElement or TypeMirror for compile-time type introspection.
@@ -163,8 +161,14 @@ public class ElementTypeModel implements TypeModel {
     }
 
     @Override
-    public boolean hasTableMapping() {
-        return AnnotationHelper.hasTableAnnotation(this);
+    public boolean isMap() {
+        TypeElement mapElement = elements.getTypeElement("java.util.Map");
+        if (mapElement == null) {
+            return false;
+        }
+        TypeMirror mapType = types.erasure(mapElement.asType());
+        TypeMirror thisErased = types.erasure(typeMirror);
+        return types.isAssignable(thisErased, mapType);
     }
 
     @Override
@@ -176,6 +180,16 @@ public class ElementTypeModel implements TypeModel {
             return getQualifiedName().equals(other.getQualifiedName());
         }
         return false;
+    }
+
+    @Override
+    public List<TypeModel> getTypeValuesFromAnnotation(Annotation annotation, String attributeName) {
+        // For annotation processing, we need to use AnnotationMirror to get the type values
+        // since Class values are not available at compile time
+        return org.pojoquery.util.Types.getAnnotationMirrorValues(typeElement, annotation, attributeName).stream()
+                .filter(item -> item instanceof TypeMirror)
+                .map(item -> (TypeModel)new ElementTypeModel((TypeMirror) item, elements, types))
+                .toList();
     }
 
     /**

@@ -98,7 +98,7 @@ public class SingleTableInheritanceIT {
 			
 			// Query all vehicles - should return correct subclass types
 			List<Vehicle> vehicles = PojoQuery.build(Vehicle.class)
-				.addOrderBy("{vehicle}.id")
+				.addOrderBy("{vehicle.id}")
 				.execute(c);
 			
 			assertEquals(3, vehicles.size());
@@ -130,7 +130,9 @@ public class SingleTableInheritanceIT {
 		DataSource db = initDatabase();
 		
 		// Add a custom column 'mileage' that is not mapped to any field
-		DB.executeDDL(db, "ALTER TABLE vehicle ADD COLUMN mileage INT");
+		DB.executeDDL(db, """
+			ALTER TABLE "vehicle" ADD COLUMN "mileage" INT
+			""");
 		
 		DB.withConnection(db, (Connection c) -> {
 			// Insert a car with mileage
@@ -155,8 +157,8 @@ public class SingleTableInheritanceIT {
 			
 			// Query with the custom mileage column included
 			PojoQuery<Vehicle> query = PojoQuery.build(Vehicle.class);
-			query.addField(SqlExpression.sql("{vehicle}.mileage"), "vehicle.mileage");
-			query.addOrderBy("{vehicle}.id");
+			query.addField(SqlExpression.sql("{vehicle.mileage}"), "vehicle.mileage");
+			query.addOrderBy("{vehicle.id}");
 			List<Vehicle> vehicles = query.execute(c);
 			
 			assertEquals(2, vehicles.size());
@@ -178,7 +180,9 @@ public class SingleTableInheritanceIT {
 		DataSource db = initDatabase();
 		
 		// Add a custom column 'color' that is not mapped to any field
-		DB.executeDDL(db, "ALTER TABLE vehicle ADD COLUMN color VARCHAR(50)");
+		DB.executeDDL(db, """
+			ALTER TABLE "vehicle" ADD COLUMN "color" VARCHAR(50)
+			""");
 		
 		DB.withConnection(db, (Connection c) -> {
 			// Insert a car with color
@@ -192,7 +196,7 @@ public class SingleTableInheritanceIT {
 			
 			// Query with both the discriminator column and color column in results
 			PojoQuery<Vehicle> query = PojoQuery.build(Vehicle.class);
-			query.addField(SqlExpression.sql("{vehicle}.color"), "vehicle.color");
+			query.addField(SqlExpression.sql("{vehicle.color}"), "vehicle.color");
 			List<Vehicle> vehicles = query.execute(c);
 			
 			assertEquals(1, vehicles.size());
@@ -214,7 +218,9 @@ public class SingleTableInheritanceIT {
 		DataSource db = initDatabase();
 		
 		// Add a custom column 'notes' 
-		DB.executeDDL(db, "ALTER TABLE vehicle ADD COLUMN notes VARCHAR(255)");
+		DB.executeDDL(db, """
+			ALTER TABLE "vehicle" ADD COLUMN "notes" VARCHAR(255)
+			""");
 		
 		DB.withConnection(db, (Connection c) -> {
 			// Insert a base vehicle (not a subclass) with notes
@@ -227,7 +233,7 @@ public class SingleTableInheritanceIT {
 			
 			// Query with notes column included
 			PojoQuery<Vehicle> query = PojoQuery.build(Vehicle.class);
-			query.addField(SqlExpression.sql("{vehicle}.notes"), "vehicle.notes");
+			query.addField(SqlExpression.sql("{vehicle.notes}"), "vehicle.notes");
 			List<Vehicle> vehicles = query.execute(c);
 			
 			assertEquals(1, vehicles.size());

@@ -56,7 +56,9 @@ public class UpsertsIT {
 				"price", 100
 			), List.of("id"));
 
-			List<Map<String, Object>> results = DB.queryRows(c, "SELECT * FROM product WHERE id=1");
+			List<Map<String, Object>> results = DB.queryRows(c, """
+				SELECT * FROM "product" WHERE "id"=1
+				""");
 			Assertions.assertEquals(1, results.size());
 			Assertions.assertEquals("Widget", getValue(results.get(0), "name"));
 			Assertions.assertEquals(100, getValue(results.get(0), "price"));
@@ -75,11 +77,15 @@ public class UpsertsIT {
 				"price", 100
 			));
 
-			// Verify it was inserted
-			List<Map<String, Object>> results = DB.queryRows(c, "SELECT * FROM product WHERE id=1");
-			Assertions.assertEquals(1, results.size());
-			Assertions.assertEquals("Widget", getValue(results.get(0), "name"));
-			Assertions.assertEquals(100, getValue(results.get(0), "price"));
+			{
+				// Verify it was inserted
+				List<Map<String, Object>> results = DB.queryRows(c, """
+					SELECT * FROM "product" WHERE "id"=1
+					""");
+				Assertions.assertEquals(1, results.size());
+				Assertions.assertEquals("Widget", getValue(results.get(0), "name"));
+				Assertions.assertEquals(100, getValue(results.get(0), "price"));
+			}
 
 			// Now use upsert to update the existing record
 			DB.upsert(c, "product", Map.of(
@@ -89,13 +95,17 @@ public class UpsertsIT {
 			), List.of("id"));
 
 			// Verify it was updated
-			results = DB.queryRows(c, "SELECT * FROM product WHERE id=1");
+			List<Map<String, Object>> results = DB.queryRows(c, """
+				SELECT * FROM "product" WHERE "id"=1
+				""");
 			Assertions.assertEquals(1, results.size());
 			Assertions.assertEquals("Super Widget", getValue(results.get(0), "name"));
 			Assertions.assertEquals(150, getValue(results.get(0), "price"));
 
 			// Make sure we still only have one record
-			results = DB.queryRows(c, "SELECT COUNT(*) AS cnt FROM product");
+			results = DB.queryRows(c, """
+				SELECT COUNT(*) AS cnt FROM "product"
+				""");
 			Assertions.assertEquals(1L, getValue(results.get(0), "cnt"));
 		});
 	}
@@ -127,7 +137,9 @@ public class UpsertsIT {
 			), List.of("id"));
 
 			// Verify both records
-			List<Map<String, Object>> results = DB.queryRows(c, "SELECT * FROM product ORDER BY id");
+			List<Map<String, Object>> results = DB.queryRows(c, """
+				SELECT * FROM "product" ORDER BY "id"
+				""");
 			Assertions.assertEquals(2, results.size());
 			Assertions.assertEquals("Widget A Updated", getValue(results.get(0), "name"));
 			Assertions.assertEquals(110, getValue(results.get(0), "price"));
@@ -172,7 +184,9 @@ public class UpsertsIT {
 			Assertions.assertEquals(Integer.valueOf(75), items.get(0).quantity);
 
 			// Make sure we still only have one record
-			List<Map<String, Object>> results = DB.queryRows(c, "SELECT COUNT(*) AS cnt FROM inventory_item");
+			List<Map<String, Object>> results = DB.queryRows(c, """
+				SELECT COUNT(*) AS cnt FROM "inventory_item"
+				""");
 			Assertions.assertEquals(1L, getValue(results.get(0), "cnt"));
 		});
 	}

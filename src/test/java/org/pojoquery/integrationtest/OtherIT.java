@@ -13,6 +13,7 @@ import org.pojoquery.PojoQuery;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Other;
+import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
@@ -20,6 +21,7 @@ import org.pojoquery.schema.SchemaGenerator;
 public class OtherIT {
 
 	@Table("room")
+	@SubClasses({BedRoom.class})
 	public static class Room {
 		@Id
 		Long id;
@@ -46,7 +48,7 @@ public class OtherIT {
 			Assertions.assertEquals((Long)1L, u.id);
 			
 			PojoQuery<Room> build = PojoQuery.build(Room.class);
-			build.addField(SqlExpression.sql("{room}.area"), "room.area");
+			build.addField(SqlExpression.sql("{room.area}"), "room.area");
 			Room loaded = build.findById(c, u.id).orElseThrow();
 			Assertions.assertNotNull(loaded.specs);
 			Assertions.assertEquals(25, loaded.specs.get("area"));
@@ -67,7 +69,7 @@ public class OtherIT {
 			Assertions.assertEquals((Long)1L, bedroom.id);
 			
 			PojoQuery<BedRoom> build = PojoQuery.build(BedRoom.class);
-			build.addField(SqlExpression.sql("{room}.area"), "bedroom.area");
+			build.addField(SqlExpression.sql("{room.area}"), "bedroom.area");
 			Room loaded = build.findById(c, bedroom.id).orElseThrow();
 			Assertions.assertNotNull(loaded.specs);
 			Assertions.assertEquals(25, loaded.specs.get("area"));
@@ -80,7 +82,7 @@ public class OtherIT {
 		// BedRoom extends Room, so only pass BedRoom (Room table is created automatically)
 		SchemaGenerator.createTables(db, BedRoom.class);
 		// Add custom field 'area' as a column in the room table
-		DB.executeDDL(db, "ALTER TABLE room ADD COLUMN area INT");
+		DB.executeDDL(db, "ALTER TABLE \"room\" ADD COLUMN \"area\" INT");
 		return db;
 	}
 

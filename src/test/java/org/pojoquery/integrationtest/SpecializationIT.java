@@ -102,7 +102,7 @@ public class SpecializationIT {
 			
 			// Query the developer using EmployeeDetail which specializes the manager field
 			List<EmployeeDetail> employees = PojoQuery.build(EmployeeDetail.class)
-				.addWhere("{employee}.id = ?", developer.id)
+				.addWhere("{employee.id} = ?", developer.id)
 				.execute(c);
 			
 			assertEquals(1, employees.size());
@@ -149,7 +149,7 @@ public class SpecializationIT {
 			
 			// Query the CEO - should have null manager
 			List<EmployeeDetail> employees = PojoQuery.build(EmployeeDetail.class)
-				.addWhere("{employee}.id = ?", ceo.id)
+				.addWhere("{employee.id} = ?", ceo.id)
 				.execute(c);
 			
 			assertEquals(1, employees.size());
@@ -189,7 +189,7 @@ public class SpecializationIT {
 			
 			// Query using Employee (not EmployeeDetail) - manager should be EmployeeRef type
 			List<Employee> employees = PojoQuery.build(Employee.class)
-				.addWhere("{employee}.id = ?", developer.id)
+				.addWhere("{employee.id} = ?", developer.id)
 				.execute(c);
 			
 			assertEquals(1, employees.size());

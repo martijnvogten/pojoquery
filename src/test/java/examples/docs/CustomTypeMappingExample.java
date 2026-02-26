@@ -1,6 +1,5 @@
 package examples.docs;
 
-import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.util.List;
 import java.util.UUID;
@@ -15,6 +14,7 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.dialects.HsqldbDbContext;
 import org.pojoquery.schema.SchemaGenerator;
+import org.pojoquery.typemodel.FieldModel;
 
 /**
  * Example demonstrating how to customize data type mapping by creating
@@ -35,11 +35,11 @@ public class CustomTypeMappingExample {
     public static class HsqldbWithUuidContext extends HsqldbDbContext {
 
         @Override
-        public String mapJavaTypeToSql(Field field) {
-            Class<?> type = field.getType();
+        public String mapJavaTypeToSql(FieldModel field) {
+            String type = field.getType().getQualifiedName();
             
             // Add support for UUID type
-            if (type == UUID.class) {
+            if (type.equals(UUID.class.getName())) {
                 return "UUID";
             }
             

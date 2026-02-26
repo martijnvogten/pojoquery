@@ -28,6 +28,10 @@ import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.SqlQuery.SqlField;
 import org.pojoquery.pipeline.SqlQuery.SqlJoin;
+import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.ReflectionFieldModel;
+import org.pojoquery.typemodel.ReflectionTypeModel;
+import org.pojoquery.typemodel.TypeModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,8 +54,8 @@ import org.slf4j.LoggerFactory;
  * 
  * // Build and execute a query
  * List<User> users = PojoQuery.build(User.class)
- *     .addWhere("{user}.name LIKE ?", "%John%")
- *     .addOrderBy("{user}.name ASC")
+ *     .addWhere("{user.name} LIKE ?", "%John%")
+ *     .addOrderBy("{user.name} ASC")
  *     .execute(dataSource);
  * }</pre>
  * 
@@ -59,8 +63,8 @@ import org.slf4j.LoggerFactory;
  * <p>Use curly braces to reference table aliases in WHERE, ORDER BY, and other clauses.
  * PojoQuery will automatically quote identifiers appropriately for your database:</p>
  * <pre>{@code
- * .addWhere("{user}.status = ?", "active")
- * .addOrderBy("{user}.created_at DESC")
+ * .addWhere("{user.status} = ?", "active")
+ * .addOrderBy("{user.created_at} DESC")
  * }</pre>
  * 
  * <h2>Relationships</h2>
@@ -406,8 +410,8 @@ public class PojoQuery<T> {
 	 * <p>Example usage:</p>
 	 * <pre>{@code
 	 * PojoQuery.build(Order.class)
-	 *     .addWhere("{order}.status = ?")
-	 *     .addOrderBy("{order}.createdAt DESC")  // OK: ordering by primary entity field
+	 *     .addWhere("{order.status} = ?")
+	 *     .addOrderBy("{order.createdAt} DESC")  // OK: ordering by primary entity field
 	 *     .executeStreaming(dataSource, order -> {
 	 *         processOrder(order);  // Called as each Order is complete
 	 *     });
@@ -465,30 +469,31 @@ public class PojoQuery<T> {
 		return insertInternal(context, conn, o.getClass(), o);
 	}
 
-	static <PK> PK insertInternal(DbContext context, Connection conn, Class<?> type, Object o) {
+	static <PK> PK insertInternal(DbContext context, Connection conn, Class<?> clz, Object o) {
 		// If the class hierarchy contains multiple tables, create separate
 		// inserts
+		TypeModel type = new ReflectionTypeModel(clz);
 		List<TableMapping> tables = QueryBuilder.determineTableMapping(type);
 		if (tables.size() == 0) {
-			throw new MappingException("Missing @Table annotation on class " + type.getName() + " or any of its superclasses");
+			throw new MappingException("Missing @Table annotation on class " + type.getQualifiedName() + " or any of its superclasses");
 		}
 
 		if (tables.size() == 1) {
 			PK ids;
-			ids = DB.insert(context, conn, tables.get(0).tableName, extractValues(type, o));
+			ids = DB.insert(context, conn, tables.get(0).tableName, extractValues(clz, o));
 			if (ids != null) {
 				applyGeneratedId(o, ids);
 			}
 			return ids;
 		} else {
 			TableMapping topType = tables.remove(0);
-			Map<String, Object> values = extractValues(topType.getReflectionClass(), o);
+			Map<String, Object> values = extractValues(((ReflectionTypeModel)topType.getType()).getReflectionClass(), o);
 			PK ids;
 			ids = DB.insert(context, conn, topType.tableName, values);
 			if (ids != null) {
 				applyGeneratedId(o, ids);
 			}
-			List<Field> idFields = QueryBuilder.determineIdFields(type);
+			List<FieldModel> idFields = QueryBuilder.determineIdFields(type);
 			if (idFields.size() != 1) {
 				throw new MappingException("Need single ID field annotated with @Id for inserting joined subclasses");
 			}
@@ -496,7 +501,7 @@ public class PojoQuery<T> {
 
 			while (tables.size() > 0) {
 				TableMapping supertype = tables.remove(0);
-				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.getReflectionClass() : type, o, topType.getReflectionClass());
+				Map<String, Object> subvals = extractValues(tables.size() > 0 ? ((ReflectionTypeModel)supertype.getType()).getReflectionClass() : clz, o, ((ReflectionTypeModel)topType.getType()).getReflectionClass());
 				subvals.put(idField, ids);
 				DB.insert(context, conn, supertype.tableName, subvals);
 				topType = supertype;
@@ -520,9 +525,10 @@ public class PojoQuery<T> {
 		return CascadingUpdater.update(context, connection, object);
 	}
 
-	static int updateInternal(DbContext context, Connection conn, Class<?> type, Object o) {
+	static int updateInternal(DbContext context, Connection conn, Class<?> clz, Object o) {
 		// If the class hierarchy contains multiple tables, create separate
 		// inserts
+		TypeModel type = new ReflectionTypeModel(clz);
 		List<TableMapping> tables = QueryBuilder.determineTableMapping(type);
 		
 		Long currentVersion = null;
@@ -535,7 +541,7 @@ public class PojoQuery<T> {
 		}
 		
 		if (tables.size() == 1) {
-			Map<String, Object> values = extractValues(type, o);
+			Map<String, Object> values = extractValues(clz, o);
 			Map<String, Object> ids = splitIdFields(o, values);
 			
 			if (o instanceof HasVersion) {
@@ -552,7 +558,7 @@ public class PojoQuery<T> {
 			int affectedRows = 0;
 
 			TableMapping topType = tables.remove(0);
-			Map<String, Object> values = extractValues(topType.getReflectionClass(), o);
+			Map<String, Object> values = extractValues(((ReflectionTypeModel)topType.getType()).getReflectionClass(), o);
 			Map<String, Object> ids = splitIdFields(o, values);
 			Map<String, Object> topIds = new HashMap<>(ids);
 
@@ -568,7 +574,7 @@ public class PojoQuery<T> {
 
 			while (tables.size() > 0) {
 				TableMapping supertype = tables.remove(0);
-				Map<String, Object> subvals = extractValues(tables.size() > 0 ? supertype.getReflectionClass() : type, o, topType.getReflectionClass());
+				Map<String, Object> subvals = extractValues(tables.size() > 0 ? ((ReflectionTypeModel)supertype.getType()).getReflectionClass() : clz, o, ((ReflectionTypeModel)topType.getType()).getReflectionClass());
 				DB.update(context, conn, supertype.tableName, subvals, ids);
 				topType = supertype;
 			}
@@ -577,14 +583,17 @@ public class PojoQuery<T> {
 
 	}
 
-	public static Map<String, Object> extractValues(Class<?> type, Object o) {
-		return extractValues(type, o, null);
+	public static Map<String, Object> extractValues(Class<?> clz, Object o) {
+		return extractValues(clz, o, null);
 	}
 
-	private static Map<String, Object> extractValues(Class<?> type, Object o, Class<?> stopAtSuperclass) {
+	private static Map<String, Object> extractValues(Class<?> clz, Object o, Class<?> stopAtSuperclass) {
+		TypeModel type = new ReflectionTypeModel(clz);
+		TypeModel stopAtType = stopAtSuperclass != null ? new ReflectionTypeModel(stopAtSuperclass) : null;
 		try {
 			Map<String, Object> values = new HashMap<String, Object>();
-			for (Field f : QueryBuilder.collectFieldsOfClass(type, stopAtSuperclass)) {
+			for (FieldModel fieldModel : QueryBuilder.collectFieldsOfClass(type, stopAtType)) {
+				Field f = ((ReflectionFieldModel) fieldModel).getReflectionField();
 				f.setAccessible(true);
 				
 				Other otherAnn = f.getAnnotation(Other.class);
@@ -600,10 +609,10 @@ public class PojoQuery<T> {
 				}
 
 				Object val = f.get(o);
-				if (AnnotationHelper.isEmbedded(f)) {
+				if (AnnotationHelper.isEmbedded(fieldModel)) {
 					if (val != null) {
 						Map<String, Object> embeddedVals = extractValues(f.getType(), val);
-						String prefix = QueryBuilder.determinePrefix(f);
+						String prefix = QueryBuilder.determinePrefix(fieldModel);
 						for (String embeddedField : embeddedVals.keySet()) {
 							values.put(prefix + embeddedField, embeddedVals.get(embeddedField));
 						}
@@ -613,27 +622,28 @@ public class PojoQuery<T> {
 				} else if (f.getType().isArray()) {
 					if (f.getType().getComponentType().isPrimitive()) {
 						// Data like byte[] long[]
-						values.put(QueryBuilder.determineSqlFieldName(f), val);
+						values.put(QueryBuilder.determineSqlFieldName(fieldModel), val);
 					}
 				} else if (Collection.class.isAssignableFrom(f.getType())) {
 				} else if (QueryBuilder.isLinkedClass(f.getType())) {
 					// Linked entity.
-					String linkfieldName = AnnotationHelper.getJoinColumnName(f);
+					String linkfieldName = AnnotationHelper.getJoinColumnName(fieldModel);
 					if (linkfieldName == null) {
 						linkfieldName = f.getName() + "_id";
 					}
 					if (val == null) {
 						values.put(linkfieldName, null);
 					} else {
-						Field idField = QueryBuilder.determineIdField(f.getType());
+						FieldModel idFieldModel = QueryBuilder.determineIdField(fieldModel.getType());
+						Field idField = ((ReflectionFieldModel) idFieldModel).getReflectionField();
 						idField.setAccessible(true);
 						Object idValue = idField.get(val);
 						values.put(linkfieldName, idValue);
 					}
-                } else if (AnnotationHelper.isId(f) && val == null) {
+                } else if (AnnotationHelper.isId(fieldModel) && val == null) {
                 	// Skip auto-generated ID field when value is null (for INSERT)
                 } else {
-                	values.put(QueryBuilder.determineSqlFieldName(f), val);
+                	values.put(QueryBuilder.determineSqlFieldName(fieldModel), val);
                 }
 			}
 			return values;
@@ -645,9 +655,9 @@ public class PojoQuery<T> {
 	}
 
 	private static <PK> void applyGeneratedId(Object o, PK ids) {
-		List<Field> idFields = QueryBuilder.determineIdFields(o.getClass());
+		List<FieldModel> idFields = QueryBuilder.determineIdFields(new ReflectionTypeModel(o.getClass()));
 		if (ids != null && idFields.size() == 1) {
-			Field idField = idFields.get(0);
+			Field idField = ((ReflectionFieldModel) idFields.get(0)).getReflectionField();
 			idField.setAccessible(true);
 			try {
 				Object value = ids;
@@ -669,13 +679,13 @@ public class PojoQuery<T> {
 	}
 	
 	private static Map<String, Object> splitIdFields(Object object, Map<String, Object> values) {
-		List<Field> idFields = QueryBuilder.determineIdFields(object.getClass());
+		List<FieldModel> idFields = QueryBuilder.determineIdFields(new ReflectionTypeModel(object.getClass()));
 		if (idFields.size() == 0) {
 			throw new RuntimeException("No @Id annotations found on fields of class " + object.getClass().getName());
 		}
 		Map<String, Object> ids = new HashMap<String, Object>();
-		for (Field f : idFields) {
-			String columnName = CustomizableQueryBuilder.determineSqlFieldName(f);
+		for (FieldModel fieldModel : idFields) {
+			String columnName = CustomizableQueryBuilder.determineSqlFieldName(fieldModel);
 			ids.put(columnName, values.get(columnName));
 			values.remove(columnName);
 		}
@@ -699,20 +709,9 @@ public class PojoQuery<T> {
 	 * @return the entity, or null if not found
 	 */
 	public Optional<T> findById(Connection connection, Object id) {
-		query.getWheres().addAll(QueryBuilder.buildIdCondition(dbContext, resultClass, id));
+		TypeModel type = new ReflectionTypeModel(resultClass);
+		query.getWheres().addAll(QueryBuilder.buildIdCondition(dbContext, type, id));
 		return returnSingleRow(execute(connection));
-	}
-
-	/**
-	 * Finds an entity by its ID using the specified DataSource.
-	 *
-	 * @param db the DataSource
-	 * @param id the ID of the entity
-	 * @return the entity, or null if not found
-	 */
-	public Optional<T> findById(DataSource db, Object id) {
-		query.getWheres().addAll(QueryBuilder.buildIdCondition(dbContext, resultClass, id));
-		return returnSingleRow(execute(db));
 	}
 
 	public static void delete(Connection conn, Object entity) {
@@ -733,12 +732,14 @@ public class PojoQuery<T> {
 	public static void delete(DbContext context, Connection conn, Object entity) {
 		Objects.requireNonNull(entity, "entity must not be null");
 		try {
-			List<TableMapping> mapping = QueryBuilder.determineTableMapping(entity.getClass());
-			List<Field> idFields = QueryBuilder.determineIdFields(entity.getClass());
+			TypeModel type = new ReflectionTypeModel(entity.getClass());
+			List<TableMapping> mapping = QueryBuilder.determineTableMapping(type);
+			List<FieldModel> idFields = QueryBuilder.determineIdFields(type);
 			Collections.reverse(mapping);
 			for (TableMapping table : mapping) {
 				List<SqlExpression> whereCondition = new ArrayList<>();
-				for (Field field : idFields) {
+				for (FieldModel fieldModel : idFields) {
+					Field field = ((ReflectionFieldModel) fieldModel).getReflectionField();
 					field.setAccessible(true);
 						Object idvalue;
 						idvalue = field.get(entity);
@@ -755,8 +756,9 @@ public class PojoQuery<T> {
 	}
 	
 	public static void deleteById(DbContext context, Class<?> clz, Object id) {
-		for (TableMapping table : QueryBuilder.determineTableMapping(clz)) {
-			List<SqlExpression> wheres = QueryBuilder.buildIdCondition(context, table.getReflectionClass(), id);
+		TypeModel type = new ReflectionTypeModel(clz);
+		for (TableMapping table : QueryBuilder.determineTableMapping(type)) {
+			List<SqlExpression> wheres = QueryBuilder.buildIdCondition(context, type, id);
 			executeDelete(context, null, table.tableName, wheres);
 		}
 	}
@@ -796,7 +798,7 @@ public class PojoQuery<T> {
 	 */
 	@SuppressWarnings("unchecked")
 	public <PK> List<PK> listIds(Connection conn) {
-		List<Field> idFields = QueryBuilder.determineIdFields(resultClass);
+		List<FieldModel> idFields = QueryBuilder.determineIdFields(new ReflectionTypeModel(resultClass));
 		SqlExpression stmt = queryBuilder.buildListIdsStatementFromFields(idFields);
 		List<Map<String, Object>> rows = DB.queryRows(conn, stmt);
 		if (idFields.size() > 1) {

@@ -20,7 +20,7 @@ public class TestSchemaPrefixes {
 		public Long id;
 		public String title;
 		
-		@JoinCondition("{this}.authorName={authors}.name")
+		@JoinCondition("{this.authorName}={authors.name}")
 		public Person[] authors;
 	}
 	
@@ -46,7 +46,7 @@ public class TestSchemaPrefixes {
 					 `article`.`title` AS `article.title`,
 					 `authors`.`name` AS `authors.name`
 					FROM `schema1`.`article` AS `article`
-					 LEFT JOIN `schema2`.`person` AS `authors` ON `article`.authorName=`authors`.name
+					 LEFT JOIN `schema2`.`person` AS `authors` ON `article`.`authorName`=`authors`.`name`
 					"""),
 				norm(QueryBuilder.from(Article.class).getQuery().toStatement().getSql()));
 	}
@@ -62,7 +62,7 @@ public class TestSchemaPrefixes {
 					 `articles.authors`.`name` AS `articles.authors.name`
 					FROM `schema3`.`book` AS `book`
 					 LEFT JOIN `schema1`.`article` AS `articles` ON `book`.`id` = `articles`.`book_id`
-					 LEFT JOIN `schema2`.`person` AS `articles.authors` ON `articles`.authorName=`articles.authors`.name
+					 LEFT JOIN `schema2`.`person` AS `articles.authors` ON `articles`.`authorName`=`articles.authors`.`name`
 					"""),
 				norm(QueryBuilder.from(Book.class).getQuery().toStatement().getSql()));
 	}

@@ -20,7 +20,7 @@ public class TestFieldExpressionAliasInWhere {
 		@Id
 		public Long id;
 		
-		@Select("LOWER({this}.title)")
+		@Select("LOWER({this.title})")
 		public String title;
 		
 		public Person author;
@@ -33,7 +33,7 @@ public class TestFieldExpressionAliasInWhere {
 		public String firstName;
 		public String lastName;
 		
-		@Select("CONCAT({this}.firstName, ' ', {this}.lastName)")
+		@Select("CONCAT({this.firstName}, ' ', {this.lastName})")
 		public String fullName;
 	}
 	
@@ -54,14 +54,14 @@ public class TestFieldExpressionAliasInWhere {
 				norm("""
 					SELECT
 					 `article`.`id` AS `article.id`,
-					 LOWER(`article`.title) AS `article.title`,
+					 LOWER(`article`.`title`) AS `article.title`,
 					 `author`.`id` AS `author.id`,
 					 `author`.`firstName` AS `author.firstName`,
 					 `author`.`lastName` AS `author.lastName`,
-					 CONCAT(`author`.firstName, ' ', `author`.lastName) AS `author.fullName`
+					 CONCAT(`author`.`firstName`, ' ', `author`.`lastName`) AS `author.fullName`
 					FROM `article` AS `article`
 					 LEFT JOIN `person` AS `author` ON `article`.`author_id` = `author`.`id`
-					WHERE CONCAT(`author`.firstName, ' ', `author`.lastName) = ?
+					WHERE CONCAT(`author`.`firstName`, ' ', `author`.`lastName`) = ?
 					"""), 
 				norm(query.toStatement().getSql()));
 	}
@@ -77,15 +77,15 @@ public class TestFieldExpressionAliasInWhere {
 					SELECT
 					 `book`.`id` AS `book.id`,
 					 `articles`.`id` AS `articles.id`,
-					 LOWER(`articles`.title) AS `articles.title`,
+					 LOWER(`articles`.`title`) AS `articles.title`,
 					 `articles.author`.`id` AS `articles.author.id`,
 					 `articles.author`.`firstName` AS `articles.author.firstName`,
 					 `articles.author`.`lastName` AS `articles.author.lastName`,
-					 CONCAT(`articles.author`.firstName, ' ', `articles.author`.lastName) AS `articles.author.fullName`
+					 CONCAT(`articles.author`.`firstName`, ' ', `articles.author`.`lastName`) AS `articles.author.fullName`
 					FROM `book` AS `book`
 					 LEFT JOIN `article` AS `articles` ON `book`.`id` = `articles`.`book_id`
 					 LEFT JOIN `person` AS `articles.author` ON `articles`.`author_id` = `articles.author`.`id`
-					WHERE CONCAT(`articles.author`.firstName, ' ', `articles.author`.lastName) = ?
+					WHERE CONCAT(`articles.author`.`firstName`, ' ', `articles.author`.`lastName`) = ?
 					"""), 
 				norm(query.toStatement().getSql()));
 	}
@@ -100,14 +100,14 @@ public class TestFieldExpressionAliasInWhere {
 				norm("""
 					SELECT
 					 `article`.`id` AS `article.id`,
-					 LOWER(`article`.title) AS `article.title`,
+					 LOWER(`article`.`title`) AS `article.title`,
 					 `author`.`id` AS `author.id`,
 					 `author`.`firstName` AS `author.firstName`,
 					 `author`.`lastName` AS `author.lastName`,
-					 CONCAT(`author`.firstName, ' ', `author`.lastName) AS `author.fullName`
+					 CONCAT(`author`.`firstName`, ' ', `author`.`lastName`) AS `author.fullName`
 					FROM `article` AS `article`
 					 LEFT JOIN `person` AS `author` ON `article`.`author_id` = `author`.`id`
-					GROUP BY CONCAT(`author`.firstName, ' ', `author`.lastName)
+					GROUP BY CONCAT(`author`.`firstName`, ' ', `author`.`lastName`)
 					"""), 
 				norm(query.toStatement().getSql()));
 	}
@@ -122,14 +122,14 @@ public class TestFieldExpressionAliasInWhere {
 				norm("""
 					SELECT
 					 `article`.`id` AS `article.id`,
-					 LOWER(`article`.title) AS `article.title`,
+					 LOWER(`article`.`title`) AS `article.title`,
 					 `author`.`id` AS `author.id`,
 					 `author`.`firstName` AS `author.firstName`,
 					 `author`.`lastName` AS `author.lastName`,
-					 CONCAT(`author`.firstName, ' ', `author`.lastName) AS `author.fullName`
+					 CONCAT(`author`.`firstName`, ' ', `author`.`lastName`) AS `author.fullName`
 					FROM `article` AS `article`
 					 LEFT JOIN `person` AS `author` ON `article`.`author_id` = `author`.`id`
-					ORDER BY CONCAT(`author`.firstName, ' ', `author`.lastName) ASC
+					ORDER BY CONCAT(`author`.`firstName`, ' ', `author`.`lastName`) ASC
 					"""), 
 				norm(query.toStatement().getSql()));
 	}
@@ -145,15 +145,15 @@ public class TestFieldExpressionAliasInWhere {
 					SELECT
 					 `book`.`id` AS `book.id`,
 					 `articles`.`id` AS `articles.id`,
-					 LOWER(`articles`.title) AS `articles.title`,
+					 LOWER(`articles`.`title`) AS `articles.title`,
 					 `articles.author`.`id` AS `articles.author.id`,
 					 `articles.author`.`firstName` AS `articles.author.firstName`,
 					 `articles.author`.`lastName` AS `articles.author.lastName`,
-					 CONCAT(`articles.author`.firstName, ' ', `articles.author`.lastName) AS `articles.author.fullName`
+					 CONCAT(`articles.author`.`firstName`, ' ', `articles.author`.`lastName`) AS `articles.author.fullName`
 					FROM `book` AS `book`
 					 LEFT JOIN `article` AS `articles` ON `book`.`id` = `articles`.`book_id`
 					 LEFT JOIN `person` AS `articles.author` ON `articles`.`author_id` = `articles.author`.`id`
-					ORDER BY CONCAT(`articles.author`.firstName, ' ', `articles.author`.lastName) DESC
+					ORDER BY CONCAT(`articles.author`.`firstName`, ' ', `articles.author`.`lastName`) DESC
 					"""), 
 				norm(query.toStatement().getSql()));
 	}
@@ -173,14 +173,14 @@ public class TestFieldExpressionAliasInWhere {
 				norm("""
 					SELECT
 					 `article`.`id` AS `article.id`,
-					 LOWER(`article`.title) AS `article.title`,
+					 LOWER(`article`.`title`) AS `article.title`,
 					 `author`.`id` AS `author.id`,
 					 `author`.`firstName` AS `author.firstName`,
 					 `author`.`lastName` AS `author.lastName`,
-					 CONCAT(`author`.firstName, ' ', `author`.lastName) AS `author.fullName`
+					 CONCAT(`author`.`firstName`, ' ', `author`.`lastName`) AS `author.fullName`
 					FROM `article` AS `article`
 					 LEFT JOIN `person` AS `author` ON `article`.`author_id` = `author`.`id`
-					 LEFT JOIN `audit_log` AS `audit` ON `audit`.`entity_name` = CONCAT(`author`.firstName, ' ', `author`.lastName)
+					 LEFT JOIN `audit_log` AS `audit` ON `audit`.`entity_name` = CONCAT(`author`.`firstName`, ' ', `author`.`lastName`)
 					"""), 
 				norm(query.toStatement().getSql()));
 	}
