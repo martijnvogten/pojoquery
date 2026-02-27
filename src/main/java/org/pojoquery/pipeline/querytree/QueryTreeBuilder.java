@@ -1,5 +1,6 @@
 package org.pojoquery.pipeline.querytree;
 
+import org.pojoquery.pipeline.querytree.transforms.QueryTreePipeline;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
