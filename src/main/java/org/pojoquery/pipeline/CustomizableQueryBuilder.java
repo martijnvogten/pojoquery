@@ -23,6 +23,12 @@ import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Join;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.querytree.FieldSelection;
+import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.QueryNode;
+import org.pojoquery.pipeline.querytree.QueryTree;
+import org.pojoquery.pipeline.querytree.SubqueryNode;
+import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionFieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
@@ -121,6 +127,69 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		// Add fields from model
 		for (QueryModel.FieldInfo fieldInfo : model.getFields()) {
 			query.addField(fieldInfo.expression, fieldInfo.fieldAlias);
+		}
+	}
+
+	/**
+	 * Applies a QueryTree to the SqlQuery.
+	 */
+	public static void applyQueryTreeToQuery(SqlQuery<?> query, QueryTree tree) {
+		QueryNode root = tree.root();
+		
+		if (root instanceof TableNode tableNode) {
+			// Set table
+			query.setTable(tableNode.schemaName(), tableNode.tableName());
+			
+			// Add fields from root table
+			for (FieldSelection field : tableNode.fields()) {
+				query.addField(field.expression(), field.alias());
+			}
+			
+			// Recursively add joins
+			addJoinsFromNode(query, tableNode);
+		}
+		
+		// Add group by
+		for (String groupBy : tree.groupBy()) {
+			query.addGroupBy(groupBy);
+		}
+		
+		// Add order by
+		for (String orderBy : tree.orderBy()) {
+			query.addOrderBy(orderBy);
+		}
+		
+		// Add where conditions
+		for (SqlExpression where : tree.wheres()) {
+			query.addWhere(where);
+		}
+	}
+	
+	/**
+	 * Recursively adds joins from a TableNode to the query.
+	 */
+	private static void addJoinsFromNode(SqlQuery<?> query, TableNode tableNode) {
+		for (JoinedNode join : tableNode.joins()) {
+			QueryNode childNode = join.node();
+			
+			if (childNode instanceof TableNode childTable) {
+				// Add the join
+				query.addJoin(join.joinType(), childTable.schemaName(), childTable.tableName(), 
+					childTable.alias(), join.condition());
+				
+				// Add fields from the joined table
+				for (FieldSelection field : childTable.fields()) {
+					query.addField(field.expression(), field.alias());
+				}
+				
+				// Recursively add nested joins
+				addJoinsFromNode(query, childTable);
+			} else if (childNode instanceof SubqueryNode subquery) {
+				// Handle subquery joins
+				DefaultSqlQuery subQuery = new DefaultSqlQuery(query.getDbContext());
+				applyQueryTreeToQuery(subQuery, subquery.subquery());
+				query.addSubqueryJoin(join.joinType(), subQuery.toStatement(), subquery.alias(), join.condition());
+			}
 		}
 	}
 
