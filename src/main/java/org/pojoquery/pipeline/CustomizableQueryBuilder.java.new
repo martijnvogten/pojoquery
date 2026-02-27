@@ -7,20 +7,18 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.logging.Logger;
 
-import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Join;
+import org.pojoquery.annotations.Link;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.typemodel.FieldModel;
@@ -79,16 +77,16 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		this.query = query;
 		
 		// Phase 1: Build the query model
-		this.model = new QueryModel(type);
+		this.model = new QueryModel(query.getDbContext(), type);
 		
 		// Phase 2: Apply the model to SqlQuery
-		applyModelToQuery(query, model);
+		applyModelToQuery();
 	}
 
 	/**
 	 * Applies the QueryModel to the SqlQuery (Phase 2).
 	 */
-	private static void applyModelToQuery(SqlQuery<?> query, QueryModel model) {
+	private void applyModelToQuery() {
 		// Set table
 		query.setTable(model.getSchemaName(), model.getTableName());
 		
@@ -110,9 +108,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		// Add joins from model
 		for (QueryModel.JoinInfo joinInfo : model.getJoins()) {
 			if (joinInfo.isSubquery()) {
-				DefaultSqlQuery subQuery = new DefaultSqlQuery(query.getDbContext());
-				applyModelToQuery(subQuery, joinInfo.subquery);
-				query.addSubqueryJoin(joinInfo.joinType, subQuery.toStatement(), joinInfo.alias, joinInfo.joinCondition);
+				query.addSubqueryJoin(joinInfo.joinType, joinInfo.subquery, joinInfo.alias, joinInfo.joinCondition);
 			} else {
 				query.addJoin(joinInfo.joinType, joinInfo.schemaName, joinInfo.tableName, joinInfo.alias, joinInfo.joinCondition);
 			}
@@ -196,7 +192,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 
 			// Find the primary ID for this row
 			Object primaryId = null;
-			for (Alias a : queryBuilder.getAliases().values()) {
+			for (Alias a : queryBuilder.model.getAliases().values()) {
 				if (a.getParentAlias() == null) {
 					Values values = onThisRow.get(a.getAlias());
 					if (values != null && !allNulls(values)) {
@@ -248,12 +244,12 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	 * @throws MappingException if any ORDER BY clause references a non-root alias (joined table)
 	 */
 	public void ensureOrderByPrimaryId() {
-		List<FieldModel> idFields = determineIdFields(getResultType());
+		List<FieldModel> idFields = determineIdFields(model.getResultType());
 		String tableName = query.getTable();
 		List<String> currentOrderBy = new ArrayList<>(query.getOrderBy());
 
 		// Validate that ORDER BY clauses only reference the root alias
-		validateOrderByAliases(currentOrderBy);
+		validateOrderByAliases(currentOrderBy, model.getRootAlias());
 
 		// Append ID fields to the ORDER BY (if not already present) as a tiebreaker
 		// Use curly brace syntax for alias + quoted field name
@@ -274,10 +270,10 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	 * to interleave, breaking streaming mode.
 	 *
 	 * @param orderByClauses the ORDER BY clauses to validate
+	 * @param rootAlias the root alias
 	 * @throws MappingException if any clause references a non-root alias
 	 */
-	private void validateOrderByAliases(List<String> orderByClauses) {
-		String rootAlias = model.getRootAlias();
+	private void validateOrderByAliases(List<String> orderByClauses, String rootAlias) {
 		for (String clause : orderByClauses) {
 			java.util.regex.Matcher matcher = ALIAS_PATTERN.matcher(clause);
 			while (matcher.find()) {
@@ -358,7 +354,10 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	 */
 	private void processRowInternal(Map<String, Values> onThisRow, Map<Object, Object> allEntities,
 			java.util.function.BiConsumer<Object, Object> onNewPrimaryEntity) {
-		for (Alias a : getAliases().values()) {
+		LinkedHashMap<String, Alias> aliases = model.getAliases();
+		TypeModel resultType = model.getResultType();
+		
+		for (Alias a : aliases.values()) {
 			Values values = onThisRow.get(a.getAlias());
 			if (values == null || allNulls(values)) {
 				continue;
@@ -370,7 +369,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 				if (!allEntities.containsKey(id)) {
 					// Merge subclass values into the values for this entity
 					Values merged = new Values(values);
-					TypeModel entityType = getResultType();
+					TypeModel entityType = resultType;
 
 					if (a.isSingleTableInheritance()) {
 						// Single table inheritance: use discriminator column to determine type
@@ -393,7 +392,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 							merged.putAll(onThisRow.get(subClassAlias));
 
 							subClassId = createId(subClassAlias, merged, a.getIdFields());
-							entityType = getAliases().get(subClassAlias).getResultType();
+							entityType = aliases.get(subClassAlias).getResultType();
 						}
 					}
 
@@ -414,19 +413,19 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 				Object parentId = null;
 				Object parent = null;
 				if (parentValues != null && parentValues.size() > 0) {
-					parentId = createId(parentAlias, parentValues, getAliases().get(parentAlias).getIdFields());
+					parentId = createId(parentAlias, parentValues, aliases.get(parentAlias).getIdFields());
 					parent = allEntities.get(parentId);
 				}
 
 				if (parent == null) {
-					Alias parentAliasObject = getAliases().get(a.getParentAlias());
+					Alias parentAliasObject = aliases.get(a.getParentAlias());
 					List<String> subs = parentAliasObject.getSubClassAliases();
 					if (subs != null && subs.size() > 0) {
 						for (String sub : subs) {
 							parentValues = onThisRow.get(sub);
 							if (parentValues != null && parentValues.size() > 0) {
 								parentAlias = sub;
-								parentId = createId(parentAlias, parentValues, getAliases().get(parentAlias).getIdFields());
+								parentId = createId(parentAlias, parentValues, aliases.get(parentAlias).getIdFields());
 								parent = allEntities.get(parentId);
 								break;
 							}
@@ -466,7 +465,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 
 							merged.putAll(onThisRow.get(subClassAlias));
 							id = createId(subClassAlias, merged, a.getIdFields());
-							entityType = getAliases().get(subClassAlias).getResultType();
+							entityType = aliases.get(subClassAlias).getResultType();
 							values = merged;
 						}
 					}
@@ -485,11 +484,12 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 
 	public Map<String, Values> remapSubClasses(Map<String, Values> onThisRow) {
 		Map<String,Values> result = new LinkedHashMap<>();
+		LinkedHashMap<String, Alias> aliases = model.getAliases();
 
 		for(String alias : onThisRow.keySet()) {
 			Values values = onThisRow.get(alias);
 
-			Alias a = getAliases().get(alias);
+			Alias a = aliases.get(alias);
 			if (a.getIsASubClass()) {
 				if (values == null || allNulls(values)) {
 					continue;
@@ -522,7 +522,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 
 	private Map<String,Values> collectValuesByAlias(Map<String, Object> row, Map<String, List<String>> keysByAlias) {
 		Map<String,Values> result = new HashMap<>();
-		for(Alias a : getAliases().values()) {
+		for(Alias a : model.getAliases().values()) {
 			String alias = a.getAlias();
 			List<String> fieldList = keysByAlias.get(alias);
 			if (fieldList != null) {
@@ -570,12 +570,13 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 
 	private Values applyValues(Object entity, Values aliasValues, String discriminatorColumn) {
 		Values other = new Values();
+		Map<String, FieldMapping> fieldMappings = model.getFieldMappings();
 		for(String fieldAlias : aliasValues.keySet()) {
 			// Skip discriminator column - it's used internally for type resolution
 			if (fieldAlias.equals(discriminatorColumn)) {
 				continue;
 			}
-			FieldMapping mapping = getFieldMappings().get(fieldAlias);
+			FieldMapping mapping = fieldMappings.get(fieldAlias);
 			if (mapping != null) {
 				mapping.apply(entity, aliasValues.get(fieldAlias));
 			} else {
@@ -608,18 +609,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	}
 
 	public Map<String, FieldMapping> getFieldMappings() {
-		return model.getFields().stream()
-			.filter(f -> f.field != null)
-			.collect(
-				HashMap::new,
-				(m, f) -> m.put(
-					f.fieldAlias,
-					getQuery().getDbContext().getFieldMapping(
-						((ReflectionFieldModel) f.field).getReflectionField()
-					)
-				),
-				HashMap::putAll
-			);
+		return model.getFieldMappings();
 	}
 
 	public TypeModel getResultType() {
@@ -628,11 +618,17 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 
 	@SuppressWarnings("unchecked")
 	public Class<T> getResultClass() {
-		return (Class<T>) getReflectionClass(getResultType());
+		return (Class<T>) getReflectionClass(model.getResultType());
 	}
 
+	public QueryModel getModel() {
+		return model;
+	}
+
+	// --- Static helper methods (delegate to QueryModel) ---
+
 	public static List<FieldModel> assertIdFields(TypeModel type) {
-		List<FieldModel> idFields = determineIdFields(type);
+		List<FieldModel> idFields = QueryModel.determineIdFields(type);
 		if (idFields.size() == 0) {
 			throw new MappingException("No @Id annotations found on fields of type " + type.getQualifiedName());
 		}
@@ -641,7 +637,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 
 	public static List<SqlExpression> buildIdCondition(DbContext context, TypeModel type, Object id) {
 		List<FieldModel> idFields = assertIdFields(type);
-		List<TableMapping> tables = determineTableMapping(type);
+		List<TableMapping> tables = QueryModel.determineTableMapping(type);
 		String tableName = tables.get(tables.size() - 1).tableName;
 		if (idFields.size() == 1) {
 			return Arrays.asList(new SqlExpression((context.quoteAlias(tableName) + "." + context.quoteObjectNames(idFields.get(0).getName())) + "=?", Arrays.asList((Object) id)));
@@ -671,206 +667,80 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		}
 	}
 
-	public static String determinePrefix(FieldModel f) {
-		String prefix;
-		Embedded embeddedAnn = f.getAnnotation(Embedded.class);
-		if (embeddedAnn != null) {
-			// PojoQuery @Embedded annotation
-			prefix = embeddedAnn.prefix();
-			if (prefix.equals(Embedded.DEFAULT)) {
-				// PojoQuery @Embedded with no explicit prefix - use field name with underscore
-				prefix = f.getName() + "_";
-			}
-			// If prefix was explicitly set, use it as-is (user controls whether to include underscore)
-		} else {
-			// JPA @Embedded without PojoQuery annotation - true JPA semantics (no prefix)
-			prefix = "";
-		}
-		return prefix;
-	}
+	// --- Delegate static methods to QueryModel ---
 
-	/** Backward compatible overload */
-	public static String determinePrefix(Field f) {
-		return determinePrefix(new ReflectionFieldModel(f));
-	}
-
-	public static List<TableMapping> determineTableMapping(TypeModel type) {
-		TypeModel current = type;
-		TypeModel mappedType = type;
-		List<TableMapping> tables = new ArrayList<TableMapping>();
-		List<FieldModel> fields = new ArrayList<FieldModel>();
-		while (current != null) {
-			if (mappedType == null) {
-				mappedType = current;
-			}
-			AnnotationHelper.TableInfo tableInfo = getTableInfo(current);
-			fields.addAll(0, collectFieldsOfClass(current, current.getSuperclass()));
-			if (tableInfo != null) {
-				String name = tableInfo.name;
-				// Check if this is a redundant @Table annotation targeting the same table as an existing mapping
-				if (!tables.isEmpty() && tables.get(0).tableName.equals(name)) {
-					Logger.getLogger(CustomizableQueryBuilder.class.getName())
-						.warning("Redundant @Table(\"" + name + "\") annotation on " +
-							tables.get(0).type.getQualifiedName() + " - same table already mapped by parent " + current.getQualifiedName());
-					// Merge fields into existing mapping instead of creating a new one
-					tables.get(0).fields.addAll(0, fields);
-				} else {
-					tables.add(0, new TableMapping(tableInfo.schema, name, mappedType, new ArrayList<FieldModel>(fields)));
-				}
-				fields.clear();
-				mappedType = null;
-			}
-			current = current.getSuperclass();
-		}
-		if (fields.size() > 0 && tables.size() > 0) {
-			tables.get(0).fields.addAll(0, fields);
-		}
-		return tables;
-	}
-
-	/**
-	 * Gets table info from a type, supporting both reflection and annotation processing.
-	 */
-	private static AnnotationHelper.TableInfo getTableInfo(TypeModel type) {
-		return AnnotationHelper.getTableInfo(type);
-	}
-
-	public static List<String> getFieldNames(String table, List<FieldModel> fields) {
-		List<String> fieldNames = new ArrayList<String>();
-		for (FieldModel f : fields) {
-			fieldNames.add(table + "." + f.getName());
-		}
-		return fieldNames;
-	}
-
-	public static List<FieldModel> filterFields(TypeModel type) {
-		List<FieldModel> result = new ArrayList<FieldModel>();
-		for (FieldModel f : type.getDeclaredFields()) {
-			if (f.isStatic()) {
-				continue;
-			}
-			if (f.isTransient()) {
-				continue;
-			}
-			result.add(f);
-		}
-		return result;
-	}
-
-	public static List<FieldModel> collectFieldsOfClass(TypeModel type, TypeModel stopAtSuperType) {
-		List<FieldModel> result = new ArrayList<FieldModel>();
-		Set<String> seenFieldNames = new HashSet<>();
-		TypeModel current = type;
-		// Walk from subclass to superclass, collecting fields
-		// If a subclass declares a field with the same name as a superclass field,
-		// the subclass version takes precedence (specialization)
-		while (current != null && (stopAtSuperType == null || !current.isSameType(stopAtSuperType))) {
-			List<FieldModel> currentFields = filterFields(current);
-			// Add fields from current class at the front, but skip if already seen
-			// (a subclass already declared a field with that name)
-			List<FieldModel> toAdd = new ArrayList<>();
-			for (FieldModel f : currentFields) {
-				if (!seenFieldNames.contains(f.getName())) {
-					seenFieldNames.add(f.getName());
-					toAdd.add(f);
-				}
-			}
-			result.addAll(0, toAdd);
-			current = current.getSuperclass();
-		}
-		return result;
-	}
-
-	public static List<FieldModel> collectFieldsOfClass(TypeModel type) {
-		return collectFieldsOfClass(type, null);
-	}
-
-	public static final List<FieldModel> determineIdFields(TypeModel type) {
-		List<FieldModel> fields = collectFieldsOfClass(type);
-		ArrayList<FieldModel> result = new ArrayList<FieldModel>();
-		for (FieldModel f : fields) {
-			if (isId(f)) {
-				result.add(f);
-			}
-		}
-		return result;
-	}
-
-	/**
-	 * Checks if a field is an ID field (has @Id annotation).
-	 */
-	public static boolean isId(FieldModel f) {
-		return AnnotationHelper.isId(f);
-	}
-
-	public static FieldModel determineIdField(TypeModel type) {
-		List<FieldModel> idFields = determineIdFields(type);
-		if (idFields.size() != 1) {
-			throw new MappingException("Need single id field annotated with @Id on type " + type.getQualifiedName());
-		}
-		return idFields.get(0);
-	}
-
-	/**
-	 * Determines the SQL column name for a field.
-	 * Checks @Column and @FieldName first, then falls back to field name.
-	 */
 	public static String determineSqlFieldName(FieldModel f) {
 		return QueryModel.determineSqlFieldName(f);
 	}
 
-	/**
-	 * Determines the SQL column name for a foreign key (link) field.
-	 * Checks @JoinColumn and @Link(linkfield) first, then falls back to @Column,
-	 * and finally defaults to fieldName_id.
-	 */
 	public static String determineLinkFieldName(FieldModel f) {
 		return QueryModel.determineLinkFieldName(f);
 	}
 
-	/**
-	 * Determines the owner (parent) column name for a link table.
-	 */
-	public static String determineLinkTableOwnerColumn(TypeModel ownerClass, org.pojoquery.annotations.Link linkAnn) {
+	public static String determineLinkTableOwnerColumn(TypeModel ownerClass, Link linkAnn) {
 		return QueryModel.determineLinkTableOwnerColumn(ownerClass, linkAnn);
 	}
 
-	/**
-	 * Determines the foreign (target) column name for a link table.
-	 */
-	public static String determineLinkTableForeignColumn(TypeModel foreignClass, org.pojoquery.annotations.Link linkAnn) {
+	public static String determineLinkTableForeignColumn(TypeModel foreignClass, Link linkAnn) {
 		return QueryModel.determineLinkTableForeignColumn(foreignClass, linkAnn);
 	}
 
-	/**
-	 * Checks if a type is a list or array (collection type).
-	 */
+	public static String determinePrefix(FieldModel f) {
+		return QueryModel.determinePrefix(f);
+	}
+
+	public static String determinePrefix(Field f) {
+		return QueryModel.determinePrefix(f);
+	}
+
+	public static List<TableMapping> determineTableMapping(TypeModel type) {
+		return QueryModel.determineTableMapping(type);
+	}
+
+	public static List<String> getFieldNames(String table, List<FieldModel> fields) {
+		return QueryModel.getFieldNames(table, fields);
+	}
+
+	public static List<FieldModel> filterFields(TypeModel type) {
+		return QueryModel.filterFields(type);
+	}
+
+	public static List<FieldModel> collectFieldsOfClass(TypeModel type, TypeModel stopAtSuperType) {
+		return QueryModel.collectFieldsOfClass(type, stopAtSuperType);
+	}
+
+	public static List<FieldModel> collectFieldsOfClass(TypeModel type) {
+		return QueryModel.collectFieldsOfClass(type);
+	}
+
+	public static List<FieldModel> determineIdFields(TypeModel type) {
+		return QueryModel.determineIdFields(type);
+	}
+
+	public static boolean isId(FieldModel f) {
+		return QueryModel.isId(f);
+	}
+
+	public static FieldModel determineIdField(TypeModel type) {
+		return QueryModel.determineIdField(type);
+	}
+
 	public static boolean isListOrArray(TypeModel type) {
 		return QueryModel.isListOrArray(type);
 	}
 
-	/**
-	 * Checks if a type is a linked class (has @Table annotation).
-	 */
 	public static boolean isLinkedClass(TypeModel type) {
 		return QueryModel.isLinkedClass(type);
 	}
 
-	/** Backward compatible overload */
 	public static boolean isLinkedClass(Class<?> type) {
-		return QueryModel.isLinkedClass(new ReflectionTypeModel(type));
+		return QueryModel.isLinkedClass(type);
 	}
 
-	/**
-	 * Gets the component type of a collection or array field.
-	 */
 	public static TypeModel getCollectionComponentType(FieldModel field) {
 		return QueryModel.getCollectionComponentType(field);
 	}
 
-	/**
-	 * Checks if a field is embedded (has @Embedded annotation).
-	 */
 	public static boolean isEmbedded(FieldModel f) {
 		return QueryModel.isEmbedded(f);
 	}

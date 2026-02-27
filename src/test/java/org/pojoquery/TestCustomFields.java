@@ -36,12 +36,12 @@ public class TestCustomFields {
 	
 	@Test
 	public void testBasics() {
-		QueryBuilder<User> p = QueryBuilder.from(User.class);
+		QueryBuilder<User> q = QueryBuilder.from(User.class);
 		
-		for(Alias a : p.getAliases().values()) {
+		for(Alias a : q.getAliases().values()) {
 			if (User.class.equals(a.getResultClass())) {
-				p.getQuery().addField(new SqlExpression("{" + a.getAlias() + "}.custom_linkedInUrl"), a.getAlias() + ".linkedInUrl");
-				p.getFieldMappings().put(a.getAlias() + ".linkedInUrl", new FieldMapping() {
+				q.getQuery().addField(new SqlExpression("{" + a.getAlias() + "}.custom_linkedInUrl"), a.getAlias() + ".linkedInUrl");
+				q.getFieldMappings().put(a.getAlias() + ".linkedInUrl", new FieldMapping() {
 					@Override
 					public void apply(Object targetEntity, Object value) {
 						User u = (User)targetEntity;
@@ -59,13 +59,13 @@ public class TestCustomFields {
 			 `user`.`email` AS `user.email`,
 			 `user`.custom_linkedInUrl AS `user.linkedInUrl` 
 			FROM `user` AS `user`
-			"""), norm(p.getQuery().toStatement().getSql()));
+			"""), norm(q.getQuery().toStatement().getSql()));
 		
 		List<Map<String,Object>> resultSet = TestUtils.resultSet(new String[] 
 				{"user.id", "user.email",     "user.linkedInUrl"}, 
 				  1L,       "john@ewbank.nl", "http://www.linkedin.com/123456");
 		
-		List<User> users = p.processRows(resultSet);
+		List<User> users = q.processRows(resultSet);
 		Assertions.assertEquals("http://www.linkedin.com/123456", users.get(0).getCustomValue("linkedInUrl"));
 	}
 
