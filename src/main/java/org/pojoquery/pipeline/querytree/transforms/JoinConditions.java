@@ -1,0 +1,141 @@
+package org.pojoquery.pipeline.querytree.transforms;
+
+import org.pojoquery.AnnotationHelper;
+import org.pojoquery.SqlExpression;
+import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.TypeModel;
+
+import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
+import static org.pojoquery.pipeline.QueryModel.determineIdField;
+
+/**
+ * Helper methods for building SQL join conditions.
+ */
+public final class JoinConditions {
+    
+    private JoinConditions() {}
+    
+    /**
+     * Creates a join condition for an entity reference (one-to-one).
+     * Pattern: {parent.field_id} = {child.id}
+     * 
+     * @param parentAlias The parent table alias
+     * @param childAlias The child (joined) table alias
+     * @param field The field creating the join
+     * @param targetType The type being joined
+     * @return The join condition
+     */
+    public static SqlExpression forEntityReference(String parentAlias, String childAlias, 
+                                                    FieldModel field, TypeModel targetType) {
+        String fkColumn = determineFkColumn(field);
+        String targetId = determineSqlFieldName(determineIdField(targetType));
+        return new SqlExpression(
+            "{" + parentAlias + "." + fkColumn + "} = {" + childAlias + "." + targetId + "}"
+        );
+    }
+    
+    /**
+     * Creates a join condition for a one-to-many collection.
+     * Pattern: {parent.id} = {child.parent_id}
+     * 
+     * @param parentAlias The parent table alias
+     * @param childAlias The child (joined) table alias
+     * @param parentType The parent type
+     * @param parentTableName The parent table name (for FK naming)
+     * @return The join condition
+     */
+    public static SqlExpression forCollection(String parentAlias, String childAlias,
+                                               TypeModel parentType, String parentTableName) {
+        return forCollection(parentAlias, childAlias, parentType, parentTableName, null);
+    }
+    
+    /**
+     * Creates a join condition for a one-to-many collection with custom FK column.
+     * Pattern: {parent.id} = {child.foreignlinkfield}
+     * 
+     * @param parentAlias The parent table alias
+     * @param childAlias The child (joined) table alias
+     * @param parentType The parent type
+     * @param parentTableName The parent table name (for default FK naming)
+     * @param foreignLinkField Custom FK column name in child table, or null for default
+     * @return The join condition
+     */
+    public static SqlExpression forCollection(String parentAlias, String childAlias,
+                                               TypeModel parentType, String parentTableName,
+                                               String foreignLinkField) {
+        String parentId = determineSqlFieldName(determineIdField(parentType));
+        String fkColumn = (foreignLinkField != null && !foreignLinkField.isEmpty()) 
+            ? foreignLinkField 
+            : parentTableName + "_id";
+        return new SqlExpression(
+            "{" + parentAlias + "." + parentId + "} = {" + childAlias + "." + fkColumn + "}"
+        );
+    }
+    
+    /**
+     * Creates a join condition for inheritance (parent-child on shared ID).
+     * Pattern: {parent.id} = {child.id}
+     * 
+     * @param parentAlias The parent table alias
+     * @param childAlias The child table alias
+     * @param idField The ID field name
+     * @return The join condition
+     */
+    public static SqlExpression forInheritance(String parentAlias, String childAlias, String idField) {
+        return new SqlExpression(
+            "{" + parentAlias + "." + idField + "} = {" + childAlias + "." + idField + "}"
+        );
+    }
+    
+    /**
+     * Creates the first join condition for a many-to-many (parent to link table).
+     * Pattern: {parent.id} = {linkTable.parent_id}
+     * 
+     * @param parentAlias The parent table alias
+     * @param linkTableAlias The link table alias
+     * @param parentIdField The parent's ID field name
+     * @param linkField The FK column in the link table pointing to parent
+     * @return The join condition
+     */
+    public static SqlExpression forLinkTableParent(String parentAlias, String linkTableAlias,
+                                                    String parentIdField, String linkField) {
+        return new SqlExpression(
+            "{" + parentAlias + "." + parentIdField + "} = {" + linkTableAlias + "." + linkField + "}"
+        );
+    }
+    
+    /**
+     * Creates the second join condition for a many-to-many (link table to target).
+     * Pattern: {linkTable.target_id} = {target.id}
+     * 
+     * @param linkTableAlias The link table alias
+     * @param targetAlias The target table alias
+     * @param foreignLinkField The FK column in the link table pointing to target
+     * @param targetIdField The target's ID field name
+     * @return The join condition
+     */
+    public static SqlExpression forLinkTableTarget(String linkTableAlias, String targetAlias,
+                                                    String foreignLinkField, String targetIdField) {
+        return new SqlExpression(
+            "{" + linkTableAlias + "." + foreignLinkField + "} = {" + targetAlias + "." + targetIdField + "}"
+        );
+    }
+    
+    /**
+     * Determines the FK column name for a field.
+     * Checks @JoinColumn, @FieldName, @Column, then defaults to fieldName_id.
+     */
+    public static String determineFkColumn(FieldModel field) {
+        // Check for @JoinColumn first
+        String joinColumn = AnnotationHelper.getJoinColumnName(field);
+        if (joinColumn != null) {
+            return joinColumn;
+        }
+        // Check for @Column/@FieldName
+        String column = AnnotationHelper.getColumnName(field);
+        if (column != null) {
+            return column;
+        }
+        return field.getName() + "_id";
+    }
+}

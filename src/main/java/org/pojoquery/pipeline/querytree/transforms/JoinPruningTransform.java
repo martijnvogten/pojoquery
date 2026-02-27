@@ -1,0 +1,114 @@
+package org.pojoquery.pipeline.querytree.transforms;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.QueryTree;
+import org.pojoquery.pipeline.querytree.TableNode;
+
+/**
+ * Transform 18: Removes joins not referenced by any field expression.
+ * Runs after FromProjectionTransform which may leave unused joins.
+ */
+public class JoinPruningTransform implements QueryTreeTransform {
+    
+    @Override
+    public QueryTree apply(QueryTree tree) {
+        // Collect all aliases referenced by field expressions
+        Set<String> referenced = collectAllReferencedAliases(tree);
+        
+        TableNode root = (TableNode) tree.root();
+        
+        // Compute transitive closure (if A is needed and references B, B is needed)
+        Set<String> required = computeTransitiveClosure(root, referenced);
+        
+        // Prune unused joins
+        TableNode pruned = pruneUnusedJoins(root, required);
+        
+        return QueryTree.of(pruned, tree.resultType())
+            .withGroupByClauses(tree.groupBy())
+            .withOrderByClauses(tree.orderBy());
+    }
+    
+    private Set<String> collectAllReferencedAliases(QueryTree tree) {
+        Set<String> aliases = new HashSet<>();
+        
+        tree.visitTableNodes(node -> {
+            for (var field : node.fields()) {
+                aliases.addAll(ExpressionResolver.extractAliases(field.expression()));
+            }
+        });
+        
+        // Also check GROUP BY and ORDER BY clauses
+        for (String clause : tree.groupBy()) {
+            aliases.addAll(ExpressionResolver.extractAliases(clause));
+        }
+        for (String clause : tree.orderBy()) {
+            aliases.addAll(ExpressionResolver.extractAliases(clause));
+        }
+        
+        return aliases;
+    }
+    
+    private Set<String> computeTransitiveClosure(TableNode root, Set<String> initial) {
+        Set<String> required = new HashSet<>(initial);
+        required.add(root.alias());
+        
+        // Build map of join alias -> aliases referenced in its condition
+        Map<String, Set<String>> joinDependencies = new HashMap<>();
+        collectJoinDependencies(root, joinDependencies);
+        
+        // Fixed-point: if join A is required and its condition references B, B is required
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (Map.Entry<String, Set<String>> entry : joinDependencies.entrySet()) {
+                if (required.contains(entry.getKey())) {
+                    for (String dep : entry.getValue()) {
+                        if (!required.contains(dep)) {
+                            required.add(dep);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return required;
+    }
+    
+    private void collectJoinDependencies(TableNode node, Map<String, Set<String>> deps) {
+        for (JoinedNode join : node.joins()) {
+            Set<String> joinDeps = new HashSet<>();
+            if (join.condition() != null) {
+                joinDeps.addAll(ExpressionResolver.extractAliases(join.condition()));
+            }
+            // Remove self and root from dependencies
+            joinDeps.remove(join.node().alias());
+            deps.put(join.node().alias(), joinDeps);
+            
+            // Recurse
+            if (join.node() instanceof TableNode childTable) {
+                collectJoinDependencies(childTable, deps);
+            }
+        }
+    }
+    
+    private TableNode pruneUnusedJoins(TableNode node, Set<String> required) {
+        List<JoinedNode> kept = node.joins().stream()
+            .filter(j -> required.contains(j.node().alias()))
+            .map(j -> {
+                if (j.node() instanceof TableNode childTable) {
+                    return j.withNode(pruneUnusedJoins(childTable, required));
+                }
+                return j;
+            })
+            .toList();
+        
+        return node.withJoins(kept);
+    }
+}
