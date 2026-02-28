@@ -117,6 +117,13 @@ public class ElementTypeModel implements TypeModel {
     }
 
     @Override
+    public <A extends Annotation> A getDeclaredAnnotation(Class<A> annotationType) {
+        // In annotation processing, getAnnotation doesn't inherit annotations,
+        // so it's equivalent to getDeclaredAnnotation
+        return getAnnotation(annotationType);
+    }
+
+    @Override
     public boolean hasAnnotation(Class<? extends Annotation> annotationType) {
         return getAnnotation(annotationType) != null;
     }

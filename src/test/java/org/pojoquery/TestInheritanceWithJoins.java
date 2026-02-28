@@ -16,6 +16,10 @@ import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.QueryBuilder;
+import org.pojoquery.pipeline.CustomizableQueryBuilder;
+import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
+import org.pojoquery.pipeline.querytree.QueryTree;
+import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 
@@ -214,5 +218,46 @@ public class TestInheritanceWithJoins {
 	
 	private List<String> fieldNames(TableMapping mapping) {
 		return mapping.getFields().stream().map(FieldModel::getName).toList();
+	}
+	
+	/**
+	 * Helper to convert QueryTree to SQL using applyQueryTreeToQuery.
+	 */
+	private String queryTreeToSql(QueryTree tree) {
+		DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
+		CustomizableQueryBuilder.applyQueryTreeToQuery(query, tree);
+		return query.toStatement().getSql();
+	}
+	
+	// ═══════════════════════════════════════════════════════════════════════
+	// QueryTree variants - compare SQL output with QueryModel
+	// ═══════════════════════════════════════════════════════════════════════
+	
+	@Test
+	public void testSubClasses_QueryTree() {
+		String queryModelSql = PojoQuery.build(Room.class).toSql();
+		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(Room.class));
+		assertEquals(norm(queryModelSql), norm(queryTreeSql));
+	}
+	
+	@Test
+	public void testSuperclasses_QueryTree() {
+		String queryModelSql = QueryBuilder.from(BedRoom.class).toStatement().getSql();
+		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(BedRoom.class));
+		assertEquals(norm(queryModelSql), norm(queryTreeSql));
+	}
+	
+	@Test
+	public void testSuperClassOfLinked_QueryTree() {
+		String queryModelSql = QueryBuilder.from(ApartmentWithSpecificProperties.class).toStatement().getSql();
+		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(ApartmentWithSpecificProperties.class));
+		assertEquals(norm(queryModelSql), norm(queryTreeSql));
+	}
+	
+	@Test
+	public void testDeeper_QueryTree() {
+		String queryModelSql = QueryBuilder.from(Apartment.class).toStatement().getSql();
+		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(Apartment.class));
+		assertEquals(norm(queryModelSql), norm(queryTreeSql));
 	}
 }

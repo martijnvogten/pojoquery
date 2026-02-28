@@ -67,6 +67,11 @@ public class ReflectionTypeModel implements TypeModel {
     }
 
     @Override
+    public <A extends Annotation> A getDeclaredAnnotation(Class<A> annotationType) {
+        return clazz.getDeclaredAnnotation(annotationType);
+    }
+
+    @Override
     public boolean hasAnnotation(Class<? extends Annotation> annotationType) {
         return clazz.getAnnotation(annotationType) != null;
     }

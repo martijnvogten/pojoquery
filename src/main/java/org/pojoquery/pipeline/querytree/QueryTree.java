@@ -99,8 +99,8 @@ public record QueryTree(
     // --- Transformation helpers ---
     
     /**
-     * Transforms all TableNodes in the tree, bottom-up.
-     * Children are processed before parents, so parent sees already-modified children.
+     * Transforms all TableNodes in the tree, top-down.
+     * Parents are transformed before children, so newly added joins also get transformed.
      * 
      * @param transform Function to apply to each TableNode
      * @return A new QueryTree with all TableNodes transformed
@@ -112,14 +112,15 @@ public record QueryTree(
     
     private static QueryNode transformNode(QueryNode node, UnaryOperator<TableNode> transform) {
         if (node instanceof TableNode table) {
-            // First recurse into children (bottom-up)
-            List<JoinedNode> transformedJoins = table.joins().stream()
+            // First apply transform to this node (may add new joins)
+            TableNode transformed = transform.apply(table);
+            
+            // Then recurse into all children (including newly added ones)
+            List<JoinedNode> transformedJoins = transformed.joins().stream()
                 .map(j -> transformJoin(j, transform))
                 .toList();
             
-            // Then apply transform to this node (with modified children)
-            TableNode withNewJoins = table.withJoins(transformedJoins);
-            return transform.apply(withNewJoins);
+            return transformed.withJoins(transformedJoins);
             
         } else if (node instanceof SubqueryNode subq) {
             // Recurse into subquery's tree

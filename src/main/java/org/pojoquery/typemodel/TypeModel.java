@@ -41,11 +41,21 @@ public interface TypeModel {
 
     /**
      * Returns the annotation of the specified type if present on this type.
+     * This may return inherited annotations depending on the annotation's @Inherited status.
      *
      * @param annotationType the Class object corresponding to the annotation type
      * @return the annotation if present, null otherwise
      */
     <A extends Annotation> A getAnnotation(Class<A> annotationType);
+
+    /**
+     * Returns the annotation of the specified type if directly present on this type.
+     * Unlike {@link #getAnnotation}, this does not return inherited annotations.
+     *
+     * @param annotationType the Class object corresponding to the annotation type
+     * @return the annotation if directly present, null otherwise
+     */
+    <A extends Annotation> A getDeclaredAnnotation(Class<A> annotationType);
 
     /**
      * Returns true if this type has the specified annotation.

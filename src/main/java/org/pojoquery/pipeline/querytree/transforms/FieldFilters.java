@@ -11,25 +11,44 @@ import org.pojoquery.annotations.Other;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Subquery;
 import org.pojoquery.annotations.Transient;
+import org.pojoquery.internal.TableMapping;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
 import static org.pojoquery.pipeline.QueryModel.collectFieldsOfClass;
+import static org.pojoquery.pipeline.QueryModel.determineTableMapping;
 import static org.pojoquery.pipeline.QueryModel.isListOrArray;
 
 /**
  * Helper methods for filtering fields by type and annotations.
+ * 
+ * <p>Methods constrain fields to the most specific table by default for
+ * table-per-subclass inheritance. This ensures that fields like entity
+ * references only appear on the table where the FK column actually lives.</p>
  */
 public final class FieldFilters {
     
     private FieldFilters() {}
     
     /**
-     * Collects all non-static, non-transient fields from a type.
+     * Collects all non-static, non-transient fields from a type (full inheritance hierarchy).
      */
     public static List<FieldModel> allFields(TypeModel type) {
         return collectFieldsOfClass(type);
+    }
+    
+    /**
+     * Returns fields belonging to the most specific table for this type.
+     * For table-per-subclass inheritance, this excludes fields from superclass tables.
+     */
+    public static List<FieldModel> tableFields(TypeModel type) {
+        List<TableMapping> mappings = determineTableMapping(type);
+        if (mappings.isEmpty()) {
+            return allFields(type);
+        }
+        // Most specific table is the last one
+        return mappings.get(mappings.size() - 1).getFields();
     }
     
     /**
@@ -43,34 +62,37 @@ public final class FieldFilters {
      * Returns fields with a specific annotation.
      */
     public static List<FieldModel> withAnnotation(TypeModel type, Class<? extends Annotation> ann) {
-        return allFields(type).stream()
+        return tableFields(type).stream()
             .filter(f -> f.getAnnotation(ann) != null)
             .toList();
     }
     
     /**
      * Returns fields that are simple (primitive, wrapper, or common type).
+     * Constrained to the most specific table.
      */
     public static List<FieldModel> simpleFields(TypeModel type) {
-        return allFields(type).stream()
+        return tableFields(type).stream()
             .filter(FieldFilters::isSimple)
             .toList();
     }
     
     /**
      * Returns fields that reference other entities (have @Table on their type).
+     * Constrained to the most specific table.
      */
     public static List<FieldModel> entityReferences(TypeModel type) {
-        return allFields(type).stream()
+        return tableFields(type).stream()
             .filter(f -> isEntityReference(f) && !isTransient(f))
             .toList();
     }
     
     /**
      * Returns collection fields (List, Set, array) of entities without @Link.
+     * Constrained to the most specific table.
      */
     public static List<FieldModel> simpleCollections(TypeModel type) {
-        return allFields(type).stream()
+        return tableFields(type).stream()
             .filter(f -> isCollection(f.getType()) 
                 && !hasAnnotation(f, Link.class)
                 && hasTableOnComponent(f)
@@ -80,9 +102,10 @@ public final class FieldFilters {
     
     /**
      * Returns fields with @Link annotation that have a linktable (many-to-many).
+     * Constrained to the most specific table.
      */
     public static List<FieldModel> linkTableFields(TypeModel type) {
-        return allFields(type).stream()
+        return tableFields(type).stream()
             .filter(f -> {
                 Link link = f.getAnnotation(Link.class);
                 return link != null 
@@ -94,9 +117,10 @@ public final class FieldFilters {
     
     /**
      * Returns fields with @Link(fetchColumn) - value collections.
+     * Constrained to the most specific table.
      */
     public static List<FieldModel> valueCollectionFields(TypeModel type) {
-        return allFields(type).stream()
+        return tableFields(type).stream()
             .filter(f -> {
                 Link link = f.getAnnotation(Link.class);
                 return link != null && !Link.NONE.equals(link.fetchColumn());
@@ -106,9 +130,10 @@ public final class FieldFilters {
     
     /**
      * Returns fields with @Embedded annotation.
+     * Constrained to the most specific table.
      */
     public static List<FieldModel> embeddedFields(TypeModel type) {
-        return allFields(type).stream()
+        return tableFields(type).stream()
             .filter(FieldFilters::isEmbedded)
             .toList();
     }

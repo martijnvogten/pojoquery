@@ -33,13 +33,12 @@ public class BasicTableTransform implements QueryTreeTransform {
         List<FieldSelection> fields = new ArrayList<>();
         List<String> idFields = new ArrayList<>();
         
-        for (FieldModel f : FieldFilters.allFields(type)) {
-            if (FieldFilters.isSimple(f)) {
-                String colName = determineSqlFieldName(f);
-                String alias = rootAlias + "." + f.getName();
-                SqlExpression expr = new SqlExpression("{" + rootAlias + "." + colName + "}");
-                fields.add(new FieldSelection(alias, expr, f, null));
-            }
+        // FieldFilters.simpleFields uses determineTableMapping to constrain to THIS table only
+        for (FieldModel f : FieldFilters.simpleFields(type)) {
+            String colName = determineSqlFieldName(f);
+            String alias = rootAlias + "." + f.getName();
+            SqlExpression expr = new SqlExpression("{" + rootAlias + "." + colName + "}");
+            fields.add(new FieldSelection(alias, expr, f, null));
         }
         
         for (FieldModel f : determineIdFields(type)) {

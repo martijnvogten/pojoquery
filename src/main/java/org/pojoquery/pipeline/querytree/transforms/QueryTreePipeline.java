@@ -33,77 +33,63 @@ public class QueryTreePipeline {
     public static QueryTreePipeline standard() {
         return new QueryTreePipeline(List.of(
             // ═══════════════════════════════════════════════════════════════
-            // PHASE 1: STRUCTURE (tables and joins)
+            // PHASE 1: STRUCTURE (recursively expands until fixed point)
+            // This handles: superclass joins, entity refs, collections, 
+            // link tables, and @SubClasses - all interdependent
             // ═══════════════════════════════════════════════════════════════
             
             // 1. Create root table node from @Table, collect @Id fields, simple fields
             new BasicTableTransform(),
             
-            // 2. Handle superclass tables: Parent @Table → INNER JOIN
-            new SuperclassTableTransform(),
-            
-            // 3. Entity references → LEFT JOIN (one-to-one)
-            new EntityReferenceTransform(),
-            
-            // 4. List<Entity> without @Link → one-to-many joins
-            new CollectionTransform(),
-            
-            // 5. @Link(linktable) → many-to-many via junction table
-            new LinkTableTransform(),
-            
-            // 6. @Link(fetchColumn) → value collection from link table
-            new ValueCollectionTransform(),
-            
-            // 7. Validate no cyclic entity references
-            new CycleDetectionTransform(),
+            // 2. Recursively expand structure: superclass tables, entity refs,
+            //    collections, link tables, and subclasses until no new tables added
+            new StructureExpansionTransform(),
             
             // ═══════════════════════════════════════════════════════════════
-            // PHASE 2: INHERITANCE
+            // PHASE 2: SINGLE TABLE INHERITANCE
+            // (just adds fields to existing tables, no new tables)
             // ═══════════════════════════════════════════════════════════════
             
-            // 8. @SubClasses (without @DiscriminatorColumn) → table-per-subclass
-            new TablePerSubclassTransform(),
-            
-            // 9. @SubClasses + @DiscriminatorColumn → single-table inheritance
+            // 4. @SubClasses + @DiscriminatorColumn → single-table inheritance
             new SingleTableInheritanceTransform(),
             
             // ═══════════════════════════════════════════════════════════════
             // PHASE 3: FIELD MODIFIERS
             // ═══════════════════════════════════════════════════════════════
             
-            // 10. @Embedded → inline fields with prefix
+            // 5. @Embedded → inline fields with prefix
             new EmbeddedTransform(),
             
-            // 11. @Column, @JoinColumn → column name overrides
+            // 6. @Column, @JoinColumn → column name overrides
             new ColumnNameTransform(),
             
-            // 12. @Select → custom SQL expression
+            // 7. @Select → custom SQL expression
             new SelectExpressionTransform(),
             
-            // 13. @Aggregate → aggregate SQL expression
+            // 8. @Aggregate → aggregate SQL expression
             new AggregateExpressionTransform(),
             
-            // 14. @Other → dynamic column capture
+            // 9. @Other → dynamic column capture
             new OtherFieldTransform(),
             
             // ═══════════════════════════════════════════════════════════════
             // PHASE 4: CUSTOM JOINS
             // ═══════════════════════════════════════════════════════════════
             
-            // 15. @JoinCondition → override auto-generated join conditions
+            // 10. @JoinCondition → override auto-generated join conditions
             new JoinConditionTransform(),
             
-            // 16. @Join, @Joins → class-level extra joins
+            // 11. @Join, @Joins → class-level extra joins
             new ClassLevelJoinTransform(),
             
-            // 17. @Subquery → derived table (subquery) joins
+            // 12. @Subquery → derived table (subquery) joins
             new SubqueryTransform(),
             
             // ═══════════════════════════════════════════════════════════════
             // PHASE 5: QUERY MODIFIERS
             // ═══════════════════════════════════════════════════════════════
             
-            // 18. @GroupBy, @OrderBy → query-level clauses (includes auto GROUP BY)
+            // 13. @GroupBy, @OrderBy → query-level clauses (includes auto GROUP BY)
             new GroupByOrderByTransform()
             
             // Note: FromProjectionTransform and JoinPruningTransform are NOT included

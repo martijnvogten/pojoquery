@@ -88,6 +88,36 @@ public final class JoinConditions {
     }
     
     /**
+     * Creates a join condition for @SubClasses expansion (subclass LEFT JOINed to parent).
+     * Pattern: {subclass.id} = {parent.id}
+     * 
+     * @param parentAlias The parent (base class) table alias
+     * @param subclassAlias The subclass table alias
+     * @param idField The ID field name
+     * @return The join condition
+     */
+    public static SqlExpression forSubclass(String parentAlias, String subclassAlias, String idField) {
+        return new SqlExpression(
+            "{" + subclassAlias + "." + idField + "} = {" + parentAlias + "." + idField + "}"
+        );
+    }
+    
+    /**
+     * Creates a join condition for superclass tables (superclass INNER JOINed to child).
+     * Pattern: {superclass.id} = {child.id}
+     * 
+     * @param childAlias The child (subclass) table alias  
+     * @param superclassAlias The superclass table alias
+     * @param idField The ID field name
+     * @return The join condition
+     */
+    public static SqlExpression forSuperclass(String childAlias, String superclassAlias, String idField) {
+        return new SqlExpression(
+            "{" + superclassAlias + "." + idField + "} = {" + childAlias + "." + idField + "}"
+        );
+    }
+    
+    /**
      * Creates the first join condition for a many-to-many (parent to link table).
      * Pattern: {parent.id} = {linkTable.parent_id}
      * 
