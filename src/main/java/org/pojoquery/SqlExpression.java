@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 import org.pojoquery.util.Iterables;
 import org.pojoquery.util.Strings;
@@ -135,5 +136,18 @@ public class SqlExpression {
 	@Override
 	public String toString() {
 		return "SqlExpression [sql=" + sql + ", parameters=" + parameters + "]";
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj) return true;
+		if (obj == null || getClass() != obj.getClass()) return false;
+		SqlExpression other = (SqlExpression) obj;
+		return sql.equals(other.sql) && parameters.equals(other.parameters);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(sql, parameters);
 	}
 }

@@ -1,17 +1,13 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
-import java.util.ArrayList;
+import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
+
 import java.util.List;
 
-import org.pojoquery.AnnotationHelper;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
-import org.pojoquery.typemodel.TypeModel;
-
-import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
-import static org.pojoquery.pipeline.QueryModel.determineIdFields;
 
 /**
  * Helper methods for creating TableNode instances.
@@ -19,45 +15,6 @@ import static org.pojoquery.pipeline.QueryModel.determineIdFields;
 public final class TableNodeFactory {
     
     private TableNodeFactory() {}
-    
-    /**
-     * Creates a TableNode for a type with simple fields populated.
-     * 
-     * @param type The Java type
-     * @param alias The table alias
-     * @return A TableNode with simple fields
-     */
-    public static TableNode forType(TypeModel type, String alias) {
-        AnnotationHelper.TableInfo tableInfo = AnnotationHelper.getTableInfo(type);
-        if (tableInfo == null) {
-            throw new IllegalArgumentException("Missing @Table annotation on " + type.getQualifiedName());
-        }
-        return forType(type, alias, tableInfo.schema, tableInfo.name);
-    }
-    
-    /**
-     * Creates a TableNode for a type with explicit table info.
-     * 
-     * @param type The Java type
-     * @param alias The table alias
-     * @param schema The schema name (may be null or empty)
-     * @param tableName The table name
-     * @return A TableNode with simple fields
-     */
-    public static TableNode forType(TypeModel type, String alias, String schema, String tableName) {
-        List<String> idFieldNames = determineIdFields(type).stream()
-            .map(f -> determineSqlFieldName(f))
-            .toList();
-        
-        // FieldFilters.simpleFields uses determineTableMapping to constrain to THIS table only
-        List<FieldSelection> fields = new ArrayList<>();
-        for (FieldModel f : FieldFilters.simpleFields(type)) {
-            fields.add(fieldSelection(alias, f));
-        }
-        
-        String schemaName = (schema == null || schema.isEmpty()) ? null : schema;
-        return TableNode.simple(alias, type, schemaName, tableName, fields, List.of(), idFieldNames);
-    }
     
     /**
      * Creates an empty TableNode (for link tables with no type/fields).

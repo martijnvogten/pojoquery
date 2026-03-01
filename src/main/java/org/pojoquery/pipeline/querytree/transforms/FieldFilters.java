@@ -176,10 +176,9 @@ public final class FieldFilters {
     
     public static boolean isEntityReference(FieldModel field) {
         TypeModel type = field.getType();
-        return !type.isPrimitive() 
+        return !isSimple(field)
             && !isCollection(type) 
-            && !isEmbedded(field)
-            && AnnotationHelper.hasTableAnnotation(type);
+            && !isEmbedded(field);
     }
     
     public static boolean isCollection(TypeModel type) {

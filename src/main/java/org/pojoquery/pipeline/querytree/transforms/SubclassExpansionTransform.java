@@ -1,24 +1,23 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
+import static org.pojoquery.pipeline.QueryModel.determineIdField;
+import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
+import static org.pojoquery.pipeline.QueryModel.determineTableMapping;
+
 import java.util.ArrayList;
 import java.util.List;
 
-import org.pojoquery.AnnotationHelper;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.SubClasses;
+import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
-import org.pojoquery.pipeline.querytree.FieldSelection;
+import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
-import org.pojoquery.pipeline.querytree.TableNode;
-import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
-
-import static org.pojoquery.pipeline.QueryModel.determineIdField;
-import static org.pojoquery.pipeline.QueryModel.determineIdFields;
-import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
 
 /**
  * Expands @SubClasses (table-per-subclass) to add subclass table nodes.
@@ -35,16 +34,11 @@ public class SubclassExpansionTransform implements QueryTreeTransform {
     
     @Override
     public QueryTree apply(QueryTree tree) {
-        return tree.transformTableNodes(this::processNode);
+        return tree.transformNodes(n -> n instanceof EmptyTableNode, this::processNode);
     }
     
-    private TableNode processNode(TableNode node) {
-        if (node.type() == null) {
-            return node;
-        }
-        
+    private QueryNode processNode(EmptyTableNode node) {
         // Only expand if @SubClasses is declared directly on this type, not inherited
-        // This prevents BedRoom from expanding sibling subclasses via inherited annotation from Room
         SubClasses subClassesAnn = node.type().getDeclaredAnnotation(SubClasses.class);
         if (subClassesAnn == null) {
             return node;
@@ -54,18 +48,21 @@ public class SubclassExpansionTransform implements QueryTreeTransform {
         if (node.type().getAnnotation(DiscriminatorColumn.class) != null) {
             return node;
         }
+
+        // Don't add subclasses to superclass joins
+        if (node.isSuperClass()) {
+            return node;
+        }
         
         List<JoinedNode> newJoins = new ArrayList<>(node.joins());
-        String idField = node.idFieldNames().isEmpty() ? "id" : node.idFieldNames().get(0);
+        String idField = determineSqlFieldName(determineIdField(node.type()));
         
         for (Class<?> subClass : subClassesAnn.value()) {
-            TypeModel subType = new ReflectionTypeModel(subClass);
-            AnnotationHelper.TableInfo subTable = AnnotationHelper.getTableInfo(subType);
-            if (subTable == null) {
-                continue;
-            }
+            TypeModel subType = ReflectionTypeModel.of(subClass);
+            List<TableMapping> subTableMappings = determineTableMapping(subType);
+            TableMapping subTableMapping = subTableMappings.get(subTableMappings.size() - 1); // Get most specific @Table mapping
             
-            String subAlias = AliasNaming.subclassAlias(node.alias(), subTable.name);
+            String subAlias = AliasNaming.subclassAlias(node.alias(), subTableMapping.tableName);
             
             // Skip if already joined (from previous iteration)
             if (alreadyJoined(newJoins, subAlias)) {
@@ -74,37 +71,7 @@ public class SubclassExpansionTransform implements QueryTreeTransform {
             
             // LEFT JOIN subclass_table ON subclass.id = parent.id
             SqlExpression condition = JoinConditions.forSubclass(node.alias(), subAlias, idField);
-            
-            // Create node with all simple fields declared in the subclass
-            List<FieldSelection> subFields = new ArrayList<>();
-            List<String> subIdFields = new ArrayList<>();
-            
-            // Add ID field (required for null-checking to determine actual type)
-            FieldModel idFieldModel = determineIdField(subType);
-            subFields.add(TableNodeFactory.fieldSelection(subAlias, idFieldModel));
-            
-            // Add all simple fields declared in subclass (not inherited from parent)
-            for (FieldModel f : FieldFilters.fieldsDeclaredIn(subType, node.type())) {
-                if (FieldFilters.isSimple(f) && !f.getName().equals(idFieldModel.getName())) {
-                    String colName = determineSqlFieldName(f);
-                    String alias = subAlias + "." + f.getName();
-                    SqlExpression expr = new SqlExpression("{" + subAlias + "." + colName + "}");
-                    subFields.add(new FieldSelection(alias, expr, f, null));
-                }
-            }
-            
-            // Collect ID fields for the subclass
-            for (FieldModel f : determineIdFields(subType)) {
-                subIdFields.add(determineSqlFieldName(f));
-            }
-            
-            String schemaName = (subTable.schema == null || subTable.schema.isEmpty()) ? null : subTable.schema;
-            // Set type to null - subclass expansion nodes don't need further structural expansion
-            // (superclass fields come from parent, not from joining superclass table again)
-            TableNode subNode = TableNode.simple(
-                subAlias, null, schemaName, subTable.name,
-                subFields, List.of(), subIdFields.isEmpty() ? List.of(idField) : subIdFields
-            );
+            EmptyTableNode subNode = EmptyTableNode.of(subAlias, subType);
             
             newJoins.add(new JoinedNode(JoinType.LEFT, condition, subNode, null, false));
         }
@@ -114,6 +81,6 @@ public class SubclassExpansionTransform implements QueryTreeTransform {
     
     private boolean alreadyJoined(List<JoinedNode> joins, String alias) {
         return joins.stream()
-            .anyMatch(j -> j.node() instanceof TableNode t && t.alias().equals(alias));
+            .anyMatch(j -> j.node() instanceof EmptyTableNode t && t.alias().equals(alias));
     }
 }

@@ -5,10 +5,12 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
 import org.pojoquery.SqlExpression;
+import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
 /**
@@ -22,40 +24,53 @@ import org.pojoquery.typemodel.TypeModel;
  * <p>QueryTree is immutable and can be transformed by plugins/transformers to add
  * fields, joins, or modify the structure in a controlled way.</p>
  *
- * @param root The root node of the query (main table or subquery)
  * @param resultType The top-level Java type that will be returned
+ * @param root The root node of the query (main table or subquery)
  * @param groupBy GROUP BY clauses (may contain {alias.field} placeholders)
  * @param orderBy ORDER BY clauses (may contain {alias.field} placeholders)
  * @param wheres WHERE conditions to apply
  */
 public record QueryTree(
-    QueryNode root,
     TypeModel resultType,
+    QueryNode root,
     List<String> groupBy,
     List<String> orderBy,
     List<SqlExpression> wheres
 ) {
     
     public QueryTree {
-        Objects.requireNonNull(root, "root");
         Objects.requireNonNull(resultType, "resultType");
         groupBy = groupBy == null ? List.of() : List.copyOf(groupBy);
         orderBy = orderBy == null ? List.of() : List.copyOf(orderBy);
         wheres = wheres == null ? List.of() : List.copyOf(wheres);
     }
+
+    /**
+     * Creates a simple QueryTree with just the result type and no root node.
+     */
+    public static QueryTree of(TypeModel resultType) {
+        return new QueryTree(resultType, null, List.of(), List.of(), List.of());
+    }
     
     /**
-     * Creates a simple QueryTree with just a root node.
+     * Creates a simple QueryTree with just the result type and no root node.
      */
-    public static QueryTree of(QueryNode root, TypeModel resultType) {
-        return new QueryTree(root, resultType, List.of(), List.of(), List.of());
+    public static QueryTree of(Class<?> resultType) {
+        return new QueryTree(ReflectionTypeModel.of(resultType), null, List.of(), List.of(), List.of());
+    }
+    
+    /**
+     * Creates a simple QueryTree with the result Type and a root node.
+     */
+    public static QueryTree of(TypeModel resultType, QueryNode root) {
+        return new QueryTree(resultType, root, List.of(), List.of(), List.of());
     }
     
     /**
      * Returns a new QueryTree with an additional WHERE condition.
      */
     public QueryTree withWhere(SqlExpression where) {
-        return new QueryTree(root, resultType, groupBy, orderBy,
+        return new QueryTree(resultType, root, groupBy, orderBy,
             Stream.concat(wheres.stream(), Stream.of(where)).toList());
     }
     
@@ -63,7 +78,7 @@ public record QueryTree(
      * Returns a new QueryTree with an additional ORDER BY clause.
      */
     public QueryTree withOrderBy(String clause) {
-        return new QueryTree(root, resultType, groupBy,
+        return new QueryTree(resultType, root, groupBy,
             Stream.concat(orderBy.stream(), Stream.of(clause)).toList(), wheres);
     }
     
@@ -71,7 +86,7 @@ public record QueryTree(
      * Returns a new QueryTree with an additional GROUP BY clause.
      */
     public QueryTree withGroupBy(String clause) {
-        return new QueryTree(root, resultType,
+        return new QueryTree(resultType, root,
             Stream.concat(groupBy.stream(), Stream.of(clause)).toList(), orderBy, wheres);
     }
     
@@ -79,35 +94,96 @@ public record QueryTree(
      * Returns a new QueryTree with replaced GROUP BY clauses.
      */
     public QueryTree withGroupByClauses(List<String> clauses) {
-        return new QueryTree(root, resultType, clauses, orderBy, wheres);
+        return new QueryTree(resultType, root, clauses, orderBy, wheres);
     }
     
     /**
      * Returns a new QueryTree with replaced ORDER BY clauses.
      */
     public QueryTree withOrderByClauses(List<String> clauses) {
-        return new QueryTree(root, resultType, groupBy, clauses, wheres);
+        return new QueryTree(resultType, root, groupBy, clauses, wheres);
     }
     
     /**
      * Returns a new QueryTree with a different root node.
      */
     public QueryTree withRoot(QueryNode newRoot) {
-        return new QueryTree(newRoot, resultType, groupBy, orderBy, wheres);
+        return new QueryTree(resultType, newRoot, groupBy, orderBy, wheres);
     }
     
     // --- Transformation helpers ---
+
+    public <T extends QueryNode> QueryTree transformNodes(Predicate<QueryNode> predicate, Function<T,QueryNode> transform) {
+        QueryNode newRoot = transformNodesRecursive(root, predicate, transform);
+        return new QueryTree(resultType, newRoot, groupBy, orderBy, wheres);
+    }
+    
+    @SuppressWarnings("unchecked")
+    private static <T extends QueryNode> QueryNode transformNodesRecursive(QueryNode node, Predicate<QueryNode> predicate, Function<T,QueryNode> transform) {
+        if (node == null) {
+            return null;
+        }
+        
+        // Apply transform if predicate matches
+        QueryNode transformed = predicate.test(node) ? transform.apply((T) node) : node;
+        
+        // Recursively process children
+        if (transformed instanceof TableNode table) {
+            List<JoinedNode> transformedJoins = table.joins().stream()
+                .map(j -> j.withNode(transformNodesRecursive(j.node(), predicate, transform)))
+                .toList();
+            return table.withJoins(transformedJoins);
+        } else if (transformed instanceof SubqueryNode subq) {
+            QueryTree transformedSubTree = subq.subquery().transformNodes(predicate, transform);
+            return new SubqueryNode(subq.alias(), subq.type(), transformedSubTree, 
+                subq.fields(), subq.joins());
+        } else if (transformed instanceof EmbeddedNode emb) {
+            List<JoinedNode> transformedJoins = emb.joins().stream()
+                .map(j -> j.withNode(transformNodesRecursive(j.node(), predicate, transform)))
+                .toList();
+            return new EmbeddedNode(emb.alias(), emb.type(), emb.fieldPrefix(),
+                emb.fields(), transformedJoins);
+        }
+        return transformed;
+    }
+    
+    public Stream<QueryNode> findNodes(Predicate<QueryNode> predicate) {
+        return findNodesRecursive(root, predicate);
+    }
+    
+    private static Stream<QueryNode> findNodesRecursive(QueryNode node, Predicate<QueryNode> predicate) {
+        if (node == null) {
+            return Stream.empty();
+        }
+        
+        Stream<QueryNode> self = predicate.test(node) ? Stream.of(node) : Stream.empty();
+        Stream<QueryNode> children;
+        
+        if (node instanceof TableNode table) {
+            children = table.joins().stream()
+                .flatMap(j -> findNodesRecursive(j.node(), predicate));
+        } else if (node instanceof SubqueryNode subq) {
+            children = subq.subquery().findNodes(predicate);
+        } else if (node instanceof EmbeddedNode emb) {
+            children = emb.joins().stream()
+                .flatMap(j -> findNodesRecursive(j.node(), predicate));
+        } else {
+            children = Stream.empty();
+        }
+        
+        return Stream.concat(self, children);
+    }
     
     /**
      * Transforms all TableNodes in the tree, top-down.
-     * Parents are transformed before children, so newly added joins also get transformed.
+     * Parents are transformed before children.
      * 
      * @param transform Function to apply to each TableNode
      * @return A new QueryTree with all TableNodes transformed
      */
     public QueryTree transformTableNodes(UnaryOperator<TableNode> transform) {
         QueryNode newRoot = transformNode(root, transform);
-        return new QueryTree(newRoot, resultType, groupBy, orderBy, wheres);
+        return new QueryTree(resultType, newRoot, groupBy, orderBy, wheres);
     }
     
     private static QueryNode transformNode(QueryNode node, UnaryOperator<TableNode> transform) {

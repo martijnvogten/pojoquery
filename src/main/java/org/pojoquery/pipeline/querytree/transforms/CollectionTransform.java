@@ -1,11 +1,15 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
+import static org.pojoquery.pipeline.QueryModel.determineTableMapping;
+
 import java.util.ArrayList;
 import java.util.List;
 
 import org.pojoquery.AnnotationHelper;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Link;
+import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
@@ -13,7 +17,7 @@ import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 
 /**
- * Transform 4: List/Set/Array of Entity without @Link → LEFT JOIN (one-to-many).
+ * List/Set/Array of Entity without @Link → LEFT JOIN (one-to-many).
  * Expects child table has parent_id FK column (customizable via @Link.foreignlinkfield).
  */
 public class CollectionTransform implements QueryTreeTransform {
@@ -37,23 +41,15 @@ public class CollectionTransform implements QueryTreeTransform {
             }
             
             TypeModel componentType = FieldFilters.getComponentType(f);
-            AnnotationHelper.TableInfo targetTable = AnnotationHelper.getTableInfo(componentType);
-            if (targetTable == null) {
-                continue;
-            }
+            // List<TableMapping> tableMappings = determineTableMapping(componentType);
+            // TableMapping tableMapping = tableMappings.get(tableMappings.size() - 1);
             
             String joinAlias = AliasNaming.childAlias(node.alias(), rootAlias, f.getName());
             
             // Build the joined table node
-            TableNode joinedNode = TableNodeFactory.forType(componentType, joinAlias);
+            EmptyTableNode joinedNode = EmptyTableNode.of(joinAlias, componentType);
             
-            // Build join condition: {parent.id} = {child.parent_id}
-            // Check for @Link.foreignlinkfield to customize FK column name
-            String foreignLinkField = getForeignLinkField(f);
-            SqlExpression condition = JoinConditions.forCollection(
-                node.alias(), joinAlias, node.type(), node.tableName(), foreignLinkField);
-            
-            newJoins.add(JoinedNode.leftJoinMany(condition, joinedNode, f));
+            newJoins.add(JoinedNode.leftJoinMany(null, joinedNode, f));
         }
         
         return node.withJoins(newJoins);
@@ -61,14 +57,6 @@ public class CollectionTransform implements QueryTreeTransform {
     
     private boolean alreadyJoined(TableNode node, FieldModel field) {
         return node.joins().stream()
-            .anyMatch(j -> j.linkField() != null && j.linkField().getName().equals(field.getName()));
-    }
-    
-    private String getForeignLinkField(FieldModel field) {
-        Link linkAnn = field.getAnnotation(Link.class);
-        if (linkAnn != null && !Link.NONE.equals(linkAnn.foreignlinkfield())) {
-            return linkAnn.foreignlinkfield();
-        }
-        return null;
+            .anyMatch(j -> field.equals(j.linkField()));
     }
 }

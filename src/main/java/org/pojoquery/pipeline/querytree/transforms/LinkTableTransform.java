@@ -1,18 +1,20 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
+import static org.pojoquery.pipeline.QueryModel.determineIdField;
+import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
+
 import java.util.ArrayList;
 import java.util.List;
 
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Link;
+import org.pojoquery.pipeline.SqlQuery.JoinType;
+import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
-
-import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
-import static org.pojoquery.pipeline.QueryModel.determineIdField;
 
 /**
  * Transform 5: @Link(linktable) → many-to-many via junction table.
@@ -27,10 +29,6 @@ public class LinkTableTransform implements QueryTreeTransform {
     }
     
     private TableNode processNode(TableNode node, String rootAlias) {
-        if (node.type() == null) {
-            return node;
-        }
-        
         List<JoinedNode> newJoins = new ArrayList<>(node.joins());
         
         for (FieldModel f : FieldFilters.linkTableFields(node.type())) {
@@ -63,14 +61,14 @@ public class LinkTableTransform implements QueryTreeTransform {
                 linkTableAlias, linkAnn.linkschema(), linkAnn.linktable());
             
             // Build target entity node
-            TableNode targetNode = TableNodeFactory.forType(componentType, targetAlias);
+            EmptyTableNode targetNode = EmptyTableNode.of(targetAlias, componentType);
             
             // Chain: linkTable contains join to target
             JoinedNode targetJoin = JoinedNode.leftJoinMany(targetCondition, targetNode, f);
             TableNode linkWithTarget = linkTableNode.withJoins(List.of(targetJoin));
             
             newJoins.add(new JoinedNode(
-                org.pojoquery.pipeline.SqlQuery.JoinType.LEFT, 
+                JoinType.LEFT, 
                 linkCondition, linkWithTarget, f, true));
         }
         
@@ -94,6 +92,6 @@ public class LinkTableTransform implements QueryTreeTransform {
     
     private boolean alreadyJoined(TableNode node, FieldModel field) {
         return node.joins().stream()
-            .anyMatch(j -> j.linkField() != null && j.linkField().getName().equals(field.getName()));
+            .anyMatch(j -> field.equals(j.linkField()));
     }
 }

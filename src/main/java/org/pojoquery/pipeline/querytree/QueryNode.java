@@ -8,7 +8,7 @@ import org.pojoquery.typemodel.TypeModel;
  * Sealed interface for all query tree nodes.
  * A QueryNode represents a table, subquery, or embedded structure in the query.
  */
-public sealed interface QueryNode permits TableNode, SubqueryNode, EmbeddedNode, LinkedValueNode {
+public sealed interface QueryNode permits TableNode, EmptyTableNode, SubqueryNode, EmbeddedNode, LinkedValueNode {
     
     /**
      * The alias used to reference this node in the query.

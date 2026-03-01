@@ -15,7 +15,7 @@ import org.pojoquery.typemodel.FieldModel;
  * @param linkField The Java field that created this join (may be null for manual joins)
  * @param isCollection True if this is a one-to-many relationship (List/Set/Array)
  */
-public record JoinedNode(
+public record JoinedNode (
     JoinType joinType,
     SqlExpression condition,
     QueryNode node,

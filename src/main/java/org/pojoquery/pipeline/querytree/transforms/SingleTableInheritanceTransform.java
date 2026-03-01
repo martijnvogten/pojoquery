@@ -18,7 +18,6 @@ import org.pojoquery.typemodel.TypeModel;
 import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
 
 /**
- * Transform 8: @SubClasses + @DiscriminatorColumn → single-table inheritance.
  * All classes in one table with a discriminator column to identify the type.
  */
 public class SingleTableInheritanceTransform implements QueryTreeTransform {
@@ -29,10 +28,6 @@ public class SingleTableInheritanceTransform implements QueryTreeTransform {
     }
     
     private TableNode processNode(TableNode node) {
-        if (node.type() == null) {
-            return node;
-        }
-        
         SubClasses subClassesAnn = node.type().getAnnotation(SubClasses.class);
         DiscriminatorColumn discAnn = node.type().getAnnotation(DiscriminatorColumn.class);
         

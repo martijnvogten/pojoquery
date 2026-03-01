@@ -45,11 +45,9 @@ public record TableNode(
     public TableNode {
         Objects.requireNonNull(alias, "alias");
         // Note: type may be null for link/junction tables that have no Java class
-        Objects.requireNonNull(tableName, "tableName");
-        fields = fields == null ? List.of() : List.copyOf(fields);
-        joins = joins == null ? List.of() : List.copyOf(joins);
-        idFieldNames = idFieldNames == null ? List.of() : List.copyOf(idFieldNames);
-        discriminatorValues = discriminatorValues == null ? Map.of() : Map.copyOf(discriminatorValues);
+        if ((tableName == null || tableName.isEmpty()) && type == null) {
+             throw new IllegalArgumentException("tableName is required if type is not provided");
+        }
     }
     
     /**
@@ -139,6 +137,13 @@ public record TableNode(
             otherField, otherColumnPrefix);
     }
 
+    public TableNode withTableName(String newSchema, String newTable) {
+        return new TableNode(alias, type, newSchema, newTable,
+            fields, joins, idFieldNames,
+            isSingleTableInheritance, discriminatorColumn, discriminatorValues,
+            otherField, otherColumnPrefix);
+    }
+
     @Override
     public String toString() {
         return toStringWithIndent("");
@@ -156,20 +161,20 @@ public record TableNode(
 		if (type != null) {
         	sb.append(indent).append("  type: ").append(type.getQualifiedName()).append("\n");
 		}
-        if (!idFieldNames.isEmpty()) {
+        if (!(idFieldNames == null || idFieldNames.isEmpty())) {
             sb.append(indent).append("  idFields: ").append(idFieldNames).append("\n");
         }
         if (isSingleTableInheritance) {
             sb.append(indent).append("  STI discriminator: ").append(discriminatorColumn).append("\n");
         }
-        if (!fields.isEmpty()) {
+        if (!(fields == null || fields.isEmpty())) {
             sb.append(indent).append("  fields: [\n");
             for (FieldSelection f : fields) {
                 sb.append(indent).append("    ").append(f).append("\n");
             }
             sb.append(indent).append("  ]\n");
         }
-        if (!joins.isEmpty()) {
+        if (!(joins == null || joins.isEmpty())) {
             sb.append(indent).append("  joins: [\n");
             for (JoinedNode j : joins) {
                 sb.append(j.toStringWithIndent(indent + "    "));

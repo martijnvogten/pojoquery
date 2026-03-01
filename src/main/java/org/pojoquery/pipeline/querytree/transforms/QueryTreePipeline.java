@@ -32,25 +32,13 @@ public class QueryTreePipeline {
      */
     public static QueryTreePipeline standard() {
         return new QueryTreePipeline(List.of(
-            // ═══════════════════════════════════════════════════════════════
-            // PHASE 1: STRUCTURE (recursively expands until fixed point)
-            // This handles: superclass joins, entity refs, collections, 
-            // link tables, and @SubClasses - all interdependent
-            // ═══════════════════════════════════════════════════════════════
-            
-            // 1. Create root table node from @Table, collect @Id fields, simple fields
+            new CreateRootTransform(),
+            new SuperclassTableTransform(),
+            new SubclassExpansionTransform(),
             new BasicTableTransform(),
-            
-            // 2. Recursively expand structure: superclass tables, entity refs,
-            //    collections, link tables, and subclasses until no new tables added
-            new StructureExpansionTransform(),
-            
-            // ═══════════════════════════════════════════════════════════════
-            // PHASE 2: SINGLE TABLE INHERITANCE
-            // (just adds fields to existing tables, no new tables)
-            // ═══════════════════════════════════════════════════════════════
-            
-            // 4. @SubClasses + @DiscriminatorColumn → single-table inheritance
+            new EntityReferenceTransform(),
+            new LinkTableTransform(),
+            new JoinConditionTransform(),
             new SingleTableInheritanceTransform(),
             
             // ═══════════════════════════════════════════════════════════════
@@ -146,7 +134,7 @@ public class QueryTreePipeline {
             TypeModel sourceType = new ReflectionTypeModel(fromAnn.value());
             QueryTree sourceTree = buildDirect(sourceType);
             return new FromProjectionTransform().apply(
-                new QueryTree(sourceTree.root(), type, sourceTree.groupBy(), 
+                new QueryTree(type, sourceTree.root(), sourceTree.groupBy(), 
                     sourceTree.orderBy(), sourceTree.wheres())
             );
         }
@@ -159,17 +147,41 @@ public class QueryTreePipeline {
      */
     private QueryTree buildDirect(TypeModel type) {
         // Start with an empty tree (first transform creates the actual structure)
-        QueryTree tree = QueryTree.of(
-            TableNode.simple("_placeholder_", type, null, "_placeholder_", 
-                List.of(), List.of(), List.of()),
-            type
-        );
+        QueryTree tree = QueryTree.of(type);
         
         // Apply transforms in sequence
         for (QueryTreeTransform transform : transforms) {
             tree = transform.apply(tree);
         }
         
+        return tree;
+    }
+    
+    /**
+     * Runs all transforms repeatedly until a fixed point is reached
+     * (no transform changes the tree anymore).
+     * Useful for testing individual transforms in isolation.
+     * 
+     * @param tree The starting tree
+     * @return The tree after reaching fixed point
+     */
+    public QueryTree runToFixPoint(QueryTree tree) {
+        return runToFixPoint(tree, 1000);
+    }
+    
+    public QueryTree runToFixPoint(QueryTree tree, int maxIterations) {
+        QueryTree before;
+        int iterations = 0;
+        do {
+            before = tree;
+            for (QueryTreeTransform transform : transforms) {
+                tree = transform.apply(tree);
+            }
+            iterations++;
+            if (iterations >= maxIterations) {
+                throw new IllegalStateException("Max iterations reached without reaching fixed point");
+            }
+        } while (!tree.equals(before));
         return tree;
     }
     

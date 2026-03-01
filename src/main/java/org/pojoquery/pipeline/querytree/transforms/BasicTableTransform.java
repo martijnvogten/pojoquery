@@ -1,54 +1,53 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
+import static org.pojoquery.pipeline.QueryModel.determineIdFields;
+import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
+import static org.pojoquery.pipeline.QueryModel.determineTableMapping;
+
 import java.util.ArrayList;
 import java.util.List;
 
-import org.pojoquery.AnnotationHelper;
-import org.pojoquery.SqlExpression;
+import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.FieldSelection;
+import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
-import org.pojoquery.typemodel.TypeModel;
-
-import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
-import static org.pojoquery.pipeline.QueryModel.determineIdFields;
 
 /**
- * Transform 1: Creates root TableNode from @Table, collects @Id fields.
+ * Creates root TableNode for the specified result type, collects @Id fields.
  * Only handles primitive/wrapper/common types - no relationships.
  */
 public class BasicTableTransform implements QueryTreeTransform {
-    
+
     @Override
     public QueryTree apply(QueryTree tree) {
-        TypeModel type = tree.resultType();
-        AnnotationHelper.TableInfo tableInfo = AnnotationHelper.getTableInfo(type);
-        
-        if (tableInfo == null) {
-            throw new IllegalArgumentException("Missing @Table annotation on " + type.getQualifiedName());
+        return tree.transformNodes(n -> n instanceof EmptyTableNode, this::transformTableNode);
+    }
+
+    private QueryNode transformTableNode(EmptyTableNode node) {
+        List<TableMapping> tableMapping = determineTableMapping(node.type()); // Validate @Table presence and hierarchy
+        if (tableMapping.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No @Table annotation found on " + node.type().getQualifiedName() + " or its superclasses");
         }
+
+        TableMapping mapping = tableMapping.get(tableMapping.size() - 1);
         
-        String rootAlias = tableInfo.name;
         List<FieldSelection> fields = new ArrayList<>();
         List<String> idFields = new ArrayList<>();
-        
-        // FieldFilters.simpleFields uses determineTableMapping to constrain to THIS table only
-        for (FieldModel f : FieldFilters.simpleFields(type)) {
+
+        for (FieldModel f : FieldFilters.simpleFields(node.type())) {
             String colName = determineSqlFieldName(f);
-            String alias = rootAlias + "." + f.getName();
-            SqlExpression expr = new SqlExpression("{" + rootAlias + "." + colName + "}");
-            fields.add(new FieldSelection(alias, expr, f, null));
+            fields.add(FieldSelection.column(node.alias(), colName, f));
         }
-        
-        for (FieldModel f : determineIdFields(type)) {
+
+        for (FieldModel f : determineIdFields(node.type())) {
             idFields.add(determineSqlFieldName(f));
         }
-        
-        String schemaName = (tableInfo.schema == null || tableInfo.schema.isEmpty()) ? null : tableInfo.schema;
-        TableNode root = TableNode.simple(rootAlias, type, schemaName, tableInfo.name, 
-            fields, List.of(), idFields);
-        
-        return QueryTree.of(root, type);
+
+        // Preserve joins from EmptyTableNode (e.g., superclass joins)
+        return TableNode.simple(node.alias(), node.type(), mapping.schemaName, mapping.tableName, fields, node.joins(), idFields);
     }
 }

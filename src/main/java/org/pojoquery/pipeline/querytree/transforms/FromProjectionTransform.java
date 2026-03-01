@@ -98,7 +98,7 @@ public class FromProjectionTransform implements QueryTreeTransform {
         // Create root with projected fields
         TableNode projectedRoot = clearedRoot.withFields(projectedFields);
         
-        return QueryTree.of(projectedRoot, resultType)
+        return QueryTree.of(resultType, projectedRoot)
             .withGroupByClauses(groupByClauses)
             .withOrderByClauses(tree.orderBy());
     }

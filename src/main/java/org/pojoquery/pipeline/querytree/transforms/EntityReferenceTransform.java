@@ -3,7 +3,7 @@ package org.pojoquery.pipeline.querytree.transforms;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.pojoquery.SqlExpression;
+import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
@@ -24,12 +24,7 @@ public class EntityReferenceTransform implements QueryTreeTransform {
     }
     
     private TableNode processNode(TableNode node, String rootAlias) {
-        if (node.type() == null) {
-            return node; // Link tables have no type
-        }
-        
         List<JoinedNode> newJoins = new ArrayList<>(node.joins());
-        
         for (FieldModel f : FieldFilters.entityReferences(node.type())) {
             if (alreadyJoined(node, f)) {
                 continue;
@@ -37,22 +32,16 @@ public class EntityReferenceTransform implements QueryTreeTransform {
             
             TypeModel targetType = f.getType();
             String joinAlias = AliasNaming.childAlias(node.alias(), rootAlias, f.getName());
+            EmptyTableNode joinedNode = EmptyTableNode.of(joinAlias, targetType);
             
-            // Build the joined table node
-            TableNode joinedNode = TableNodeFactory.forType(targetType, joinAlias);
-            
-            // Build join condition: {parent.field_id} = {child.id}
-            SqlExpression condition = JoinConditions.forEntityReference(
-                node.alias(), joinAlias, f, targetType);
-            
-            newJoins.add(JoinedNode.leftJoinOne(condition, joinedNode, f));
+            newJoins.add(JoinedNode.leftJoinOne(null, joinedNode, f));
         }
         
-        return node.withJoins(newJoins);
+        return newJoins.size() > 0 ? node.withJoins(newJoins) : node;
     }
     
     private boolean alreadyJoined(TableNode node, FieldModel field) {
         return node.joins().stream()
-            .anyMatch(j -> j.linkField() != null && j.linkField().getName().equals(field.getName()));
+            .anyMatch(j -> field.equals(j.linkField()));
     }
 }

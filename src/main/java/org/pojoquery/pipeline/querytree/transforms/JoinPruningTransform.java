@@ -29,7 +29,7 @@ public class JoinPruningTransform implements QueryTreeTransform {
         // Prune unused joins
         TableNode pruned = pruneUnusedJoins(root, required);
         
-        return QueryTree.of(pruned, tree.resultType())
+        return QueryTree.of(tree.resultType(), pruned)
             .withGroupByClauses(tree.groupBy())
             .withOrderByClauses(tree.orderBy());
     }
