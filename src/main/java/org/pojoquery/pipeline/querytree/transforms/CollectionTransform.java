@@ -1,14 +1,8 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
-import static org.pojoquery.pipeline.QueryModel.determineTableMapping;
-
 import java.util.ArrayList;
 import java.util.List;
 
-import org.pojoquery.AnnotationHelper;
-import org.pojoquery.SqlExpression;
-import org.pojoquery.annotations.Link;
-import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
@@ -34,7 +28,6 @@ public class CollectionTransform implements QueryTreeTransform {
         }
         
         List<JoinedNode> newJoins = new ArrayList<>(node.joins());
-        
         for (FieldModel f : FieldFilters.simpleCollections(node.type())) {
             if (alreadyJoined(node, f)) {
                 continue;

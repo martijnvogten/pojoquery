@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.pojoquery.pipeline.querytree.QueryTree;
-import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
