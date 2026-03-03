@@ -5,55 +5,88 @@ import java.util.List;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
+import org.pojoquery.pipeline.querytree.EmptyTableNode;
+import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
 
 /**
+ * Transform that resolves join conditions for nodes that don't have them yet.
  */
 public class JoinConditionTransform implements QueryTreeTransform {
     
     @Override
     public QueryTree apply(QueryTree tree) {
         String rootAlias = ((TableNode) tree.root()).alias();
-        return tree.transformNodes(n -> n instanceof TableNode && n.joins().stream().anyMatch(it -> it.condition() == null), 
+        return tree.transformNodes(
+            n -> n instanceof TableNode && hasChildrenNeedingConditions((TableNode) n), 
             (TableNode n) -> processNode(n, rootAlias));
     }
     
-    private TableNode processNode(TableNode node, String rootAlias) {
-        List<JoinedNode> updatedJoins = node.joins().stream()
-            .filter(it -> it.condition() == null)
-            .map(j -> updateCondition(j, node))
-            .toList();
-        
-        return node.withJoins(updatedJoins);
+    private boolean hasChildrenNeedingConditions(TableNode node) {
+        return node.children().stream()
+            .anyMatch(c -> c.joinInfo() != null && 
+                          c.joinInfo().condition() == null);
     }
     
-    private JoinedNode updateCondition(JoinedNode join, TableNode parent) {
-        JoinCondition condAnn = join.linkField().getAnnotation(JoinCondition.class);
+    private TableNode processNode(TableNode node, String rootAlias) {
+        List<QueryNode> updatedChildren = node.children().stream()
+            .map(c -> updateCondition(c, node))
+            .toList();
+        
+        return node.withChildren(updatedChildren);
+    }
+    
+    private QueryNode updateCondition(QueryNode child, TableNode parent) {
+        JoinInfo joinInfo = child.joinInfo();
+        if (joinInfo == null || joinInfo.condition() != null) {
+            return child;
+        }
+        
+        SqlExpression newCondition;
+        FieldModel linkField = joinInfo.linkField();
+        
+        JoinCondition condAnn = linkField != null ? linkField.getAnnotation(JoinCondition.class) : null;
         if (condAnn != null) {
             String resolved = ExpressionResolver.resolve(
                 condAnn.value(),
                 parent.alias(),
-                join.node().alias(),
+                child.alias(),
                 null
             );
-            return join.withCondition(new SqlExpression(resolved));
-        } else if (join.isCollection()) {
-            SqlExpression cond = JoinConditions.forCollection(parent.alias(), join.node().alias(), parent.type(), parent.tableName(), getForeignLinkField(join.linkField()));
-            return join.withCondition(cond);
+            newCondition = new SqlExpression(resolved);
+        } else if (joinInfo.isCollection()) {
+            newCondition = JoinConditions.forCollection(
+                parent.alias(), child.alias(), parent.type(), parent.tableInfo().tableName(), 
+                getForeignLinkField(linkField));
         } else {
-            return join.withCondition(JoinConditions.forEntityReference(parent.alias(), join.node().alias(), join.linkField(), join.node().type()));
+            newCondition = JoinConditions.forEntityReference(
+                parent.alias(), child.alias(), linkField, child.type());
         }
+        
+        JoinInfo updatedJoinInfo = joinInfo.withCondition(newCondition);
+        return updateNodeJoinInfo(child, updatedJoinInfo);
+    }
+    
+    private QueryNode updateNodeJoinInfo(QueryNode node, JoinInfo newJoinInfo) {
+        if (node instanceof EmptyTableNode empty) {
+            return empty.withJoinInfo(newJoinInfo);
+        } else if (node instanceof JoinedNode table) {
+            return table.withJoinInfo(newJoinInfo);
+        }
+        // For other node types, return as-is (they should implement withJoinInfo if needed)
+        return node;
     }
 
     private String getForeignLinkField(FieldModel field) {
+        if (field == null) return null;
         Link linkAnn = field.getAnnotation(Link.class);
         if (linkAnn != null && !Link.NONE.equals(linkAnn.foreignlinkfield())) {
             return linkAnn.foreignlinkfield();
         }
         return null;
     }
-
 }

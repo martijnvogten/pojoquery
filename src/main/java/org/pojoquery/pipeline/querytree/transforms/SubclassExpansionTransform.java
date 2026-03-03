@@ -11,11 +11,11 @@ import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.internal.TableMapping;
-import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
-import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
+import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
@@ -54,7 +54,7 @@ public class SubclassExpansionTransform implements QueryTreeTransform {
             return node;
         }
         
-        List<JoinedNode> newJoins = new ArrayList<>(node.joins());
+        List<QueryNode> newChildren = new ArrayList<>(node.children());
         String idField = determineSqlFieldName(determineIdField(node.type()));
         
         for (Class<?> subClass : subClassesAnn.value()) {
@@ -65,22 +65,24 @@ public class SubclassExpansionTransform implements QueryTreeTransform {
             String subAlias = AliasNaming.subclassAlias(node.alias(), subTableMapping.tableName);
             
             // Skip if already joined (from previous iteration)
-            if (alreadyJoined(newJoins, subAlias)) {
+            if (alreadyJoined(newChildren, subAlias)) {
                 continue;
             }
             
             // LEFT JOIN subclass_table ON subclass.id = parent.id
             SqlExpression condition = JoinConditions.forSubclass(node.alias(), subAlias, idField);
-            EmptyTableNode subNode = EmptyTableNode.of(subAlias, subType);
+
+            EmptyTableNode subNode = EmptyTableNode.ofJoined(subAlias, subType,
+                JoinInfo.leftJoinSubClass(TableInfo.of(subTableMapping.schemaName, subTableMapping.tableName), condition)).withIsSubClass(true);
             
-            newJoins.add(new JoinedNode(JoinType.LEFT, condition, subNode, null, false));
+            newChildren.add(subNode);
         }
         
-        return node.withJoins(newJoins);
+        return node.withChildren(newChildren);
     }
     
-    private boolean alreadyJoined(List<JoinedNode> joins, String alias) {
-        return joins.stream()
-            .anyMatch(j -> j.node() instanceof EmptyTableNode t && t.alias().equals(alias));
+    private boolean alreadyJoined(List<QueryNode> children, String alias) {
+        return children.stream()
+            .anyMatch(c -> c instanceof EmptyTableNode t && t.alias().equals(alias));
     }
 }

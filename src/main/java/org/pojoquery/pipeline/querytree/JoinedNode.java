@@ -1,69 +1,172 @@
 package org.pojoquery.pipeline.querytree;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
-import org.pojoquery.SqlExpression;
-import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.TypeModel;
 
 /**
- * Represents a join relationship to a child node in the query tree.
+ * Represents a database table in the query tree.
+ * This is the primary node type for both root tables and joined tables.
  *
- * @param joinType The SQL join type (LEFT, INNER, etc.)
- * @param condition The join condition SQL expression
- * @param node The child node being joined
- * @param linkField The Java field that created this join (may be null for manual joins)
- * @param isCollection True if this is a one-to-many relationship (List/Set/Array)
+ * @param alias The alias used to reference this table in the query
+ * @param type The Java type that will be instantiated for rows from this table
+ * @param tableInfo The table information (schema and table name)
+ * @param fields Fields to select from this table
+ * @param children Child nodes from this table (each carries its own JoinInfo)
+ * @param idFieldNames Names of the primary key fields (for deduplication)
+ * @param isSingleTableInheritance True if using single-table inheritance strategy
+ * @param discriminatorColumn Column name for discriminator (STI only)
+ * @param discriminatorValues Map of discriminator values to subtypes (STI only)
+ * @param otherField Field annotated with @Other for dynamic columns (may be null)
+ * @param otherColumnPrefix Prefix filter for @Other columns (may be null)
+ * @param joinInfo Join information (null for root tables)
  */
-public record JoinedNode (
-    JoinType joinType,
-    SqlExpression condition,
-    QueryNode node,
-    FieldModel linkField,
-    boolean isCollection
-) {
+public record JoinedNode(
+    String alias,
+    TypeModel type,
+    TableInfo tableInfo,
+    List<FieldSelection> fields,
+    List<QueryNode> children,
+    List<String> idFieldNames,
+    boolean isSingleTableInheritance,
+    String discriminatorColumn,
+    Map<String, TypeModel> discriminatorValues,
+    FieldModel otherField,
+    String otherColumnPrefix,
+    JoinInfo joinInfo
+) implements TableNode, HasToStringWithIndent {
     
+    /**
+     * Compact constructor for validation.
+     */
     public JoinedNode {
-        Objects.requireNonNull(joinType, "joinType");
-        Objects.requireNonNull(node, "node");
-        // condition may be null for CROSS JOIN
+        Objects.requireNonNull(alias, "alias");
+        Objects.requireNonNull(tableInfo, "tableInfo");
+        children = children == null ? List.of() : children;
     }
     
     /**
-     * Creates a LEFT JOIN for a single entity reference.
+     * Creates a simple TableNode without inheritance or @Other support (as root).
      */
-    public static JoinedNode leftJoinOne(SqlExpression condition, QueryNode node, FieldModel linkField) {
-        return new JoinedNode(JoinType.LEFT, condition, node, linkField, false);
+    public static JoinedNode simple(
+            String alias,
+            TypeModel type,
+            TableInfo tableInfo,
+            List<FieldSelection> fields,
+            List<QueryNode> children,
+            List<String> idFieldNames) {
+        return new JoinedNode(
+            alias, type, tableInfo, fields, children, idFieldNames,
+            false, null, null, null, null, null
+        );
     }
     
     /**
-     * Creates a LEFT JOIN for a collection.
+     * Creates a joined TableNode with JoinInfo.
      */
-    public static JoinedNode leftJoinMany(SqlExpression condition, QueryNode node, FieldModel linkField) {
-        return new JoinedNode(JoinType.LEFT, condition, node, linkField, true);
+    public static JoinedNode joined(
+            String alias,
+            TypeModel type,
+            TableInfo tableInfo,
+            List<FieldSelection> fields,
+            List<QueryNode> children,
+            List<String> idFieldNames,
+            JoinInfo joinInfo) {
+        return new JoinedNode(
+            alias, type, tableInfo, fields, children, idFieldNames,
+            false, null, null, null, null, joinInfo
+        );
     }
     
     // --- With methods for immutable transformations ---
     
     /**
-     * Returns a new JoinedNode with a different child node.
+     * Returns a new TableNode with different fields.
      */
-    public JoinedNode withNode(QueryNode newNode) {
-        return new JoinedNode(joinType, condition, newNode, linkField, isCollection);
+    @Override
+    public JoinedNode withFields(List<FieldSelection> newFields) {
+        return new JoinedNode(alias, type, tableInfo,
+            newFields, children, idFieldNames,
+            isSingleTableInheritance, discriminatorColumn, discriminatorValues,
+            otherField, otherColumnPrefix, joinInfo);
     }
     
     /**
-     * Returns a new JoinedNode with a different condition.
+     * Returns a new TableNode with different children.
      */
-    public JoinedNode withCondition(SqlExpression newCondition) {
-        return new JoinedNode(joinType, newCondition, node, linkField, isCollection);
+    public JoinedNode withChildren(List<QueryNode> newChildren) {
+        return new JoinedNode(alias, type, tableInfo,
+            fields, newChildren, idFieldNames,
+            isSingleTableInheritance, discriminatorColumn, discriminatorValues,
+            otherField, otherColumnPrefix, joinInfo);
     }
     
     /**
-     * Returns a new JoinedNode with a different join type.
+     * Returns a new JoinedNode with additional fields appended.
      */
-    public JoinedNode withJoinType(JoinType newJoinType) {
-        return new JoinedNode(newJoinType, condition, node, linkField, isCollection);
+    public JoinedNode withAddedFields(List<FieldSelection> additionalFields) {
+        List<FieldSelection> newFields = new java.util.ArrayList<>(fields);
+        newFields.addAll(additionalFields);
+        return withFields(newFields);
+    }
+    
+    /**
+     * Returns a new JoinedNode with additional children appended.
+     */
+    public JoinedNode withAddedChildren(List<QueryNode> additionalChildren) {
+        List<QueryNode> newChildren = new java.util.ArrayList<>(children);
+        newChildren.addAll(additionalChildren);
+        return withChildren(newChildren);
+    }
+    
+    /**
+     * Returns a new JoinedNode with single-table inheritance configured.
+     */
+    public JoinedNode withSingleTableInheritance(String discColumn, Map<String, TypeModel> discValues) {
+        return new JoinedNode(alias, type, tableInfo,
+            fields, children, idFieldNames,
+            true, discColumn, discValues,
+            otherField, otherColumnPrefix, joinInfo);
+    }
+    
+    /**
+     * Returns a new JoinedNode with @Other field configured.
+     */
+    public JoinedNode withOtherField(FieldModel other, String prefix) {
+        return new JoinedNode(alias, type, tableInfo,
+            fields, children, idFieldNames,
+            isSingleTableInheritance, discriminatorColumn, discriminatorValues,
+            other, prefix, joinInfo);
+    }
+    
+    /**
+     * Returns a new JoinedNode with a different alias.
+     */
+    public JoinedNode withAlias(String newAlias) {
+        return new JoinedNode(newAlias, type, tableInfo,
+            fields, children, idFieldNames,
+            isSingleTableInheritance, discriminatorColumn, discriminatorValues,
+            otherField, otherColumnPrefix, joinInfo);
+    }
+
+    public JoinedNode withTableName(String newSchema, String newTable) {
+        return new JoinedNode(alias, type, new TableInfo(newSchema, newTable),
+            fields, children, idFieldNames,
+            isSingleTableInheritance, discriminatorColumn, discriminatorValues,
+            otherField, otherColumnPrefix, joinInfo);
+    }
+    
+    /**
+     * Returns a new TableNode with different join info.
+     */
+    public JoinedNode withJoinInfo(JoinInfo newJoinInfo) {
+        return new JoinedNode(alias, type, tableInfo,
+            fields, children, idFieldNames,
+            isSingleTableInheritance, discriminatorColumn, discriminatorValues,
+            otherField, otherColumnPrefix, newJoinInfo);
     }
 
     @Override
@@ -71,19 +174,46 @@ public record JoinedNode (
         return toStringWithIndent("");
     }
 
-    String toStringWithIndent(String indent) {
+    @Override
+    public String toStringWithIndent(String indent) {
         StringBuilder sb = new StringBuilder();
         sb.append(indent).append("JoinedNode {\n");
-        sb.append(indent).append("  joinType: ").append(joinType).append("\n");
-        sb.append(indent).append("  isCollection: ").append(isCollection).append("\n");
-        if (condition != null) {
-            sb.append(indent).append("  condition: \"").append(condition.getSql()).append("\"\n");
+        sb.append(indent).append("  alias: \"").append(alias).append("\"\n");
+        sb.append(indent).append("  table: ");
+        if (tableInfo.schemaName() != null) {
+            sb.append(tableInfo.schemaName()).append(".");
         }
-        if (linkField != null) {
-            sb.append(indent).append("  linkField: ").append(linkField.getName()).append("\n");
+        sb.append(tableInfo.tableName()).append("\n");
+		if (type != null) {
+        	sb.append(indent).append("  type: ").append(type.getQualifiedName()).append("\n");
+		}
+        if (!(idFieldNames == null || idFieldNames.isEmpty())) {
+            sb.append(indent).append("  idFields: ").append(idFieldNames).append("\n");
         }
-        sb.append(indent).append("  node:\n");
-        sb.append(QueryTree.toStringNode(node, indent + "    "));
+        if (isSingleTableInheritance) {
+            sb.append(indent).append("  STI discriminator: ").append(discriminatorColumn).append("\n");
+        }
+        if (joinInfo != null) {
+            sb.append(indent).append("  joinInfo: ").append(joinInfo.joinType());
+            if (joinInfo.condition() != null) {
+                sb.append(" ON ").append(joinInfo.condition().getSql());
+            }
+            sb.append("\n");
+        }
+        if (!(fields == null || fields.isEmpty())) {
+            sb.append(indent).append("  fields: [\n");
+            for (FieldSelection f : fields) {
+                sb.append(indent).append("    ").append(f).append("\n");
+            }
+            sb.append(indent).append("  ]\n");
+        }
+        if (!(children == null || children.isEmpty())) {
+            sb.append(indent).append("  children: [\n");
+            for (QueryNode child : children) {
+                sb.append(QueryTree.toStringNode(child, indent + "    "));
+            }
+            sb.append(indent).append("  ]\n");
+        }
         sb.append(indent).append("}\n");
         return sb.toString();
     }

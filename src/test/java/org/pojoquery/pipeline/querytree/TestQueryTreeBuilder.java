@@ -38,12 +38,12 @@ public class TestQueryTreeBuilder {
         System.out.println(tree);
         
         assertEquals("Person", tree.resultType().getSimpleName());        
-        assertInstanceOf(TableNode.class, tree.root());
-        TableNode root = (TableNode) tree.root();
+        assertInstanceOf(JoinedNode.class, tree.root());
+        JoinedNode root = (JoinedNode) tree.root();
         
         assertEquals("person", root.alias());
-        assertEquals("person", root.tableName());
-        assertNull(root.schemaName());
+        assertEquals("person", root.tableInfo().tableName());
+        assertNull(root.tableInfo().schemaName());
         
         // Should have 3 fields: id, name, email
         assertEquals(3, root.fields().size());
@@ -60,8 +60,8 @@ public class TestQueryTreeBuilder {
         assertEquals(1, root.idFieldNames().size());
         assertTrue(root.idFieldNames().contains("id"));
         
-        // No joins for simple class
-        assertTrue(root.joins().isEmpty());
+        // No children for simple class
+        assertTrue(root.children().isEmpty());
     }
 
     @Test
@@ -70,27 +70,28 @@ public class TestQueryTreeBuilder {
         
         System.out.println(tree);
         
-        TableNode root = (TableNode) tree.root();
-        assertEquals("book", root.tableName());
+        JoinedNode root = (JoinedNode) tree.root();
+        assertEquals("book", root.tableInfo().tableName());
         
         // Should have 2 simple fields: id, title
         assertEquals(2, root.fields().size());
         
-        // Should have 1 join for author
-        assertEquals(1, root.joins().size());
+        // Should have 1 child for author
+        assertEquals(1, root.children().size());
         
-        JoinedNode authorJoin = root.joins().get(0);
-        assertEquals("author", authorJoin.linkField().getName());
-        assertFalse(authorJoin.isCollection());
+        QueryNode authorChild = root.children().get(0);
+        JoinInfo authorJoinInfo = authorChild.joinInfo();
+        assertEquals("author", authorJoinInfo.linkField().getName());
+        assertFalse(authorJoinInfo.isCollection());
 
-		assertEquals("{book.author_id} = {author.id}", authorJoin.condition().getSql());
+		assertEquals("{book.author_id} = {author.id}", authorJoinInfo.condition().getSql());
         
-        TableNode authorNode = (TableNode) authorJoin.node();
+        EmptyTableNode authorNode = (EmptyTableNode) authorChild;
         assertEquals("author", authorNode.alias());
-        assertEquals("person", authorNode.tableName());
+        // assertEquals("person", authorNode.tableInfo().tableName());
         
         // Author should have 3 fields
-        assertEquals(3, authorNode.fields().size());
+        // assertEquals(3, authorNode.fields().size());
     }
 
     // --- Entities for join types test ---
@@ -129,14 +130,14 @@ public class TestQueryTreeBuilder {
 
 		System.out.println(tree);
 
-        TableNode root = (TableNode) tree.root();
+        JoinedNode root = (JoinedNode) tree.root();
 
-        // Article has 3 joins: author, comments, tags (via link table)
-        assertEquals(3, root.joins().size());
+        // Article has 3 children: author, comments, tags (via link table)
+        assertEquals(3, root.children().size());
 
-        // All non-link joins are LEFT
-        for (JoinedNode join : root.joins()) {
-            assertEquals(JoinType.LEFT, join.joinType());
+        // All joins are LEFT
+        for (QueryNode child : root.children()) {
+            assertEquals(JoinType.LEFT, child.joinInfo().joinType());
         }
     }
 

@@ -4,7 +4,10 @@ import java.util.List;
 
 import org.pojoquery.AnnotationHelper;
 import org.pojoquery.SqlExpression;
+import org.pojoquery.pipeline.querytree.EmptyTableNode;
+import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
 
@@ -23,34 +26,45 @@ public class ColumnNameTransform implements QueryTreeTransform {
     
     private TableNode processNode(TableNode node) {
         // Update join conditions that might use @JoinColumn
-        List<JoinedNode> updatedJoins = node.joins().stream()
+        List<QueryNode> updatedChildren = node.children().stream()
             .map(this::updateJoinColumnName)
             .toList();
         
-        return node.withJoins(updatedJoins);
+        return node.withChildren(updatedChildren);
     }
     
-    private JoinedNode updateJoinColumnName(JoinedNode join) {
-        if (join.linkField() == null || join.condition() == null) {
-            return join;
+    private QueryNode updateJoinColumnName(QueryNode child) {
+        JoinInfo joinInfo = child.joinInfo();
+        if (joinInfo == null || joinInfo.linkField() == null || joinInfo.condition() == null) {
+            return child;
         }
         
         // Check if linkField has @JoinColumn override
-        String joinColumn = AnnotationHelper.getJoinColumnName(join.linkField());
+        String joinColumn = AnnotationHelper.getJoinColumnName(joinInfo.linkField());
         if (joinColumn == null) {
-            return join;
+            return child;
         }
         
         // The join condition was built with default FK naming (field_id)
         // We need to rewrite it to use the @JoinColumn name
-        String defaultFk = join.linkField().getName() + "_id";
-        String currentCondition = join.condition().getSql();
+        String defaultFk = joinInfo.linkField().getName() + "_id";
+        String currentCondition = joinInfo.condition().getSql();
         
         if (currentCondition.contains(defaultFk)) {
             String newCondition = currentCondition.replace(defaultFk, joinColumn);
-            return join.withCondition(new SqlExpression(newCondition));
+            JoinInfo updatedJoinInfo = joinInfo.withCondition(new SqlExpression(newCondition));
+            return updateNodeJoinInfo(child, updatedJoinInfo);
         }
         
-        return join;
+        return child;
+    }
+    
+    private QueryNode updateNodeJoinInfo(QueryNode node, JoinInfo newJoinInfo) {
+        if (node instanceof EmptyTableNode empty) {
+            return empty.withJoinInfo(newJoinInfo);
+        } else if (node instanceof JoinedNode table) {
+            return table.withJoinInfo(newJoinInfo);
+        }
+        return node;
     }
 }

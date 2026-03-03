@@ -9,6 +9,7 @@ import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Transient;
 import org.pojoquery.pipeline.QueryModel;
 import org.pojoquery.pipeline.querytree.FieldSelection;
+import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
@@ -108,16 +109,16 @@ public class FromProjectionTransform implements QueryTreeTransform {
      * Preserves the join structure.
      */
     private TableNode clearAllFields(TableNode node) {
-        // Recursively clear fields from all joined nodes
-        List<org.pojoquery.pipeline.querytree.JoinedNode> clearedJoins = node.joins().stream()
-            .map(j -> {
-                if (j.node() instanceof TableNode childTable) {
-                    return j.withNode(clearAllFields(childTable));
+        // Recursively clear fields from all child nodes
+        List<QueryNode> clearedChildren = node.children().stream()
+            .map(child -> {
+                if (child instanceof TableNode childTable) {
+                    return clearAllFields(childTable);
                 }
-                return j;
+                return child;
             })
             .toList();
         
-        return node.withFields(List.of()).withJoins(clearedJoins);
+        return node.withFields(List.of()).withChildren(clearedChildren);
     }
 }

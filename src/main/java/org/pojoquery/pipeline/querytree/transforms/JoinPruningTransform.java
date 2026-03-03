@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
 
@@ -82,33 +82,33 @@ public class JoinPruningTransform implements QueryTreeTransform {
     }
     
     private void collectJoinDependencies(TableNode node, Map<String, Set<String>> deps) {
-        for (JoinedNode join : node.joins()) {
+        for (QueryNode child : node.children()) {
             Set<String> joinDeps = new HashSet<>();
-            if (join.condition() != null) {
-                joinDeps.addAll(ExpressionResolver.extractAliases(join.condition()));
+            if (child.joinInfo() != null && child.joinInfo().condition() != null) {
+                joinDeps.addAll(ExpressionResolver.extractAliases(child.joinInfo().condition()));
             }
             // Remove self and root from dependencies
-            joinDeps.remove(join.node().alias());
-            deps.put(join.node().alias(), joinDeps);
+            joinDeps.remove(child.alias());
+            deps.put(child.alias(), joinDeps);
             
             // Recurse
-            if (join.node() instanceof TableNode childTable) {
+            if (child instanceof TableNode childTable) {
                 collectJoinDependencies(childTable, deps);
             }
         }
     }
     
     private TableNode pruneUnusedJoins(TableNode node, Set<String> required) {
-        List<JoinedNode> kept = node.joins().stream()
-            .filter(j -> required.contains(j.node().alias()))
-            .map(j -> {
-                if (j.node() instanceof TableNode childTable) {
-                    return j.withNode(pruneUnusedJoins(childTable, required));
+        List<QueryNode> kept = node.children().stream()
+            .filter(c -> required.contains(c.alias()))
+            .map(c -> {
+                if (c instanceof TableNode childTable) {
+                    return pruneUnusedJoins(childTable, required);
                 }
-                return j;
+                return c;
             })
             .toList();
         
-        return node.withJoins(kept);
+        return node.withChildren(kept);
     }
 }

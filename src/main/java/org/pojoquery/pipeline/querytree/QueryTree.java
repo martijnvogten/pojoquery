@@ -127,24 +127,10 @@ public record QueryTree(
         // Apply transform if predicate matches
         QueryNode transformed = predicate.test(node) ? transform.apply((T) node) : node;
         
-        // Recursively process children
-        if (transformed instanceof TableNode table) {
-            List<JoinedNode> transformedJoins = table.joins().stream()
-                .map(j -> j.withNode(transformNodesRecursive(j.node(), predicate, transform)))
-                .toList();
-            return table.withJoins(transformedJoins);
-        } else if (transformed instanceof SubqueryNode subq) {
-            QueryTree transformedSubTree = subq.subquery().transformNodes(predicate, transform);
-            return new SubqueryNode(subq.alias(), subq.type(), transformedSubTree, 
-                subq.fields(), subq.joins());
-        } else if (transformed instanceof EmbeddedNode emb) {
-            List<JoinedNode> transformedJoins = emb.joins().stream()
-                .map(j -> j.withNode(transformNodesRecursive(j.node(), predicate, transform)))
-                .toList();
-            return new EmbeddedNode(emb.alias(), emb.type(), emb.fieldPrefix(),
-                emb.fields(), transformedJoins);
-        }
-        return transformed;
+        List<QueryNode> transformedChildren = transformed.children().stream()
+            .map(child -> transformNodesRecursive(child, predicate, transform))
+            .toList();
+        return transformed.withChildren(transformedChildren);
     }
     
     public Stream<QueryNode> findNodes(Predicate<QueryNode> predicate) {
@@ -157,21 +143,32 @@ public record QueryTree(
         }
         
         Stream<QueryNode> self = predicate.test(node) ? Stream.of(node) : Stream.empty();
-        Stream<QueryNode> children;
+        Stream<QueryNode> childStream = node.children().stream()
+            .flatMap(child -> findNodesRecursive(child, predicate));
         
-        if (node instanceof TableNode table) {
-            children = table.joins().stream()
-                .flatMap(j -> findNodesRecursive(j.node(), predicate));
-        } else if (node instanceof SubqueryNode subq) {
-            children = subq.subquery().findNodes(predicate);
-        } else if (node instanceof EmbeddedNode emb) {
-            children = emb.joins().stream()
-                .flatMap(j -> findNodesRecursive(j.node(), predicate));
-        } else {
-            children = Stream.empty();
+        return Stream.concat(self, childStream);
+    }
+    
+    /**
+     * Finds all child nodes in the tree matching the predicate.
+     * This searches for joined nodes (nodes with non-null joinInfo).
+     */
+    public Stream<QueryNode> findJoinedNodes(Predicate<QueryNode> predicate) {
+        return findJoinedNodesRecursive(root, predicate);
+    }
+    
+    private static Stream<QueryNode> findJoinedNodesRecursive(QueryNode node, Predicate<QueryNode> predicate) {
+        if (node == null) {
+            return Stream.empty();
         }
         
-        return Stream.concat(self, children);
+        Stream<QueryNode> matching = node.children().stream()
+            .filter(child -> child.joinInfo() != null)
+            .filter(predicate);
+        Stream<QueryNode> fromChildren = node.children().stream()
+            .flatMap(child -> findJoinedNodesRecursive(child, predicate));
+        
+        return Stream.concat(matching, fromChildren);
     }
     
     /**
@@ -187,37 +184,14 @@ public record QueryTree(
     }
     
     private static QueryNode transformNode(QueryNode node, UnaryOperator<TableNode> transform) {
-        if (node instanceof TableNode table) {
-            // First apply transform to this node (may add new joins)
-            TableNode transformed = transform.apply(table);
-            
-            // Then recurse into all children (including newly added ones)
-            List<JoinedNode> transformedJoins = transformed.joins().stream()
-                .map(j -> transformJoin(j, transform))
-                .toList();
-            
-            return transformed.withJoins(transformedJoins);
-            
-        } else if (node instanceof SubqueryNode subq) {
-            // Recurse into subquery's tree
-            QueryTree transformedSubTree = subq.subquery().transformTableNodes(transform);
-            return new SubqueryNode(subq.alias(), subq.type(), transformedSubTree, 
-                subq.fields(), subq.joins());
-            
-        } else if (node instanceof EmbeddedNode emb) {
-            // Recurse into embedded joins
-            List<JoinedNode> transformedJoins = emb.joins().stream()
-                .map(j -> transformJoin(j, transform))
-                .toList();
-            return new EmbeddedNode(emb.alias(), emb.type(), emb.fieldPrefix(),
-                emb.fields(), transformedJoins);
-        }
-        return node;
-    }
-    
-    private static JoinedNode transformJoin(JoinedNode join, UnaryOperator<TableNode> transform) {
-        QueryNode transformedNode = transformNode(join.node(), transform);
-        return join.withNode(transformedNode);
+        // Apply transform if this is a TableNode
+        QueryNode result = node instanceof TableNode table ? transform.apply(table) : node;
+        
+        // Recurse into children
+        List<QueryNode> transformedChildren = result.children().stream()
+            .map(child -> transformNode(child, transform))
+            .toList();
+        return result.withChildren(transformedChildren);
     }
     
     /**
@@ -244,15 +218,9 @@ public record QueryTree(
     private static void visitNode(QueryNode node, Consumer<TableNode> visitor) {
         if (node instanceof TableNode table) {
             visitor.accept(table);
-            for (JoinedNode join : table.joins()) {
-                visitNode(join.node(), visitor);
-            }
-        } else if (node instanceof SubqueryNode subq) {
-            subq.subquery().visitTableNodes(visitor);
-        } else if (node instanceof EmbeddedNode emb) {
-            for (JoinedNode join : emb.joins()) {
-                visitNode(join.node(), visitor);
-            }
+        }
+        for (QueryNode child : node.children()) {
+            visitNode(child, visitor);
         }
     }
     
@@ -288,14 +256,8 @@ public record QueryTree(
     }
 
     static String toStringNode(QueryNode node, String indent) {
-        if (node instanceof TableNode t) {
-            return t.toStringWithIndent(indent);
-        } else if (node instanceof EmbeddedNode e) {
-            return e.toStringWithIndent(indent);
-        } else if (node instanceof SubqueryNode s) {
-            return s.toStringWithIndent(indent);
-        } else if (node instanceof LinkedValueNode l) {
-            return l.toStringWithIndent(indent);
+        if (node instanceof HasToStringWithIndent h) {
+            return h.toStringWithIndent(indent);
         }
         return indent + node.getClass().getSimpleName() + "{}\n";
     }

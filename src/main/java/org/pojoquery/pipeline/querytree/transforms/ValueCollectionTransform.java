@@ -1,20 +1,21 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
+import static org.pojoquery.pipeline.QueryModel.determineIdField;
+import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
+
 import java.util.ArrayList;
 import java.util.List;
 
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Link;
-
-import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.LinkedValueNode;
+import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
+import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
-
-import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
-import static org.pojoquery.pipeline.QueryModel.determineIdField;
 
 /**
  * Transform 6: @Link(fetchColumn) → select scalar values from link table.
@@ -33,7 +34,7 @@ public class ValueCollectionTransform implements QueryTreeTransform {
             return node;
         }
         
-        List<JoinedNode> newJoins = new ArrayList<>(node.joins());
+        List<QueryNode> newChildren = new ArrayList<>(node.children());
         
         for (FieldModel f : FieldFilters.valueCollectionFields(node.type())) {
             if (alreadyJoined(node, f)) {
@@ -46,7 +47,7 @@ public class ValueCollectionTransform implements QueryTreeTransform {
             String joinAlias = AliasNaming.childAlias(node.alias(), rootAlias, f.getName());
             
             String parentId = determineSqlFieldName(determineIdField(node.type()));
-            String linkField = resolveLinkField(linkAnn, node.tableName());
+            String linkField = resolveLinkField(linkAnn, node.tableInfo().tableName());
             
             SqlExpression condition = new SqlExpression(
                 "{" + node.alias() + "." + parentId + "} = {" + joinAlias + "." + linkField + "}"
@@ -58,13 +59,14 @@ public class ValueCollectionTransform implements QueryTreeTransform {
                 componentType,
                 linkAnn.linkschema().isEmpty() ? null : linkAnn.linkschema(),
                 linkAnn.linktable(),
-                linkAnn.fetchColumn()
+                linkAnn.fetchColumn(),
+                JoinInfo.leftJoinMany(TableInfo.of(linkAnn.linkschema(), linkAnn.linktable()), f).withCondition(condition)
             );
             
-            newJoins.add(JoinedNode.leftJoinMany(condition, valueNode, f));
+            newChildren.add(valueNode);
         }
         
-        return node.withJoins(newJoins);
+        return node.withChildren(newChildren);
     }
     
     private String resolveLinkField(Link linkAnn, String parentTableName) {
@@ -75,7 +77,8 @@ public class ValueCollectionTransform implements QueryTreeTransform {
     }
     
     private boolean alreadyJoined(TableNode node, FieldModel field) {
-        return node.joins().stream()
-            .anyMatch(j -> j.linkField() != null && j.linkField().getName().equals(field.getName()));
+        return node.children().stream()
+            .filter(c -> c.joinInfo() != null && c.joinInfo().linkField() != null)
+            .anyMatch(c -> c.joinInfo().linkField().getName().equals(field.getName()));
     }
 }

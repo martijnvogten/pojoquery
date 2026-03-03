@@ -36,9 +36,9 @@ public record FieldSelection(
     /**
      * Creates a field selection for a simple column reference.
      */
-    public static FieldSelection column(String tableAlias, String columnName, FieldModel field) {
-        String alias = tableAlias + "." + (field != null ? field.getName() : columnName);
-        SqlExpression expr = new SqlExpression("{" + tableAlias + "." + columnName + "}");
+    public static FieldSelection column(String sourceAlias, String targetAlias, String columnName, FieldModel field) {
+        String alias = targetAlias + "." + (field != null ? field.getName() : columnName);
+        SqlExpression expr = new SqlExpression("{" + sourceAlias + "." + columnName + "}");
         return new FieldSelection(alias, expr, field, null);
     }
 

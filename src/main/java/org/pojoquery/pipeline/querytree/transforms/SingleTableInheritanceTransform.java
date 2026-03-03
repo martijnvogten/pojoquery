@@ -1,5 +1,7 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
+import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -8,14 +10,14 @@ import java.util.Map;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.SubClasses;
+import org.pojoquery.pipeline.querytree.EmbeddedNode;
 import org.pojoquery.pipeline.querytree.FieldSelection;
+import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
-
-import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
 
 /**
  * All classes in one table with a discriminator column to identify the type.
@@ -28,6 +30,15 @@ public class SingleTableInheritanceTransform implements QueryTreeTransform {
     }
     
     private TableNode processNode(TableNode node) {
+        // Skip nodes without a type (e.g., EmptyTableNode placeholders)
+        if (node.type() == null) {
+            return node;
+        }
+
+        if (node instanceof EmbeddedNode) {
+            throw new RuntimeException("Single table inheritance is not supported on embedded types: " + node.type());
+        }
+        
         SubClasses subClassesAnn = node.type().getAnnotation(SubClasses.class);
         DiscriminatorColumn discAnn = node.type().getAnnotation(DiscriminatorColumn.class);
         
@@ -69,7 +80,7 @@ public class SingleTableInheritanceTransform implements QueryTreeTransform {
             }
         }
         
-        return node.withFields(newFields)
+        return ((JoinedNode)node.withFields(newFields))
             .withSingleTableInheritance(discAlias, discriminatorValues);
     }
 }

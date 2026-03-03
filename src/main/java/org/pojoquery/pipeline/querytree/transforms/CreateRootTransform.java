@@ -9,8 +9,7 @@ import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 
 /**
- * Creates root TableNode for the specified result type, collects @Id fields.
- * Only handles primitive/wrapper/common types - no relationships.
+ * Creates root TableNode for the specified result type.
  */
 public class CreateRootTransform implements QueryTreeTransform {
 

@@ -7,8 +7,11 @@ import org.pojoquery.typemodel.TypeModel;
 /**
  * Sealed interface for all query tree nodes.
  * A QueryNode represents a table, subquery, or embedded structure in the query.
+ * 
+ * <p>Each node (except the root) carries its own {@link JoinInfo} describing
+ * how it joins to its parent. The root node returns null for joinInfo().</p>
  */
-public sealed interface QueryNode permits TableNode, EmptyTableNode, SubqueryNode, EmbeddedNode, LinkedValueNode {
+public sealed interface QueryNode permits EmptyTableNode, TableNode, LinkedValueNode {
     
     /**
      * The alias used to reference this node in the query.
@@ -21,12 +24,20 @@ public sealed interface QueryNode permits TableNode, EmptyTableNode, SubqueryNod
     TypeModel type();
     
     /**
-     * Fields selected from this node.
+     * Child nodes from this node. Each child carries its own join information.
      */
-    List<FieldSelection> fields();
+    List<QueryNode> children();
     
     /**
-     * Child joins from this node.
+     * Returns a copy of this node with the given children.
      */
-    List<JoinedNode> joins();
+    QueryNode withChildren(List<QueryNode> children);
+    
+    default JoinInfo joinInfo() {
+        return null;
+    }
+
+    default EmbedInfo embedInfo() {
+        return null;
+    }
 }

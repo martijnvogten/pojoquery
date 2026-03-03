@@ -10,11 +10,11 @@ import java.util.List;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.internal.TableMapping;
-import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
-import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
+import org.pojoquery.pipeline.querytree.TableInfo;
 
 /**
  * Handles class hierarchies where parent classes have @Table.
@@ -42,22 +42,23 @@ public class SuperclassTableTransform implements QueryTreeTransform {
         String parentAlias = AliasNaming.superclassAlias(node.alias(), tree.root().alias(), superClassMapping.tableName);
             
         // Skip if already joined (idempotence)
-        if (alreadyJoined(node.joins(), parentAlias)) {
+        if (alreadyJoined(node.children(), parentAlias)) {
             return node;
         }
         
         // Add superclass tables as INNER JOINs
-        List<JoinedNode> newJoins = new ArrayList<>(node.joins());
+        List<QueryNode> newChildren = new ArrayList<>(node.children());
         String idField = determineSqlFieldName(determineIdField(superClassMapping.type));
         SqlExpression condition = JoinConditions.forInheritance(parentAlias, node.alias(), idField);
-        EmptyTableNode parentNode = EmptyTableNode.of(parentAlias, superClassMapping.type).withIsSuperClass(true);
+        EmptyTableNode parentNode = EmptyTableNode.ofJoined(parentAlias, superClassMapping.type,
+            JoinInfo.leftJoinSuperClass(TableInfo.of(superClassMapping.schemaName, superClassMapping.tableName), condition)).withIsSuperClass(true);
         
-        newJoins.add(new JoinedNode(JoinType.INNER, condition, parentNode, null, false));
+        newChildren.add(parentNode);
         
-        return node.withJoins(newJoins);
+        return node.withChildren(newChildren);
     }
     
-    private boolean alreadyJoined(List<JoinedNode> joins, String alias) {
-        return joins.stream().anyMatch(j -> j.node() instanceof EmptyTableNode t && t.alias().equals(alias));
+    private boolean alreadyJoined(List<QueryNode> children, String alias) {
+        return children.stream().anyMatch(c -> c instanceof EmptyTableNode t && t.alias().equals(alias));
     }
 }

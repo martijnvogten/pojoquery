@@ -23,11 +23,12 @@ import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Join;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.querytree.FieldSelection;
-import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.JoinInfo;
+import org.pojoquery.pipeline.querytree.JoinTableInfo;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
-import org.pojoquery.pipeline.querytree.SubqueryNode;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionFieldModel;
@@ -138,7 +139,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		
 		if (root instanceof TableNode tableNode) {
 			// Set table
-			query.setTable(tableNode.schemaName(), tableNode.tableName());
+			query.setTable(tableNode.tableInfo().schemaName(), tableNode.tableInfo().tableName());
 			
 			// Add fields from root table
 			for (FieldSelection field : tableNode.fields()) {
@@ -169,13 +170,32 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	 * Recursively adds joins from a TableNode to the query.
 	 */
 	private static void addJoinsFromNode(SqlQuery<?> query, TableNode tableNode) {
-		for (JoinedNode join : tableNode.joins()) {
-			QueryNode childNode = join.node();
+		for (QueryNode child : tableNode.children()) {
+			JoinInfo joinInfo = child.joinInfo();
 			
-			if (childNode instanceof TableNode childTable) {
+			if (child instanceof TableNode childTable) {
 				// Add the join
-				query.addJoin(join.joinType(), childTable.schemaName(), childTable.tableName(), 
-					childTable.alias(), join.condition());
+				if (joinInfo != null) {
+
+					if (joinInfo.subquery() != null) {
+						DefaultSqlQuery subQuery = new DefaultSqlQuery(query.getDbContext());
+						applyQueryTreeToQuery(subQuery, joinInfo.subquery());
+						query.addSubqueryJoin(joinInfo.joinType(), subQuery.toStatement(), child.alias(), joinInfo.condition());
+						continue;
+					}
+
+					// Many to many
+					if (joinInfo.joinTableInfo() != null) {
+						JoinTableInfo joinTableInfo = joinInfo.joinTableInfo();
+						// add join to join table
+						query.addJoin(JoinType.LEFT, joinTableInfo.joinTable().schemaName(), joinTableInfo.joinTable().tableName(), joinTableInfo.joinTableAlias(), joinTableInfo.parentCondition());
+						// add join to join table
+						query.addJoin(JoinType.LEFT, joinInfo.childTable().schemaName(), joinInfo.childTable().tableName(), child.alias(), joinTableInfo.targetCondition());
+					} else {
+						query.addJoin(joinInfo.joinType(), joinInfo.childTable().schemaName(), joinInfo.childTable().tableName(), 
+							child.alias(), joinInfo.condition());
+					}
+				}
 				
 				// Add fields from the joined table
 				for (FieldSelection field : childTable.fields()) {
@@ -184,11 +204,6 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 				
 				// Recursively add nested joins
 				addJoinsFromNode(query, childTable);
-			} else if (childNode instanceof SubqueryNode subquery) {
-				// Handle subquery joins
-				DefaultSqlQuery subQuery = new DefaultSqlQuery(query.getDbContext());
-				applyQueryTreeToQuery(subQuery, subquery.subquery());
-				query.addSubqueryJoin(join.joinType(), subQuery.toStatement(), subquery.alias(), join.condition());
 			}
 		}
 	}

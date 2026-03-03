@@ -32,7 +32,7 @@ public class StructureExpansionTransform implements QueryTreeTransform {
         this.structureTransforms = List.of(
             new SuperclassTableTransform(),
             new CollectionTransform(),
-            new LinkTableTransform(),
+            new JoinTableTransform(),
             new ValueCollectionTransform(),
             new EntityReferenceTransform(),
             new SubclassExpansionTransform()

@@ -4,11 +4,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Join;
 import org.pojoquery.annotations.Joins;
-import org.pojoquery.pipeline.SqlQuery.JoinType;
-import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.TypeModel;
@@ -33,23 +31,24 @@ public class ClassLevelJoinTransform implements QueryTreeTransform {
             return node;
         }
         
-        List<JoinedNode> newJoins = new ArrayList<>(node.joins());
+        List<QueryNode> newChildren = new ArrayList<>(node.children());
         
         for (Join joinAnn : joinAnns) {
-            String alias = joinAnn.alias().isEmpty() ? joinAnn.tableName() : joinAnn.alias();
-            JoinType joinType = joinAnn.type();
+            // String alias = joinAnn.alias().isEmpty() ? joinAnn.tableName() : joinAnn.alias();
+            // JoinType joinType = joinAnn.type();
             
-            SqlExpression condition = new SqlExpression(
-                ExpressionResolver.resolve(joinAnn.joinCondition(), node.alias())
-            );
+            // SqlExpression condition = new SqlExpression(
+            //     ExpressionResolver.resolve(joinAnn.joinCondition(), node.alias())
+            // );
+
+            // // String schemaName = joinAnn.schemaName().isEmpty() ? null : joinAnn.schemaName();
+            // // TableNode joinedTable = TableNodeFactory.forLinkTable(alias, schemaName, joinAnn.tableName())
+            // //     .withJoinInfo(new JoinInfo(joinType, condition, null, false, null));
             
-            String schemaName = joinAnn.schemaName().isEmpty() ? null : joinAnn.schemaName();
-            TableNode joinedTable = TableNodeFactory.forLinkTable(alias, schemaName, joinAnn.tableName());
-            
-            newJoins.add(new JoinedNode(joinType, condition, joinedTable, null, false));
+            // newChildren.add(joinedTable);
         }
         
-        return node.withJoins(newJoins);
+        return node.withChildren(newChildren);
     }
     
     private List<Join> getJoinAnnotations(TypeModel type) {

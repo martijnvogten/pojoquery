@@ -12,7 +12,7 @@ import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
-import org.pojoquery.pipeline.querytree.TableNode;
+import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.typemodel.FieldModel;
 
 /**
@@ -27,27 +27,30 @@ public class BasicTableTransform implements QueryTreeTransform {
     }
 
     private QueryNode transformTableNode(EmptyTableNode node) {
-        List<TableMapping> tableMapping = determineTableMapping(node.type()); // Validate @Table presence and hierarchy
-        if (tableMapping.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "No @Table annotation found on " + node.type().getQualifiedName() + " or its superclasses");
-        }
-
-        TableMapping mapping = tableMapping.get(tableMapping.size() - 1);
-        
         List<FieldSelection> fields = new ArrayList<>();
         List<String> idFields = new ArrayList<>();
+        boolean isEmbedded = node.embedInfo() != null;
 
         for (FieldModel f : FieldFilters.simpleFields(node.type())) {
             String colName = determineSqlFieldName(f);
-            fields.add(FieldSelection.column(node.alias(), colName, f));
+            String sourceAlias = node.alias();
+            if (isEmbedded) {
+                colName = node.embedInfo().fieldPrefix() + colName;
+                sourceAlias = node.embedInfo().sourceAlias();
+            }
+            fields.add(FieldSelection.column(sourceAlias, node.alias(), colName, f));
         }
 
         for (FieldModel f : determineIdFields(node.type())) {
             idFields.add(determineSqlFieldName(f));
         }
 
-        // Preserve joins from EmptyTableNode (e.g., superclass joins)
-        return TableNode.simple(node.alias(), node.type(), mapping.schemaName, mapping.tableName, fields, node.joins(), idFields);
+        if (isEmbedded) {
+            return node.toEmbeddedNode(fields);
+        } else {
+            List<TableMapping> tableMapping = determineTableMapping(node.type()); // Validate @Table presence and hierarchy
+            TableMapping mapping = tableMapping.get(tableMapping.size() - 1);
+            return node.toJoinedNode(new TableInfo(mapping.schemaName, mapping.tableName), fields, idFields);
+        }
     }
 }

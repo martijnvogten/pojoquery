@@ -2,67 +2,59 @@ package org.pojoquery.pipeline.querytree.transforms;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
-import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Embedded;
-import org.pojoquery.pipeline.querytree.EmbeddedNode;
-import org.pojoquery.pipeline.querytree.FieldSelection;
-import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.EmbedInfo;
+import org.pojoquery.pipeline.querytree.EmptyTableNode;
+import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 
-import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
-
 /**
- * Transform 9: @Embedded → inline fields with column prefix.
+ * @Embedded → inline fields with column prefix.
  * Creates EmbeddedNode for result mapping, fields come from parent table with prefix.
  */
 public class EmbeddedTransform implements QueryTreeTransform {
-    
+
     @Override
     public QueryTree apply(QueryTree tree) {
         String rootAlias = ((TableNode) tree.root()).alias();
         return tree.transformTableNodes(node -> processNode(node, rootAlias));
     }
-    
+
     private TableNode processNode(TableNode node, String rootAlias) {
         if (node.type() == null) {
             return node;
         }
-        
-        List<JoinedNode> newJoins = new ArrayList<>(node.joins());
-        
+
+        List<QueryNode> newChildren = new ArrayList<>(node.children());
+
         for (FieldModel f : FieldFilters.embeddedFields(node.type())) {
-            String prefix = determinePrefix(f);
-            TypeModel embeddedType = f.getType();
-            String embedAlias = AliasNaming.childAlias(node.alias(), rootAlias, f.getName());
-            
-            // Collect fields from embedded type with prefix
-            List<FieldSelection> embeddedFields = new ArrayList<>();
-            for (FieldModel ef : FieldFilters.simpleFields(embeddedType)) {
-                String colName = prefix + determineSqlFieldName(ef);
-                String fieldAlias = embedAlias + "." + ef.getName();
-                embeddedFields.add(new FieldSelection(
-                    fieldAlias,
-                    new SqlExpression("{" + node.alias() + "." + colName + "}"),
-                    ef, null
-                ));
+            if (alreadyJoined(node, f)) {
+                continue;
             }
-            
-            // Create EmbeddedNode for result mapping
-            EmbeddedNode embedNode = new EmbeddedNode(
-                embedAlias, embeddedType, prefix, embeddedFields, List.of()
-            );
-            
-            // Add as a pseudo-join (null join type indicates embedded)
-            newJoins.add(new JoinedNode(null, null, embedNode, f, false));
+            TypeModel type = f.getType();
+            String alias = AliasNaming.childAlias(node.embedInfo() != null ? node.embedInfo().sourceAlias() : node.alias(), rootAlias, f.getName());
+
+            String prefix = determinePrefix(f);
+
+            if (node.embedInfo() != null) {
+                // Nested embedding: combine prefixes
+                prefix = node.embedInfo().fieldPrefix() + prefix;
+            }
+
+            EmbedInfo embedInfo = EmbedInfo.of(f, prefix, node.embedInfo() != null ? node.embedInfo().sourceAlias() : node.alias());
+
+            EmptyTableNode embedNode = EmptyTableNode.ofEmbedded(alias, type, embedInfo);
+            newChildren.add(embedNode);
         }
-        
-        return node.withJoins(newJoins);
+
+        return node.withChildren(newChildren);
     }
-    
+
     private String determinePrefix(FieldModel f) {
         Embedded embeddedAnn = f.getAnnotation(Embedded.class);
         if (embeddedAnn != null) {
@@ -74,5 +66,12 @@ public class EmbeddedTransform implements QueryTreeTransform {
         }
         // JPA @Embedded without PojoQuery annotation - no prefix
         return "";
+    }
+
+    private boolean alreadyJoined(TableNode node, FieldModel field) {
+        return node.children().stream()
+            .map(QueryNode::embedInfo)
+            .filter(Objects::nonNull)
+            .anyMatch(ei -> ei.linkField().equals(field));
     }
 }

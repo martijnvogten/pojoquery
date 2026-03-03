@@ -14,22 +14,40 @@ import org.pojoquery.typemodel.TypeModel;
  * @param type The Java type of the embedded object
  * @param fieldPrefix The column name prefix for embedded fields
  * @param fields Fields to select for this embedded object
- * @param joins Child joins from embedded fields (e.g., linked entities within embedded)
+ * @param children Child nodes from embedded fields (e.g., linked entities within embedded)
+ * @param joinInfo Join information (tracks the linkField, even though joinType is NULL)
  */
 public record EmbeddedNode(
     String alias,
     TypeModel type,
-    String fieldPrefix,
     List<FieldSelection> fields,
-    List<JoinedNode> joins
-) implements QueryNode {
+    List<QueryNode> children,
+    EmbedInfo embedInfo
+) implements TableNode, HasToStringWithIndent {
     
     public EmbeddedNode {
         Objects.requireNonNull(alias, "alias");
         Objects.requireNonNull(type, "type");
-        fieldPrefix = fieldPrefix == null ? "" : fieldPrefix;
+        Objects.requireNonNull(embedInfo, "embedInfo");
         fields = fields == null ? List.of() : List.copyOf(fields);
-        joins = joins == null ? List.of() : List.copyOf(joins);
+        children = children == null ? List.of() : List.copyOf(children);
+    }
+    
+    /**
+     * Creates an EmbeddedNode with the given embed info.
+     */
+    public static EmbeddedNode of(String alias, TypeModel type, List<FieldSelection> fields, EmbedInfo embedInfo) {
+        return new EmbeddedNode(alias, type, fields, List.of(), embedInfo);
+    }
+    
+    @Override
+    public EmbeddedNode withChildren(List<QueryNode> newChildren) {
+        return new EmbeddedNode(alias, type, fields, newChildren, embedInfo);
+    }
+
+    @Override
+    public EmbeddedNode withFields(List<FieldSelection> newFields) {
+        return new EmbeddedNode(alias, type, newFields, children, embedInfo);
     }
 
     @Override
@@ -37,12 +55,12 @@ public record EmbeddedNode(
         return toStringWithIndent("");
     }
 
-    String toStringWithIndent(String indent) {
+    public String toStringWithIndent(String indent) {
         StringBuilder sb = new StringBuilder();
         sb.append(indent).append("EmbeddedNode {\n");
         sb.append(indent).append("  alias: \"").append(alias).append("\"\n");
         sb.append(indent).append("  type: ").append(type.getSimpleName()).append("\n");
-        sb.append(indent).append("  prefix: \"").append(fieldPrefix).append("\"\n");
+        sb.append(indent).append("  prefix: \"").append(embedInfo.fieldPrefix()).append("\"\n");
         if (!fields.isEmpty()) {
             sb.append(indent).append("  fields: [\n");
             for (FieldSelection f : fields) {
@@ -50,10 +68,10 @@ public record EmbeddedNode(
             }
             sb.append(indent).append("  ]\n");
         }
-        if (!joins.isEmpty()) {
-            sb.append(indent).append("  joins: [\n");
-            for (JoinedNode j : joins) {
-                sb.append(j.toStringWithIndent(indent + "    "));
+        if (!children.isEmpty()) {
+            sb.append(indent).append("  children: [\n");
+            for (QueryNode child : children) {
+                sb.append(QueryTree.toStringNode(child, indent + "    "));
             }
             sb.append(indent).append("  ]\n");
         }

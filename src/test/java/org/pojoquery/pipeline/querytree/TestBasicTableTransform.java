@@ -4,6 +4,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.pojoquery.DbContext;
 import org.pojoquery.TestUtils;
+import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.SubClasses;
@@ -13,10 +14,11 @@ import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
 import org.pojoquery.pipeline.querytree.transforms.BasicTableTransform;
 import org.pojoquery.pipeline.querytree.transforms.CollectionTransform;
 import org.pojoquery.pipeline.querytree.transforms.CreateRootTransform;
+import org.pojoquery.pipeline.querytree.transforms.EmbeddedTransform;
 import org.pojoquery.pipeline.querytree.transforms.EntityReferenceTransform;
 import org.pojoquery.pipeline.querytree.transforms.FixPointTransform;
 import org.pojoquery.pipeline.querytree.transforms.JoinConditionTransform;
-import org.pojoquery.pipeline.querytree.transforms.LinkTableTransform;
+import org.pojoquery.pipeline.querytree.transforms.JoinTableTransform;
 import org.pojoquery.pipeline.querytree.transforms.QueryTreePipeline;
 import org.pojoquery.pipeline.querytree.transforms.SubclassExpansionTransform;
 import org.pojoquery.pipeline.querytree.transforms.SuperclassTableTransform;
@@ -131,9 +133,8 @@ public class TestBasicTableTransform {
 	public void testWithInheritanceDeeper() {
 		QueryTreePipeline pipeline = QueryTreePipeline.empty()
 				.with(new CreateRootTransform())
-				.with(new FixPointTransform(
-					new SuperclassTableTransform(), 
-					new SubclassExpansionTransform()))
+				.with(new SuperclassTableTransform())
+				.with(new SubclassExpansionTransform())
 				.with(new BasicTableTransform())
 				.with(new EntityReferenceTransform())
 				.with(new CollectionTransform())
@@ -172,17 +173,82 @@ public class TestBasicTableTransform {
 	}
 
 	@Test
-	public void testLinkTable() {
+	public void testJoinTable() {
 		QueryTreePipeline pipeline = QueryTreePipeline.empty()
 				.with(new CreateRootTransform())
 				.with(new SuperclassTableTransform())
 				.with(new SubclassExpansionTransform())
 				.with(new BasicTableTransform())
 				.with(new EntityReferenceTransform())
-				.with(new LinkTableTransform())
+				.with(new JoinTableTransform())
 				.with(new JoinConditionTransform())
 				;
 		QueryTree result = pipeline.runToFixPoint(QueryTree.of(UserGroupWithUsers.class));
 		System.out.println("SQL: " + queryTreeToSql(result));
 	}
+
+	@Table("person")
+	static class PersonWithEmbedded {
+		@Id
+		Long id;
+		String name;
+		
+		@Embedded
+		Address address;
+	}
+
+	static class Address {
+		String street;
+		String city;
+		@Embedded(prefix = "country_")
+		Country country;
+		AddressType type;
+	}
+
+	@Table("addresstype")
+	static class AddressType {
+		@Id
+		Long id;
+		String name;
+	}
+
+	static class Country {
+		String name;
+		String shortCode;
+	}
+
+	@Table("order")
+	static class Order {
+		@Id
+		Long id;
+		String orderNumber;
+		PersonWithEmbedded customer;
+	}
+
+	@Test
+	public void testEmbedded() {
+		QueryTreePipeline pipeline = QueryTreePipeline.empty()
+				.with(new CreateRootTransform())
+				.with(new SuperclassTableTransform())
+				.with(new SubclassExpansionTransform())
+				.with(new BasicTableTransform())
+				.with(new EmbeddedTransform())
+				.with(new EntityReferenceTransform())
+				.with(new JoinTableTransform())
+				.with(new JoinConditionTransform())
+				;
+
+		{
+			QueryTree result = pipeline.runToFixPoint(QueryTree.of(PersonWithEmbedded.class));
+			// System.out.println("Tree: " + result.toString());
+			System.out.println("SQL: " + queryTreeToSql(result));
+		}
+
+		{
+			QueryTree result = pipeline.runToFixPoint(QueryTree.of(Order.class));
+			// System.out.println("Tree: " + result.toString());
+			System.out.println("SQL: " + queryTreeToSql(result));
+		}
+	}
+
 }

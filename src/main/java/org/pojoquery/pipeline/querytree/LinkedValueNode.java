@@ -14,14 +14,16 @@ import org.pojoquery.typemodel.TypeModel;
  * @param linkTableSchema The schema of the link table (may be null)
  * @param linkTableName The link table name
  * @param fetchColumn The column in the link table to fetch values from
+ * @param joinInfo Join information describing how this node joins to its parent
  */
 public record LinkedValueNode(
     String alias,
     TypeModel type,
     String linkTableSchema,
     String linkTableName,
-    String fetchColumn
-) implements QueryNode {
+    String fetchColumn,
+    JoinInfo joinInfo
+) implements QueryNode, HasToStringWithIndent {
     
     public LinkedValueNode {
         Objects.requireNonNull(alias, "alias");
@@ -31,13 +33,14 @@ public record LinkedValueNode(
     }
     
     @Override
-    public List<FieldSelection> fields() {
+    public List<QueryNode> children() {
         return List.of();
     }
     
     @Override
-    public List<JoinedNode> joins() {
-        return List.of();
+    public LinkedValueNode withChildren(List<QueryNode> newChildren) {
+        // LinkedValueNode has no children, ignore
+        return this;
     }
 
     @Override
@@ -45,7 +48,8 @@ public record LinkedValueNode(
         return toStringWithIndent("");
     }
 
-    String toStringWithIndent(String indent) {
+    @Override
+    public String toStringWithIndent(String indent) {
         StringBuilder sb = new StringBuilder();
         sb.append(indent).append("LinkedValueNode {\n");
         sb.append(indent).append("  alias: \"").append(alias).append("\"\n");
@@ -56,6 +60,13 @@ public record LinkedValueNode(
         sb.append(linkTableName).append("\n");
         sb.append(indent).append("  fetchColumn: ").append(fetchColumn).append("\n");
         sb.append(indent).append("  valueType: ").append(type.getSimpleName()).append("\n");
+        if (joinInfo != null) {
+            sb.append(indent).append("  joinInfo: ").append(joinInfo.joinType());
+            if (joinInfo.condition() != null) {
+                sb.append(" ON ").append(joinInfo.condition().getSql());
+            }
+            sb.append("\n");
+        }
         sb.append(indent).append("}\n");
         return sb.toString();
     }
