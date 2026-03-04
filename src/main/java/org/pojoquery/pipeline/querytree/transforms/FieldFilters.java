@@ -16,9 +16,9 @@ import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
-import static org.pojoquery.pipeline.QueryModel.collectFieldsOfClass;
-import static org.pojoquery.pipeline.QueryModel.determineTableMapping;
-import static org.pojoquery.pipeline.QueryModel.isListOrArray;
+import static org.pojoquery.pipeline.PojoMetadata.collectFieldsOfClass;
+import static org.pojoquery.pipeline.PojoMetadata.determineTableMapping;
+import static org.pojoquery.pipeline.PojoMetadata.isListOrArray;
 
 /**
  * Helper methods for filtering fields by type and annotations.

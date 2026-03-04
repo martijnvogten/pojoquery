@@ -17,7 +17,7 @@ import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.internal.TableMapping;
-import org.pojoquery.pipeline.CustomizableQueryBuilder;
+import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.schema.ForeignKeyInfo.DeferredForeignKey;
 import org.pojoquery.schema.ForeignKeyInfo.InferredForeignKey;
@@ -227,7 +227,7 @@ public class SchemaGenerator {
                         for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnn, "value")) {
                             // Collect fields declared only in the subclass
                             for (FieldModel f : QueryBuilder.collectFieldsOfClass(subClass, entityClass)) {
-                                if (!isLinkedField(f) && !CustomizableQueryBuilder.isListOrArray(f.getType())) {
+                                if (!isLinkedField(f) && !PojoMetadata.isListOrArray(f.getType())) {
                                     stiFields.add(f);
                                 }
                             }
@@ -415,7 +415,7 @@ public class SchemaGenerator {
             // Handle linked fields (foreign keys or collections)
             if (isLinkedField(field)) {
                 // For single entity references, add a foreign key column
-                if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
+                if (!PojoMetadata.isListOrArray(field.getType())) {
                     String columnName = determineForeignKeyColumnName(field);
                     // Only add if not already defined (e.g., as an @Id field)
                     if (!existingColumnNames.contains(columnName.toLowerCase())) {
@@ -544,7 +544,7 @@ public class SchemaGenerator {
 
             // Handle linked fields
             if (isLinkedField(field)) {
-                if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
+                if (!PojoMetadata.isListOrArray(field.getType())) {
                     String columnName = determineForeignKeyColumnName(field);
                     if (!existingColumnNames.contains(columnName.toLowerCase())) {
                         String columnDef = formatForeignKeyColumnDefinition(columnName, dbContext, field);
@@ -662,7 +662,7 @@ public class SchemaGenerator {
             // Handle linked fields (foreign keys) inside embedded
             if (isLinkedField(field)) {
                 // For single entity references, add a foreign key column
-                if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
+                if (!PojoMetadata.isListOrArray(field.getType())) {
                     String fkColumnName = determineForeignKeyColumnName(field);
                     String columnName = prefix + fkColumnName;
                     if (!existingColumnNames.contains(columnName.toLowerCase())) {
@@ -691,7 +691,7 @@ public class SchemaGenerator {
     private static boolean isLinkedField(FieldModel field) {
         TypeModel type = field.getType();
         // Check if it's a collection (list, set, etc.) - reuse QueryBuilder's logic
-        if (CustomizableQueryBuilder.isListOrArray(type)) {
+        if (PojoMetadata.isListOrArray(type)) {
             return true;
         }
         // Check if the field type has a @Link annotation
@@ -699,7 +699,7 @@ public class SchemaGenerator {
             return true;
         }
         // Check if the field type is an entity - reuse QueryBuilder's logic
-        return CustomizableQueryBuilder.isLinkedClass(type);
+        return PojoMetadata.isLinkedClass(type);
     }
     
     private static String determineForeignKeyColumnName(FieldModel field) {
@@ -1058,7 +1058,7 @@ public class SchemaGenerator {
 
             // Handle linked fields
             if (isLinkedField(field)) {
-                if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
+                if (!PojoMetadata.isListOrArray(field.getType())) {
                     String columnName = determineForeignKeyColumnName(field);
                     // Only add if not already defined (e.g., as an @Id field)
                     if (!existingColumnNames.contains(columnName.toLowerCase())) {

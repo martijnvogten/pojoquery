@@ -44,8 +44,11 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 
 	private static final java.util.regex.Pattern ALIAS_PATTERN = java.util.regex.Pattern.compile("\\{([a-zA-Z0-9_\\.]+)\\}");
 
-	public static class Values extends HashMap<String,Object> {
-
+	/**
+	 * @deprecated Use org.pojoquery.pipeline.PojoMetadata.Values instead
+	 */
+	@Deprecated
+	public static class Values extends PojoMetadata.Values {
 		public Values() {
 			super();
 		}
@@ -55,8 +58,11 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 		}
 	}
 
-	public static class DefaultSqlQuery extends SqlQuery<DefaultSqlQuery> {
-
+	/**
+	 * @deprecated Use org.pojoquery.pipeline.DefaultSqlQuery instead
+	 */
+	@Deprecated
+	public static class DefaultSqlQuery extends org.pojoquery.pipeline.DefaultSqlQuery {
 		public DefaultSqlQuery(DbContext context) {
 			super(context);
 		}
@@ -70,14 +76,14 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 	 * Creates a CustomizableQueryBuilder for the given class.
 	 * This constructor wraps the class in a ReflectionTypeModel.
 	 */
-	protected CustomizableQueryBuilder(SqlQuery<SQ> query, Class<T> clz) {
+	CustomizableQueryBuilder(SqlQuery<SQ> query, Class<T> clz) {
 		this(query, new ReflectionTypeModel(clz));
 	}
 
 	/**
 	 * Creates a CustomizableQueryBuilder for the given type model.
 	 */
-	protected CustomizableQueryBuilder(SqlQuery<SQ> query, TypeModel type) {
+	CustomizableQueryBuilder(SqlQuery<SQ> query, TypeModel type) {
 		this.query = query;
 		
 		// Phase 1: Build the query model

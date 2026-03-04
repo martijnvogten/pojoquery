@@ -22,7 +22,8 @@ import org.pojoquery.annotations.Other;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.CustomizableQueryBuilder;
-import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
+import org.pojoquery.pipeline.DefaultSqlQuery;
+import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
@@ -685,7 +686,7 @@ public class PojoQuery<T> {
 		}
 		Map<String, Object> ids = new HashMap<String, Object>();
 		for (FieldModel fieldModel : idFields) {
-			String columnName = CustomizableQueryBuilder.determineSqlFieldName(fieldModel);
+			String columnName = PojoMetadata.determineSqlFieldName(fieldModel);
 			ids.put(columnName, values.get(columnName));
 			values.remove(columnName);
 		}

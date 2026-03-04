@@ -11,8 +11,8 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.pipeline.CustomizableQueryBuilder;
-import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
+import org.pojoquery.pipeline.DefaultSqlQuery;
+import org.pojoquery.pipeline.SQLQueryFromTree;
 import org.pojoquery.pipeline.querytree.transforms.BasicTableTransform;
 import org.pojoquery.pipeline.querytree.transforms.CollectionTransform;
 import org.pojoquery.pipeline.querytree.transforms.CreateRootTransform;
@@ -153,7 +153,7 @@ public class TestBasicTableTransform {
 
 	private String queryTreeToSql(QueryTree tree) {
 		DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
-		CustomizableQueryBuilder.applyQueryTreeToQuery(query, tree);
+		SQLQueryFromTree.applyQueryTreeToQuery(query, tree);
 		return TestUtils.norm(query.toStatement().getSql());
 	}
 

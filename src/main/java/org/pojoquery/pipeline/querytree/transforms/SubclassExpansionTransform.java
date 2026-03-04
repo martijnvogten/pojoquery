@@ -1,8 +1,8 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
-import static org.pojoquery.pipeline.QueryModel.determineIdField;
-import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
-import static org.pojoquery.pipeline.QueryModel.determineTableMapping;
+import static org.pojoquery.pipeline.PojoMetadata.determineIdField;
+import static org.pojoquery.pipeline.PojoMetadata.determineSqlFieldName;
+import static org.pojoquery.pipeline.PojoMetadata.determineTableMapping;
 
 import java.util.ArrayList;
 import java.util.List;

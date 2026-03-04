@@ -1,6 +1,6 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
-import static org.pojoquery.pipeline.QueryModel.determineTableMapping;
+import static org.pojoquery.pipeline.PojoMetadata.determineTableMapping;
 
 import java.util.List;
 

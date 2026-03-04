@@ -385,7 +385,7 @@ public class QueryClassCodeGenerator {
         out.write("import org.pojoquery.DbContext;\n");
         out.write("import org.pojoquery.FieldMapping;\n");
         out.write("import org.pojoquery.SqlExpression;\n");
-        out.write("import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;\n");
+        out.write("import org.pojoquery.pipeline.DefaultSqlQuery;\n");
         out.write("import org.pojoquery.pipeline.SqlQuery;\n");
         out.write("import org.pojoquery.util.FieldHelper;\n\n");
         out.write("import org.pojoquery.typedquery.ChainFactory;\n");

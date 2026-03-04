@@ -6,8 +6,8 @@ import org.pojoquery.pipeline.querytree.JoinCondition;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 
-import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
-import static org.pojoquery.pipeline.QueryModel.determineIdField;
+import static org.pojoquery.pipeline.PojoMetadata.determineSqlFieldName;
+import static org.pojoquery.pipeline.PojoMetadata.determineIdField;
 
 /**
  * Helper methods for building SQL join conditions.

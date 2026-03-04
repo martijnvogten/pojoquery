@@ -12,7 +12,7 @@ import java.util.function.BiConsumer;
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
 import org.pojoquery.internal.MappingException;
-import org.pojoquery.pipeline.CustomizableQueryBuilder.Values;
+import org.pojoquery.pipeline.PojoMetadata.Values;
 import org.pojoquery.pipeline.querytree.EmbeddedNode;
 import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.JoinedNode;
@@ -87,7 +87,7 @@ public class QueryTreeRowProcessor<T> {
             Map<Object, Object> allEntities = new HashMap<>();
             
             if (!rows.isEmpty()) {
-                keysByAlias = CustomizableQueryBuilder.groupKeysByAlias(rows.get(0).keySet());
+                keysByAlias = PojoMetadata.groupKeysByAlias(rows.get(0).keySet());
             }
 
             for (Map<String, Object> row : rows) {
@@ -106,7 +106,7 @@ public class QueryTreeRowProcessor<T> {
     @SuppressWarnings("unchecked")
     public void processRow(List<T> result, Map<Object, Object> allEntities, Map<String, Object> row) {
         if (keysByAlias.isEmpty()) {
-            keysByAlias = CustomizableQueryBuilder.groupKeysByAlias(row.keySet());
+            keysByAlias = PojoMetadata.groupKeysByAlias(row.keySet());
         }
         Map<String, Values> onThisRow = collectValuesByAlias(row, keysByAlias);
         onThisRow = remapSubClasses(onThisRow);

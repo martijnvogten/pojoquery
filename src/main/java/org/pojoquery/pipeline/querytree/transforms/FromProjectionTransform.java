@@ -7,7 +7,7 @@ import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Aggregate;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Transient;
-import org.pojoquery.pipeline.QueryModel;
+import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
@@ -79,7 +79,7 @@ public class FromProjectionTransform implements QueryTreeTransform {
                 nonAggregateExpressions.add(resolved);
             } else {
                 // Simple field - map to source column
-                String columnName = QueryModel.determineSqlFieldName(f);
+                String columnName = PojoMetadata.determineSqlFieldName(f);
                 selectExpression = new SqlExpression("{" + rootAlias + "." + columnName + "}");
                 nonAggregateExpressions.add(selectExpression.getSql());
             }

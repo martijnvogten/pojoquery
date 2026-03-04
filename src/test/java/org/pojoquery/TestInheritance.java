@@ -17,7 +17,7 @@ import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.CustomizableQueryBuilder;
-import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
+import org.pojoquery.pipeline.DefaultSqlQuery;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
 import org.pojoquery.typemodel.FieldModel;

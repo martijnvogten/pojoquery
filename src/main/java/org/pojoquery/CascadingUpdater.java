@@ -12,7 +12,7 @@ import java.util.Set;
 import org.pojoquery.annotations.Cascade;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.internal.MappingException;
-import org.pojoquery.pipeline.CustomizableQueryBuilder;
+import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionFieldModel;
@@ -206,12 +206,12 @@ final class CascadingUpdater {
     private static void processCascadeField(DbContext context, Connection connection,
             Object entity, TypeModel entityClass, Object parentId, FieldModel field, CascadeOperation operation) {
         
-        if (!CustomizableQueryBuilder.isListOrArray(field.getType())) {
+        if (!PojoMetadata.isListOrArray(field.getType())) {
             throw new RuntimeException("Only collections are supported for @Cascade fields. Invalid field: " + field.getName());
         }
         
         TypeModel componentType = Types.getCollectionComponentType(field);
-        if (componentType == null || !CustomizableQueryBuilder.isLinkedClass(componentType)) {
+        if (componentType == null || !PojoMetadata.isLinkedClass(componentType)) {
             return;
         }
         
@@ -255,11 +255,11 @@ final class CascadingUpdater {
         String linkSchema = linkAnn.linkschema();
         
         // Determine link field names using shared utility methods
-        String parentLinkField = CustomizableQueryBuilder.determineLinkTableOwnerColumn(entityClass, linkAnn);
+        String parentLinkField = PojoMetadata.determineLinkTableOwnerColumn(entityClass, linkAnn);
         
         // Check if this is a value collection (using fetchColumn) or entity collection
         boolean isValueCollection = !Link.NONE.equals(linkAnn.fetchColumn());
-        String foreignLinkField = CustomizableQueryBuilder.determineLinkTableForeignColumn(
+        String foreignLinkField = PojoMetadata.determineLinkTableForeignColumn(
                 isValueCollection ? null : componentType, linkAnn);
         
         switch (operation) {
@@ -366,7 +366,7 @@ final class CascadingUpdater {
             TypeModel childClass, String fkColumn, Object childId, Object parentId) {
         String tableName = AnnotationHelper.getTableName(childClass);
         FieldModel idField = QueryBuilder.determineIdField(childClass);
-        String idColumnName = CustomizableQueryBuilder.determineSqlFieldName(idField);
+        String idColumnName = PojoMetadata.determineSqlFieldName(idField);
         
         String sql = "UPDATE " + context.quoteObjectNames(tableName) 
                 + " SET " + context.quoteObjectNames(fkColumn) + " = ?"
@@ -484,7 +484,7 @@ final class CascadingUpdater {
         for (FieldModel f : QueryBuilder.collectFieldsOfClass(childClass)) {
             if (Types.isAssignableFrom(f.getType(), parentClass) || Types.isAssignableFrom(parentClass, f.getType())) {
                 // This is an entity reference to the parent - use link field naming (fieldName_id)
-                String sqlName = CustomizableQueryBuilder.determineLinkFieldName(f);
+                String sqlName = PojoMetadata.determineLinkFieldName(f);
                 return new ForeignKeyInfo(f, sqlName, true);
             }
         }
@@ -503,7 +503,7 @@ final class CascadingUpdater {
         
         // Also try with @FieldName annotation
         for (FieldModel f : QueryBuilder.collectFieldsOfClass(childClass)) {
-            String sqlName = CustomizableQueryBuilder.determineSqlFieldName(f);
+            String sqlName = PojoMetadata.determineSqlFieldName(f);
             if (expectedFieldName.equals(sqlName) || (tableName + "_id").equals(sqlName)) {
                 return new ForeignKeyInfo(f, sqlName, Number.class.isAssignableFrom(((ReflectionTypeModel)f.getType()).getReflectionClass()) || f.getType().isPrimitive());
             }
@@ -561,7 +561,7 @@ final class CascadingUpdater {
         
         String tableName = AnnotationHelper.getTableName(componentType);
         FieldModel idField = QueryBuilder.determineIdField(componentType);
-        String idFieldName = CustomizableQueryBuilder.determineSqlFieldName(idField);
+        String idFieldName = PojoMetadata.determineSqlFieldName(idField);
         
         // Build query: SELECT id FROM child_table WHERE parent_id = ?
         String sql = "SELECT " + context.quoteObjectNames(idFieldName) + 
@@ -586,9 +586,9 @@ final class CascadingUpdater {
         // We need to process any @Cascade fields on the component type
         for (FieldModel field : QueryBuilder.collectFieldsOfClass(componentType)) {
             Cascade cascadeAnn = field.getAnnotation(Cascade.class);
-            if (cascadeAnn != null && CustomizableQueryBuilder.isListOrArray(field.getType())) {
+            if (cascadeAnn != null && PojoMetadata.isListOrArray(field.getType())) {
                 TypeModel nestedType = Types.getCollectionComponentType(field);
-                if (nestedType != null && CustomizableQueryBuilder.isLinkedClass(nestedType)) {
+                if (nestedType != null && PojoMetadata.isLinkedClass(nestedType)) {
                     // Delete nested children first
                     ForeignKeyInfo nestedFkInfo = findForeignKeyInfo(nestedType, componentType, field);
                     if (nestedFkInfo != null) {
@@ -600,7 +600,7 @@ final class CascadingUpdater {
         
         String tableName = AnnotationHelper.getTableName(componentType);
         FieldModel idField = QueryBuilder.determineIdField(componentType);
-        String idFieldName = CustomizableQueryBuilder.determineSqlFieldName(idField);
+        String idFieldName = PojoMetadata.determineSqlFieldName(idField);
         
         String sql = "DELETE FROM " + context.quoteObjectNames(tableName) + 
                      " WHERE " + context.quoteObjectNames(idFieldName) + " = ?";
@@ -614,7 +614,7 @@ final class CascadingUpdater {
         // First check if this type has nested @Cascade collections
         boolean hasNestedCascade = false;
         for (FieldModel field : QueryBuilder.collectFieldsOfClass(componentType)) {
-            if (field.getAnnotation(Cascade.class) != null && CustomizableQueryBuilder.isListOrArray(field.getType())) {
+            if (field.getAnnotation(Cascade.class) != null && PojoMetadata.isListOrArray(field.getType())) {
                 hasNestedCascade = true;
                 break;
             }

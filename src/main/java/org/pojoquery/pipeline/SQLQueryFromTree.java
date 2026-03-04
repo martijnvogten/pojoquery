@@ -1,7 +1,6 @@
 package org.pojoquery.pipeline;
 
 import org.pojoquery.SqlExpression;
-import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.JoinInfo;

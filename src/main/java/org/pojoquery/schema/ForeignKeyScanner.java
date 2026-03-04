@@ -8,7 +8,7 @@ import java.util.Map;
 import org.pojoquery.AnnotationHelper;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.internal.TableMapping;
-import org.pojoquery.pipeline.CustomizableQueryBuilder;
+import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.schema.ForeignKeyInfo.InferredForeignKey;
 import org.pojoquery.schema.ForeignKeyInfo.LinkTableInfo;
@@ -52,13 +52,13 @@ class ForeignKeyScanner {
         String ownerIdColumn = ownerIdFields.isEmpty() ? "id" : QueryBuilder.determineSqlFieldName(ownerIdFields.get(0));
         
         for (FieldModel field : fields) {
-            if (CustomizableQueryBuilder.isListOrArray(field.getType())) {
+            if (PojoMetadata.isListOrArray(field.getType())) {
                 // Check if this is a many-to-many via linktable
                 Link linkAnn = field.getAnnotation(Link.class);
                 if (linkAnn != null && !Link.NONE.equals(linkAnn.linktable())) {
                     // Many-to-many relationship - generate link table
                     TypeModel componentType = Types.getCollectionComponentType(field);
-                    if (componentType != null && CustomizableQueryBuilder.isLinkedClass(componentType)) {
+                    if (componentType != null && PojoMetadata.isLinkedClass(componentType)) {
                         LinkTableInfo linkTableInfo = createLinkTableInfo(ownerMapping, ownerIdColumn, field, linkAnn, componentType);
                         if (linkTableInfo != null) {
                             linkTables.add(linkTableInfo);
@@ -69,7 +69,7 @@ class ForeignKeyScanner {
                 
                 // One-to-many - Get the component type of the collection
                 TypeModel componentType = Types.getCollectionComponentType(field);
-                if (componentType != null && CustomizableQueryBuilder.isLinkedClass(componentType)) {
+                if (componentType != null && PojoMetadata.isLinkedClass(componentType)) {
                     // Check if the component type already has a back-reference field to the owner
                     // If so, skip inferring a FK - the existing field will create the FK column
                     if (hasBackReferenceField(componentType, entityClass)) {
@@ -112,12 +112,12 @@ class ForeignKeyScanner {
         
         for (FieldModel field : targetFields) {
             // Skip collections - we're looking for single entity references
-            if (CustomizableQueryBuilder.isListOrArray(field.getType())) {
+            if (PojoMetadata.isListOrArray(field.getType())) {
                 continue;
             }
             
             TypeModel fieldType = field.getType();
-            if (CustomizableQueryBuilder.isLinkedClass(fieldType)) {
+            if (PojoMetadata.isLinkedClass(fieldType)) {
                 // Check if this field's type maps to the same table as the owner
                 List<TableMapping> fieldTypeMappings = QueryBuilder.determineTableMapping(fieldType);
                 if (!fieldTypeMappings.isEmpty()) {
@@ -177,7 +177,7 @@ class ForeignKeyScanner {
         Collection<FieldModel> fields = QueryBuilder.filterFields(entityClass);
         for (FieldModel field : fields) {
             // Skip collections
-            if (CustomizableQueryBuilder.isListOrArray(field.getType())) {
+            if (PojoMetadata.isListOrArray(field.getType())) {
                 continue;
             }
             

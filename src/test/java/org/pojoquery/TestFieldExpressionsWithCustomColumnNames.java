@@ -18,7 +18,7 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
-import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
+import org.pojoquery.pipeline.DefaultSqlQuery;
 import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.schema.SchemaGenerator;
 

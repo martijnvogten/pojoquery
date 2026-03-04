@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.SqlExpression;
-import org.pojoquery.pipeline.CustomizableQueryBuilder.DefaultSqlQuery;
+import org.pojoquery.pipeline.DefaultSqlQuery;
 import org.pojoquery.pipeline.SqlQuery;
 
 /**

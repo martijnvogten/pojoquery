@@ -1,6 +1,6 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
-import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
+import static org.pojoquery.pipeline.PojoMetadata.determineSqlFieldName;
 
 import org.pojoquery.SqlExpression;
 import org.pojoquery.pipeline.querytree.FieldSelection;
