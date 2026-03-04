@@ -3,6 +3,7 @@ package org.pojoquery.pipeline.querytree;
 import java.util.Objects;
 
 import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.TypeModel;
 
 /**
  * Encapsulates embed metadata for a node in the query tree.
@@ -15,15 +16,19 @@ import org.pojoquery.typemodel.FieldModel;
 public record EmbedInfo(
     FieldModel linkField,
     String fieldPrefix,
-    String sourceAlias
+    String sourceAlias,
+    TypeModel superType
 ) {
     public EmbedInfo {
-        Objects.requireNonNull(linkField, "linkField");
         Objects.requireNonNull(fieldPrefix, "fieldPrefix");
         Objects.requireNonNull(sourceAlias, "sourceAlias");
     }
 
     public static EmbedInfo of(FieldModel linkField, String fieldPrefix, String sourceAlias) {
-        return new EmbedInfo(linkField, fieldPrefix, sourceAlias);
+        return new EmbedInfo(linkField, fieldPrefix, sourceAlias, null);
+    }
+    
+    public static EmbedInfo of(FieldModel linkField, String fieldPrefix, String sourceAlias, TypeModel superType) {
+        return new EmbedInfo(linkField, fieldPrefix, sourceAlias, superType);
     }
 }

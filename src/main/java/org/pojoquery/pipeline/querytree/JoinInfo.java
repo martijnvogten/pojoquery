@@ -59,4 +59,44 @@ public record JoinInfo(
     public boolean isManyToMany() {
         return isCollection && joinTableInfo != null;
     }
+
+    @Override
+    public String toString() {
+        return toStringWithIndent("");
+    }
+
+    public String toStringWithIndent(String indent) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(indent).append("JoinInfo {\n");
+        sb.append(indent).append("  joinType: ").append(joinType).append("\n");
+        if (isCollection) {
+            sb.append(indent).append("  isCollection: true\n");
+        }
+        if (linkField != null) {
+            sb.append(indent).append("  linkField: \"").append(linkField.getName()).append("\"\n");
+        }
+        if (childTable != null) {
+            sb.append(indent).append("  childTable: ").append(childTable.tableName()).append("\n");
+        }
+        if (condition != null) {
+            sb.append(indent).append("  condition: ").append(condition.getSql()).append("\n");
+        }
+        if (joinTableInfo != null) {
+            sb.append(indent).append("  joinTableInfo: {\n");
+            sb.append(indent).append("    joinTable: ").append(joinTableInfo.joinTable().tableName()).append("\n");
+            sb.append(indent).append("    alias: \"").append(joinTableInfo.joinTableAlias()).append("\"\n");
+            if (joinTableInfo.parentCondition() != null) {
+                sb.append(indent).append("    parentCondition: ").append(joinTableInfo.parentCondition().getSql()).append("\n");
+            }
+            if (joinTableInfo.targetCondition() != null) {
+                sb.append(indent).append("    targetCondition: ").append(joinTableInfo.targetCondition().getSql()).append("\n");
+            }
+            sb.append(indent).append("  }\n");
+        }
+        if (subquery != null) {
+            sb.append(indent).append("  subquery: ").append(subquery.toStringWithIndent(indent + "  ")).append("\n");
+        }
+        sb.append(indent).append("}");
+        return sb.toString();
+    }
 }

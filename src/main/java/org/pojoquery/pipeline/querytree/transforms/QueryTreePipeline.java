@@ -36,6 +36,7 @@ public class QueryTreePipeline {
             new SubclassExpansionTransform(),
             new BasicTableTransform(),
             new EntityReferenceTransform(),
+            new CollectionTransform(),
             new JoinTableTransform(),
             new JoinConditionTransform(),
             new SingleTableInheritanceTransform(),
@@ -148,12 +149,8 @@ public class QueryTreePipeline {
         // Start with an empty tree (first transform creates the actual structure)
         QueryTree tree = QueryTree.of(type);
         
-        // Apply transforms in sequence
-        for (QueryTreeTransform transform : transforms) {
-            tree = transform.apply(tree);
-        }
-        
-        return tree;
+        // Apply transforms to fixpoint (repeatedly until no changes)
+        return runToFixPoint(tree);
     }
     
     /**

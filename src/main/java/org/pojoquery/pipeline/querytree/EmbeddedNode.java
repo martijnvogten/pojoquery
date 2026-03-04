@@ -22,7 +22,9 @@ public record EmbeddedNode(
     TypeModel type,
     List<FieldSelection> fields,
     List<QueryNode> children,
-    EmbedInfo embedInfo
+    EmbedInfo embedInfo,
+    boolean isSuperClass,
+    boolean isSubClass
 ) implements TableNode, HasToStringWithIndent {
     
     public EmbeddedNode {
@@ -37,17 +39,21 @@ public record EmbeddedNode(
      * Creates an EmbeddedNode with the given embed info.
      */
     public static EmbeddedNode of(String alias, TypeModel type, List<FieldSelection> fields, EmbedInfo embedInfo) {
-        return new EmbeddedNode(alias, type, fields, List.of(), embedInfo);
+        return new EmbeddedNode(alias, type, fields, List.of(), embedInfo, false, false);
+    }
+    
+    public static EmbeddedNode forSubclass(String alias, TypeModel type, EmbedInfo embedInfo) {
+        return new EmbeddedNode(alias, type, null, List.of(), embedInfo, false, true);
     }
     
     @Override
     public EmbeddedNode withChildren(List<QueryNode> newChildren) {
-        return new EmbeddedNode(alias, type, fields, newChildren, embedInfo);
+        return new EmbeddedNode(alias, type, fields, newChildren, embedInfo, isSuperClass, isSubClass);
     }
 
     @Override
     public EmbeddedNode withFields(List<FieldSelection> newFields) {
-        return new EmbeddedNode(alias, type, newFields, children, embedInfo);
+        return new EmbeddedNode(alias, type, newFields, children, embedInfo, isSuperClass, isSubClass);
     }
 
     @Override
@@ -61,6 +67,8 @@ public record EmbeddedNode(
         sb.append(indent).append("  alias: \"").append(alias).append("\"\n");
         sb.append(indent).append("  type: ").append(type.getSimpleName()).append("\n");
         sb.append(indent).append("  prefix: \"").append(embedInfo.fieldPrefix()).append("\"\n");
+        sb.append(indent).append("  isSuperClass: ").append(isSuperClass).append("\n");
+        sb.append(indent).append("  isSubClass: ").append(isSubClass).append("\n");
         if (!fields.isEmpty()) {
             sb.append(indent).append("  fields: [\n");
             for (FieldSelection f : fields) {

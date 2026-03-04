@@ -1,7 +1,11 @@
 package org.pojoquery.typemodel;
 
 import java.lang.annotation.Annotation;
+import java.lang.annotation.Repeatable;
+import java.util.ArrayList;
+import java.util.List;
 
+import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
@@ -68,6 +72,37 @@ public class ElementFieldModel implements FieldModel {
     }
 
     @Override
+    public List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> annotationType) {
+        List<AnnotationModel> result = new ArrayList<>();
+        String targetTypeName = annotationType.getName();
+        
+        // Check for @Repeatable container
+        Repeatable repeatable = annotationType.getAnnotation(Repeatable.class);
+        String containerTypeName = repeatable != null ? repeatable.value().getName() : null;
+        
+        for (AnnotationMirror am : variableElement.getAnnotationMirrors()) {
+            String annTypeName = am.getAnnotationType().toString();
+            
+            if (annTypeName.equals(targetTypeName)) {
+                // Direct match
+                result.add(new ElementAnnotationModel(am, elements, types));
+            } else if (containerTypeName != null && annTypeName.equals(containerTypeName)) {
+                // Container annotation - unwrap value()
+                ElementAnnotationModel container = new ElementAnnotationModel(am, elements, types);
+                result.addAll(container.getAnnotationValues("value"));
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public AnnotationModel[] getAnnotations() {
+        return variableElement.getAnnotationMirrors().stream()
+            .map(am -> new ElementAnnotationModel(am, elements, types))
+            .toArray(AnnotationModel[]::new);
+    }
+
+    @Override
     public boolean isStatic() {
         return variableElement.getModifiers().contains(Modifier.STATIC);
     }
@@ -75,11 +110,7 @@ public class ElementFieldModel implements FieldModel {
     @Override
     public boolean isTransient() {
         // Check Java transient modifier
-        if (variableElement.getModifiers().contains(Modifier.TRANSIENT)) {
-            return true;
-        }
-        // Check @Transient annotation
-        return AnnotationHelper.isTransient(this);
+        return variableElement.getModifiers().contains(Modifier.TRANSIENT);
     }
 
     /**

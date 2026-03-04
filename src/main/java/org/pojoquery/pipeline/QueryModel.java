@@ -1117,7 +1117,7 @@ public class QueryModel {
 			if (f.isStatic()) {
 				continue;
 			}
-			if (f.isTransient()) {
+			if (f.isTransient() || f.getAnnotation(Transient.class) != null) {
 				continue;
 			}
 			result.add(f);

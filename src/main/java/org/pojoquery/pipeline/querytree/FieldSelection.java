@@ -16,6 +16,7 @@ import org.pojoquery.typemodel.FieldModel;
  */
 public record FieldSelection(
     String alias,
+    String columnName,
     SqlExpression expression,
     FieldModel field,
     FieldMapping customMapping
@@ -30,7 +31,7 @@ public record FieldSelection(
      * Creates a simple field selection without custom mapping.
      */
     public static FieldSelection of(String alias, SqlExpression expression, FieldModel field) {
-        return new FieldSelection(alias, expression, field, null);
+        return new FieldSelection(alias, null, expression, field, null);
     }
     
     /**
@@ -39,7 +40,7 @@ public record FieldSelection(
     public static FieldSelection column(String sourceAlias, String targetAlias, String columnName, FieldModel field) {
         String alias = targetAlias + "." + (field != null ? field.getName() : columnName);
         SqlExpression expr = new SqlExpression("{" + sourceAlias + "." + columnName + "}");
-        return new FieldSelection(alias, expr, field, null);
+        return new FieldSelection(alias, columnName, expr, field, null);
     }
 
     @Override

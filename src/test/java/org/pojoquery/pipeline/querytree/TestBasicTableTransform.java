@@ -4,6 +4,8 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.pojoquery.DbContext;
 import org.pojoquery.TestUtils;
+import org.pojoquery.annotations.DiscriminatorColumn;
+import org.pojoquery.annotations.DiscriminatorValue;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
@@ -20,6 +22,7 @@ import org.pojoquery.pipeline.querytree.transforms.FixPointTransform;
 import org.pojoquery.pipeline.querytree.transforms.JoinConditionTransform;
 import org.pojoquery.pipeline.querytree.transforms.JoinTableTransform;
 import org.pojoquery.pipeline.querytree.transforms.QueryTreePipeline;
+import org.pojoquery.pipeline.querytree.transforms.SingleTableInheritanceTransform;
 import org.pojoquery.pipeline.querytree.transforms.SubclassExpansionTransform;
 import org.pojoquery.pipeline.querytree.transforms.SuperclassTableTransform;
 
@@ -249,6 +252,49 @@ public class TestBasicTableTransform {
 			// System.out.println("Tree: " + result.toString());
 			System.out.println("SQL: " + queryTreeToSql(result));
 		}
+	}
+
+	@Table("room")
+	@DiscriminatorColumn(name = "room_type")
+	@DiscriminatorValue("Room")
+	@SubClasses({STIBedRoom.class, STIKitchen.class})
+	static class STIRoom {
+		@Id
+		Long id;
+		String name;
+	}
+
+	@DiscriminatorValue("BedRoom")
+	static class STIBedRoom extends STIRoom {
+		Integer numberOfBeds;
+	}
+
+	@DiscriminatorValue("Kitchen")
+	static class STIKitchen extends STIRoom {
+		Integer numberOfOvens;
+	}
+
+	@Test
+	public void testSingleTableInheritance() {
+		QueryTreePipeline pipeline = QueryTreePipeline.empty()
+				.with(new CreateRootTransform())
+				.with(new SuperclassTableTransform())
+				.with(new SubclassExpansionTransform())
+				.with(new SingleTableInheritanceTransform())
+				.with(new BasicTableTransform())
+				.with(new EntityReferenceTransform())
+				;
+
+		{
+			QueryTree result = pipeline.runToFixPoint(QueryTree.of(STIRoom.class));
+			System.out.println("SQL: " + queryTreeToSql(result));
+		}
+
+		{
+			QueryTree result = pipeline.runToFixPoint(QueryTree.of(STIBedRoom.class));
+			System.out.println("SQL: " + queryTreeToSql(result));
+		}
+		
 	}
 
 }

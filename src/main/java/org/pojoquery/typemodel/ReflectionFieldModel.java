@@ -5,9 +5,9 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
-
-import org.pojoquery.AnnotationHelper;
 
 /**
  * Implementation of {@link FieldModel} that wraps a runtime {@link Field}.
@@ -64,16 +64,33 @@ public class ReflectionFieldModel implements FieldModel {
     }
 
     @Override
+    public List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> annotationType) {
+        Annotation[] annotations = field.getAnnotationsByType(annotationType);
+        List<AnnotationModel> result = new ArrayList<>();
+        for (Annotation a : annotations) {
+            result.add(new ReflectionAnnotationModel(a));
+        }
+        return result;
+    }
+
+    @Override
+    public AnnotationModel[] getAnnotations() {
+        Annotation[] annotations = field.getAnnotations();
+        AnnotationModel[] result = new AnnotationModel[annotations.length];
+        for (int i = 0; i < annotations.length; i++) {
+            result[i] = new ReflectionAnnotationModel(annotations[i]);
+        }
+        return result;
+    }
+
+    @Override
     public boolean isStatic() {
         return (field.getModifiers() & Modifier.STATIC) != 0;
     }
 
     @Override
     public boolean isTransient() {
-        if ((field.getModifiers() & Modifier.TRANSIENT) != 0) {
-            return true;
-        }
-        return AnnotationHelper.isTransient(this);
+        return (field.getModifiers() & Modifier.TRANSIENT) != 0;
     }
 
     // ========== Runtime-specific methods ==========

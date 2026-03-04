@@ -53,7 +53,7 @@ public record EmptyTableNode(
     }
 
 	public JoinedNode toJoinedNode(TableInfo table, List<FieldSelection> fields, List<String> idFields) {
-		return new JoinedNode(alias, type, table, fields, children, idFields, false, null, null, null, null, joinInfo);
+		return new JoinedNode(alias, type, table, fields, children, idFields, false, null, null, null, null, joinInfo, List.of(), isSuperClass, isSubClass);
 	}
 
 	public EmbeddedNode toEmbeddedNode(List<FieldSelection> fields) {
@@ -88,10 +88,33 @@ public record EmptyTableNode(
 
 	public String toStringWithIndent(String indent) {
 		StringBuilder sb = new StringBuilder();
-		sb.append(indent).append(alias).append(" (empty)");
-		if (joinInfo != null) {
-			sb.append(" [").append(joinInfo.joinType()).append("]");
+		sb.append(indent).append("EmptyTableNode {\n");
+		sb.append(indent).append("  alias: \"").append(alias).append("\"\n");
+		sb.append(indent).append("  type: ").append(type.getSimpleName()).append("\n");
+		if (isSuperClass) {
+			sb.append(indent).append("  isSuperClass: true\n");
 		}
+		if (isSubClass) {
+			sb.append(indent).append("  isSubClass: true\n");
+		}
+		if (joinInfo != null) {
+			sb.append(indent).append("  joinInfo: ").append(joinInfo.joinType());
+			if (joinInfo.condition() != null) {
+				sb.append(" ON ").append(joinInfo.condition().getSql());
+			}
+			sb.append("\n");
+		}
+		if (embedInfo != null) {
+			sb.append(indent).append("  embedInfo: prefix=\"").append(embedInfo.fieldPrefix()).append("\"\n");
+		}
+		if (!children.isEmpty()) {
+			sb.append(indent).append("  children: [\n");
+			for (QueryNode child : children) {
+				sb.append(QueryTree.toStringNode(child, indent + "    "));
+			}
+			sb.append(indent).append("  ]\n");
+		}
+		sb.append(indent).append("}\n");
 		return sb.toString();
 	}
 }

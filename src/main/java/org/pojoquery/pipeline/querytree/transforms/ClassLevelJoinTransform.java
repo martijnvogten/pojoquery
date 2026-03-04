@@ -1,15 +1,19 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
+import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Join;
-import org.pojoquery.annotations.Joins;
-import org.pojoquery.pipeline.querytree.QueryNode;
+import org.pojoquery.internal.MappingException;
+import org.pojoquery.pipeline.SqlQuery.JoinType;
+import org.pojoquery.pipeline.querytree.BareJoinInfo;
+import org.pojoquery.pipeline.querytree.EmbeddedNode;
+import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
+import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.TableNode;
-import org.pojoquery.typemodel.TypeModel;
+import org.pojoquery.typemodel.AnnotationModel;
 
 /**
  * Transform 15: @Join, @Joins on class → extra joins not from field structure.
@@ -22,44 +26,36 @@ public class ClassLevelJoinTransform implements QueryTreeTransform {
     }
     
     private TableNode processNode(TableNode node) {
+        if (node instanceof EmbeddedNode) {
+            throw new MappingException("@Join annotations are not supported on @Embedded types: " + node.type().getQualifiedName());
+        }
+        return node instanceof JoinedNode joined ? processJoinedNode(joined) : node;
+    }
+    
+    private TableNode processJoinedNode(JoinedNode node) {
         if (node.type() == null) {
             return node;
         }
         
-        List<Join> joinAnns = getJoinAnnotations(node.type());
+        List<AnnotationModel> joinAnns = node.type().getAnnotationsByType(Join.class);
         if (joinAnns.isEmpty()) {
             return node;
         }
-        
-        List<QueryNode> newChildren = new ArrayList<>(node.children());
-        
-        for (Join joinAnn : joinAnns) {
-            // String alias = joinAnn.alias().isEmpty() ? joinAnn.tableName() : joinAnn.alias();
-            // JoinType joinType = joinAnn.type();
-            
-            // SqlExpression condition = new SqlExpression(
-            //     ExpressionResolver.resolve(joinAnn.joinCondition(), node.alias())
-            // );
 
-            // // String schemaName = joinAnn.schemaName().isEmpty() ? null : joinAnn.schemaName();
-            // // TableNode joinedTable = TableNodeFactory.forLinkTable(alias, schemaName, joinAnn.tableName())
-            // //     .withJoinInfo(new JoinInfo(joinType, condition, null, false, null));
-            
-            // newChildren.add(joinedTable);
-        }
+        List<BareJoinInfo> newJoins = new ArrayList<>(node.extraJoins());
         
-        return node.withChildren(newChildren);
+        for (AnnotationModel joinAnn : joinAnns) {
+            String alias = (joinAnn.getStringValue("alias").isEmpty() ? joinAnn.getStringValue("tableName") : joinAnn.getStringValue("alias"));
+            if ((node.extraJoins().stream().anyMatch(j -> j.alias().equals(alias)))) {
+                continue; // Skip if a join with this alias already exists
+            }
+            JoinType joinType = joinAnn.getEnumValue(JoinType.class, "type");
+            
+            String schemaName = joinAnn.getStringValue("schemaName");
+            String tableName = joinAnn.getStringValue("tableName");
+            newJoins.add(BareJoinInfo.of(alias, joinType, TableInfo.of(schemaName, tableName), new SqlExpression(joinAnn.getStringValue("joinCondition"))));
+        }
+        return node.withExtraJoins(newJoins);
     }
     
-    private List<Join> getJoinAnnotations(TypeModel type) {
-        Joins joins = type.getAnnotation(Joins.class);
-        if (joins != null) {
-            return Arrays.asList(joins.value());
-        }
-        Join join = type.getAnnotation(Join.class);
-        if (join != null) {
-            return List.of(join);
-        }
-        return List.of();
-    }
 }

@@ -1,6 +1,7 @@
 package org.pojoquery.typemodel;
 
 import java.lang.annotation.Annotation;
+import java.util.List;
 
 /**
  * Abstraction over field introspection that works with both runtime Fields
@@ -31,6 +32,13 @@ public interface FieldModel {
     TypeModel getDeclaringType();
 
     /**
+     * Returns all annotations present on this field.
+     *
+     * @return an array of annotation models
+     */
+    AnnotationModel[] getAnnotations();
+
+    /**
      * Returns the annotation of the specified type if present on this field.
      *
      * @param annotationType the Class object corresponding to the annotation type
@@ -47,13 +55,21 @@ public interface FieldModel {
     boolean hasAnnotation(Class<? extends Annotation> annotationType);
 
     /**
+     * Returns all annotations of the specified type on this field.
+     * This handles repeatable annotations by unwrapping container annotations.
+     *
+     * @param annotationType the annotation type to find
+     * @return list of matching annotation models, empty if none found
+     */
+    List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> annotationType);
+
+    /**
      * Returns true if this field is static.
      */
     boolean isStatic();
 
     /**
-     * Returns true if this field is transient (has the transient modifier
-     * or the @Transient annotation).
+     * Returns true if this field has the transient modifier.
      */
     boolean isTransient();
 }

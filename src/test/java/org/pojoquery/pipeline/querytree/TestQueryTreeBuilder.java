@@ -73,7 +73,7 @@ public class TestQueryTreeBuilder {
         JoinedNode root = (JoinedNode) tree.root();
         assertEquals("book", root.tableInfo().tableName());
         
-        // Should have 2 simple fields: id, title
+        // Should have 2 fields: id, title
         assertEquals(2, root.fields().size());
         
         // Should have 1 child for author
@@ -86,12 +86,10 @@ public class TestQueryTreeBuilder {
 
 		assertEquals("{book.author_id} = {author.id}", authorJoinInfo.condition().getSql());
         
-        EmptyTableNode authorNode = (EmptyTableNode) authorChild;
+        // With fixpoint, EmptyTableNode is now converted to JoinedNode
+        JoinedNode authorNode = (JoinedNode) authorChild;
         assertEquals("author", authorNode.alias());
-        // assertEquals("person", authorNode.tableInfo().tableName());
-        
-        // Author should have 3 fields
-        // assertEquals(3, authorNode.fields().size());
+        assertEquals("person", authorNode.tableInfo().tableName());
     }
 
     // --- Entities for join types test ---

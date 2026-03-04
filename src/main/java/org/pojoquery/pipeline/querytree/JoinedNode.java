@@ -36,7 +36,10 @@ public record JoinedNode(
     Map<String, TypeModel> discriminatorValues,
     FieldModel otherField,
     String otherColumnPrefix,
-    JoinInfo joinInfo
+    JoinInfo joinInfo,
+    List<BareJoinInfo> extraJoins,
+    boolean isSuperClass,
+    boolean isSubClass
 ) implements TableNode, HasToStringWithIndent {
     
     /**
@@ -60,7 +63,7 @@ public record JoinedNode(
             List<String> idFieldNames) {
         return new JoinedNode(
             alias, type, tableInfo, fields, children, idFieldNames,
-            false, null, null, null, null, null
+            false, null, null, null, null, null, List.of(), false, false
         );
     }
     
@@ -77,10 +80,10 @@ public record JoinedNode(
             JoinInfo joinInfo) {
         return new JoinedNode(
             alias, type, tableInfo, fields, children, idFieldNames,
-            false, null, null, null, null, joinInfo
+            false, null, null, null, null, joinInfo, List.of(), false, false
         );
     }
-    
+
     // --- With methods for immutable transformations ---
     
     /**
@@ -91,7 +94,7 @@ public record JoinedNode(
         return new JoinedNode(alias, type, tableInfo,
             newFields, children, idFieldNames,
             isSingleTableInheritance, discriminatorColumn, discriminatorValues,
-            otherField, otherColumnPrefix, joinInfo);
+            otherField, otherColumnPrefix, joinInfo, extraJoins, isSuperClass, isSubClass);
     }
     
     /**
@@ -101,7 +104,7 @@ public record JoinedNode(
         return new JoinedNode(alias, type, tableInfo,
             fields, newChildren, idFieldNames,
             isSingleTableInheritance, discriminatorColumn, discriminatorValues,
-            otherField, otherColumnPrefix, joinInfo);
+            otherField, otherColumnPrefix, joinInfo, extraJoins, isSuperClass, isSubClass);
     }
     
     /**
@@ -129,7 +132,7 @@ public record JoinedNode(
         return new JoinedNode(alias, type, tableInfo,
             fields, children, idFieldNames,
             true, discColumn, discValues,
-            otherField, otherColumnPrefix, joinInfo);
+            otherField, otherColumnPrefix, joinInfo, extraJoins, isSuperClass, isSubClass);
     }
     
     /**
@@ -139,7 +142,7 @@ public record JoinedNode(
         return new JoinedNode(alias, type, tableInfo,
             fields, children, idFieldNames,
             isSingleTableInheritance, discriminatorColumn, discriminatorValues,
-            other, prefix, joinInfo);
+            other, prefix, joinInfo, extraJoins, isSuperClass, isSubClass);
     }
     
     /**
@@ -149,14 +152,14 @@ public record JoinedNode(
         return new JoinedNode(newAlias, type, tableInfo,
             fields, children, idFieldNames,
             isSingleTableInheritance, discriminatorColumn, discriminatorValues,
-            otherField, otherColumnPrefix, joinInfo);
+            otherField, otherColumnPrefix, joinInfo, extraJoins, isSuperClass, isSubClass);
     }
 
     public JoinedNode withTableName(String newSchema, String newTable) {
         return new JoinedNode(alias, type, new TableInfo(newSchema, newTable),
             fields, children, idFieldNames,
             isSingleTableInheritance, discriminatorColumn, discriminatorValues,
-            otherField, otherColumnPrefix, joinInfo);
+            otherField, otherColumnPrefix, joinInfo, extraJoins, isSuperClass, isSubClass);
     }
     
     /**
@@ -166,7 +169,28 @@ public record JoinedNode(
         return new JoinedNode(alias, type, tableInfo,
             fields, children, idFieldNames,
             isSingleTableInheritance, discriminatorColumn, discriminatorValues,
-            otherField, otherColumnPrefix, newJoinInfo);
+            otherField, otherColumnPrefix, newJoinInfo, extraJoins, isSuperClass, isSubClass);
+    }
+
+    public JoinedNode withExtraJoins(List<BareJoinInfo> newExtraJoins) {
+        return new JoinedNode(alias, type, tableInfo,
+            fields, children, idFieldNames,
+            isSingleTableInheritance, discriminatorColumn, discriminatorValues,
+            otherField, otherColumnPrefix, joinInfo, newExtraJoins, isSuperClass, isSubClass);
+    }
+
+    public JoinedNode withIsSuperClass(boolean isSuperClass) {
+        return new JoinedNode(alias, type, tableInfo,
+            fields, children, idFieldNames,
+            isSingleTableInheritance, discriminatorColumn, discriminatorValues,
+            otherField, otherColumnPrefix, joinInfo, extraJoins, isSuperClass, isSubClass);
+    }
+
+    public JoinedNode withIsSubClass(boolean isSubClass) {
+        return new JoinedNode(alias, type, tableInfo,
+            fields, children, idFieldNames,
+            isSingleTableInheritance, discriminatorColumn, discriminatorValues,
+            otherField, otherColumnPrefix, joinInfo, extraJoins, isSuperClass, isSubClass);
     }
 
     @Override
@@ -192,6 +216,12 @@ public record JoinedNode(
         }
         if (isSingleTableInheritance) {
             sb.append(indent).append("  STI discriminator: ").append(discriminatorColumn).append("\n");
+        }
+        if (isSuperClass) {
+            sb.append(indent).append("  isSuperClass: true\n");
+        }
+        if (isSubClass) {
+            sb.append(indent).append("  isSubClass: true\n");
         }
         if (joinInfo != null) {
             sb.append(indent).append("  joinInfo: ").append(joinInfo.joinType());

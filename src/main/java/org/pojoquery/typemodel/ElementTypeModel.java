@@ -129,6 +129,32 @@ public class ElementTypeModel implements TypeModel {
     }
 
     @Override
+    public List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> annotationType) {
+        List<AnnotationModel> result = new ArrayList<>();
+        if (typeElement == null) return result;
+        
+        String targetTypeName = annotationType.getName();
+        
+        // Check for @Repeatable container
+        java.lang.annotation.Repeatable repeatable = annotationType.getAnnotation(java.lang.annotation.Repeatable.class);
+        String containerTypeName = repeatable != null ? repeatable.value().getName() : null;
+        
+        for (javax.lang.model.element.AnnotationMirror am : typeElement.getAnnotationMirrors()) {
+            String annTypeName = am.getAnnotationType().toString();
+            
+            if (annTypeName.equals(targetTypeName)) {
+                // Direct match
+                result.add(new ElementAnnotationModel(am, elements, types));
+            } else if (containerTypeName != null && annTypeName.equals(containerTypeName)) {
+                // Container annotation - unwrap value()
+                ElementAnnotationModel container = new ElementAnnotationModel(am, elements, types);
+                result.addAll(container.getAnnotationValues("value"));
+            }
+        }
+        return result;
+    }
+
+    @Override
     public boolean isPrimitive() {
         return typeMirror.getKind().isPrimitive();
     }

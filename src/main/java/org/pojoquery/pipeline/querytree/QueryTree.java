@@ -1,7 +1,10 @@
 package org.pojoquery.pipeline.querytree;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -229,6 +232,95 @@ public record QueryTree(
      */
     public List<String> allAliases() {
         return collectFromTableNodes(TableNode::alias);
+    }
+
+    // --- Parent and hierarchy utilities ---
+
+    /**
+     * Returns a map from child alias to parent node.
+     * The root node's alias is not included as a key (it has no parent).
+     */
+    public Map<String, QueryNode> parentNodes() {
+        Map<String, QueryNode> result = new HashMap<>();
+        collectParentsRecursive(root, result);
+        return result;
+    }
+
+    private static void collectParentsRecursive(QueryNode parent, Map<String, QueryNode> result) {
+        if (parent == null) return;
+        for (QueryNode child : parent.children()) {
+            result.put(child.alias(), parent);
+            collectParentsRecursive(child, result);
+        }
+    }
+
+    /**
+     * Returns a map from each alias to its subclass aliases (children with isSubClass=true).
+     * Only aliases that have subclasses are included as keys.
+     */
+    public Map<String, List<String>> subClassAliases() {
+        Map<String, List<String>> result = new HashMap<>();
+        collectSubClassAliasesRecursive(root, result);
+        return result;
+    }
+
+    private static void collectSubClassAliasesRecursive(QueryNode node, Map<String, List<String>> result) {
+        if (node == null) return;
+        
+        List<String> subClasses = new ArrayList<>();
+        for (QueryNode child : node.children()) {
+            if (child instanceof JoinedNode jn && jn.isSubClass()) {
+                subClasses.add(child.alias());
+            } else if (child instanceof EmbeddedNode en && en.isSubClass()) {
+                subClasses.add(child.alias());
+            }
+            collectSubClassAliasesRecursive(child, result);
+        }
+        if (!subClasses.isEmpty()) {
+            result.put(node.alias(), subClasses);
+        }
+    }
+
+    /**
+     * Returns all nodes in processing order (depth-first, parent before children).
+     * This matches the order used by CustomizableQueryBuilder.processRowInternal.
+     */
+    public List<QueryNode> allNodes() {
+        List<QueryNode> result = new ArrayList<>();
+        collectNodesRecursive(root, result);
+        return result;
+    }
+
+    private static void collectNodesRecursive(QueryNode node, List<QueryNode> result) {
+        if (node == null) return;
+        result.add(node);
+        for (QueryNode child : node.children()) {
+            collectNodesRecursive(child, result);
+        }
+    }
+
+    /**
+     * Returns a map from alias to node for quick lookup.
+     */
+    public Map<String, QueryNode> nodesByAlias() {
+        Map<String, QueryNode> result = new LinkedHashMap<>();
+        collectNodesByAliasRecursive(root, result);
+        return result;
+    }
+
+    private static void collectNodesByAliasRecursive(QueryNode node, Map<String, QueryNode> result) {
+        if (node == null) return;
+        result.put(node.alias(), node);
+        for (QueryNode child : node.children()) {
+            collectNodesByAliasRecursive(child, result);
+        }
+    }
+
+    /**
+     * Returns the root alias, or null if the tree has no root.
+     */
+    public String rootAlias() {
+        return root != null ? root.alias() : null;
     }
 
     @Override

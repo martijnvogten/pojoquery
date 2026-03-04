@@ -77,6 +77,16 @@ public class ReflectionTypeModel implements TypeModel {
     }
 
     @Override
+    public List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> annotationType) {
+        Annotation[] annotations = clazz.getAnnotationsByType(annotationType);
+        List<AnnotationModel> result = new ArrayList<>();
+        for (Annotation a : annotations) {
+            result.add(new ReflectionAnnotationModel(a));
+        }
+        return result;
+    }
+
+    @Override
     public boolean isPrimitive() {
         return clazz.isPrimitive();
     }

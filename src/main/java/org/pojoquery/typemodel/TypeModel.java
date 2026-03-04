@@ -66,6 +66,15 @@ public interface TypeModel {
     boolean hasAnnotation(Class<? extends Annotation> annotationType);
 
     /**
+     * Returns all annotations of the specified type on this type.
+     * This handles repeatable annotations by unwrapping container annotations.
+     *
+     * @param annotationType the annotation type to find
+     * @return list of matching annotation models, empty if none found
+     */
+    List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> annotationType);
+
+    /**
      * Returns true if this type represents a primitive type.
      */
     boolean isPrimitive();

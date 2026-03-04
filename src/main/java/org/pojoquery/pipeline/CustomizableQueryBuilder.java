@@ -21,6 +21,7 @@ import org.pojoquery.FieldMapping;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Join;
+import org.pojoquery.annotations.Transient;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
@@ -833,7 +834,7 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 			if (f.isStatic()) {
 				continue;
 			}
-			if (f.isTransient()) {
+			if (f.isTransient() || f.hasAnnotation(Transient.class)) {
 				continue;
 			}
 			result.add(f);

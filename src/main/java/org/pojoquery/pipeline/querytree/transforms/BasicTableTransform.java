@@ -14,6 +14,7 @@ import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.TypeModel;
 
 /**
  * Creates root TableNode for the specified result type, collects @Id fields.
@@ -31,15 +32,20 @@ public class BasicTableTransform implements QueryTreeTransform {
         List<String> idFields = new ArrayList<>();
         boolean isEmbedded = node.embedInfo() != null;
 
-        for (FieldModel f : FieldFilters.simpleFields(node.type())) {
-            String colName = determineSqlFieldName(f);
-            String sourceAlias = node.alias();
-            if (isEmbedded) {
-                colName = node.embedInfo().fieldPrefix() + colName;
-                sourceAlias = node.embedInfo().sourceAlias();
-            }
-            fields.add(FieldSelection.column(sourceAlias, node.alias(), colName, f));
-        }
+        TypeModel superType = isEmbedded ? node.embedInfo().superType() : null;
+
+        fields.addAll(FieldFilters.fieldsDeclaredIn(node.type(), superType).stream()
+            .filter(FieldFilters::isSimple)
+            .map(f -> {
+                String colName = determineSqlFieldName(f);
+                String sourceAlias = node.alias();
+                if (isEmbedded) {
+                    colName = node.embedInfo().fieldPrefix() + colName;
+                    sourceAlias = node.embedInfo().sourceAlias();
+                }
+                return FieldSelection.column(sourceAlias, node.alias(), colName, f);
+            })
+            .toList());
 
         for (FieldModel f : determineIdFields(node.type())) {
             idFields.add(determineSqlFieldName(f));
