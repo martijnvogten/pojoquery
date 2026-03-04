@@ -118,8 +118,6 @@ public class QueryModel {
 		}
 	}
 
-	private static final java.util.regex.Pattern ALIAS_PATTERN = java.util.regex.Pattern.compile("\\{([a-zA-Z0-9_\\.]+)\\}");
-
 	private final LinkedHashMap<String, Alias> aliases = new LinkedHashMap<>();
 	private final Map<String, List<String>> keysByAlias = new HashMap<>();
 	private final List<JoinInfo> joins = new ArrayList<>();
@@ -685,17 +683,7 @@ public class QueryModel {
 	 * Extracts all aliases referenced in an expression using {alias.field} syntax.
 	 */
 	private void collectReferencedAliases(String expression, Set<String> aliases) {
-		java.util.regex.Matcher matcher = ALIAS_PATTERN.matcher(expression);
-		while (matcher.find()) {
-			String fullMatch = matcher.group(1);
-			// Extract the alias part (everything before the last dot, or the whole thing if no field)
-			int lastDot = fullMatch.lastIndexOf('.');
-			if (lastDot > 0) {
-				aliases.add(fullMatch.substring(0, lastDot));
-			} else {
-				aliases.add(fullMatch);
-			}
-		}
+		aliases.addAll(CurlyMarkers.extractAliases(expression));
 	}
 
 	/**
@@ -1224,11 +1212,7 @@ public class QueryModel {
 	 */
 	private void validateOrderByAliases(List<String> orderByClauses) {
 		for (String clause : orderByClauses) {
-			java.util.regex.Matcher matcher = ALIAS_PATTERN.matcher(clause);
-			while (matcher.find()) {
-				String alias = matcher.group(1);
-				String tableAlias = alias.contains(".") ? alias.substring(0, alias.indexOf('.')) : alias;
-
+			for (String tableAlias : CurlyMarkers.extractAliases(clause)) {
 				if (!tableAlias.equals(rootAlias)) {
 					throw new MappingException(
 							"executeStreaming with consumer does not support ORDER BY on joined tables. " +

@@ -3,8 +3,6 @@ package org.pojoquery.pipeline.querytree.transforms;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.pojoquery.SqlExpression;
 import org.pojoquery.pipeline.querytree.FieldSelection;
@@ -14,8 +12,6 @@ import org.pojoquery.util.CurlyMarkers;
  * Helper methods for resolving alias placeholders in SQL expressions.
  */
 public final class ExpressionResolver {
-    
-    private static final Pattern ALIAS_PATTERN = Pattern.compile("\\{([a-zA-Z0-9_\\.]+)\\}");
     
     private ExpressionResolver() {}
     
@@ -75,25 +71,13 @@ public final class ExpressionResolver {
     
     /**
      * Extracts all aliases referenced in an expression.
+     * Delegates to {@link CurlyMarkers#extractAliases(String)}.
      * 
      * @param expression The expression to scan
      * @return Set of referenced aliases (table aliases, not column names)
      */
     public static Set<String> extractAliases(String expression) {
-        Set<String> aliases = new HashSet<>();
-        if (expression == null) return aliases;
-        
-        Matcher m = ALIAS_PATTERN.matcher(expression);
-        while (m.find()) {
-            String ref = m.group(1);
-            int lastDot = ref.lastIndexOf('.');
-            if (lastDot > 0) {
-                aliases.add(ref.substring(0, lastDot));
-            } else {
-                aliases.add(ref);
-            }
-        }
-        return aliases;
+        return CurlyMarkers.extractAliases(expression);
     }
     
     /**

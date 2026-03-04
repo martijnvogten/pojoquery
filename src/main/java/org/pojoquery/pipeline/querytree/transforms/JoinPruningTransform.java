@@ -1,17 +1,17 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
+import org.pojoquery.pipeline.querytree.JoinCondition;
+import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
 
 /**
- * Transform 18: Removes joins not referenced by any field expression.
+ * Removes joins not referenced by any field expression.
  * Runs after FromProjectionTransform which may leave unused joins.
  */
 public class JoinPruningTransform implements QueryTreeTransform {
@@ -23,7 +23,7 @@ public class JoinPruningTransform implements QueryTreeTransform {
         
         TableNode root = (TableNode) tree.root();
         
-        // Compute transitive closure (if A is needed and references B, B is needed)
+        // Compute transitive closure: if A is needed and references B in a Custom condition, B is needed
         Set<String> required = computeTransitiveClosure(root, referenced);
         
         // Prune unused joins
@@ -58,44 +58,56 @@ public class JoinPruningTransform implements QueryTreeTransform {
         Set<String> required = new HashSet<>(initial);
         required.add(root.alias());
         
-        // Build map of join alias -> aliases referenced in its condition
-        Map<String, Set<String>> joinDependencies = new HashMap<>();
-        collectJoinDependencies(root, joinDependencies);
+        // For standard join conditions (ForeignKeyInChild, ForeignKeyInParent, SharedPrimaryKey),
+        // the only dependency is the direct parent-child relationship - no extra aliases.
+        // Only Custom conditions can reference other aliases, so we only need to handle those.
         
-        // Fixed-point: if join A is required and its condition references B, B is required
         boolean changed = true;
         while (changed) {
             changed = false;
-            for (Map.Entry<String, Set<String>> entry : joinDependencies.entrySet()) {
-                if (required.contains(entry.getKey())) {
-                    for (String dep : entry.getValue()) {
+            changed |= addCustomConditionDeps(root, required);
+        }
+        
+        return required;
+    }
+    
+    /**
+     * Recursively finds Custom join conditions and adds their alias dependencies.
+     * Returns true if any new aliases were added to the required set.
+     */
+    private boolean addCustomConditionDeps(TableNode node, Set<String> required) {
+        boolean changed = false;
+        
+        for (QueryNode child : node.children()) {
+            if (!required.contains(child.alias())) {
+                continue; // Skip if this join isn't required
+            }
+            
+            JoinInfo joinInfo = child.joinInfo();
+            if (joinInfo != null) {
+                JoinCondition condition = joinInfo.joinCondition();
+                
+                // Only Custom conditions can reference other aliases
+                if (condition instanceof JoinCondition.Custom custom) {
+                    Set<String> conditionAliases = ExpressionResolver.extractAliases(custom.condition());
+                    for (String dep : conditionAliases) {
                         if (!required.contains(dep)) {
                             required.add(dep);
                             changed = true;
                         }
                     }
                 }
+                // ForeignKeyInChild, ForeignKeyInParent, SharedPrimaryKey only reference
+                // parent and child - no extra alias dependencies
+            }
+            
+            // Recurse into children
+            if (child instanceof TableNode childTable) {
+                changed |= addCustomConditionDeps(childTable, required);
             }
         }
         
-        return required;
-    }
-    
-    private void collectJoinDependencies(TableNode node, Map<String, Set<String>> deps) {
-        for (QueryNode child : node.children()) {
-            Set<String> joinDeps = new HashSet<>();
-            if (child.joinInfo() != null && child.joinInfo().condition() != null) {
-                joinDeps.addAll(ExpressionResolver.extractAliases(child.joinInfo().condition()));
-            }
-            // Remove self and root from dependencies
-            joinDeps.remove(child.alias());
-            deps.put(child.alias(), joinDeps);
-            
-            // Recurse
-            if (child instanceof TableNode childTable) {
-                collectJoinDependencies(childTable, deps);
-            }
-        }
+        return changed;
     }
     
     private TableNode pruneUnusedJoins(TableNode node, Set<String> required) {

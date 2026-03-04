@@ -10,7 +10,6 @@ import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
-import org.pojoquery.pipeline.QueryBuilder;
 
 @UseDialect(Dialect.MYSQL)
 public class TestBasics {
@@ -58,7 +57,7 @@ public class TestBasics {
 
 	@Test
 	public void testIt() {
-		String sql = QueryBuilder.from(ArticleDetail.class).toStatement().getSql();
+		String sql = PojoQuery.build(ArticleDetail.class).toStatement().getSql();
 		
 		System.out.println(sql);
 		

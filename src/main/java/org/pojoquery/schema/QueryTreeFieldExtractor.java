@@ -18,6 +18,7 @@ import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
+import org.pojoquery.util.CurlyMarkers;
 
 /**
  * Extracts and merges field definitions from multiple QueryTrees.
@@ -170,15 +171,21 @@ public class QueryTreeFieldExtractor {
             // Add foreign key columns from join conditions
             for (QueryNode child : joined.children()) {
                 JoinInfo joinInfo = child.joinInfo();
-                if (joinInfo != null) {
+                if (joinInfo != null && joinInfo.joinCondition() != null) {
                     // Handle FK in parent table (entity references / many-to-one)
-                    if (joinInfo.joinCondition() != null) {
-                        String fkColumn = extractForeignKeyColumnFromCondition(joinInfo.joinCondition(), joined.alias(), child.alias());
-                        if (fkColumn != null) {
-                            FieldKey key = new FieldKey(schema, table, fkColumn);
-                            FieldDef def = new FieldDef(key, null, false, false, false);
-                            result.merge(key, def, FieldDef::mergeWith);
-                        }
+                    JoinCondition condition = joinInfo.joinCondition();
+                    String fkColumn = null;
+                    if (condition instanceof JoinCondition.ForeignKeyInParent fk) {
+                        fkColumn = fk.foreignKeyColumn();
+                    } else if (condition instanceof JoinCondition.Custom custom) {
+                        fkColumn = CurlyMarkers.extractColumnForAlias(custom.condition().getSql(), joined.alias());
+                    }
+                    // ForeignKeyInChild and SharedPrimaryKey don't add FK to parent table
+                    
+                    if (fkColumn != null) {
+                        FieldKey key = new FieldKey(schema, table, fkColumn);
+                        FieldDef def = new FieldDef(key, null, false, false, false);
+                        result.merge(key, def, FieldDef::mergeWith);
                     }
                     
                     // Handle many-to-many junction tables
@@ -189,7 +196,7 @@ public class QueryTreeFieldExtractor {
                 
                 // Add columns from embedded nodes
                 if (child instanceof EmbeddedNode embedded) {
-                    collectEmbeddedColumns(embedded, schema, table, joined.alias(), result);
+                    collectEmbeddedColumns(embedded, schema, table, result);
                 }
             }
             
@@ -224,7 +231,7 @@ public class QueryTreeFieldExtractor {
     }
 
     private static void collectEmbeddedColumns(EmbeddedNode node, String schema, String table,
-            String sourceAlias, Map<FieldKey, FieldDef> result) {
+            Map<FieldKey, FieldDef> result) {
         for (FieldSelection field : node.fields()) {
             String column = field.columnName();
             if (column == null) continue;
@@ -238,39 +245,9 @@ public class QueryTreeFieldExtractor {
         // Recurse into nested embedded nodes
         for (QueryNode child : node.children()) {
             if (child instanceof EmbeddedNode nested) {
-                collectEmbeddedColumns(nested, schema, table, sourceAlias, result);
+                collectEmbeddedColumns(nested, schema, table, result);
             }
         }
-    }
-
-    /**
-     * Extracts the FK column name from a structured JoinCondition.
-     * Returns the FK column name that belongs in the parent table (for ForeignKeyInParent),
-     * or null if the FK is in the child table.
-     */
-    private static String extractForeignKeyColumnFromCondition(JoinCondition condition, String parentAlias, String childAlias) {
-        return switch (condition) {
-            case JoinCondition.ForeignKeyInParent fk -> fk.foreignKeyColumn();
-            case JoinCondition.ForeignKeyInChild fk -> null; // FK is in child table, not parent
-            case JoinCondition.SharedPrimaryKey pk -> null; // No FK column, just shared PK
-            case JoinCondition.Custom custom -> extractForeignKeyColumn(custom.condition().getSql(), parentAlias);
-        };
-    }
-
-    /**
-     * Legacy method for extracting FK column from SQL string.
-     * Pattern: {alias.column} = {other.column}
-     */
-    private static String extractForeignKeyColumn(String condition, String alias) {
-        String prefix = "{" + alias + ".";
-        int start = condition.indexOf(prefix);
-        if (start >= 0) {
-            int end = condition.indexOf("}", start);
-            if (end > start) {
-                return condition.substring(start + prefix.length(), end);
-            }
-        }
-        return null;
     }
 
     private static boolean isEntityType(TypeModel type) {

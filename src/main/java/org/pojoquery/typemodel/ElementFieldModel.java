@@ -12,8 +12,6 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 
-import org.pojoquery.AnnotationHelper;
-
 /**
  * FieldModel implementation for annotation processing.
  * Wraps a VariableElement for compile-time field introspection.
