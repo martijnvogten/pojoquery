@@ -6,8 +6,8 @@ import static org.pojoquery.pipeline.QueryModel.determineSqlFieldName;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Link;
+import org.pojoquery.pipeline.querytree.JoinCondition;
 import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.LinkedValueNode;
 import org.pojoquery.pipeline.querytree.QueryNode;
@@ -49,9 +49,8 @@ public class ValueCollectionTransform implements QueryTreeTransform {
             String parentId = determineSqlFieldName(determineIdField(node.type()));
             String linkField = resolveLinkField(linkAnn, node.tableInfo().tableName());
             
-            SqlExpression condition = new SqlExpression(
-                "{" + node.alias() + "." + parentId + "} = {" + joinAlias + "." + linkField + "}"
-            );
+            // FK is in the link table (child), pointing to parent's ID
+            JoinCondition condition = new JoinCondition.ForeignKeyInChild(linkField, parentId);
             
             // Create a LinkedValueNode for value collections
             LinkedValueNode valueNode = new LinkedValueNode(
@@ -60,7 +59,7 @@ public class ValueCollectionTransform implements QueryTreeTransform {
                 linkAnn.linkschema().isEmpty() ? null : linkAnn.linkschema(),
                 linkAnn.linktable(),
                 linkAnn.fetchColumn(),
-                JoinInfo.leftJoinMany(TableInfo.of(linkAnn.linkschema(), linkAnn.linktable()), f).withCondition(condition)
+                JoinInfo.leftJoinMany(TableInfo.of(linkAnn.linkschema(), linkAnn.linktable()), f).withJoinCondition(condition)
             );
             
             newChildren.add(valueNode);

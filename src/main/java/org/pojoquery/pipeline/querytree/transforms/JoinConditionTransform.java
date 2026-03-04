@@ -3,9 +3,8 @@ package org.pojoquery.pipeline.querytree.transforms;
 import java.util.List;
 
 import org.pojoquery.SqlExpression;
-import org.pojoquery.annotations.JoinCondition;
-import org.pojoquery.annotations.Link;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
+import org.pojoquery.pipeline.querytree.JoinCondition;
 import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryNode;
@@ -29,7 +28,7 @@ public class JoinConditionTransform implements QueryTreeTransform {
     private boolean hasChildrenNeedingConditions(TableNode node) {
         return node.children().stream()
             .anyMatch(c -> c.joinInfo() != null && 
-                          c.joinInfo().condition() == null);
+                          c.joinInfo().joinCondition() == null);
     }
     
     private TableNode processNode(TableNode node, String rootAlias) {
@@ -42,32 +41,34 @@ public class JoinConditionTransform implements QueryTreeTransform {
     
     private QueryNode updateCondition(QueryNode child, TableNode parent) {
         JoinInfo joinInfo = child.joinInfo();
-        if (joinInfo == null || joinInfo.condition() != null) {
+        if (joinInfo == null || joinInfo.joinCondition() != null) {
             return child;
         }
         
-        SqlExpression newCondition;
+        JoinCondition newCondition;
         FieldModel linkField = joinInfo.linkField();
         
-        JoinCondition condAnn = linkField != null ? linkField.getAnnotation(JoinCondition.class) : null;
+        org.pojoquery.annotations.JoinCondition condAnn = linkField != null ? linkField.getAnnotation(org.pojoquery.annotations.JoinCondition.class) : null;
         if (condAnn != null) {
+            // Custom join condition annotation - use Custom variant
             String resolved = ExpressionResolver.resolve(
                 condAnn.value(),
                 parent.alias(),
                 child.alias(),
                 null
             );
-            newCondition = new SqlExpression(resolved);
+            newCondition = new JoinCondition.Custom(new SqlExpression(resolved));
         } else if (joinInfo.isCollection()) {
-            newCondition = JoinConditions.forCollection(
-                parent.alias(), child.alias(), parent.type(), parent.tableInfo().tableName(), 
+            // One-to-many: FK column is in child table
+            newCondition = JoinConditions.forCollectionStructured(
+                parent.type(), parent.tableInfo().tableName(), 
                 getForeignLinkField(linkField));
         } else {
-            newCondition = JoinConditions.forEntityReference(
-                parent.alias(), child.alias(), linkField, child.type());
+            // Entity reference (many-to-one): FK column is in parent table
+            newCondition = JoinConditions.forEntityReferenceStructured(linkField, child.type());
         }
         
-        JoinInfo updatedJoinInfo = joinInfo.withCondition(newCondition);
+        JoinInfo updatedJoinInfo = joinInfo.withJoinCondition(newCondition);
         return updateNodeJoinInfo(child, updatedJoinInfo);
     }
     
@@ -83,8 +84,8 @@ public class JoinConditionTransform implements QueryTreeTransform {
 
     private String getForeignLinkField(FieldModel field) {
         if (field == null) return null;
-        Link linkAnn = field.getAnnotation(Link.class);
-        if (linkAnn != null && !Link.NONE.equals(linkAnn.foreignlinkfield())) {
+        org.pojoquery.annotations.Link linkAnn = field.getAnnotation(org.pojoquery.annotations.Link.class);
+        if (linkAnn != null && !org.pojoquery.annotations.Link.NONE.equals(linkAnn.foreignlinkfield())) {
             return linkAnn.foreignlinkfield();
         }
         return null;

@@ -7,11 +7,11 @@ import static org.pojoquery.pipeline.QueryModel.determineTableMapping;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
+import org.pojoquery.pipeline.querytree.JoinCondition;
 import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
@@ -70,7 +70,7 @@ public class SubclassExpansionTransform implements QueryTreeTransform {
             }
             
             // LEFT JOIN subclass_table ON subclass.id = parent.id
-            SqlExpression condition = JoinConditions.forSubclass(node.alias(), subAlias, idField);
+            JoinCondition.SharedPrimaryKey condition = JoinConditions.forInheritanceStructured(idField);
 
             EmptyTableNode subNode = EmptyTableNode.ofJoined(subAlias, subType,
                 JoinInfo.leftJoinSubClass(TableInfo.of(subTableMapping.schemaName, subTableMapping.tableName), condition)).withIsSubClass(true);

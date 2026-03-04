@@ -55,6 +55,7 @@ public class SingleTableInheritanceTransform implements QueryTreeTransform {
         String discAlias = node.alias() + "." + discColumn;
         newFields.add(new FieldSelection(
             discAlias,
+            discColumn,
             new SqlExpression("{" + node.alias() + "." + discColumn + "}"),
             null, null
         ));

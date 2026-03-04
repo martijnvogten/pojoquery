@@ -7,10 +7,10 @@ import static org.pojoquery.pipeline.QueryModel.determineTableMapping;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
+import org.pojoquery.pipeline.querytree.JoinCondition;
 import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
@@ -46,12 +46,17 @@ public class SuperclassTableTransform implements QueryTreeTransform {
             return node;
         }
         
-        // Add superclass tables as INNER JOINs
+        // Determine join type: INNER for root nodes, LEFT for already-joined nodes
+        // (to preserve the optional semantics of the parent join)
+        boolean isRoot = node.joinInfo() == null;
+        
         List<QueryNode> newChildren = new ArrayList<>(node.children());
         String idField = determineSqlFieldName(determineIdField(superClassMapping.type));
-        SqlExpression condition = JoinConditions.forInheritance(parentAlias, node.alias(), idField);
-        EmptyTableNode parentNode = EmptyTableNode.ofJoined(parentAlias, superClassMapping.type,
-            JoinInfo.leftJoinSuperClass(TableInfo.of(superClassMapping.schemaName, superClassMapping.tableName), condition)).withIsSuperClass(true);
+        JoinCondition.SharedPrimaryKey condition = JoinConditions.forInheritanceStructured(idField);
+        JoinInfo superJoinInfo = isRoot 
+            ? JoinInfo.innerJoinSuperClass(TableInfo.of(superClassMapping.schemaName, superClassMapping.tableName), condition, node.alias())
+            : JoinInfo.leftJoinSuperClass(TableInfo.of(superClassMapping.schemaName, superClassMapping.tableName), condition, node.alias());
+        EmptyTableNode parentNode = EmptyTableNode.ofJoined(parentAlias, superClassMapping.type, superJoinInfo).withIsSuperClass(true);
         
         newChildren.add(parentNode);
         

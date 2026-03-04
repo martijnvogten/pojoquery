@@ -44,7 +44,7 @@ public class AggregateExpressionTransform implements QueryTreeTransform {
                 Aggregate aggAnn = f.getAnnotation(Aggregate.class);
                 String resolved = ExpressionResolver.resolve(aggAnn.value(), node.alias());
                 String fieldAlias = node.alias() + "." + f.getName();
-                newFields.add(new FieldSelection(fieldAlias, new SqlExpression(resolved), f, null));
+                newFields.add(new FieldSelection(fieldAlias, null, new SqlExpression(resolved), f, null));
             }
         }
         
@@ -59,7 +59,7 @@ public class AggregateExpressionTransform implements QueryTreeTransform {
         Aggregate aggAnn = fs.field().getAnnotation(Aggregate.class);
         if (aggAnn != null) {
             String resolved = ExpressionResolver.resolve(aggAnn.value(), alias);
-            return new FieldSelection(fs.alias(), new SqlExpression(resolved), fs.field(), fs.customMapping());
+            return new FieldSelection(fs.alias(), fs.columnName(), new SqlExpression(resolved), fs.field(), fs.customMapping());
         }
         return fs;
     }

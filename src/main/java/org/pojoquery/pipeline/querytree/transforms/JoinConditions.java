@@ -2,6 +2,7 @@ package org.pojoquery.pipeline.querytree.transforms;
 
 import org.pojoquery.AnnotationHelper;
 import org.pojoquery.SqlExpression;
+import org.pojoquery.pipeline.querytree.JoinCondition;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 
@@ -15,6 +16,51 @@ public final class JoinConditions {
     
     private JoinConditions() {}
     
+    // ========== Structured JoinCondition factory methods ==========
+    
+    /**
+     * Creates a structured join condition for an entity reference (many-to-one).
+     * FK column is in the parent table, pointing to child's ID.
+     * 
+     * @param field The field creating the join
+     * @param targetType The type being joined
+     * @return A ForeignKeyInParent condition
+     */
+    public static JoinCondition.ForeignKeyInParent forEntityReferenceStructured(FieldModel field, TypeModel targetType) {
+        String fkColumn = determineFkColumn(field);
+        String targetId = determineSqlFieldName(determineIdField(targetType));
+        return new JoinCondition.ForeignKeyInParent(fkColumn, targetId);
+    }
+    
+    /**
+     * Creates a structured join condition for a one-to-many collection.
+     * FK column is in the child table, pointing to parent's ID.
+     * 
+     * @param parentType The parent type
+     * @param parentTableName The parent table name (for FK naming)
+     * @param foreignLinkField Custom FK column name in child table, or null for default
+     * @return A ForeignKeyInChild condition
+     */
+    public static JoinCondition.ForeignKeyInChild forCollectionStructured(TypeModel parentType, String parentTableName, String foreignLinkField) {
+        String parentId = determineSqlFieldName(determineIdField(parentType));
+        String fkColumn = (foreignLinkField != null && !foreignLinkField.isEmpty()) 
+            ? foreignLinkField 
+            : parentTableName + "_id";
+        return new JoinCondition.ForeignKeyInChild(fkColumn, parentId);
+    }
+    
+    /**
+     * Creates a structured join condition for inheritance (shared primary key).
+     * 
+     * @param idField The ID field name
+     * @return A SharedPrimaryKey condition
+     */
+    public static JoinCondition.SharedPrimaryKey forInheritanceStructured(String idField) {
+        return new JoinCondition.SharedPrimaryKey(idField, idField);
+    }
+    
+    // ========== Legacy SqlExpression factory methods (for backward compatibility) ==========
+    
     /**
      * Creates a join condition for an entity reference (one-to-one).
      * Pattern: {parent.field_id} = {child.id}
@@ -24,14 +70,12 @@ public final class JoinConditions {
      * @param field The field creating the join
      * @param targetType The type being joined
      * @return The join condition
+     * @deprecated Use {@link #forEntityReferenceStructured} and {@link JoinCondition#toSqlExpression}
      */
+    @Deprecated
     public static SqlExpression forEntityReference(String parentAlias, String childAlias, 
                                                     FieldModel field, TypeModel targetType) {
-        String fkColumn = determineFkColumn(field);
-        String targetId = determineSqlFieldName(determineIdField(targetType));
-        return new SqlExpression(
-            "{" + parentAlias + "." + fkColumn + "} = {" + childAlias + "." + targetId + "}"
-        );
+        return forEntityReferenceStructured(field, targetType).toSqlExpression(parentAlias, childAlias);
     }
     
     /**
@@ -43,7 +87,9 @@ public final class JoinConditions {
      * @param parentType The parent type
      * @param parentTableName The parent table name (for FK naming)
      * @return The join condition
+     * @deprecated Use {@link #forCollectionStructured} and {@link JoinCondition#toSqlExpression}
      */
+    @Deprecated
     public static SqlExpression forCollection(String parentAlias, String childAlias,
                                                TypeModel parentType, String parentTableName) {
         return forCollection(parentAlias, childAlias, parentType, parentTableName, null);
@@ -59,17 +105,14 @@ public final class JoinConditions {
      * @param parentTableName The parent table name (for default FK naming)
      * @param foreignLinkField Custom FK column name in child table, or null for default
      * @return The join condition
+     * @deprecated Use {@link #forCollectionStructured} and {@link JoinCondition#toSqlExpression}
      */
+    @Deprecated
     public static SqlExpression forCollection(String parentAlias, String childAlias,
                                                TypeModel parentType, String parentTableName,
                                                String foreignLinkField) {
-        String parentId = determineSqlFieldName(determineIdField(parentType));
-        String fkColumn = (foreignLinkField != null && !foreignLinkField.isEmpty()) 
-            ? foreignLinkField 
-            : parentTableName + "_id";
-        return new SqlExpression(
-            "{" + parentAlias + "." + parentId + "} = {" + childAlias + "." + fkColumn + "}"
-        );
+        return forCollectionStructured(parentType, parentTableName, foreignLinkField)
+            .toSqlExpression(parentAlias, childAlias);
     }
     
     /**
@@ -80,11 +123,11 @@ public final class JoinConditions {
      * @param childAlias The child table alias
      * @param idField The ID field name
      * @return The join condition
+     * @deprecated Use {@link #forInheritanceStructured} and {@link JoinCondition#toSqlExpression}
      */
+    @Deprecated
     public static SqlExpression forInheritance(String parentAlias, String childAlias, String idField) {
-        return new SqlExpression(
-            "{" + parentAlias + "." + idField + "} = {" + childAlias + "." + idField + "}"
-        );
+        return forInheritanceStructured(idField).toSqlExpression(parentAlias, childAlias);
     }
     
     /**
@@ -95,8 +138,12 @@ public final class JoinConditions {
      * @param subclassAlias The subclass table alias
      * @param idField The ID field name
      * @return The join condition
+     * @deprecated Use {@link #forInheritanceStructured} and {@link JoinCondition#toSqlExpression}
      */
+    @Deprecated
     public static SqlExpression forSubclass(String parentAlias, String subclassAlias, String idField) {
+        // Note: for subclass, the join is subclass.id = parent.id 
+        // which is the reverse direction in the SQL, but same columns
         return new SqlExpression(
             "{" + subclassAlias + "." + idField + "} = {" + parentAlias + "." + idField + "}"
         );
@@ -110,7 +157,9 @@ public final class JoinConditions {
      * @param superclassAlias The superclass table alias
      * @param idField The ID field name
      * @return The join condition
+     * @deprecated Use {@link #forInheritanceStructured} and {@link JoinCondition#toSqlExpression}
      */
+    @Deprecated
     public static SqlExpression forSuperclass(String childAlias, String superclassAlias, String idField) {
         return new SqlExpression(
             "{" + superclassAlias + "." + idField + "} = {" + childAlias + "." + idField + "}"
@@ -126,7 +175,9 @@ public final class JoinConditions {
      * @param parentIdField The parent's ID field name
      * @param linkField The FK column in the link table pointing to parent
      * @return The join condition
+     * @deprecated JoinTableInfo now holds column names directly
      */
+    @Deprecated
     public static SqlExpression forLinkTableParent(String parentAlias, String linkTableAlias,
                                                     String parentIdField, String linkField) {
         return new SqlExpression(
@@ -143,7 +194,9 @@ public final class JoinConditions {
      * @param foreignLinkField The FK column in the link table pointing to target
      * @param targetIdField The target's ID field name
      * @return The join condition
+     * @deprecated JoinTableInfo now holds column names directly
      */
+    @Deprecated
     public static SqlExpression forLinkTableTarget(String linkTableAlias, String targetAlias,
                                                     String foreignLinkField, String targetIdField) {
         return new SqlExpression(

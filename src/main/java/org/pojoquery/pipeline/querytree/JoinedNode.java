@@ -225,8 +225,8 @@ public record JoinedNode(
         }
         if (joinInfo != null) {
             sb.append(indent).append("  joinInfo: ").append(joinInfo.joinType());
-            if (joinInfo.condition() != null) {
-                sb.append(" ON ").append(joinInfo.condition().getSql());
+            if (joinInfo.joinCondition() != null) {
+                sb.append(" ON ").append(joinInfo.joinCondition());
             }
             sb.append("\n");
         }

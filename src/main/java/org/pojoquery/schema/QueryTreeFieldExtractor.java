@@ -9,7 +9,9 @@ import java.util.stream.Collectors;
 
 import org.pojoquery.pipeline.querytree.EmbeddedNode;
 import org.pojoquery.pipeline.querytree.FieldSelection;
+import org.pojoquery.pipeline.querytree.JoinCondition;
 import org.pojoquery.pipeline.querytree.JoinInfo;
+import org.pojoquery.pipeline.querytree.JoinTableInfo;
 import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
@@ -168,12 +170,20 @@ public class QueryTreeFieldExtractor {
             // Add foreign key columns from join conditions
             for (QueryNode child : joined.children()) {
                 JoinInfo joinInfo = child.joinInfo();
-                if (joinInfo != null && joinInfo.condition() != null) {
-                    String fkColumn = extractForeignKeyColumn(joinInfo.condition().getSql(), joined.alias());
-                    if (fkColumn != null) {
-                        FieldKey key = new FieldKey(schema, table, fkColumn);
-                        FieldDef def = new FieldDef(key, null, false, false, false);
-                        result.merge(key, def, FieldDef::mergeWith);
+                if (joinInfo != null) {
+                    // Handle FK in parent table (entity references / many-to-one)
+                    if (joinInfo.joinCondition() != null) {
+                        String fkColumn = extractForeignKeyColumnFromCondition(joinInfo.joinCondition(), joined.alias(), child.alias());
+                        if (fkColumn != null) {
+                            FieldKey key = new FieldKey(schema, table, fkColumn);
+                            FieldDef def = new FieldDef(key, null, false, false, false);
+                            result.merge(key, def, FieldDef::mergeWith);
+                        }
+                    }
+                    
+                    // Handle many-to-many junction tables
+                    if (joinInfo.joinTableInfo() != null) {
+                        collectJunctionTableColumns(joinInfo.joinTableInfo(), result);
                     }
                 }
                 
@@ -182,12 +192,35 @@ public class QueryTreeFieldExtractor {
                     collectEmbeddedColumns(embedded, schema, table, joined.alias(), result);
                 }
             }
+            
+            // Check if this node is a child with FK in its own table (one-to-many / FK in child)
+            if (joined.joinInfo() != null && joined.joinInfo().joinCondition() instanceof JoinCondition.ForeignKeyInChild fkChild) {
+                FieldKey key = new FieldKey(schema, table, fkChild.foreignKeyColumn());
+                FieldDef def = new FieldDef(key, null, false, false, false);
+                result.merge(key, def, FieldDef::mergeWith);
+            }
         }
 
         // Recurse into children
         for (QueryNode child : node.children()) {
             collectFromNode(child, result);
         }
+    }
+    
+    /**
+     * Collects FK columns from a junction table (many-to-many relationship).
+     */
+    private static void collectJunctionTableColumns(JoinTableInfo joinTableInfo, Map<FieldKey, FieldDef> result) {
+        String schema = joinTableInfo.joinTable().schemaName();
+        String table = joinTableInfo.joinTable().tableName();
+        
+        // Parent FK column
+        FieldKey parentFkKey = new FieldKey(schema, table, joinTableInfo.parentFkColumn());
+        result.merge(parentFkKey, new FieldDef(parentFkKey, null, false, false, false), FieldDef::mergeWith);
+        
+        // Target FK column  
+        FieldKey targetFkKey = new FieldKey(schema, table, joinTableInfo.targetFkColumn());
+        result.merge(targetFkKey, new FieldDef(targetFkKey, null, false, false, false), FieldDef::mergeWith);
     }
 
     private static void collectEmbeddedColumns(EmbeddedNode node, String schema, String table,
@@ -210,8 +243,25 @@ public class QueryTreeFieldExtractor {
         }
     }
 
+    /**
+     * Extracts the FK column name from a structured JoinCondition.
+     * Returns the FK column name that belongs in the parent table (for ForeignKeyInParent),
+     * or null if the FK is in the child table.
+     */
+    private static String extractForeignKeyColumnFromCondition(JoinCondition condition, String parentAlias, String childAlias) {
+        return switch (condition) {
+            case JoinCondition.ForeignKeyInParent fk -> fk.foreignKeyColumn();
+            case JoinCondition.ForeignKeyInChild fk -> null; // FK is in child table, not parent
+            case JoinCondition.SharedPrimaryKey pk -> null; // No FK column, just shared PK
+            case JoinCondition.Custom custom -> extractForeignKeyColumn(custom.condition().getSql(), parentAlias);
+        };
+    }
+
+    /**
+     * Legacy method for extracting FK column from SQL string.
+     * Pattern: {alias.column} = {other.column}
+     */
     private static String extractForeignKeyColumn(String condition, String alias) {
-        // Pattern: {alias.column} = {other.column}
         String prefix = "{" + alias + ".";
         int start = condition.indexOf(prefix);
         if (start >= 0) {

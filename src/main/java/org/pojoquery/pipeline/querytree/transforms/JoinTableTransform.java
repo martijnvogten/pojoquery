@@ -7,11 +7,11 @@ import static org.pojoquery.pipeline.QueryModel.determineTableMapping;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.JoinInfo;
+import org.pojoquery.pipeline.querytree.JoinTableInfo;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableInfo;
@@ -47,33 +47,27 @@ public class JoinTableTransform implements QueryTreeTransform {
             String linkTableAlias = AliasNaming.linkTableAlias(node.alias(), f.getName());
             String targetAlias = AliasNaming.childAlias(node.alias(), rootAlias, f.getName());
             
-            // // Determine column names
+            // Determine column names
             String parentId = determineSqlFieldName(determineIdField(node.type()));
             String linkField = resolveLinkField(linkAnn, node.tableInfo().tableName());
             String foreignLinkField = resolveForeignLinkField(linkAnn, componentType);
             String targetId = determineSqlFieldName(determineIdField(componentType));
             
-            // // JOIN 1: parent → linktable
-            SqlExpression linkCondition = JoinConditions.forLinkTableParent(
-                node.alias(), linkTableAlias, parentId, linkField);
-            
-            // // JOIN 2: linktable → target
-            SqlExpression targetCondition = JoinConditions.forLinkTableTarget(
-                linkTableAlias, targetAlias, foreignLinkField, targetId);
-            
-            // // Build link table node (no fields, just for joining)
-            // TableNode linkTableNode = TableNodeFactory.forLinkTable(
-            //     linkTableAlias, linkAnn.linkschema(), linkAnn.linktable());
-            
-            // // Build target entity node with its join info
-            // EmptyTableNode targetNode = EmptyTableNode.ofJoined(targetAlias, componentType,
-            //     JoinInfo.leftJoinMany(targetCondition, f));
+            // Create JoinTableInfo with explicit column names
+            JoinTableInfo joinTableInfo = JoinTableInfo.of(
+                TableInfo.of(linkAnn.linkschema(), linkAnn.linktable()),
+                linkTableAlias,
+                linkField,      // parentFkColumn: e.g., "article_id" in junction table
+                parentId,       // parentRefColumn: e.g., "id" in parent table
+                foreignLinkField, // targetFkColumn: e.g., "tag_id" in junction table
+                targetId        // targetRefColumn: e.g., "id" in target table
+            );
             
             // Chain: linkTable contains join to target
             JoinInfo joinInfo = JoinInfo.manyToMany(
                 TableInfo.of(targetMapping.schemaName, targetMapping.tableName), 
                 f, 
-                TableInfo.of(linkAnn.linkschema(), linkAnn.linktable()), linkTableAlias, linkCondition, targetCondition);
+                joinTableInfo);
             
             newChildren.add(EmptyTableNode.ofJoined(targetAlias, FieldFilters.getComponentType(f), joinInfo));
         }

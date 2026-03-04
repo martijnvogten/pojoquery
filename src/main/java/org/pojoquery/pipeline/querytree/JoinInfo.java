@@ -11,53 +11,84 @@ import org.pojoquery.typemodel.FieldModel;
  * This record captures how a node is joined to its parent.
  *
  * @param joinType The SQL join type (LEFT, INNER, etc.)
- * @param condition The join condition SQL expression (may be null if not yet resolved)
+ * @param joinCondition The structured join condition (may be null if not yet resolved)
  * @param linkField The Java field that created this join (may be null for manual joins)
  * @param isCollection True if this is a one-to-many relationship (List/Set/Array)
+ * @param childAliasPrefix For superclass joins, the alias prefix for field aliasing (e.g., "bedroom" for "room.id AS bedroom.id")
  */
 public record JoinInfo(
     JoinType joinType,
     boolean isCollection,
     FieldModel linkField,
     TableInfo childTable,
-    SqlExpression condition,
+    JoinCondition joinCondition,
     JoinTableInfo joinTableInfo,
-    QueryTree subquery
+    QueryTree subquery,
+    String childAliasPrefix
 ) {
     public JoinInfo {
         Objects.requireNonNull(joinType, "joinType");
     }
+    
+    // Legacy constructor for backward compatibility
+    public JoinInfo(JoinType joinType, boolean isCollection, FieldModel linkField, 
+                   TableInfo childTable, JoinCondition joinCondition, 
+                   JoinTableInfo joinTableInfo, QueryTree subquery) {
+        this(joinType, isCollection, linkField, childTable, joinCondition, joinTableInfo, subquery, null);
+    }
 
-    public static JoinInfo manyToMany(TableInfo childTable, FieldModel linkField, TableInfo joinTable, String joinTableAlias, SqlExpression parentCondition, SqlExpression targetCondition) {
-        return new JoinInfo(JoinType.LEFT, true, linkField, childTable, null, new JoinTableInfo(joinTable, joinTableAlias, parentCondition, targetCondition), null);
+    public static JoinInfo manyToMany(TableInfo childTable, FieldModel linkField, JoinTableInfo joinTableInfo) {
+        return new JoinInfo(JoinType.LEFT, true, linkField, childTable, null, joinTableInfo, null, null);
     }
 
     public static JoinInfo leftJoinMany(TableInfo childTable, FieldModel linkField) {
-        return new JoinInfo(JoinType.LEFT, true, linkField, childTable, null, null, null);
+        return new JoinInfo(JoinType.LEFT, true, linkField, childTable, null, null, null, null);
     }
 
     public static JoinInfo leftJoinOne(TableInfo childTable, FieldModel linkField) {
-        return new JoinInfo(JoinType.LEFT, false, linkField, childTable, null, null, null);
+        return new JoinInfo(JoinType.LEFT, false, linkField, childTable, null, null, null, null);
     }
 
-    public static JoinInfo leftJoinSubClass(TableInfo childTable, SqlExpression condition) {
-        return new JoinInfo(JoinType.LEFT, false, null, childTable, condition, null, null);
+    public static JoinInfo leftJoinSubClass(TableInfo childTable, JoinCondition.SharedPrimaryKey condition) {
+        return new JoinInfo(JoinType.LEFT, false, null, childTable, condition, null, null, null);
     }
 
-    public static JoinInfo leftJoinSuperClass(TableInfo childTable, SqlExpression condition) {
-        return new JoinInfo(JoinType.LEFT, false, null, childTable, condition, null, null);
+    public static JoinInfo leftJoinSuperClass(TableInfo childTable, JoinCondition.SharedPrimaryKey condition, String childAliasPrefix) {
+        return new JoinInfo(JoinType.LEFT, false, null, childTable, condition, null, null, childAliasPrefix);
     }
 
+    public static JoinInfo innerJoinSuperClass(TableInfo childTable, JoinCondition.SharedPrimaryKey condition, String childAliasPrefix) {
+        return new JoinInfo(JoinType.INNER, false, null, childTable, condition, null, null, childAliasPrefix);
+    }
+
+    public JoinInfo withJoinCondition(JoinCondition joinCondition) {
+        return new JoinInfo(joinType, isCollection, linkField, childTable, joinCondition, joinTableInfo, subquery, childAliasPrefix);
+    }
+
+    /**
+     * @deprecated Use {@link #withJoinCondition(JoinCondition)} instead
+     */
+    @Deprecated
     public JoinInfo withCondition(SqlExpression condition) {
-        return new JoinInfo(joinType, isCollection, linkField, childTable, condition, joinTableInfo, subquery);
+        return new JoinInfo(joinType, isCollection, linkField, childTable, new JoinCondition.Custom(condition), joinTableInfo, subquery, childAliasPrefix);
     }
 
     public JoinInfo withSubQuery(QueryTree subquery) {
-        return new JoinInfo(joinType, isCollection, linkField, childTable, condition, joinTableInfo, subquery);
+        return new JoinInfo(joinType, isCollection, linkField, childTable, joinCondition, joinTableInfo, subquery, childAliasPrefix);
     }
 
     public boolean isManyToMany() {
         return isCollection && joinTableInfo != null;
+    }
+    
+    /**
+     * Returns the join condition as a SQL expression.
+     * @param parentAlias The parent table alias
+     * @param childAlias The child table alias
+     * @return The SQL expression, or null if no condition is set
+     */
+    public SqlExpression toSqlCondition(String parentAlias, String childAlias) {
+        return joinCondition != null ? joinCondition.toSqlExpression(parentAlias, childAlias) : null;
     }
 
     @Override
@@ -78,23 +109,17 @@ public record JoinInfo(
         if (childTable != null) {
             sb.append(indent).append("  childTable: ").append(childTable.tableName()).append("\n");
         }
-        if (condition != null) {
-            sb.append(indent).append("  condition: ").append(condition.getSql()).append("\n");
+        if (joinCondition != null) {
+            sb.append(indent).append("  joinCondition: ").append(joinCondition).append("\n");
         }
         if (joinTableInfo != null) {
-            sb.append(indent).append("  joinTableInfo: {\n");
-            sb.append(indent).append("    joinTable: ").append(joinTableInfo.joinTable().tableName()).append("\n");
-            sb.append(indent).append("    alias: \"").append(joinTableInfo.joinTableAlias()).append("\"\n");
-            if (joinTableInfo.parentCondition() != null) {
-                sb.append(indent).append("    parentCondition: ").append(joinTableInfo.parentCondition().getSql()).append("\n");
-            }
-            if (joinTableInfo.targetCondition() != null) {
-                sb.append(indent).append("    targetCondition: ").append(joinTableInfo.targetCondition().getSql()).append("\n");
-            }
-            sb.append(indent).append("  }\n");
+            sb.append(indent).append("  joinTableInfo: ").append(joinTableInfo.toStringWithIndent(indent + "  ")).append("\n");
         }
         if (subquery != null) {
             sb.append(indent).append("  subquery: ").append(subquery.toStringWithIndent(indent + "  ")).append("\n");
+        }
+        if (childAliasPrefix != null) {
+            sb.append(indent).append("  childAliasPrefix: \"").append(childAliasPrefix).append("\"\n");
         }
         sb.append(indent).append("}");
         return sb.toString();

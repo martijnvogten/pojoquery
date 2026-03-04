@@ -10,6 +10,8 @@ import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 
+// Note: JoinCondition is in the same package, no import needed
+
 /**
  * Tests for QueryTreeBuilder - building QueryTree from POJO classes.
  */
@@ -84,7 +86,12 @@ public class TestQueryTreeBuilder {
         assertEquals("author", authorJoinInfo.linkField().getName());
         assertFalse(authorJoinInfo.isCollection());
 
-		assertEquals("{book.author_id} = {author.id}", authorJoinInfo.condition().getSql());
+		// The join condition should be ForeignKeyInParent with author_id pointing to id
+		JoinCondition condition = authorJoinInfo.joinCondition();
+		assertTrue(condition instanceof JoinCondition.ForeignKeyInParent);
+		JoinCondition.ForeignKeyInParent fkCondition = (JoinCondition.ForeignKeyInParent) condition;
+		assertEquals("author_id", fkCondition.foreignKeyColumn());
+		assertEquals("id", fkCondition.referencedColumn());
         
         // With fixpoint, EmptyTableNode is now converted to JoinedNode
         JoinedNode authorNode = (JoinedNode) authorChild;

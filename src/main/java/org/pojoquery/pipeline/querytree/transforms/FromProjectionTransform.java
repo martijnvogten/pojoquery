@@ -84,7 +84,7 @@ public class FromProjectionTransform implements QueryTreeTransform {
                 nonAggregateExpressions.add(selectExpression.getSql());
             }
             
-            projectedFields.add(new FieldSelection(fieldAlias, selectExpression, f, null));
+            projectedFields.add(new FieldSelection(fieldAlias, null, selectExpression, f, null));
         }
         
         // Auto-add GROUP BY for non-aggregate fields when aggregates are present

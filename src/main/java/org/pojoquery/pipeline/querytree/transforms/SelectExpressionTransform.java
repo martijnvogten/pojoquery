@@ -43,7 +43,7 @@ public class SelectExpressionTransform implements QueryTreeTransform {
                 Select selectAnn = f.getAnnotation(Select.class);
                 String resolved = ExpressionResolver.resolve(selectAnn.value(), node.alias());
                 String fieldAlias = node.alias() + "." + f.getName();
-                newFields.add(new FieldSelection(fieldAlias, new SqlExpression(resolved), f, null));
+                newFields.add(new FieldSelection(fieldAlias, null, new SqlExpression(resolved), f, null));
             }
         }
         
@@ -58,7 +58,7 @@ public class SelectExpressionTransform implements QueryTreeTransform {
         Select selectAnn = fs.field().getAnnotation(Select.class);
         if (selectAnn != null) {
             String resolved = ExpressionResolver.resolve(selectAnn.value(), alias);
-            return new FieldSelection(fs.alias(), new SqlExpression(resolved), fs.field(), fs.customMapping());
+            return new FieldSelection(fs.alias(), fs.columnName(), new SqlExpression(resolved), fs.field(), fs.customMapping());
         }
         return fs;
     }

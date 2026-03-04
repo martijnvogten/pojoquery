@@ -181,7 +181,8 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 					if (joinInfo.subquery() != null) {
 						DefaultSqlQuery subQuery = new DefaultSqlQuery(query.getDbContext());
 						applyQueryTreeToQuery(subQuery, joinInfo.subquery());
-						query.addSubqueryJoin(joinInfo.joinType(), subQuery.toStatement(), child.alias(), joinInfo.condition());
+						SqlExpression condition = joinInfo.toSqlCondition(tableNode.alias(), child.alias());
+						query.addSubqueryJoin(joinInfo.joinType(), subQuery.toStatement(), child.alias(), condition);
 						continue;
 					}
 
@@ -189,12 +190,15 @@ public class CustomizableQueryBuilder<SQ extends SqlQuery<?>,T> {
 					if (joinInfo.joinTableInfo() != null) {
 						JoinTableInfo joinTableInfo = joinInfo.joinTableInfo();
 						// add join to join table
-						query.addJoin(JoinType.LEFT, joinTableInfo.joinTable().schemaName(), joinTableInfo.joinTable().tableName(), joinTableInfo.joinTableAlias(), joinTableInfo.parentCondition());
-						// add join to join table
-						query.addJoin(JoinType.LEFT, joinInfo.childTable().schemaName(), joinInfo.childTable().tableName(), child.alias(), joinTableInfo.targetCondition());
+						query.addJoin(JoinType.LEFT, joinTableInfo.joinTable().schemaName(), joinTableInfo.joinTable().tableName(), 
+							joinTableInfo.joinTableAlias(), joinTableInfo.parentCondition(tableNode.alias()));
+						// add join to target table
+						query.addJoin(JoinType.LEFT, joinInfo.childTable().schemaName(), joinInfo.childTable().tableName(), 
+							child.alias(), joinTableInfo.targetCondition(child.alias()));
 					} else {
+						SqlExpression condition = joinInfo.toSqlCondition(tableNode.alias(), child.alias());
 						query.addJoin(joinInfo.joinType(), joinInfo.childTable().schemaName(), joinInfo.childTable().tableName(), 
-							child.alias(), joinInfo.condition());
+							child.alias(), condition);
 					}
 				}
 				

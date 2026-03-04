@@ -37,7 +37,7 @@ public final class TableNodeFactory {
         String colName = determineSqlFieldName(field);
         String alias = aliasPrefix + "." + field.getName();
         SqlExpression expr = new SqlExpression("{" + tableAlias + "." + colName + "}");
-        return new FieldSelection(alias, expr, field, null);
+        return new FieldSelection(alias, colName, expr, field, null);
     }
     
     /**
@@ -50,6 +50,6 @@ public final class TableNodeFactory {
      */
     public static FieldSelection fieldSelection(String tableAlias, FieldModel field, String expression) {
         String alias = tableAlias + "." + field.getName();
-        return new FieldSelection(alias, new SqlExpression(expression), field, null);
+        return new FieldSelection(alias, null, new SqlExpression(expression), field, null);
     }
 }

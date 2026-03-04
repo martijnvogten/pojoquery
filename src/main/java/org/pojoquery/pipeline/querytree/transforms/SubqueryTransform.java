@@ -44,8 +44,11 @@ public class SubqueryTransform implements QueryTreeTransform {
         }
 
         FieldModel linkField = joinInfo.linkField();
+        if (linkField == null || joinInfo.subquery() != null) {
+            return node;
+        }
         Subquery subqAnn = linkField.getAnnotation(Subquery.class);
-        if (linkField == null || subqAnn == null || joinInfo.subquery() != null) {
+        if (subqAnn == null) {
             return node;
         }
 
