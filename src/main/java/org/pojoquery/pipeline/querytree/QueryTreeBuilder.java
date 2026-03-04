@@ -16,45 +16,17 @@ import org.pojoquery.typemodel.TypeModel;
  * </pre>
  */
 public class QueryTreeBuilder {
-
-    private final TypeModel rootType;
-    private QueryTreePipeline pipeline;
-
-    public QueryTreeBuilder(Class<?> clazz) {
-        this(new ReflectionTypeModel(clazz));
-    }
-
-    public QueryTreeBuilder(TypeModel type) {
-        this.rootType = type;
-        this.pipeline = QueryTreePipeline.standard();
-    }
-
-    /**
-     * Uses a custom pipeline instead of the standard one.
-     */
-    public QueryTreeBuilder withPipeline(QueryTreePipeline pipeline) {
-        this.pipeline = pipeline;
-        return this;
-    }
-
-    /**
-     * Builds the QueryTree from the root type using the configured pipeline.
-     */
-    public QueryTree build() {
-        return pipeline.build(rootType);
-    }
-
     /**
      * Creates a QueryTree from a class using the standard pipeline.
      */
     public static QueryTree from(Class<?> clazz) {
-        return new QueryTreeBuilder(clazz).build();
+        return from(new ReflectionTypeModel(clazz));
     }
-
+    
     /**
      * Creates a QueryTree from a TypeModel using the standard pipeline.
-     */
-    public static QueryTree from(TypeModel type) {
-        return new QueryTreeBuilder(type).build();
+    */
+   public static QueryTree from(TypeModel type) {
+        return QueryTreePipeline.standard().build(type);
     }
 }

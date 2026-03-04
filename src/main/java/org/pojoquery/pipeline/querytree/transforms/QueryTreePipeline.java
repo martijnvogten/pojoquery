@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.pojoquery.pipeline.querytree.QueryTree;
-import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
 /**
@@ -115,42 +114,9 @@ public class QueryTreePipeline {
      * @param clazz The entity class
      * @return The built QueryTree
      */
-    public QueryTree build(Class<?> clazz) {
-        return build(new ReflectionTypeModel(clazz));
-    }
-    
-    /**
-     * Builds a QueryTree for the given type.
-     * Automatically handles @From projection if present.
-     * 
-     * @param type The entity type
-     * @return The built QueryTree
-     */
     public QueryTree build(TypeModel type) {
-        // Check for @From - if present, use FromProjectionTransform
-        org.pojoquery.annotations.From fromAnn = type.getAnnotation(org.pojoquery.annotations.From.class);
-        if (fromAnn != null) {
-            // Build from source type, then apply projection
-            TypeModel sourceType = new ReflectionTypeModel(fromAnn.value());
-            QueryTree sourceTree = buildDirect(sourceType);
-            return new FromProjectionTransform().apply(
-                new QueryTree(type, sourceTree.root(), sourceTree.groupBy(), 
-                    sourceTree.orderBy(), sourceTree.wheres())
-            );
-        }
-        
-        return buildDirect(type);
-    }
-    
-    /**
-     * Builds a QueryTree directly without checking @From.
-     */
-    private QueryTree buildDirect(TypeModel type) {
-        // Start with an empty tree (first transform creates the actual structure)
-        QueryTree tree = QueryTree.of(type);
-        
         // Apply transforms to fixpoint (repeatedly until no changes)
-        return runToFixPoint(tree);
+        return runToFixPoint(QueryTree.of(type));
     }
     
     /**
@@ -161,7 +127,7 @@ public class QueryTreePipeline {
      * @param tree The starting tree
      * @return The tree after reaching fixed point
      */
-    public QueryTree runToFixPoint(QueryTree tree) {
+    QueryTree runToFixPoint(QueryTree tree) {
         return runToFixPoint(tree, 1000);
     }
     

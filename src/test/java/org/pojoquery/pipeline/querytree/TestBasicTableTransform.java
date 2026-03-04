@@ -25,6 +25,7 @@ import org.pojoquery.pipeline.querytree.transforms.QueryTreePipeline;
 import org.pojoquery.pipeline.querytree.transforms.SingleTableInheritanceTransform;
 import org.pojoquery.pipeline.querytree.transforms.SubclassExpansionTransform;
 import org.pojoquery.pipeline.querytree.transforms.SuperclassTableTransform;
+import org.pojoquery.typemodel.ReflectionTypeModel;
 
 public class TestBasicTableTransform {
 
@@ -90,7 +91,7 @@ public class TestBasicTableTransform {
 		.with(new JoinConditionTransform())
 		;
 
-		QueryTree result = pipeline.runToFixPoint(QueryTree.of(Book.class)); // Should not throw and should terminate
+		QueryTree result = pipeline.build(new ReflectionTypeModel(Book.class)); // Should not throw and should terminate
 		System.out.println("SQL: " + queryTreeToSql(result));
 		
 		// System.out.println("Result: " + result);
@@ -126,7 +127,7 @@ public class TestBasicTableTransform {
 				.with(new BasicTableTransform())
 				.with(new EntityReferenceTransform());
 
-		QueryTree result = pipeline.runToFixPoint(QueryTree.of(BedRoom.class));
+		QueryTree result = pipeline.build(new ReflectionTypeModel(BedRoom.class));
 		System.out.println("SQL: " + queryTreeToSql(result));
 		
 		System.out.println("Result: " + result);
@@ -144,7 +145,7 @@ public class TestBasicTableTransform {
 				.with(new JoinConditionTransform())
 				;
 
-		QueryTree result = pipeline.runToFixPoint(QueryTree.of(House.class));
+		QueryTree result = pipeline.build(new ReflectionTypeModel(House.class));
 		System.out.println("SQL: " + queryTreeToSql(result));
 		
 		System.out.println("Result: " + result);
@@ -186,7 +187,7 @@ public class TestBasicTableTransform {
 				.with(new JoinTableTransform())
 				.with(new JoinConditionTransform())
 				;
-		QueryTree result = pipeline.runToFixPoint(QueryTree.of(UserGroupWithUsers.class));
+		QueryTree result = pipeline.build(new ReflectionTypeModel(UserGroupWithUsers.class));
 		System.out.println("SQL: " + queryTreeToSql(result));
 	}
 
@@ -242,13 +243,13 @@ public class TestBasicTableTransform {
 				;
 
 		{
-			QueryTree result = pipeline.runToFixPoint(QueryTree.of(PersonWithEmbedded.class));
+			QueryTree result = pipeline.build(new ReflectionTypeModel(PersonWithEmbedded.class));
 			// System.out.println("Tree: " + result.toString());
 			System.out.println("SQL: " + queryTreeToSql(result));
 		}
 
 		{
-			QueryTree result = pipeline.runToFixPoint(QueryTree.of(Order.class));
+			QueryTree result = pipeline.build(new ReflectionTypeModel(Order.class));
 			// System.out.println("Tree: " + result.toString());
 			System.out.println("SQL: " + queryTreeToSql(result));
 		}
@@ -286,12 +287,12 @@ public class TestBasicTableTransform {
 				;
 
 		{
-			QueryTree result = pipeline.runToFixPoint(QueryTree.of(STIRoom.class));
+			QueryTree result = pipeline.build(new ReflectionTypeModel(STIRoom.class));
 			System.out.println("SQL: " + queryTreeToSql(result));
 		}
 
 		{
-			QueryTree result = pipeline.runToFixPoint(QueryTree.of(STIBedRoom.class));
+			QueryTree result = pipeline.build(new ReflectionTypeModel(STIBedRoom.class));
 			System.out.println("SQL: " + queryTreeToSql(result));
 		}
 		
