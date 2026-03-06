@@ -54,8 +54,8 @@ public class SuperclassTableTransform implements QueryTreeTransform {
         String idField = determineSqlFieldName(determineIdField(superClassMapping.type));
         JoinCondition.SharedPrimaryKey condition = JoinConditions.forInheritanceStructured(idField);
         JoinInfo superJoinInfo = isRoot 
-            ? JoinInfo.innerJoinSuperClass(TableInfo.of(superClassMapping.schemaName, superClassMapping.tableName), condition, node.alias())
-            : JoinInfo.leftJoinSuperClass(TableInfo.of(superClassMapping.schemaName, superClassMapping.tableName), condition, node.alias());
+            ? JoinInfo.innerJoinSuperClass(TableInfo.of(superClassMapping.schemaName, superClassMapping.tableName), condition)
+            : JoinInfo.leftJoinSuperClass(TableInfo.of(superClassMapping.schemaName, superClassMapping.tableName), condition);
         EmptyTableNode parentNode = EmptyTableNode.ofJoined(parentAlias, superClassMapping.type, superJoinInfo).withIsSuperClass(true);
         
         newChildren.add(parentNode);

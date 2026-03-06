@@ -1,24 +1,21 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
+import static org.pojoquery.pipeline.PojoMetadata.collectFieldsOfClass;
+import static org.pojoquery.pipeline.PojoMetadata.determineTableMapping;
+import static org.pojoquery.pipeline.PojoMetadata.isListOrArray;
+
 import java.lang.annotation.Annotation;
 import java.util.List;
 
 import org.pojoquery.AnnotationHelper;
 import org.pojoquery.annotations.Aggregate;
-
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Other;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Subquery;
-import org.pojoquery.annotations.Transient;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.typemodel.FieldModel;
-import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
-
-import static org.pojoquery.pipeline.PojoMetadata.collectFieldsOfClass;
-import static org.pojoquery.pipeline.PojoMetadata.determineTableMapping;
-import static org.pojoquery.pipeline.PojoMetadata.isListOrArray;
 
 /**
  * Helper methods for filtering fields by type and annotations.
@@ -83,7 +80,7 @@ public final class FieldFilters {
      */
     public static List<FieldModel> entityReferences(TypeModel type) {
         return tableFields(type).stream()
-            .filter(f -> isEntityReference(f) && !isTransient(f))
+            .filter(f -> isEntityReference(f) && !isTransient(f) && !f.getType().isEnum())
             .toList();
     }
     
@@ -171,7 +168,7 @@ public final class FieldFilters {
     public static boolean isSimple(FieldModel field) {
         if (isTransient(field)) return false;
         TypeModel type = field.getType();
-        return type.isPrimitive() || isWrapper(type) || isCommonType(type) || isEnum(type);
+        return type.isPrimitive() || isWrapper(type) || isCommonType(type) || type.isEnum();
     }
     
     public static boolean isEntityReference(FieldModel field) {
@@ -190,7 +187,7 @@ public final class FieldFilters {
     }
     
     public static boolean isTransient(FieldModel field) {
-        return field.getAnnotation(Transient.class) != null || field.isTransient();
+        return AnnotationHelper.isTransient(field) || field.isTransient();
     }
     
     public static boolean hasAnnotation(FieldModel field, Class<? extends Annotation> ann) {
@@ -207,7 +204,7 @@ public final class FieldFilters {
     
     private static boolean hasTableOnComponent(FieldModel field) {
         TypeModel component = getComponentType(field);
-        return component != null && AnnotationHelper.hasTableAnnotation(component);
+        return component != null && !component.isPrimitive() && !determineTableMapping(component).isEmpty();
     }
     
     private static boolean isWrapper(TypeModel type) {
@@ -238,12 +235,5 @@ public final class FieldFilters {
                name.equals("java.math.BigInteger") ||
                name.equals("java.util.UUID") ||
                name.equals("[B"); // byte[]
-    }
-    
-    private static boolean isEnum(TypeModel type) {
-        if (type instanceof ReflectionTypeModel rtm) {
-            return rtm.getReflectionClass().isEnum();
-        }
-        return false;
     }
 }

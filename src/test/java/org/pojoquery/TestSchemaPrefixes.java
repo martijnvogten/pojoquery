@@ -9,7 +9,6 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
-import org.pojoquery.pipeline.QueryBuilder;
 
 @UseDialect(Dialect.MYSQL)
 public class TestSchemaPrefixes {
@@ -48,7 +47,7 @@ public class TestSchemaPrefixes {
 					FROM `schema1`.`article` AS `article`
 					 LEFT JOIN `schema2`.`person` AS `authors` ON `article`.`authorName`=`authors`.`name`
 					"""),
-				norm(QueryBuilder.from(Article.class).getQuery().toStatement().getSql()));
+				norm(PojoQuery.build(Article.class).getQuery().toStatement().getSql()));
 	}
 	
 	@Test
@@ -64,7 +63,7 @@ public class TestSchemaPrefixes {
 					 LEFT JOIN `schema1`.`article` AS `articles` ON `book`.`id` = `articles`.`book_id`
 					 LEFT JOIN `schema2`.`person` AS `articles.authors` ON `articles`.`authorName`=`articles.authors`.`name`
 					"""),
-				norm(QueryBuilder.from(Book.class).getQuery().toStatement().getSql()));
+				norm(PojoQuery.build(Book.class).getQuery().toStatement().getSql()));
 	}
 	
 	@Test
@@ -85,6 +84,6 @@ public class TestSchemaPrefixes {
 					 LEFT JOIN schema1.article AS `articles` ON `book`.id = `articles`.book_id
 					 LEFT JOIN schema2.person AS `articles.authors` ON `articles`.authorName=`articles.authors`.name
 					"""),
-				norm(QueryBuilder.from(context, Book.class).getQuery().toStatement().getSql()));
+				norm(PojoQuery.build(context, Book.class).getQuery().toStatement().getSql()));
 	}
 }

@@ -7,7 +7,9 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
@@ -87,7 +89,7 @@ public class QueryTreeRowProcessor<T> {
             Map<Object, Object> allEntities = new HashMap<>();
             
             if (!rows.isEmpty()) {
-                keysByAlias = PojoMetadata.groupKeysByAlias(rows.get(0).keySet());
+                keysByAlias = groupKeysByAlias(rows.get(0).keySet());
             }
 
             for (Map<String, Object> row : rows) {
@@ -106,7 +108,7 @@ public class QueryTreeRowProcessor<T> {
     @SuppressWarnings("unchecked")
     public void processRow(List<T> result, Map<Object, Object> allEntities, Map<String, Object> row) {
         if (keysByAlias.isEmpty()) {
-            keysByAlias = PojoMetadata.groupKeysByAlias(row.keySet());
+            keysByAlias = groupKeysByAlias(row.keySet());
         }
         Map<String, Values> onThisRow = collectValuesByAlias(row, keysByAlias);
         onThisRow = remapSubClasses(onThisRow);
@@ -209,6 +211,22 @@ public class QueryTreeRowProcessor<T> {
                                 parentId = createId(sub, parentValues, subIdFields);
                                 parent = allEntities.get(parentId);
                                 if (parent != null) break;
+                            }
+                        }
+                    }
+                }
+                
+                // If parent is a superclass node, look up entity via first non-superclass ancestor
+                if (parent == null && parentNode instanceof JoinedNode jn && jn.isSuperClass()) {
+                    String ancestorAlias = findFirstNonSuperclassAncestor(parentAlias);
+                    if (ancestorAlias != null) {
+                        parentValues = onThisRow.get(ancestorAlias);
+                        if (parentValues != null && !parentValues.isEmpty()) {
+                            QueryNode ancestorNode = nodesByAlias.get(ancestorAlias);
+                            if (ancestorNode != null) {
+                                List<String> ancestorIdFields = getIdFieldNames(ancestorNode);
+                                parentId = createId(ancestorAlias, parentValues, ancestorIdFields);
+                                parent = allEntities.get(parentId);
                             }
                         }
                     }
@@ -323,6 +341,22 @@ public class QueryTreeRowProcessor<T> {
         }
         if (node.embedInfo() != null) {
             return node.embedInfo().linkField();
+        }
+        return null;
+    }
+
+    /**
+     * Traverses up the parent chain to find the first non-superclass ancestor.
+     * Used for table-per-subclass inheritance where superclass tables need to be 
+     * mapped back to their subclass entities.
+     */
+    private String findFirstNonSuperclassAncestor(String alias) {
+        QueryNode current = parentNodes.get(alias);
+        while (current != null) {
+            if (current instanceof JoinedNode jn && !jn.isSuperClass()) {
+                return jn.alias();
+            }
+            current = parentNodes.get(current.alias());
         }
         return null;
     }
@@ -461,4 +495,87 @@ public class QueryTreeRowProcessor<T> {
         Field field = ((ReflectionFieldModel) linkField).getReflectionField();
         org.pojoquery.util.FieldHelper.putValueIntoField(parentEntity, field, entity);
     }
+
+	public static Map<String, List<String>> groupKeysByAlias(Set<String> allKeys) {
+		Map<String, List<String>> keysByAlias = new HashMap<>();
+
+		for (String key : allKeys) {
+			int dotPos = key.lastIndexOf(".");
+			if (dotPos < 0) {
+				throw new RuntimeException("Key does not contain a dot: '" + key + "', allKeys: " + allKeys);
+			}
+			String alias = key.substring(0, dotPos);
+			if (!keysByAlias.containsKey(alias)) {
+				keysByAlias.put(alias, new ArrayList<>());
+			}
+			keysByAlias.get(alias).add(key);
+		}
+
+		return keysByAlias;
+	}
+
+    public StreamingRowHandler createStreamingRowHandler(Consumer<T> entityConsumer) {
+        return new StreamingRowHandler(entityConsumer);
+    }
+    	/**
+	 * Handles streaming row processing, emitting completed entities when the primary ID changes.
+	 */
+	public class StreamingRowHandler implements Consumer<Map<String, Object>> {
+		private final Consumer<T> entityConsumer;
+		private Object currentPrimaryId = null;
+		private T currentEntity = null;
+		private Map<Object, Object> entityCache = new HashMap<>();
+
+		StreamingRowHandler(Consumer<T> entityConsumer) {
+			this.entityConsumer = entityConsumer;
+		}
+
+		@Override
+		@SuppressWarnings("unchecked")
+		public void accept(Map<String, Object> row) {
+			if (keysByAlias.size() == 0) {
+				keysByAlias = groupKeysByAlias(row.keySet());
+			}
+			Map<String, Values> onThisRow = collectValuesByAlias(row, keysByAlias);
+			onThisRow = remapSubClasses(onThisRow);
+
+			// Find the primary ID for this row
+			Object primaryId = null;
+            Values values = onThisRow.get(tree.rootAlias());
+            if (values != null && !allNulls(values)) {
+                primaryId = createId(tree.rootAlias(), values, ((JoinedNode) tree.root()).idFieldNames());
+            }
+
+			// If primary ID changed, emit the current entity and clear cache
+			if (primaryId != null && currentPrimaryId != null && !primaryId.equals(currentPrimaryId)) {
+				emitCurrentEntity();
+			}
+
+			// Process the row
+			final Object finalPrimaryId = primaryId;
+			processRowInternal(onThisRow, entityCache, (id, entity) -> {
+				currentPrimaryId = finalPrimaryId;
+				currentEntity = (T) entity;
+			});
+		}
+
+		/**
+		 * Emits the final entity after all rows have been processed.
+		 * Must be called after the last row to ensure the final entity is emitted.
+		 */
+		public void flush() {
+			emitCurrentEntity();
+		}
+
+		private void emitCurrentEntity() {
+			if (currentEntity != null) {
+				entityConsumer.accept(currentEntity);
+				entityCache.clear();
+				currentEntity = null;
+				currentPrimaryId = null;
+			}
+		}
+	}
+
+
 }

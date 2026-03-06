@@ -24,7 +24,7 @@ import javax.tools.JavaFileObject;
 
 import org.pojoquery.annotations.GenerateQuery;
 import org.pojoquery.internal.TableMapping;
-import org.pojoquery.pipeline.QueryBuilder;
+import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
 import org.pojoquery.typemodel.ElementTypeModel;
@@ -98,7 +98,7 @@ public class QueryProcessor extends AbstractProcessor {
         // Use ElementTypeModel to process the entity at compile time
         TypeModel entityType = new ElementTypeModel(typeElement, elementUtils, typeUtils);
 
-        List<TableMapping> tableMapping = QueryBuilder.determineTableMapping(entityType);
+        List<TableMapping> tableMapping = PojoMetadata.determineTableMapping(entityType);
         if (tableMapping.size() == 0) {
             messager.printMessage(Diagnostic.Kind.ERROR,
                 "@GenerateQuery requires @Table annotation on entity or its superclasses", typeElement);

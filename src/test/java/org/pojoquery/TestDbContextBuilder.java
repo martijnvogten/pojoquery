@@ -8,7 +8,6 @@ import java.lang.reflect.Field;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.SimpleFieldMapping;
 import org.pojoquery.pipeline.SqlQuery;
 
@@ -91,7 +90,7 @@ public class TestDbContextBuilder {
             .withQuoteStyle(DbContext.QuoteStyle.ANSI)
             .build();
         
-        SqlQuery<?> query = QueryBuilder.from(context, TestEntity.class).getQuery();
+        SqlQuery<?> query = PojoQuery.build(context, TestEntity.class).getQuery();
         String sql = query.toStatement().getSql();
         
         assertTrue(sql.contains("\"test\"")); // Table name should be quoted with ANSI style

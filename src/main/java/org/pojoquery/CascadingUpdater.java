@@ -13,7 +13,6 @@ import org.pojoquery.annotations.Cascade;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.pipeline.PojoMetadata;
-import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionFieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
@@ -187,18 +186,16 @@ final class CascadingUpdater {
             throw new MappingException("Cannot cascade operations for entity without ID: " + entityClass.getQualifiedName());
         }
         
-        for (FieldModel field : QueryBuilder.collectFieldsOfClass(entityClass)) {
+        for (FieldModel field : PojoMetadata.collectFieldsOfClass(entityClass)) {
             // Handle @Cascade annotated fields (one-to-many owned relationships)
-            Cascade cascadeAnn = field.getAnnotation(Cascade.class);
-            if (cascadeAnn != null) {
+            if (AnnotationHelper.isCascade(field)) {
                 processCascadeField(context, connection, entity, entityClass, parentId, field, operation);
                 continue;
             }
             
             // Handle @Link annotated fields with linktable (many-to-many relationships)
-            Link linkAnn = field.getAnnotation(Link.class);
-            if (linkAnn != null && !Link.NONE.equals(linkAnn.linktable())) {
-                processLinkTableField(context, connection, entity, entityClass, parentId, field, linkAnn, operation);
+            if (AnnotationHelper.isLinkTable(field)) {
+                processLinkTableField(context, connection, entity, entityClass, parentId, field, operation);
             }
         }
     }
@@ -236,7 +233,7 @@ final class CascadingUpdater {
     }
     
     private static void processLinkTableField(DbContext context, Connection connection,
-            Object entity, TypeModel entityClass, Object parentId, FieldModel field, Link linkAnn, CascadeOperation operation) {
+            Object entity, TypeModel entityClass, Object parentId, FieldModel field, CascadeOperation operation) {
         TypeModel componentType = Types.getCollectionComponentType(field);
         if (componentType == null) {
             return;
@@ -251,6 +248,7 @@ final class CascadingUpdater {
             throw new MappingException("Cannot access field " + field.getName(), e);
         }
         
+        AnnotationHelper.getLinkTable();
         String linkTable = linkAnn.linktable();
         String linkSchema = linkAnn.linkschema();
         
@@ -365,7 +363,7 @@ final class CascadingUpdater {
     private static void updateForeignKeyColumn(DbContext context, Connection connection,
             TypeModel childClass, String fkColumn, Object childId, Object parentId) {
         String tableName = AnnotationHelper.getTableName(childClass);
-        FieldModel idField = QueryBuilder.determineIdField(childClass);
+        FieldModel idField = PojoMetadata.determineIdField(childClass);
         String idColumnName = PojoMetadata.determineSqlFieldName(idField);
         
         String sql = "UPDATE " + context.quoteObjectNames(tableName) 
@@ -433,7 +431,7 @@ final class CascadingUpdater {
     }
     
     private static Object getEntityId(Object entity) {
-        List<FieldModel> idFields = QueryBuilder.determineIdFields(new ReflectionTypeModel(entity.getClass()));
+        List<FieldModel> idFields = PojoMetadata.determineIdFields(new ReflectionTypeModel(entity.getClass()));
         if (idFields.isEmpty()) {
             return null;
         }
@@ -481,7 +479,7 @@ final class CascadingUpdater {
         }
         
         // Look for entity reference field that points to parent class
-        for (FieldModel f : QueryBuilder.collectFieldsOfClass(childClass)) {
+        for (FieldModel f : PojoMetadata.collectFieldsOfClass(childClass)) {
             if (Types.isAssignableFrom(f.getType(), parentClass) || Types.isAssignableFrom(parentClass, f.getType())) {
                 // This is an entity reference to the parent - use link field naming (fieldName_id)
                 String sqlName = PojoMetadata.determineLinkFieldName(f);
@@ -502,7 +500,7 @@ final class CascadingUpdater {
         }
         
         // Also try with @FieldName annotation
-        for (FieldModel f : QueryBuilder.collectFieldsOfClass(childClass)) {
+        for (FieldModel f : PojoMetadata.collectFieldsOfClass(childClass)) {
             String sqlName = PojoMetadata.determineSqlFieldName(f);
             if (expectedFieldName.equals(sqlName) || (tableName + "_id").equals(sqlName)) {
                 return new ForeignKeyInfo(f, sqlName, Number.class.isAssignableFrom(((ReflectionTypeModel)f.getType()).getReflectionClass()) || f.getType().isPrimitive());
@@ -546,7 +544,7 @@ final class CascadingUpdater {
     }
     
     private static FieldModel findField(TypeModel clazz, String fieldName) {
-        for (FieldModel f : QueryBuilder.collectFieldsOfClass(clazz)) {
+        for (FieldModel f : PojoMetadata.collectFieldsOfClass(clazz)) {
             if (f.getName().equals(fieldName)) {
                 return f;
             }
@@ -560,7 +558,7 @@ final class CascadingUpdater {
         Set<Object> ids = new HashSet<>();
         
         String tableName = AnnotationHelper.getTableName(componentType);
-        FieldModel idField = QueryBuilder.determineIdField(componentType);
+        FieldModel idField = PojoMetadata.determineIdField(componentType);
         String idFieldName = PojoMetadata.determineSqlFieldName(idField);
         
         // Build query: SELECT id FROM child_table WHERE parent_id = ?
@@ -584,7 +582,7 @@ final class CascadingUpdater {
         
         // First, recursively delete any nested @Cascade collections
         // We need to process any @Cascade fields on the component type
-        for (FieldModel field : QueryBuilder.collectFieldsOfClass(componentType)) {
+        for (FieldModel field : PojoMetadata.collectFieldsOfClass(componentType)) {
             Cascade cascadeAnn = field.getAnnotation(Cascade.class);
             if (cascadeAnn != null && PojoMetadata.isListOrArray(field.getType())) {
                 TypeModel nestedType = Types.getCollectionComponentType(field);
@@ -599,7 +597,7 @@ final class CascadingUpdater {
         }
         
         String tableName = AnnotationHelper.getTableName(componentType);
-        FieldModel idField = QueryBuilder.determineIdField(componentType);
+        FieldModel idField = PojoMetadata.determineIdField(componentType);
         String idFieldName = PojoMetadata.determineSqlFieldName(idField);
         
         String sql = "DELETE FROM " + context.quoteObjectNames(tableName) + 
@@ -613,7 +611,7 @@ final class CascadingUpdater {
         
         // First check if this type has nested @Cascade collections
         boolean hasNestedCascade = false;
-        for (FieldModel field : QueryBuilder.collectFieldsOfClass(componentType)) {
+        for (FieldModel field : PojoMetadata.collectFieldsOfClass(componentType)) {
             if (field.getAnnotation(Cascade.class) != null && PojoMetadata.isListOrArray(field.getType())) {
                 hasNestedCascade = true;
                 break;

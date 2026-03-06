@@ -11,7 +11,6 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
-import org.pojoquery.pipeline.QueryBuilder;
 
 @UseDialect(DbContext.Dialect.MYSQL)
 public class TestEnums {
@@ -42,13 +41,13 @@ public class TestEnums {
 		assertEquals(
 			norm("""
 				SELECT
-				 `user`.`id` AS `user.id`,
-				 `roles`.`element` AS `roles.value`,
-				 `user`.`state` AS `user.state`
-				 FROM `user` AS `user`
-				 LEFT JOIN `user_roles` AS `roles` ON `user`.`id` = `roles`.`user_id`
+				`user`.`id` AS `user.id`,
+				`user`.`state` AS `user.state`,
+				`roles`.`element` AS `roles.value`
+				FROM `user` AS `user`
+				LEFT JOIN `user_roles` AS `roles` ON `user`.`id` = `roles`.`user_id`
 				"""), 
-			norm(QueryBuilder.from(User.class).toStatement().getSql()));
+			norm(PojoQuery.build(User.class).toStatement().getSql()));
 		
 		List<Map<String, Object>> result = List.of(
 			Map.of(
@@ -62,7 +61,7 @@ public class TestEnums {
 				"roles.value", Role.AGENT.name())
 			);
 		
-		List<User> users = QueryBuilder.from(User.class).processRows(result);
+		List<User> users = PojoQuery.build(User.class).processRows(result);
 		
 		assertEquals(1, users.size());
 		assertEquals(Role.ADMIN, users.get(0).roles[0]);

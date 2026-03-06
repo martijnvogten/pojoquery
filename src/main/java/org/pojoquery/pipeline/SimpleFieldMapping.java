@@ -24,6 +24,7 @@ public class SimpleFieldMapping implements FieldMapping {
 		this.f = f;
 	}
 
+	@SuppressWarnings({ "rawtypes", "unchecked" })
 	@Override
 	public void apply(Object targetEntity, Object value) {
 		try {
@@ -38,7 +39,7 @@ public class SimpleFieldMapping implements FieldMapping {
 			}
 
 			if (value instanceof String && f.getType().isEnum()) {
-				value = QueryBuilder.enumValueOf(f.getType(), (String)value);
+				value = Enum.valueOf((Class<Enum>) f.getType(), (String)value);
 			}
 			if (value instanceof BigDecimal && (f.getType().equals(Integer.class) || f.getType().equals(Integer.TYPE))) {
 				value = ((BigDecimal)value).intValue();

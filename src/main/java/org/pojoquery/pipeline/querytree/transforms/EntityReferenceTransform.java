@@ -5,6 +5,7 @@ import static org.pojoquery.pipeline.PojoMetadata.determineTableMapping;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.querytree.EmbeddedNode;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
@@ -46,6 +47,9 @@ public class EntityReferenceTransform implements QueryTreeTransform {
             String joinAlias = AliasNaming.childAlias(node instanceof EmbeddedNode en ? en.embedInfo().sourceAlias() : node.alias(), rootAlias, 
             fieldName);
             List<TableMapping> tableMapping = determineTableMapping(targetType);
+            if (tableMapping.isEmpty()) {
+                throw new MappingException("Missing @Table annotation on class " + targetType.getQualifiedName() + " or any of its superclasses");
+            }
             TableMapping childTableMapping = tableMapping.get(tableMapping.size() - 1);
             EmptyTableNode joinedNode = EmptyTableNode.ofJoined(joinAlias, targetType, 
                 JoinInfo.leftJoinOne(TableInfo.of(childTableMapping.schemaName, childTableMapping.tableName), f));

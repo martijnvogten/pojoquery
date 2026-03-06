@@ -99,6 +99,14 @@ public interface AnnotationModel {
         return getAnnotationValues("value");
     }
 
+    default Number getNumberValue(String attr) {
+        return getNumberValues(attr).stream().findFirst().orElse(null);
+    }
+
+    default Boolean getBooleanValue(String attr) {
+        return getBooleanValues(attr).stream().findFirst().orElse(null);
+    }
+
     default List<Number> getNumberValues() {
         return getNumberValues("value");
     }

@@ -10,7 +10,6 @@ import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
-import org.pojoquery.pipeline.QueryBuilder;
 
 @UseDialect(Dialect.MYSQL)
 public class TestSpecialization {
@@ -86,7 +85,7 @@ public class TestSpecialization {
 
 	@Test
 	public void testManagerSpecialization() {
-		String sql = QueryBuilder.from(EmployeeDetail.class).toStatement().getSql();
+		String sql = PojoQuery.build(EmployeeDetail.class).toStatement().getSql();
 		
 		System.out.println(sql);
 		
@@ -95,24 +94,27 @@ public class TestSpecialization {
 		// The specialized manager property should completely replace the parent's version - no duplicates.
 		assertEquals(norm("""
 			SELECT
-			 `employee`.`id` AS `employee.id`,
-			 `employee`.`name` AS `employee.name`,
-			 `employee`.`salary` AS `employee.salary`,
-			 `department`.`id` AS `department.id`,
-			 `department`.`name` AS `department.name`,
-			 `employee`.`hireDate` AS `employee.hireDate`,
-			 `manager`.`id` AS `manager.id`,
-			 `manager`.`name` AS `manager.name`,
-			 `manager.manager`.`id` AS `manager.manager.id`,
-			 `manager.manager`.`name` AS `manager.manager.name`,
-			 `manager`.`salary` AS `manager.salary`,
-			 `manager.department`.`id` AS `manager.department.id`,
-			 `manager.department`.`name` AS `manager.department.name`
+			`employee`.`id` AS `employee.id`,
+			`employee`.`name` AS `employee.name`,
+			`employee`.`salary` AS `employee.salary`,
+			`employee`.`hireDate` AS `employee.hireDate`,
+			`manager`.`id` AS `manager.id`,
+			`manager`.`name` AS `manager.name`,
+			`department`.`id` AS `department.id`,
+			`department`.`name` AS `department.name`,
+			`manager`.`id` AS `manager.id`,
+			`manager`.`name` AS `manager.name`,
+			`manager`.`salary` AS `manager.salary`,
+			`manager.manager`.`id` AS `manager.manager.id`,
+			`manager.manager`.`name` AS `manager.manager.name`,
+			`manager.department`.`id` AS `manager.department.id`,
+			`manager.department`.`name` AS `manager.department.name`
 			FROM `employee` AS `employee`
-			 LEFT JOIN `department` AS `department` ON `employee`.`department_id` = `department`.`id`
-			 LEFT JOIN `employee` AS `manager` ON `employee`.`manager_id` = `manager`.`id`
-			 LEFT JOIN `employee` AS `manager.manager` ON `manager`.`manager_id` = `manager.manager`.`id`
-			 LEFT JOIN `department` AS `manager.department` ON `manager`.`department_id` = `manager.department`.`id`
+			LEFT JOIN `employee` AS `manager` ON `employee`.`manager_id` = `manager`.`id`
+			LEFT JOIN `department` AS `department` ON `employee`.`department_id` = `department`.`id`
+			LEFT JOIN `employee` AS `manager` ON `employee`.`manager_id` = `manager`.`id`
+			LEFT JOIN `employee` AS `manager.manager` ON `manager`.`manager_id` = `manager.manager`.`id`
+			LEFT JOIN `department` AS `manager.department` ON `manager`.`department_id` = `manager.department`.`id`
 			"""), norm(sql));
 	}
 

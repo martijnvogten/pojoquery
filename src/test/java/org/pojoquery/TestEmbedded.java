@@ -13,7 +13,6 @@ import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
-import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.schema.SchemaGenerator;
 
 @UseDialect(DbContext.Dialect.MYSQL)
@@ -78,20 +77,20 @@ public class TestEmbedded {
 					 `user`.`home_address` AS `home.address`,
 					 `user`.`home_city` AS `home.city`
 					 FROM `user` AS `user`
-					"""), norm(QueryBuilder.from(User.class).getQuery().toStatement().getSql()));
+					"""), norm(PojoQuery.build(User.class).getQuery().toStatement().getSql()));
 		
 		List<Map<String, Object>> result = List.of(Map.of(
 				"user.id", 1L, 
 				"home.address", "501, Broadway", 
 				"home.city", "New York D.C."));
 		
-		List<User> users = QueryBuilder.from(User.class).processRows(result);
+		List<User> users = PojoQuery.build(User.class).processRows(result);
 		assertEquals("501, Broadway", users.get(0).home.address);
 	}
 	
 	@Test
 	public void testUsingPipeline() {
-		QueryBuilder<ArticleDetail> p = QueryBuilder.from(ArticleDetail.class);
+		PojoQuery<ArticleDetail> p = PojoQuery.build(ArticleDetail.class);
 		System.out.println(p.getQuery().toStatement().getSql());
 		List<ArticleDetail> articles = p.processRows(RESULT_ARTICLE_DETAIL);
 		
@@ -111,7 +110,7 @@ public class TestEmbedded {
 				FROM `user` AS `user`
 				 LEFT JOIN `country` AS `home.country` ON `user`.`home_country_id` = `home.country`.`id`
 				"""), 
-				norm(QueryBuilder.from(UserWithCountry.class).getQuery().toStatement().getSql()));
+				norm(PojoQuery.build(UserWithCountry.class).getQuery().toStatement().getSql()));
 	}
 	
 	private static final List<Map<String, Object>> RESULT_USER_WITH_COUNTRY = List.of(Map.of(
@@ -124,7 +123,7 @@ public class TestEmbedded {
 	
 	@Test
 	public void testEmbeddedLinkFieldUsingPipeline() {
-		QueryBuilder<UserWithCountry> p = QueryBuilder.from(UserWithCountry.class);
+		PojoQuery<UserWithCountry> p = PojoQuery.build(UserWithCountry.class);
 		List<UserWithCountry> users = p.processRows(RESULT_USER_WITH_COUNTRY);
 		
 		assertEquals("United States of America", users.get(0).home.country.name);
@@ -252,7 +251,7 @@ public class TestEmbedded {
 
 	@Test
 	public void testEmbeddedWithJoinColumnInQueryBuilder() {
-		String sql = QueryBuilder.from(StoreWithEmbeddedAddress.class).getQuery().toStatement().getSql();
+		String sql = PojoQuery.build(StoreWithEmbeddedAddress.class).getQuery().toStatement().getSql();
 
 		// @JoinColumn inside embedded should use the specified name with prefix
 		assertTrue(sql.contains("location_region_id"),

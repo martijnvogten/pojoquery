@@ -15,9 +15,9 @@ import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.internal.TableMapping;
-import org.pojoquery.pipeline.QueryBuilder;
-import org.pojoquery.pipeline.CustomizableQueryBuilder;
+import org.pojoquery.pipeline.SQLQueryFromTree;
 import org.pojoquery.pipeline.DefaultSqlQuery;
+import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
 import org.pojoquery.typemodel.FieldModel;
@@ -75,16 +75,16 @@ public class TestInheritanceWithJoins {
 	public void testBuildTableHierarchy() throws Exception {
 		// When querying a superclasses, we want a list of all tables
 		// and fields per table
-		List<TableMapping> mapping = QueryBuilder.determineTableMapping(new ReflectionTypeModel(Room.class));
+		List<TableMapping> mapping = PojoMetadata.determineTableMapping(new ReflectionTypeModel(Room.class));
 		Assertions.assertEquals(1, mapping.size());
 		Assertions.assertEquals(List.of("id", "area", "house"), fieldNames(mapping.get(0)));
 
-		List<TableMapping> bedroom = QueryBuilder.determineTableMapping(new ReflectionTypeModel(BedRoom.class));
+		List<TableMapping> bedroom = PojoMetadata.determineTableMapping(new ReflectionTypeModel(BedRoom.class));
 		Assertions.assertEquals(2, bedroom.size());
 		Assertions.assertEquals(List.of("id", "area", "house"), fieldNames(bedroom.get(0)));
 		Assertions.assertEquals(List.of("numberOfBeds"), fieldNames(bedroom.get(1)));
 
-		List<TableMapping> luxury = QueryBuilder.determineTableMapping(new ReflectionTypeModel(LuxuryBedRoom.class));
+		List<TableMapping> luxury = PojoMetadata.determineTableMapping(new ReflectionTypeModel(LuxuryBedRoom.class));
 		Assertions.assertEquals(2, luxury.size());
 		Assertions.assertEquals(List.of("numberOfBeds", "tvScreenSize"), fieldNames(luxury.get(1)));
 	}
@@ -97,18 +97,18 @@ public class TestInheritanceWithJoins {
 		assertEquals(
 				norm("""
 					SELECT
-					 `room`.`id` AS `room.id`,
-					 `room`.`area` AS `room.area`,
-					 `house`.`id` AS `house.id`,
-					 `house`.`address` AS `house.address`,
-					 `room.bedroom`.`id` AS `room.bedroom.id`,
-					 `room.bedroom`.`numberOfBeds` AS `room.bedroom.numberOfBeds`,
-					 `room.kitchen`.`id` AS `room.kitchen.id`,
-					 `room.kitchen`.`hasDishWasher` AS `room.kitchen.hasDishWasher`
+					`room`.`id` AS `room.id`,
+					`room`.`area` AS `room.area`,
+					`room.bedroom`.`id` AS `room.bedroom.id`,
+					`room.bedroom`.`numberOfBeds` AS `room.bedroom.numberOfBeds`,
+					`room.kitchen`.`id` AS `room.kitchen.id`,
+					`room.kitchen`.`hasDishWasher` AS `room.kitchen.hasDishWasher`,
+					`house`.`id` AS `house.id`,
+					`house`.`address` AS `house.address`
 					FROM `room` AS `room`
-					 LEFT JOIN `house` AS `house` ON `room`.`house_id` = `house`.`id`
-					 LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.`id` = `room`.`id`
-					 LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.`id` = `room`.`id`
+					LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.`id` = `room`.`id`
+					LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.`id` = `room`.`id`
+					LEFT JOIN `house` AS `house` ON `room`.`house_id` = `house`.`id`
 					"""),
 				norm(sql));
 		
@@ -127,28 +127,28 @@ public class TestInheritanceWithJoins {
 	
 	@Test
 	public void testSuperclasses() {
-		QueryBuilder<BedRoom> q = QueryBuilder.from(BedRoom.class);
+		PojoQuery<BedRoom> q = PojoQuery.build(BedRoom.class);
 		String sql = q.toStatement().getSql();
 		System.out.println(sql);
 		assertEquals(
 				norm("""
 					SELECT
-					 `bedroom`.`numberOfBeds` AS `bedroom.numberOfBeds`,
-					 `room`.`id` AS `bedroom.id`,
-					 `room`.`area` AS `bedroom.area`,
-					 `house`.`id` AS `house.id`,
-					 `house`.`address` AS `house.address`
+					`bedroom`.`numberOfBeds` AS `bedroom.numberOfBeds`,
+					`room`.`id` AS `bedroom.id`,
+					`room`.`area` AS `bedroom.area`,
+					`room.house`.`id` AS `room.house.id`,
+					`room.house`.`address` AS `room.house.address`
 					FROM `bedroom` AS `bedroom`
-					 INNER JOIN `room` AS `room` ON `room`.`id` = `bedroom`.`id`
-					 LEFT JOIN `house` AS `house` ON `room`.`house_id` = `house`.`id`
+					INNER JOIN `room` AS `room` ON `room`.`id` = `bedroom`.`id`
+					LEFT JOIN `house` AS `room.house` ON `room`.`house_id` = `room.house`.`id`
 					"""),
 				norm(sql));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
-				"bedroom.id", "bedroom.area", "bedroom.numberOfBeds", "house.id", "house.address" }, 
+				"bedroom.id", "bedroom.area", "bedroom.numberOfBeds", "room.house.id", "room.house.address" }, 
 			     1L,           100.0,          1                    ,  1L       , "Unity Street 1");
 		
-		List<BedRoom> list = QueryBuilder.from(BedRoom.class).processRows(result);
+		List<BedRoom> list = PojoQuery.build(BedRoom.class).processRows(result);
 		Assertions.assertEquals(1, list.size());
 		BedRoom bedroom = list.get(0);
 		Assertions.assertTrue(bedroom instanceof BedRoom);
@@ -159,7 +159,7 @@ public class TestInheritanceWithJoins {
 	
 	@Test
 	public void testSuperClassOfLinked() {
-		String sql = QueryBuilder.from(ApartmentWithSpecificProperties.class).toStatement().getSql();
+		String sql = PojoQuery.build(ApartmentWithSpecificProperties.class).toStatement().getSql();
 		System.out.println(sql);
 		assertEquals(
 			norm("""
@@ -180,7 +180,7 @@ public class TestInheritanceWithJoins {
 	
 	@Test
 	public void testDeeper() {
-		QueryBuilder<Apartment> qb = QueryBuilder.from(Apartment.class);
+		PojoQuery<Apartment> qb = PojoQuery.build(Apartment.class);
 		String sql = qb.toStatement().getSql();
 		assertEquals(
 				norm("""
@@ -225,7 +225,7 @@ public class TestInheritanceWithJoins {
 	 */
 	private String queryTreeToSql(QueryTree tree) {
 		DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
-		CustomizableQueryBuilder.applyQueryTreeToQuery(query, tree);
+		SQLQueryFromTree.applyQueryTreeToQuery(query, tree);
 		return query.toStatement().getSql();
 	}
 	
@@ -242,21 +242,21 @@ public class TestInheritanceWithJoins {
 	
 	@Test
 	public void testSuperclasses_QueryTree() {
-		String queryModelSql = QueryBuilder.from(BedRoom.class).toStatement().getSql();
+		String queryModelSql = PojoQuery.build(BedRoom.class).toStatement().getSql();
 		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(BedRoom.class));
 		assertEquals(norm(queryModelSql), norm(queryTreeSql));
 	}
 	
 	@Test
 	public void testSuperClassOfLinked_QueryTree() {
-		String queryModelSql = QueryBuilder.from(ApartmentWithSpecificProperties.class).toStatement().getSql();
+		String queryModelSql = PojoQuery.build(ApartmentWithSpecificProperties.class).toStatement().getSql();
 		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(ApartmentWithSpecificProperties.class));
 		assertEquals(norm(queryModelSql), norm(queryTreeSql));
 	}
 	
 	@Test
 	public void testDeeper_QueryTree() {
-		String queryModelSql = QueryBuilder.from(Apartment.class).toStatement().getSql();
+		String queryModelSql = PojoQuery.build(Apartment.class).toStatement().getSql();
 		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(Apartment.class));
 		assertEquals(norm(queryModelSql), norm(queryTreeSql));
 	}

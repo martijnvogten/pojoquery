@@ -3,10 +3,10 @@ package org.pojoquery.pipeline.querytree.transforms;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.pojoquery.AnnotationHelper;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Aggregate;
 import org.pojoquery.annotations.Select;
-import org.pojoquery.annotations.Transient;
 import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.QueryNode;
@@ -57,7 +57,7 @@ public class FromProjectionTransform implements QueryTreeTransform {
             }
             
             // Skip transient and static fields
-            if (f.getAnnotation(Transient.class) != null || f.isTransient() || f.isStatic()) {
+            if (AnnotationHelper.isTransient(f) || f.isTransient() || f.isStatic()) {
                 continue;
             }
             

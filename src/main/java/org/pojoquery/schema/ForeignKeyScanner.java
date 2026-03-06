@@ -9,7 +9,6 @@ import org.pojoquery.AnnotationHelper;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.PojoMetadata;
-import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.schema.ForeignKeyInfo.InferredForeignKey;
 import org.pojoquery.schema.ForeignKeyInfo.LinkTableInfo;
 import org.pojoquery.typemodel.FieldModel;
@@ -46,10 +45,10 @@ class ForeignKeyScanner {
     private static void scanCollectionFields(TypeModel entityClass, 
             Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys, 
             List<LinkTableInfo> linkTables) {
-        Collection<FieldModel> fields = QueryBuilder.filterFields(entityClass);
-        TableMapping ownerMapping = QueryBuilder.determineTableMapping(entityClass).get(0);
-        List<FieldModel> ownerIdFields = QueryBuilder.determineIdFields(entityClass);
-        String ownerIdColumn = ownerIdFields.isEmpty() ? "id" : QueryBuilder.determineSqlFieldName(ownerIdFields.get(0));
+        Collection<FieldModel> fields = PojoMetadata.filterFields(entityClass);
+        TableMapping ownerMapping = PojoMetadata.determineTableMapping(entityClass).get(0);
+        List<FieldModel> ownerIdFields = PojoMetadata.determineIdFields(entityClass);
+        String ownerIdColumn = ownerIdFields.isEmpty() ? "id" : PojoMetadata.determineSqlFieldName(ownerIdFields.get(0));
         
         for (FieldModel field : fields) {
             if (PojoMetadata.isListOrArray(field.getType())) {
@@ -101,10 +100,10 @@ class ForeignKeyScanner {
      * @return true if targetClass has a field referencing ownerClass or one of its superclasses
      */
     private static boolean hasBackReferenceField(TypeModel targetClass, TypeModel ownerClass) {
-        Collection<FieldModel> targetFields = QueryBuilder.filterFields(targetClass);
+        Collection<FieldModel> targetFields = PojoMetadata.filterFields(targetClass);
         
         // Build a set of all classes in the owner's hierarchy that share the same table
-        List<TableMapping> ownerMappings = QueryBuilder.determineTableMapping(ownerClass);
+        List<TableMapping> ownerMappings = PojoMetadata.determineTableMapping(ownerClass);
         if (ownerMappings.isEmpty()) {
             return false;
         }
@@ -119,7 +118,7 @@ class ForeignKeyScanner {
             TypeModel fieldType = field.getType();
             if (PojoMetadata.isLinkedClass(fieldType)) {
                 // Check if this field's type maps to the same table as the owner
-                List<TableMapping> fieldTypeMappings = QueryBuilder.determineTableMapping(fieldType);
+                List<TableMapping> fieldTypeMappings = PojoMetadata.determineTableMapping(fieldType);
                 if (!fieldTypeMappings.isEmpty()) {
                     String fieldTypeTableName = fieldTypeMappings.get(0).tableName;
                     if (ownerTableName.equals(fieldTypeTableName)) {
@@ -137,13 +136,13 @@ class ForeignKeyScanner {
     private static LinkTableInfo createLinkTableInfo(TableMapping ownerMapping, String ownerIdColumn,
             FieldModel field, Link linkAnn, TypeModel componentType) {
         // Get foreign table info
-        List<TableMapping> foreignMappings = QueryBuilder.determineTableMapping(componentType);
+        List<TableMapping> foreignMappings = PojoMetadata.determineTableMapping(componentType);
         if (foreignMappings.isEmpty()) {
             return null;
         }
         TableMapping foreignMapping = foreignMappings.get(0);
-        List<FieldModel> foreignIdFields = QueryBuilder.determineIdFields(componentType);
-        String foreignIdColumn = foreignIdFields.isEmpty() ? "id" : QueryBuilder.determineSqlFieldName(foreignIdFields.get(0));
+        List<FieldModel> foreignIdFields = PojoMetadata.determineIdFields(componentType);
+        String foreignIdColumn = foreignIdFields.isEmpty() ? "id" : PojoMetadata.determineSqlFieldName(foreignIdFields.get(0));
         
         // Determine link table columns
         String ownerColumn = !Link.NONE.equals(linkAnn.linkfield()) 
@@ -174,7 +173,7 @@ class ForeignKeyScanner {
      */
     private static void scanSingleEntityFields(TypeModel entityClass, 
             Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys) {
-        Collection<FieldModel> fields = QueryBuilder.filterFields(entityClass);
+        Collection<FieldModel> fields = PojoMetadata.filterFields(entityClass);
         for (FieldModel field : fields) {
             // Skip collections
             if (PojoMetadata.isListOrArray(field.getType())) {
@@ -189,7 +188,7 @@ class ForeignKeyScanner {
                 
                 // Get reference table info from the linked type
                 TypeModel linkedType = field.getType();
-                List<TableMapping> linkedMappings = QueryBuilder.determineTableMapping(linkedType);
+                List<TableMapping> linkedMappings = PojoMetadata.determineTableMapping(linkedType);
                 String refTable = null;
                 String refColumn = null;
                 String refSchema = null;
@@ -197,8 +196,8 @@ class ForeignKeyScanner {
                     TableMapping linkedMapping = linkedMappings.get(0);
                     refTable = linkedMapping.tableName;
                     refSchema = linkedMapping.schemaName;
-                    List<FieldModel> linkedIdFields = QueryBuilder.determineIdFields(linkedType);
-                    refColumn = linkedIdFields.isEmpty() ? "id" : QueryBuilder.determineSqlFieldName(linkedIdFields.get(0));
+                    List<FieldModel> linkedIdFields = PojoMetadata.determineIdFields(linkedType);
+                    refColumn = linkedIdFields.isEmpty() ? "id" : PojoMetadata.determineSqlFieldName(linkedIdFields.get(0));
                 }
                 
                 // Find the table class where this FK should be placed
@@ -220,7 +219,7 @@ class ForeignKeyScanner {
         TypeModel rootTableClass = null;
         TypeModel current = clazz;
         while (current != null) {
-            if (AnnotationHelper.hasTableAnnotation(current)) {
+            if (AnnotationHelper.getTableInfo(current) != null) {
                 rootTableClass = current;
             }
             current = current.getSuperclass();
@@ -233,7 +232,7 @@ class ForeignKeyScanner {
      * For subclasses without their own @Table, returns the parent class with @Table.
      */
     static TypeModel findTableClass(TypeModel clazz) {
-        List<TableMapping> mappings = QueryBuilder.determineTableMapping(clazz);
+        List<TableMapping> mappings = PojoMetadata.determineTableMapping(clazz);
         if (!mappings.isEmpty()) {
             return mappings.get(0).getType();
         }
@@ -250,7 +249,7 @@ class ForeignKeyScanner {
             return linkAnn.foreignlinkfield();
         }
         // Default: owning table name + "_id"
-        TableMapping ownerMapping = QueryBuilder.determineTableMapping(owningClass).get(0);
+        TableMapping ownerMapping = PojoMetadata.determineTableMapping(owningClass).get(0);
         return ownerMapping.tableName + "_id";
     }
 }

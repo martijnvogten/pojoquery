@@ -36,6 +36,7 @@ public class QueryTreePipeline {
             new BasicTableTransform(),
             new EntityReferenceTransform(),
             new CollectionTransform(),
+            new ValueCollectionTransform(),
             new JoinTableTransform(),
             new JoinConditionTransform(),
             new SingleTableInheritanceTransform(),

@@ -9,7 +9,6 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
-import org.pojoquery.pipeline.QueryBuilder;
 
 @UseDialect(Dialect.MYSQL)
 public class TestJoinsAndAliases {
@@ -47,7 +46,7 @@ public class TestJoinsAndAliases {
 				FROM `article` AS `article`
 				 LEFT JOIN `person` AS `authors` ON `article`.`authorName` = `authors`.`name`
 				"""),
-			norm(QueryBuilder.from(Article.class).getQuery().toStatement().getSql()));
+			norm(PojoQuery.build(Article.class).getQuery().toStatement().getSql()));
 	}
 	
 	@Test
@@ -63,6 +62,6 @@ public class TestJoinsAndAliases {
 				 LEFT JOIN `article` AS `articles` ON `book`.`id` = `articles`.`book_id`
 				 LEFT JOIN `person` AS `articles.authors` ON `articles`.`authorName` = `articles.authors`.`name`
 				"""), 
-			norm(QueryBuilder.from(Book.class).getQuery().toStatement().getSql()));
+			norm(PojoQuery.build(Book.class).getQuery().toStatement().getSql()));
 	}
 }

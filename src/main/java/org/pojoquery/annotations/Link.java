@@ -1,7 +1,9 @@
 package org.pojoquery.annotations;
 
+import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 /**
  * Configures the relationship between entities for collection or reference fields.
@@ -40,15 +42,15 @@ import java.lang.annotation.RetentionPolicy;
  * @see Table
  */
 @Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.FIELD})
 public @interface Link {
-	public static final String NONE = "--NONE--";
 	public static final class DEFAULT {}
 	
-	String linktable() default NONE;
+	String linktable() default "";
 	String linkschema() default "";
-	String fetchColumn() default NONE;
-	String foreignlinkfield() default NONE;
-	String linkfield() default NONE;
+	String fetchColumn() default "";
+	String foreignlinkfield() default "";
+	String linkfield() default "";
 	
 	/**
 	 * Whether the foreign key column allows NULL values.

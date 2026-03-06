@@ -14,7 +14,7 @@ import java.util.List;
  *   <li>ElementTypeModel (in processor module) - wraps {@code TypeElement} for annotation processing</li>
  * </ul>
  */
-public interface TypeModel {
+public interface TypeModel extends AnnotatedElementModel {
 
     /**
      * Returns the fully qualified name of this type.
@@ -38,32 +38,6 @@ public interface TypeModel {
      * Returns the fields declared directly in this type (not inherited fields).
      */
     List<FieldModel> getDeclaredFields();
-
-    /**
-     * Returns the annotation of the specified type if present on this type.
-     * This may return inherited annotations depending on the annotation's @Inherited status.
-     *
-     * @param annotationType the Class object corresponding to the annotation type
-     * @return the annotation if present, null otherwise
-     */
-    <A extends Annotation> A getAnnotation(Class<A> annotationType);
-
-    /**
-     * Returns the annotation of the specified type if directly present on this type.
-     * Unlike {@link #getAnnotation}, this does not return inherited annotations.
-     *
-     * @param annotationType the Class object corresponding to the annotation type
-     * @return the annotation if directly present, null otherwise
-     */
-    <A extends Annotation> A getDeclaredAnnotation(Class<A> annotationType);
-
-    /**
-     * Returns true if this type has the specified annotation.
-     *
-     * @param annotationType the annotation type to check for
-     * @return true if the annotation is present
-     */
-    boolean hasAnnotation(Class<? extends Annotation> annotationType);
 
     /**
      * Returns all annotations of the specified type on this type.

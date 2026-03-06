@@ -19,7 +19,7 @@ import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.pipeline.DefaultSqlQuery;
-import org.pojoquery.pipeline.QueryBuilder;
+import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.schema.SchemaGenerator;
 
 @UseDialect(Dialect.HSQLDB)
@@ -78,7 +78,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 	
 	@Test
 	public void testFindById() {
-		DefaultSqlQuery query = QueryBuilder.from(Article.class).getQuery();
+		SqlQuery<DefaultSqlQuery> query = PojoQuery.build(Article.class).getQuery();
 		query.addWhere("{this.id} = ?", 1L);
 
 		// {this.id} uses Java field name 'id' which resolves to @FieldName column 'article_id'
@@ -100,7 +100,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 	
 	@Test
 	public void testFindByTitle() {
-		DefaultSqlQuery query = QueryBuilder.from(Article.class).getQuery();
+		SqlQuery<DefaultSqlQuery> query = PojoQuery.build(Article.class).getQuery();
 		query.addWhere("{this.title} = ?", "some title");
 
 		assertEquals(
@@ -134,7 +134,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 	@Test
 	public void testAliases() {
 		
-		DefaultSqlQuery query = QueryBuilder.from(Article.class).getQuery();
+		SqlQuery<DefaultSqlQuery> query = PojoQuery.build(Article.class).getQuery();
 		query.addWhere("{author.fullName} = ?", "Jane Doe");
 		
 		assertEquals(
@@ -167,7 +167,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 	@Test
 	public void testAliasesDeeper() {
 		
-		DefaultSqlQuery query = QueryBuilder.from(Book.class).getQuery();
+		SqlQuery<DefaultSqlQuery> query = PojoQuery.build(Book.class).getQuery();
 		query.addWhere("{articles.author.fullName} = ?", "Jane Doe");
 		
 		assertEquals(
@@ -202,7 +202,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 	@Test
 	public void testAliasesInOrderBy() {
 		
-		DefaultSqlQuery query = QueryBuilder.from(Article.class).getQuery();
+		SqlQuery<DefaultSqlQuery> query = PojoQuery.build(Article.class).getQuery();
 		query.addOrderBy("{author.fullName} ASC");
 		
 		assertEquals(
@@ -235,7 +235,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 	@Test
 	public void testAliasesInOrderByDeeper() {
 		
-		DefaultSqlQuery query = QueryBuilder.from(Book.class).getQuery();
+		SqlQuery<DefaultSqlQuery> query = PojoQuery.build(Book.class).getQuery();
 		query.addOrderBy("{articles.author.fullName} DESC");
 		
 		assertEquals(
@@ -270,7 +270,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 	@Test
 	public void testAliasesInJoinCondition() {
 		
-		DefaultSqlQuery query = QueryBuilder.from(Article.class).getQuery();
+		SqlQuery<DefaultSqlQuery> query = PojoQuery.build(Article.class).getQuery();
 		query.addJoin(
 			org.pojoquery.pipeline.SqlQuery.JoinType.LEFT,
 			"audit_log",

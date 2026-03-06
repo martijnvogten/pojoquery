@@ -17,7 +17,6 @@ import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabase;
-import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.schema.SchemaGenerator;
 
@@ -49,7 +48,7 @@ public class TestDbContext {
 		{
 			// Explicitly use MYSQL context for this test (don't rely on global default)
 			DbContext mysqlContext = DbContext.forDialect(Dialect.MYSQL);
-			SqlQuery<?> query = QueryBuilder.from(mysqlContext, Article.class).getQuery();
+			SqlQuery<?> query = PojoQuery.build(mysqlContext, Article.class).getQuery();
 			
 			assertEquals(
 					norm("""
@@ -66,7 +65,7 @@ public class TestDbContext {
 				.dialect(Dialect.MYSQL)
 				.quoteObjectNames(false)
 				.build();
-			SqlQuery<?> query = QueryBuilder.from(dbContext, Article.class).getQuery();
+			SqlQuery<?> query = PojoQuery.build(dbContext, Article.class).getQuery();
 			
 			assertEquals(
 					norm("""

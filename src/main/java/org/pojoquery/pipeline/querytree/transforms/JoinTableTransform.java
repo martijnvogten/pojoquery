@@ -86,8 +86,8 @@ public class JoinTableTransform implements QueryTreeTransform {
         if (!Link.NONE.equals(linkAnn.foreignlinkfield())) {
             return linkAnn.foreignlinkfield();
         }
-        var tableInfo = org.pojoquery.AnnotationHelper.getTableInfo(targetType);
-        return tableInfo != null ? tableInfo.name + "_id" : targetType.getSimpleName().toLowerCase() + "_id";
+        List<TableMapping> mappings = determineTableMapping(targetType);
+        return mappings.isEmpty() ? targetType.getSimpleName().toLowerCase() + "_id" : mappings.get(mappings.size() - 1).tableName + "_id";
     }
     
     private boolean alreadyJoined(TableNode node, FieldModel field) {

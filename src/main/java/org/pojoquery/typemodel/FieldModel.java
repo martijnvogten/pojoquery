@@ -14,7 +14,7 @@ import java.util.List;
  *   <li>ElementFieldModel (in processor module) - wraps {@code VariableElement} for annotation processing</li>
  * </ul>
  */
-public interface FieldModel {
+public interface FieldModel extends AnnotatedElementModel {
 
     /**
      * Returns the name of this field.
@@ -37,14 +37,6 @@ public interface FieldModel {
      * @return an array of annotation models
      */
     AnnotationModel[] getAnnotations();
-
-    /**
-     * Returns the annotation of the specified type if present on this field.
-     *
-     * @param annotationType the Class object corresponding to the annotation type
-     * @return the annotation if present, null otherwise
-     */
-    <A extends Annotation> A getAnnotation(Class<A> annotationType);
 
     /**
      * Returns true if this field has the specified annotation.

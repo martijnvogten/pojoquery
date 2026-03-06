@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.MappingException;
-import org.pojoquery.pipeline.QueryBuilder;
 
 public class TestDetectCycles {
 
@@ -31,7 +30,7 @@ public class TestDetectCycles {
 	@Test
 	public void testIt() {
 		try {
-			QueryBuilder.from(Department.class).toStatement().getSql();
+			PojoQuery.build(Department.class).toStatement().getSql();
 			Assertions.fail();
 		} catch (MappingException e) {
 		}

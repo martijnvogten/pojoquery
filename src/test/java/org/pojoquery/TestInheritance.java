@@ -15,9 +15,9 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.TableMapping;
-import org.pojoquery.pipeline.QueryBuilder;
-import org.pojoquery.pipeline.CustomizableQueryBuilder;
 import org.pojoquery.pipeline.DefaultSqlQuery;
+import org.pojoquery.pipeline.PojoMetadata;
+import org.pojoquery.pipeline.SQLQueryFromTree;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
 import org.pojoquery.typemodel.FieldModel;
@@ -73,16 +73,16 @@ public class TestInheritance {
 	public void testBuildTableHierarchy() throws Exception {
 		// When querying a superclasses, we want a list of all tables
 		// and fields per table
-		List<TableMapping> mapping = QueryBuilder.determineTableMapping(new ReflectionTypeModel(Room.class));
+		List<TableMapping> mapping = PojoMetadata.determineTableMapping(new ReflectionTypeModel(Room.class));
 		Assertions.assertEquals(1, mapping.size());
 		Assertions.assertEquals(List.of("id", "area"), fieldNames(mapping.get(0)));
 		
-		List<TableMapping> bedroom = QueryBuilder.determineTableMapping(new ReflectionTypeModel(BedRoom.class));
+		List<TableMapping> bedroom = PojoMetadata.determineTableMapping(new ReflectionTypeModel(BedRoom.class));
 		Assertions.assertEquals(2, bedroom.size());
 		Assertions.assertEquals(List.of("id", "area"), fieldNames(bedroom.get(0)));
 		Assertions.assertEquals(List.of("numberOfBeds"), fieldNames(bedroom.get(1)));
 		
-		List<TableMapping> luxury = QueryBuilder.determineTableMapping(new ReflectionTypeModel(LuxuryBedRoom.class));
+		List<TableMapping> luxury = PojoMetadata.determineTableMapping(new ReflectionTypeModel(LuxuryBedRoom.class));
 		Assertions.assertEquals(2, luxury.size());
 		Assertions.assertEquals(List.of("numberOfBeds", "tvScreenSize"), fieldNames(luxury.get(1)));
 	}
@@ -121,7 +121,7 @@ public class TestInheritance {
 	
 	@Test
 	public void testSuperclasses() {
-		QueryBuilder<BedRoom> q = QueryBuilder.from(BedRoom.class);
+		PojoQuery<BedRoom> q = PojoQuery.build(BedRoom.class);
 		String sql = q.toStatement().getSql();
 		System.out.println(sql);
 		assertEquals(
@@ -139,7 +139,7 @@ public class TestInheritance {
 				"bedroom.id", "bedroom.area", "bedroom.numberOfBeds" }, 
 			     1L,           100.0,          1);
 		
-		List<BedRoom> list = QueryBuilder.from(BedRoom.class).processRows(result);
+		List<BedRoom> list = PojoQuery.build(BedRoom.class).processRows(result);
 		Assertions.assertEquals(1, list.size());
 		BedRoom bedroom = list.get(0);
 		Assertions.assertTrue(bedroom instanceof BedRoom);
@@ -149,7 +149,7 @@ public class TestInheritance {
 	
 	@Test
 	public void testSuperClassOfLinked() {
-		String sql = QueryBuilder.from(ApartmentWithSpecificProperties.class).toStatement().getSql();
+		String sql = PojoQuery.build(ApartmentWithSpecificProperties.class).toStatement().getSql();
 		System.out.println(sql);
 		assertEquals(
 			norm("""
@@ -167,7 +167,7 @@ public class TestInheritance {
 	
 	@Test
 	public void testDeeper() {
-		String sql = QueryBuilder.from(Apartment.class).toStatement().getSql();
+		String sql = PojoQuery.build(Apartment.class).toStatement().getSql();
 		assertEquals(
 				norm("""
 					SELECT
@@ -189,7 +189,7 @@ public class TestInheritance {
 				"apartment.id", "rooms.id", "rooms.area", "rooms.bedroom.id", "rooms.bedroom.numberOfBeds", "rooms.kitchen.id", "rooms.kitchen.hasDishwasher" }, 
 			     1L,             1L,         100.0,        1L,                 2,                            null,               null);
 		
-		List<Apartment> list = QueryBuilder.from(Apartment.class).processRows(result);
+		List<Apartment> list = PojoQuery.build(Apartment.class).processRows(result);
 		Assertions.assertTrue(list.get(0).rooms[0] instanceof BedRoom);
 	}
 	
@@ -202,7 +202,7 @@ public class TestInheritance {
 	 */
 	private String queryTreeToSql(QueryTree tree) {
 		DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
-		CustomizableQueryBuilder.applyQueryTreeToQuery(query, tree);
+		SQLQueryFromTree.applyQueryTreeToQuery(query, tree);
 		return query.toStatement().getSql();
 	}
 	
@@ -219,21 +219,21 @@ public class TestInheritance {
 	
 	@Test
 	public void testSuperclasses_QueryTree() {
-		String queryModelSql = QueryBuilder.from(BedRoom.class).toStatement().getSql();
+		String queryModelSql = PojoQuery.build(BedRoom.class).toStatement().getSql();
 		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(BedRoom.class));
 		assertEquals(norm(queryModelSql), norm(queryTreeSql));
 	}
 	
 	@Test
 	public void testSuperClassOfLinked_QueryTree() {
-		String queryModelSql = QueryBuilder.from(ApartmentWithSpecificProperties.class).toStatement().getSql();
+		String queryModelSql = PojoQuery.build(ApartmentWithSpecificProperties.class).toStatement().getSql();
 		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(ApartmentWithSpecificProperties.class));
 		assertEquals(norm(queryModelSql), norm(queryTreeSql));
 	}
 	
 	@Test
 	public void testDeeper_QueryTree() {
-		String queryModelSql = QueryBuilder.from(Apartment.class).toStatement().getSql();
+		String queryModelSql = PojoQuery.build(Apartment.class).toStatement().getSql();
 		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(Apartment.class));
 		assertEquals(norm(queryModelSql), norm(queryTreeSql));
 	}

@@ -1,8 +1,10 @@
 package org.pojoquery;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Method;
+import java.util.Optional;
+import java.util.function.Function;
 
+import org.pojoquery.annotations.Cascade;
 import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
@@ -11,6 +13,7 @@ import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.annotations.Transient;
+import org.pojoquery.typemodel.AnnotatedElementModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 
@@ -59,259 +62,166 @@ public class AnnotationHelper {
 		JAKARTA_JOIN_COLUMN = tryLoadAnnotationClass("jakarta.persistence.JoinColumn");
 	}
 
-	private static Class<? extends Annotation> tryLoadAnnotationClass(String name) {
-		try {
-			return (Class<? extends Annotation>) Class.forName(name);
-		} catch (ClassNotFoundException e) {
-			return null;
-		}
-	}
-
-	/**
-	 * Returns the table name from @Table annotation, or null if not specified.
-	 * Checks PojoQuery @Table first, then JPA @Table.
-	 * @param clz the class to check
-	 * @return the table name, or null if not specified
-	 */
-	public static String getTableName(TypeModel clz) {
-		Table tableAnn = clz.getAnnotation(Table.class);
-		if (tableAnn != null) {
-			return tableAnn.value();
-		}
-
-		// Try JPA @Table (uses "name" attribute)
-		String jpaName = getJpaTableName(clz, JPA_TABLE);
-		if (jpaName != null) {
-			return jpaName;
-		}
-
-		return getJpaTableName(clz, JAKARTA_TABLE);
-	}
-
-	/**
-	 * Returns the table schema from @Table annotation, or empty string if not specified.
-	 * @param clz the class to check
-	 * @return the table schema, or empty string if not specified
-	 */
-	public static String getTableSchema(TypeModel clz) {
-		Table tableAnn = clz.getAnnotation(Table.class);
-		if (tableAnn != null) {
-			return tableAnn.schema();
-		}
-
-		// Try JPA @Table
-		String jpaSchema = getJpaTableSchema(clz, JPA_TABLE);
-		if (jpaSchema != null && !jpaSchema.isEmpty()) {
-			return jpaSchema;
-		}
-
-		String jakartaSchema = getJpaTableSchema(clz, JAKARTA_TABLE);
-		return jakartaSchema != null ? jakartaSchema : "";
-	}
-
-	// ========== TypeModel overloads ==========
-
-	/**
-	 * Returns true if the type has a @Table annotation (PojoQuery or JPA).
-	 * @param type the type to check
-	 * @return true if the type has a @Table annotation
-	 */
-	public static boolean hasTableAnnotation(TypeModel type) {
-		if (type.getAnnotation(Table.class) != null) {
-			return true;
-		}
-		if (JPA_TABLE != null && type.getAnnotation(JPA_TABLE) != null) {
-			return true;
-		}
-		if (JAKARTA_TABLE != null && type.getAnnotation(JAKARTA_TABLE) != null) {
-			return true;
-		}
-		return false;
-	}
-
-	/**
-	 * Returns a TableInfo object with both name and schema, or null if no @Table annotation.
-	 * @param type the type to check
-	 * @return the TableInfo, or null if no @Table annotation
-	 */
-	public static TableInfo getTableInfo(TypeModel type) {
-		Table tableAnn = type.getAnnotation(Table.class);
-		if (tableAnn != null) {
-			return new TableInfo(tableAnn.value(), tableAnn.schema());
-		}
-
-		// Try JPA @Table
-		if (JPA_TABLE != null) {
-			Annotation ann = type.getAnnotation(JPA_TABLE);
-			if (ann != null) {
-				String name = invokeStringMethod(ann, "name");
-				String schema = invokeStringMethod(ann, "schema");
-				return new TableInfo(name, schema);
-			}
-		}
-
-		if (JAKARTA_TABLE != null) {
-			Annotation ann = type.getAnnotation(JAKARTA_TABLE);
-			if (ann != null) {
-				String name = invokeStringMethod(ann, "name");
-				String schema = invokeStringMethod(ann, "schema");
-				return new TableInfo(name, schema);
-			}
-		}
-
-		return null;
-	}
-
-	// ========== Field-level helpers ==========
-
-	public static ColumnMetadata getColumnMetadata(FieldModel f) {
-		if (f.getAnnotation(Column.class) != null) {
-			Column colAnn = f.getAnnotation(Column.class);
-			return new ColumnMetadata(colAnn.length(), colAnn.precision(), colAnn.scale(), colAnn.nullable(), colAnn.unique());
-		}
-
-		// Try JPA @Column
-		ColumnMetadata jpaMetadata = getJpaColumnMetadata(f, JPA_COLUMN);
-		if (jpaMetadata != null) {
-			return jpaMetadata;
-		}
-
-		ColumnMetadata jakartaMetadata = getJpaColumnMetadata(f, JAKARTA_COLUMN);
-		if (jakartaMetadata != null) {
-			return jakartaMetadata;
-		}
-
-		return null;
-	}
-	
-	// ========== FieldModel overloads ==========
-
 	/**
 	 * Returns true if the field is marked as an ID field.
-	 * @param f the field to check
-	 * @return true if the field is an ID field
 	 */
 	public static boolean isId(FieldModel f) {
-		if (f.getAnnotation(Id.class) != null) {
-			return true;
-		}
-		if (JPA_ID != null && f.getAnnotation(JPA_ID) != null) {
-			return true;
-		}
-		if (JAKARTA_ID != null && f.getAnnotation(JAKARTA_ID) != null) {
-			return true;
-		}
-		return false;
+		return oneOf(marker(Id.class), marker(JPA_ID), marker(JAKARTA_ID)).apply(f).orElse(false);
 	}
 
 	/**
 	 * Returns true if the field is marked as transient (excluded from persistence).
-	 * @param f the field to check
-	 * @return true if the field is transient
 	 */
 	public static boolean isTransient(FieldModel f) {
-		return hasAnyAnnotation(f, Transient.class, JPA_TRANSIENT, JAKARTA_TRANSIENT);
+		return oneOf(marker(Transient.class), marker(JPA_TRANSIENT), marker(JAKARTA_TRANSIENT)).apply(f).orElse(false);
 	}
 
 	/**
 	 * Returns true if the field is marked as embedded.
-	 * @param f the field to check
-	 * @return true if the field is embedded
 	 */
 	public static boolean isEmbedded(FieldModel f) {
-		return hasAnyAnnotation(f, Embedded.class, JPA_EMBEDDED, JAKARTA_EMBEDDED);
+		return oneOf(marker(Embedded.class), marker(JPA_EMBEDDED), marker(JAKARTA_EMBEDDED)).apply(f).orElse(false);
 	}
 
 	/**
 	 * Returns true if the field is marked as a LOB (large object).
-	 * @param f the field to check
-	 * @return true if the field is a LOB
 	 */
 	public static boolean isLob(FieldModel f) {
-		return hasAnyAnnotation(f, Lob.class, JPA_LOB, JAKARTA_LOB);
-	}
-
-	private static boolean hasAnyAnnotation(FieldModel f, Class<? extends Annotation>... annotationClasses) {
-		for (Class<? extends Annotation> annotationClass : annotationClasses) {
-			if (annotationClass != null && f.getAnnotation(annotationClass) != null) {
-				return true;
-			}
-		}
-		return false;
+		return oneOf(marker(Lob.class), marker(JPA_LOB), marker(JAKARTA_LOB)).apply(f).orElse(false);
 	}
 
 	/**
-	 * Returns the column name for a field.
-	 * Checks PojoQuery @FieldName first, then JPA @Column(name=...).
-	 * Returns null if no custom column name is specified.
-	 * @param f the field to check
-	 * @return the column name, or null if not specified
+	 * Returns the column name for a field, or null if not specified.
+	 * Checks @FieldName/@Column first, then JPA @Column(name=...).
 	 */
 	public static String getColumnName(FieldModel f) {
-		FieldName fieldNameAnn = f.getAnnotation(FieldName.class);
-		if (fieldNameAnn != null) {
-			return fieldNameAnn.value();
-		}
-
-		// Try JPA @Column(name=...)
-		if (JPA_COLUMN != null) {
-			Annotation ann = f.getAnnotation(JPA_COLUMN);
-			if (ann != null) {
-				String name = invokeStringMethod(ann, "name");
-				if (name != null && !name.isEmpty()) {
-					return name;
-				}
-			}
-		}
-
-		if (JAKARTA_COLUMN != null) {
-			Annotation ann = f.getAnnotation(JAKARTA_COLUMN);
-			if (ann != null) {
-				String name = invokeStringMethod(ann, "name");
-				if (name != null && !name.isEmpty()) {
-					return name;
-				}
-			}
-		}
-
-		return null;
+		return oneOf(
+			stringAttr(FieldName.class, "value"),
+			stringAttr(Column.class, "name"),
+			stringAttr(JPA_COLUMN, "name"),
+			stringAttr(JAKARTA_COLUMN, "name")
+		).apply(f).orElse(null);
 	}
 
 	/**
 	 * Returns the join column name for a foreign key field.
 	 * Checks PojoQuery @Link(linkfield=...) first, then JPA @JoinColumn(name=...).
-	 * Returns null if no custom join column name is specified.
-	 * @param f the field to check
-	 * @return the join column name, or null if not specified
 	 */
 	public static String getJoinColumnName(FieldModel f) {
-		Link linkAnn = f.getAnnotation(Link.class);
-		if (linkAnn != null && !Link.NONE.equals(linkAnn.linkfield())) {
-			return linkAnn.linkfield();
-		}
+		return oneOf(
+			stringAttr(Link.class, "linkfield"),
+			stringAttr(JPA_JOIN_COLUMN, "name"),
+			stringAttr(JAKARTA_JOIN_COLUMN, "name")
+		).apply(f).orElse(null);
+	}
 
-		// Try JPA @JoinColumn(name=...)
-		if (JPA_JOIN_COLUMN != null) {
-			Annotation ann = f.getAnnotation(JPA_JOIN_COLUMN);
-			if (ann != null) {
-				String name = invokeStringMethod(ann, "name");
-				if (name != null && !name.isEmpty()) {
-					return name;
-				}
-			}
-		}
+	public static Optional<Integer> getColumnLength(FieldModel f) {
+		return oneOf(
+			intAttr(Column.class, "length"),
+			intAttr(JPA_COLUMN, "length"),
+			intAttr(JAKARTA_COLUMN, "length")
+		).apply(f);
+	}
 
-		if (JAKARTA_JOIN_COLUMN != null) {
-			Annotation ann = f.getAnnotation(JAKARTA_JOIN_COLUMN);
-			if (ann != null) {
-				String name = invokeStringMethod(ann, "name");
-				if (name != null && !name.isEmpty()) {
-					return name;
-				}
-			}
-		}
+	public static Optional<Integer> getColumnPrecision(FieldModel f) {
+		return oneOf(
+			intAttr(Column.class, "precision"),
+			intAttr(JPA_COLUMN, "precision"),
+			intAttr(JAKARTA_COLUMN, "precision")
+		).apply(f);
+	}
 
-		return null;
+	public static Optional<Integer> getColumnScale(FieldModel f) {
+		return oneOf(
+			intAttr(Column.class, "scale"),
+			intAttr(JPA_COLUMN, "scale"),
+			intAttr(JAKARTA_COLUMN, "scale")
+		).apply(f);
+	}
+
+	public static Optional<Boolean> getNullable(FieldModel f) {
+		return oneOf(
+			markerAttr(Column.class, "nullable"),
+			markerAttr(JPA_COLUMN, "nullable"),
+			markerAttr(JAKARTA_COLUMN, "nullable")
+		).apply(f);
+	}
+
+	public static Optional<Boolean> getUnique(FieldModel f) {
+		return oneOf(
+			markerAttr(Column.class, "unique"),
+			markerAttr(JPA_COLUMN, "unique"),
+			markerAttr(JAKARTA_COLUMN, "unique")
+		).apply(f);
+	}
+
+	/**
+	 * Returns column metadata from @Column annotation, or null if not present.
+	 */
+	public static ColumnMetadata getColumnMetadata(FieldModel f) {
+		return new ColumnMetadata(
+			getColumnLength(f).orElse(255),
+			getColumnPrecision(f).orElse(0),
+			getColumnScale(f).orElse(0),
+			getNullable(f).orElse(true),
+			getUnique(f).orElse(false)
+		);
+	}
+
+	/**
+	 * Returns true if the field is marked as a @Cascade annotation.
+	 */
+	public static boolean isCascade(FieldModel f) {
+		return oneOf(marker(Cascade.class)).apply(f).orElse(false);
+	}
+
+	/**
+	 * Returns true if the field is marked as a @Link annotation.
+	 */
+	public static boolean isLinkTable(FieldModel f) {
+		return oneOf(marker(Link.class)).apply(f).orElse(false);
+	}
+
+	// ========== Type-level public API ==========
+
+	/**
+	 * Returns the table name from @Table annotation, or null if not specified.
+	 */
+	public static String getTableName(TypeModel type) {
+		return oneOf(
+			stringAttr(Table.class, "value"),
+			stringAttr(JPA_TABLE, "name"),
+			stringAttr(JAKARTA_TABLE, "name")
+		).apply(type).orElse("");
+	}
+
+	/**
+	 * Returns the table schema from @Table annotation, or empty string if not specified.
+	 */
+	public static String getTableSchema(TypeModel type) {
+		return oneOf(
+			stringAttr(Table.class, "schema"),
+			stringAttr(JPA_TABLE, "schema"),
+			stringAttr(JAKARTA_TABLE, "schema")
+		).apply(type).orElse("");
+	}
+
+	/**
+	 * Returns true if the type has a @Table annotation (PojoQuery or JPA).
+	 */
+	public static boolean hasTableAnnotation(TypeModel type) {
+		return oneOf(
+			marker(Table.class),
+			marker(JPA_TABLE),
+			marker(JAKARTA_TABLE)
+		).apply(type).orElse(false);
+	}
+
+	/**
+	 * Returns a TableInfo object with both name and schema, or null if no @Table annotation.
+	 */
+	public static Optional<TableInfo> getTableInfo(TypeModel type) {
+		return hasTableAnnotation(type) ? Optional.of(new TableInfo(getTableName(type), getTableSchema(type))) : Optional.empty();
 	}
 
 	// ========== Helper classes ==========
@@ -320,16 +230,9 @@ public class AnnotationHelper {
 	 * Holds table name and schema information from a @Table annotation.
 	 */
 	public static class TableInfo {
-		/** The table name. */
 		public final String name;
-		/** The schema name. */
 		public final String schema;
 
-		/**
-		 * Creates a new TableInfo.
-		 * @param name the table name
-		 * @param schema the schema name (may be null)
-		 */
 		public TableInfo(String name, String schema) {
 			this.name = name;
 			this.schema = schema != null ? schema : "";
@@ -340,25 +243,12 @@ public class AnnotationHelper {
 	 * Holds column metadata from a @Column annotation.
 	 */
 	public static class ColumnMetadata {
-		/** The column length (for VARCHAR). */
 		public final int length;
-		/** The precision (for DECIMAL). */
 		public final int precision;
-		/** The scale (for DECIMAL). */
 		public final int scale;
-		/** Whether the column allows NULL. */
 		public final boolean nullable;
-		/** Whether the column has a UNIQUE constraint. */
 		public final boolean unique;
 
-		/**
-		 * Creates a new ColumnMetadata.
-		 * @param length the column length
-		 * @param precision the precision
-		 * @param scale the scale
-		 * @param nullable whether nullable
-		 * @param unique whether unique
-		 */
 		public ColumnMetadata(int length, int precision, int scale, boolean nullable, boolean unique) {
 			this.length = length;
 			this.precision = precision;
@@ -368,72 +258,54 @@ public class AnnotationHelper {
 		}
 	}
 
-	// ========== JPA reflection helpers ==========
-
-	private static String getJpaTableName(TypeModel clz, Class<? extends Annotation> jpaTableClass) {
-		if (jpaTableClass == null) {
-			return null;
-		}
-		Annotation ann = clz.getAnnotation(jpaTableClass);
-		if (ann == null) {
-			return null;
-		}
-		return invokeStringMethod(ann, "name");
-	}
-
-	private static String getJpaTableSchema(TypeModel clz, Class<? extends Annotation> jpaTableClass) {
-		if (jpaTableClass == null) {
-			return null;
-		}
-		Annotation ann = clz.getAnnotation(jpaTableClass);
-		if (ann == null) {
-			return null;
-		}
-		return invokeStringMethod(ann, "schema");
-	}
-
-	private static ColumnMetadata getJpaColumnMetadata(FieldModel f, Class<? extends Annotation> jpaColumnClass) {
-		if (jpaColumnClass == null) {
-			return null;
-		}
-		Annotation ann = f.getAnnotation(jpaColumnClass);
-		if (ann == null) {
-			return null;
-		}
-
-		int length = invokeIntMethod(ann, "length", 255);
-		int precision = invokeIntMethod(ann, "precision", 0);
-		int scale = invokeIntMethod(ann, "scale", 0);
-		boolean nullable = invokeBooleanMethod(ann, "nullable", true);
-		boolean unique = invokeBooleanMethod(ann, "unique", false);
-
-		return new ColumnMetadata(length, precision, scale, nullable, unique);
-	}
-
-	private static String invokeStringMethod(Annotation ann, String methodName) {
+	private static Class<? extends Annotation> tryLoadAnnotationClass(String name) {
 		try {
-			Method method = ann.getClass().getMethod(methodName);
-			return (String) method.invoke(ann);
-		} catch (Exception e) {
+			return (Class<? extends Annotation>) Class.forName(name);
+		} catch (ClassNotFoundException e) {
 			return null;
 		}
 	}
 
-	private static int invokeIntMethod(Annotation ann, String methodName, int defaultValue) {
-		try {
-			Method method = ann.getClass().getMethod(methodName);
-			return (Integer) method.invoke(ann);
-		} catch (Exception e) {
-			return defaultValue;
-		}
+	@SafeVarargs
+	private static <M,T> Function<M, Optional<T>> oneOf(Function<M, Optional<T>>... options) {
+		return field -> {
+			for (Function<M, Optional<T>> option : options) {
+				Optional<T> result = option.apply(field);
+				if (result.isPresent()) {
+					return result;
+				}
+			}
+			return Optional.empty();
+		};
 	}
 
-	private static boolean invokeBooleanMethod(Annotation ann, String methodName, boolean defaultValue) {
-		try {
-			Method method = ann.getClass().getMethod(methodName);
-			return (Boolean) method.invoke(ann);
-		} catch (Exception e) {
-			return defaultValue;
-		}
+	private static Function<AnnotatedElementModel, Optional<Boolean>> marker(Class<? extends Annotation> annotationClass) {
+		if (annotationClass == null) return field -> Optional.empty();
+		return field -> field.hasAnnotation(annotationClass) ? Optional.of(true) : Optional.empty();
 	}
+
+	private static Function<AnnotatedElementModel, Optional<String>> stringAttr(Class<? extends Annotation> annotationClass, String attributeName) {
+		if (annotationClass == null) return field -> Optional.empty();
+		return field -> field.getAnnotationsByType(annotationClass).stream()
+			.findFirst()
+			.map(annotation -> annotation.getStringValue(attributeName))
+			.filter(s -> s != null && !s.isEmpty());
+	}
+
+	private static Function<AnnotatedElementModel, Optional<Integer>> intAttr(Class<? extends Annotation> annotationClass, String attributeName) {
+		if (annotationClass == null) return field -> Optional.empty();
+		return field -> field.getAnnotationsByType(annotationClass).stream()
+			.findFirst()
+			.map(annotation -> (Integer) annotation.getNumberValue(attributeName))
+			.filter(i -> i != null);
+	}
+
+	private static Function<AnnotatedElementModel, Optional<Boolean>> markerAttr(Class<? extends Annotation> annotationClass, String attributeName) {
+		if (annotationClass == null) return field -> Optional.empty();
+		return field -> field.getAnnotationsByType(annotationClass).stream()
+			.findFirst()
+			.map(annotation -> (Boolean) annotation.getBooleanValue(attributeName))
+			.filter(b -> b != null);
+	}
+
 }

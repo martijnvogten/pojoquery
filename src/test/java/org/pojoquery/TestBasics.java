@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.pojoquery.TestUtils.norm;
 
 import java.util.Date;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext.Dialect;
@@ -52,7 +53,7 @@ public class TestBasics {
 	
 	public static class ArticleDetail extends Article {
 		public User author;
-		public Iterable<CommentDetail> comments;
+		public List<CommentDetail> comments;
 	}
 
 	@Test

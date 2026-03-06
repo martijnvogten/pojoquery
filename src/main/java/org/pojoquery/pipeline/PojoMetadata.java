@@ -5,21 +5,39 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Logger;
 
 import org.pojoquery.AnnotationHelper;
+import org.pojoquery.AnnotationHelper.TableInfo;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Link;
-import org.pojoquery.annotations.Transient;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionFieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
+
+
+// Annotation metadata
+// should follow an overridable pattern
+// where the separate annotation transforms can override the
+// default behaviour.
+// There is one cannonical set of annotations used in the
+// rest of the transforms. If library users want to use custom annotations
+// they should write a transform that converts their custom annotations
+// to the cannonical ones used by the rest of the pipeline. This way we can
+// keep the rest of the pipeline simple and annotation-agnostic.
+// Transform can only add annotations to the fieldmodel and typemodel
+// annotations are already abstract as the fieldmodel and typemodel abstract
+// away real classes and compile elements into a unified model.
+// We can add transforms to FieldModel and Typemodel.
+// That means FieldModel and TypeModel must also be immutable records
+// that only represent data needed in the transforms.
+// API should be something like: field.getAnnotationValue(Link.class, "linktable")
+// and field.hasAnnotation(Embedded.class).
 
 /**
  * Static utility methods for extracting metadata from POJO classes.
@@ -219,7 +237,7 @@ public final class PojoMetadata {
 			if (mappedType == null) {
 				mappedType = current;
 			}
-			AnnotationHelper.TableInfo tableInfo = AnnotationHelper.getTableInfo(current);
+			TableInfo tableInfo = AnnotationHelper.getTableInfo(current);
 			fields.addAll(0, collectFieldsOfClass(current, current.getSuperclass()));
 			if (tableInfo != null) {
 				String name = tableInfo.name;
@@ -255,7 +273,7 @@ public final class PojoMetadata {
 			if (f.isStatic()) {
 				continue;
 			}
-			if (f.isTransient() || f.getAnnotation(Transient.class) != null) {
+			if (f.isTransient() || AnnotationHelper.isTransient(f)) {
 				continue;
 			}
 			result.add(f);
@@ -332,24 +350,6 @@ public final class PojoMetadata {
 	 * Groups result set column keys by their alias prefix.
 	 * Keys are expected to be in format "alias.fieldName".
 	 */
-	public static Map<String, List<String>> groupKeysByAlias(Set<String> allKeys) {
-		Map<String, List<String>> keysByAlias = new HashMap<>();
-
-		for (String key : allKeys) {
-			int dotPos = key.lastIndexOf(".");
-			if (dotPos < 0) {
-				throw new RuntimeException("Key does not contain a dot: '" + key + "', allKeys: " + allKeys);
-			}
-			String alias = key.substring(0, dotPos);
-			if (!keysByAlias.containsKey(alias)) {
-				keysByAlias.put(alias, new ArrayList<>());
-			}
-			keysByAlias.get(alias).add(key);
-		}
-
-		return keysByAlias;
-	}
-
 	// --- Field name utilities ---
 
 	/**

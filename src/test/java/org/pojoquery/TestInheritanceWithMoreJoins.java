@@ -10,7 +10,6 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.pipeline.QueryBuilder;
 
 public class TestInheritanceWithMoreJoins {
 
@@ -68,7 +67,7 @@ public class TestInheritanceWithMoreJoins {
 	
 	@Test
 	public void testDeeper() {
-		QueryBuilder<BedRoom> qb = QueryBuilder.from(BedRoom.class);
+		PojoQuery<BedRoom> qb = PojoQuery.build(BedRoom.class);
 		String sql = qb.toStatement().getSql();
 		assertEquals(
 				norm("""
@@ -92,7 +91,7 @@ public class TestInheritanceWithMoreJoins {
 	
 	@Test
 	public void testApartment() {
-		QueryBuilder<Apartment> qb = QueryBuilder.from(Apartment.class);
+		PojoQuery<Apartment> qb = PojoQuery.build(Apartment.class);
 		String sql = qb.toStatement().getSql();
 		assertEquals(
 				norm("""

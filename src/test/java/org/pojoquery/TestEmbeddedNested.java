@@ -13,7 +13,6 @@ import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
-import org.pojoquery.pipeline.QueryBuilder;
 
 @UseDialect(Dialect.MYSQL)
 public class TestEmbeddedNested {
@@ -65,7 +64,7 @@ public class TestEmbeddedNested {
 				FROM `customer` AS `customer`
 				 LEFT JOIN `country` AS `personal.home.country` ON `customer`.`personal_home_country_id` = `personal.home.country`.`id`
 				"""), 
-				norm(QueryBuilder.from(mysqlContext, Customer.class).getQuery().toStatement().getSql()));
+				norm(PojoQuery.build(mysqlContext, Customer.class).getQuery().toStatement().getSql()));
 	}
 	
 	private List<Map<String, Object>> RESULT_CUSTOMERS = Collections.singletonList(Map.of(
@@ -81,7 +80,7 @@ public class TestEmbeddedNested {
 
 	@Test
 	public void testEmbeddedNestedWithLinkFieldUsingPipeline() {
-		QueryBuilder<Customer> p = QueryBuilder.from(Customer.class);
+		PojoQuery<Customer> p = PojoQuery.build(Customer.class);
 		List<Customer> users = p.processRows(RESULT_CUSTOMERS);
 		
 		assertEquals("United States of America", users.get(0).personal.home.country.name);

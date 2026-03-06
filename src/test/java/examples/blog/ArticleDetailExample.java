@@ -5,9 +5,9 @@ import java.util.Date;
 import javax.sql.DataSource;
 
 import org.pojoquery.DB;
+import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.pipeline.DefaultSqlQuery;
 
 public class ArticleDetailExample {
@@ -71,7 +71,7 @@ public class ArticleDetailExample {
 		DataSource db = BlogDb.create("localhost", "pojoquery_blog", "root", "");
 		
 		// tag::query[]
-		QueryBuilder<ArticleDetail> qb = QueryBuilder.from(ArticleDetail.class);
+		PojoQuery<ArticleDetail> qb = PojoQuery.build(ArticleDetail.class);
 		DefaultSqlQuery q = qb.getQuery()
 				.addWhere("{article.id} = ?", 1L)
 				.addOrderBy("{comments.submitdate} DESC");

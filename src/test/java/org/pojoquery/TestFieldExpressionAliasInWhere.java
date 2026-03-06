@@ -10,7 +10,7 @@ import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.pipeline.DefaultSqlQuery;
-import org.pojoquery.pipeline.QueryBuilder;
+import org.pojoquery.pipeline.SqlQuery;
 
 @UseDialect(Dialect.MYSQL)
 public class TestFieldExpressionAliasInWhere {
@@ -47,7 +47,7 @@ public class TestFieldExpressionAliasInWhere {
 	@Test
 	public void testAliases() {
 		
-		DefaultSqlQuery query = QueryBuilder.from(Article.class).getQuery();
+		SqlQuery<DefaultSqlQuery> query = PojoQuery.build(Article.class).getQuery();
 		query.addWhere("{author.fullName} = ?", "Jane Doe");
 		
 		assertEquals(
@@ -69,7 +69,7 @@ public class TestFieldExpressionAliasInWhere {
 	@Test
 	public void testAliasesDeeper() {
 		
-		DefaultSqlQuery query = QueryBuilder.from(Book.class).getQuery();
+		SqlQuery<DefaultSqlQuery> query = PojoQuery.build(Book.class).getQuery();
 		query.addWhere("{articles.author.fullName} = ?", "Jane Doe");
 		
 		assertEquals(
@@ -93,7 +93,7 @@ public class TestFieldExpressionAliasInWhere {
 	@Test
 	public void testAliasesInGroupBy() {
 		
-		DefaultSqlQuery query = QueryBuilder.from(Article.class).getQuery();
+		SqlQuery<DefaultSqlQuery> query = PojoQuery.build(Article.class).getQuery();
 		query.addGroupBy("{author.fullName}");
 		
 		assertEquals(
@@ -115,7 +115,7 @@ public class TestFieldExpressionAliasInWhere {
 	@Test
 	public void testAliasesInOrderBy() {
 		
-		DefaultSqlQuery query = QueryBuilder.from(Article.class).getQuery();
+		SqlQuery<DefaultSqlQuery> query = PojoQuery.build(Article.class).getQuery();
 		query.addOrderBy("{author.fullName} ASC");
 		
 		assertEquals(
@@ -137,7 +137,7 @@ public class TestFieldExpressionAliasInWhere {
 	@Test
 	public void testAliasesInOrderByDeeper() {
 		
-		DefaultSqlQuery query = QueryBuilder.from(Book.class).getQuery();
+		SqlQuery<DefaultSqlQuery> query = PojoQuery.build(Book.class).getQuery();
 		query.addOrderBy("{articles.author.fullName} DESC");
 		
 		assertEquals(
@@ -161,7 +161,7 @@ public class TestFieldExpressionAliasInWhere {
 	@Test
 	public void testAliasesInJoinCondition() {
 		
-		DefaultSqlQuery query = QueryBuilder.from(Article.class).getQuery();
+		SqlQuery<DefaultSqlQuery> query = PojoQuery.build(Article.class).getQuery();
 		query.addJoin(
 			org.pojoquery.pipeline.SqlQuery.JoinType.LEFT,
 			"audit_log",

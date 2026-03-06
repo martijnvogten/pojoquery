@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.MappingException;
-import org.pojoquery.pipeline.QueryBuilder;
 
 public class TestExceptions {
 
@@ -36,7 +35,7 @@ public class TestExceptions {
 	private void assertMappingException(Class<?> clz) {
 		boolean caught = true;
 		try {
-			QueryBuilder.from(clz);
+			PojoQuery.build(clz);
 		} catch (MappingException me) {
 			caught = true;
 		}

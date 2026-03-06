@@ -14,7 +14,6 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
-import org.pojoquery.pipeline.QueryBuilder;
 
 @UseDialect(Dialect.MYSQL)
 public class TestCollections {
@@ -76,7 +75,7 @@ public class TestCollections {
 				"roles.value", Role.AGENT.name())
 			);
 		
-		List<User> users = QueryBuilder.from(User.class).processRows(result);
+		List<User> users = PojoQuery.build(User.class).processRows(result);
 		assertEquals(1, users.size());
 		Assertions.assertTrue(users.get(0).roles.contains(Role.ADMIN));
 	}

@@ -18,7 +18,6 @@ import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.PojoMetadata;
-import org.pojoquery.pipeline.QueryBuilder;
 import org.pojoquery.schema.ForeignKeyInfo.DeferredForeignKey;
 import org.pojoquery.schema.ForeignKeyInfo.InferredForeignKey;
 import org.pojoquery.schema.ForeignKeyInfo.LinkTableInfo;
@@ -174,7 +173,7 @@ public class SchemaGenerator {
         // Scan for collection fields that imply foreign keys in other tables
         ForeignKeyScanner.scanForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
         
-        List<TableMapping> tableMappings = QueryBuilder.determineTableMapping(entityClass);
+        List<TableMapping> tableMappings = PojoMetadata.determineTableMapping(entityClass);
         if (tableMappings.isEmpty()) {
             throw new IllegalArgumentException("Class " + entityClass.getSimpleName() + " must have a @Table annotation");
         }
@@ -226,7 +225,7 @@ public class SchemaGenerator {
                         List<FieldModel> stiFields = new ArrayList<>();
                         for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnn, "value")) {
                             // Collect fields declared only in the subclass
-                            for (FieldModel f : QueryBuilder.collectFieldsOfClass(subClass, entityClass)) {
+                            for (FieldModel f : PojoMetadata.collectFieldsOfClass(subClass, entityClass)) {
                                 if (!isLinkedField(f) && !PojoMetadata.isListOrArray(f.getType())) {
                                     stiFields.add(f);
                                 }
@@ -261,7 +260,7 @@ public class SchemaGenerator {
     private static void collectMergedColumnAnnotations(TypeModel[] entityClasses, 
             Map<String, Map<String, MergedColumnAnnotations>> tableColumnAnnotations) {
         for (TypeModel entityClass : entityClasses) {
-            List<TableMapping> tableMappings = QueryBuilder.determineTableMapping(entityClass);
+            List<TableMapping> tableMappings = PojoMetadata.determineTableMapping(entityClass);
             for (TableMapping mapping : tableMappings) {
                 String tableKey = (mapping.schemaName != null ? mapping.schemaName + "." : "") + mapping.tableName;
                 Map<String, MergedColumnAnnotations> columnMap = tableColumnAnnotations
@@ -269,7 +268,7 @@ public class SchemaGenerator {
                 
                 // Process fields from this mapping
                 for (FieldModel field : mapping.getFields()) {
-                    String columnName = QueryBuilder.determineSqlFieldName(field).toLowerCase();
+                    String columnName = PojoMetadata.determineSqlFieldName(field).toLowerCase();
                     MergedColumnAnnotations merged = columnMap.computeIfAbsent(columnName, k -> new MergedColumnAnnotations());
                     AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
                     merged.mergeWith(columnMeta);
@@ -377,7 +376,7 @@ public class SchemaGenerator {
         Set<String> existingFkColumns = new HashSet<>(); // Track FK columns to avoid duplicates
         
         // Determine if we have a composite key from the overall class hierarchy
-        List<FieldModel> idFields = QueryBuilder.determineIdFields(mapping.getType());
+        List<FieldModel> idFields = PojoMetadata.determineIdFields(mapping.getType());
         boolean isCompositeKey = idFields.size() > 1;
         
         // Check if this is a subclass table (not the root table with @Id fields)
@@ -394,7 +393,7 @@ public class SchemaGenerator {
         // we need to add the ID field as a non-auto-increment primary key (foreign key to parent)
         if (!hasIdFieldInThisMapping && !idFields.isEmpty()) {
             for (FieldModel idField : idFields) {
-                String columnName = QueryBuilder.determineSqlFieldName(idField);
+                String columnName = PojoMetadata.determineSqlFieldName(idField);
                 // Add as NOT NULL (not auto-increment - it references the parent table)
                 String columnDef = formatColumnDefinition(columnName, idField.getType(), false, dbContext, idField, mergedAnnotations);
                 columnDefinitions.add(columnDef);
@@ -406,7 +405,7 @@ public class SchemaGenerator {
         for (FieldModel field : mapping.getFields()) {
             // Handle embedded fields
             if (AnnotationHelper.isEmbedded(field)) {
-                String prefix = QueryBuilder.determinePrefix(field);
+                String prefix = PojoMetadata.determinePrefix(field);
                 addEmbeddedColumns(field.getType(), prefix, columnDefinitions, primaryKeyColumns,
                     existingColumnNames, dbContext, isCompositeKey, mergedAnnotations);
                 continue;
@@ -427,12 +426,12 @@ public class SchemaGenerator {
                     // Defer foreign key constraint for single entity references
                     if (!existingFkColumns.contains(columnName.toLowerCase())) {
                         TypeModel linkedType = field.getType();
-                        List<TableMapping> linkedMappings = QueryBuilder.determineTableMapping(linkedType);
+                        List<TableMapping> linkedMappings = PojoMetadata.determineTableMapping(linkedType);
                         if (!linkedMappings.isEmpty()) {
                             TableMapping linkedMapping = linkedMappings.get(0);
-                            List<FieldModel> linkedIdFields = QueryBuilder.determineIdFields(linkedType);
+                            List<FieldModel> linkedIdFields = PojoMetadata.determineIdFields(linkedType);
                             if (!linkedIdFields.isEmpty()) {
-                                String refColumn = QueryBuilder.determineSqlFieldName(linkedIdFields.get(0));
+                                String refColumn = PojoMetadata.determineSqlFieldName(linkedIdFields.get(0));
                                 deferredForeignKeys.add(new DeferredForeignKey(
                                     mapping.tableName, mapping.schemaName, columnName,
                                     linkedMapping.tableName, refColumn, linkedMapping.schemaName));
@@ -445,7 +444,7 @@ public class SchemaGenerator {
                 continue;
             }
             
-            String columnName = QueryBuilder.determineSqlFieldName(field);
+            String columnName = PojoMetadata.determineSqlFieldName(field);
             boolean isPrimaryKey = AnnotationHelper.isId(field);
             // Only auto-increment if single primary key (not composite) and it's in this mapping
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
@@ -528,7 +527,7 @@ public class SchemaGenerator {
         Set<String> existingFkColumns = new HashSet<>();
 
         // Determine if we have a composite key
-        List<FieldModel> idFields = QueryBuilder.determineIdFields(mapping.getType());
+        List<FieldModel> idFields = PojoMetadata.determineIdFields(mapping.getType());
         boolean isCompositeKey = idFields.size() > 1;
 
         // Process fields from the mapping (parent class fields)
@@ -554,12 +553,12 @@ public class SchemaGenerator {
 
                     if (!existingFkColumns.contains(columnName.toLowerCase())) {
                         TypeModel linkedType = field.getType();
-                        List<TableMapping> linkedMappings = QueryBuilder.determineTableMapping(linkedType);
+                        List<TableMapping> linkedMappings = PojoMetadata.determineTableMapping(linkedType);
                         if (!linkedMappings.isEmpty()) {
                             TableMapping linkedMapping = linkedMappings.get(0);
-                            List<FieldModel> linkedIdFields = QueryBuilder.determineIdFields(linkedType);
+                            List<FieldModel> linkedIdFields = PojoMetadata.determineIdFields(linkedType);
                             if (!linkedIdFields.isEmpty()) {
-                                String refColumn = QueryBuilder.determineSqlFieldName(linkedIdFields.get(0));
+                                String refColumn = PojoMetadata.determineSqlFieldName(linkedIdFields.get(0));
                                 deferredForeignKeys.add(new DeferredForeignKey(
                                         mapping.tableName, mapping.schemaName, columnName,
                                         linkedMapping.tableName, refColumn, linkedMapping.schemaName));
@@ -571,7 +570,7 @@ public class SchemaGenerator {
                 continue;
             }
 
-            String columnName = QueryBuilder.determineSqlFieldName(field);
+            String columnName = PojoMetadata.determineSqlFieldName(field);
             boolean isPrimaryKey = AnnotationHelper.isId(field);
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext, field, mergedAnnotations);
@@ -590,7 +589,7 @@ public class SchemaGenerator {
 
         // Add fields from subclasses (single table inheritance)
         for (FieldModel field : stiFields) {
-            String columnName = QueryBuilder.determineSqlFieldName(field);
+            String columnName = PojoMetadata.determineSqlFieldName(field);
             if (!existingColumnNames.contains(columnName.toLowerCase())) {
                 // Subclass fields are nullable (since not all rows will be of that subclass)
                 String columnDef = formatColumnDefinition(columnName, field.getType(), false, dbContext, field, mergedAnnotations);
@@ -648,12 +647,12 @@ public class SchemaGenerator {
     private static void addEmbeddedColumns(TypeModel embeddedClass, String prefix,
             List<String> columnDefinitions, List<String> primaryKeyColumns, Set<String> existingColumnNames,
             DbContext dbContext, boolean isCompositeKey, Map<String, MergedColumnAnnotations> mergedAnnotations) {
-        // Use QueryBuilder's filterFields which already handles static, transient, and @Transient
-        Collection<FieldModel> fields = QueryBuilder.filterFields(embeddedClass);
+        // filterFields already handles static, transient, and @Transient
+        Collection<FieldModel> fields = PojoMetadata.filterFields(embeddedClass);
         for (FieldModel field : fields) {
             // Recursively handle nested embedded
             if (AnnotationHelper.isEmbedded(field)) {
-                String nestedPrefix = prefix + QueryBuilder.determinePrefix(field);
+                String nestedPrefix = prefix + PojoMetadata.determinePrefix(field);
                 addEmbeddedColumns(field.getType(), nestedPrefix, columnDefinitions, primaryKeyColumns,
                     existingColumnNames, dbContext, isCompositeKey, mergedAnnotations);
                 continue;
@@ -675,7 +674,7 @@ public class SchemaGenerator {
                 continue;
             }
 
-            String columnName = prefix + QueryBuilder.determineSqlFieldName(field);
+            String columnName = prefix + PojoMetadata.determineSqlFieldName(field);
             boolean isPrimaryKey = AnnotationHelper.isId(field);
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext, field, mergedAnnotations);
@@ -690,7 +689,7 @@ public class SchemaGenerator {
     
     private static boolean isLinkedField(FieldModel field) {
         TypeModel type = field.getType();
-        // Check if it's a collection (list, set, etc.) - reuse QueryBuilder's logic
+        // Check if it's a collection (list, set, etc.) - reuse PojoMetadata.s logic
         if (PojoMetadata.isListOrArray(type)) {
             return true;
         }
@@ -698,7 +697,7 @@ public class SchemaGenerator {
         if (field.getAnnotation(Link.class) != null) {
             return true;
         }
-        // Check if the field type is an entity - reuse QueryBuilder's logic
+        // Check if the field type is an entity - reuse PojoMetadata.s logic
         return PojoMetadata.isLinkedClass(type);
     }
     
@@ -915,7 +914,7 @@ public class SchemaGenerator {
         // Scan for inferred foreign keys
         ForeignKeyScanner.scanForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
         
-        List<TableMapping> tableMappings = QueryBuilder.determineTableMapping(entityClass);
+        List<TableMapping> tableMappings = PojoMetadata.determineTableMapping(entityClass);
         if (tableMappings.isEmpty()) {
             throw new IllegalArgumentException("Class " + entityClass.getSimpleName() + " must have a @Table annotation");
         }
@@ -1021,7 +1020,7 @@ public class SchemaGenerator {
         Set<String> existingColumnNames = new HashSet<>();
         
         // Determine if we have a composite key from the overall class hierarchy
-        List<FieldModel> idFields = QueryBuilder.determineIdFields(mapping.getType());
+        List<FieldModel> idFields = PojoMetadata.determineIdFields(mapping.getType());
         boolean isCompositeKey = idFields.size() > 1;
         
         // Check if this is a subclass table
@@ -1036,7 +1035,7 @@ public class SchemaGenerator {
         // Add ID fields if needed (for subclass tables)
         if (!hasIdFieldInThisMapping && !idFields.isEmpty()) {
             for (FieldModel idField : idFields) {
-                String columnName = QueryBuilder.determineSqlFieldName(idField);
+                String columnName = PojoMetadata.determineSqlFieldName(idField);
                 String sqlType = dbContext.mapJavaTypeToSql(idField);
                 columns.add(new ColumnDefinition(columnName, sqlType, false, true));
                 existingColumnNames.add(columnName.toLowerCase());
@@ -1047,7 +1046,7 @@ public class SchemaGenerator {
         for (FieldModel field : mapping.getFields()) {
             // Handle embedded fields
             if (AnnotationHelper.isEmbedded(field)) {
-                String prefix = QueryBuilder.determinePrefix(field);
+                String prefix = PojoMetadata.determinePrefix(field);
                 // Remove trailing underscore
                 if (prefix.endsWith("_")) {
                     prefix = prefix.substring(0, prefix.length() - 1);
@@ -1074,7 +1073,7 @@ public class SchemaGenerator {
                 continue;
             }
 
-            String columnName = QueryBuilder.determineSqlFieldName(field);
+            String columnName = PojoMetadata.determineSqlFieldName(field);
             boolean isPrimaryKey = AnnotationHelper.isId(field);
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String sqlType = dbContext.mapJavaTypeToSql(field);
@@ -1102,7 +1101,7 @@ public class SchemaGenerator {
     
     private static void addEmbeddedColumnsToList(TypeModel embeddedClass, String prefix,
             List<ColumnDefinition> columns, Set<String> existingColumnNames, DbContext dbContext, boolean isCompositeKey) {
-        Collection<FieldModel> fields = QueryBuilder.filterFields(embeddedClass);
+        Collection<FieldModel> fields = PojoMetadata.filterFields(embeddedClass);
         for (FieldModel field : fields) {
             if (AnnotationHelper.isEmbedded(field)) {
                 // Get prefix from PojoQuery @Embedded if present, otherwise use empty string (JPA @Embedded has no prefix)
@@ -1112,7 +1111,7 @@ public class SchemaGenerator {
                 continue;
             }
 
-            String columnName = prefix + QueryBuilder.determineSqlFieldName(field);
+            String columnName = prefix + PojoMetadata.determineSqlFieldName(field);
             boolean isPrimaryKey = AnnotationHelper.isId(field);
             boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
             String sqlType = dbContext.mapJavaTypeToSql(field);

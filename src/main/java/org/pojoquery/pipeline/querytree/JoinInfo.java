@@ -14,7 +14,6 @@ import org.pojoquery.typemodel.FieldModel;
  * @param joinCondition The structured join condition (may be null if not yet resolved)
  * @param linkField The Java field that created this join (may be null for manual joins)
  * @param isCollection True if this is a one-to-many relationship (List/Set/Array)
- * @param childAliasPrefix For superclass joins, the alias prefix for field aliasing (e.g., "bedroom" for "room.id AS bedroom.id")
  */
 public record JoinInfo(
     JoinType joinType,
@@ -23,46 +22,38 @@ public record JoinInfo(
     TableInfo childTable,
     JoinCondition joinCondition,
     JoinTableInfo joinTableInfo,
-    QueryTree subquery,
-    String childAliasPrefix
+    QueryTree subquery
 ) {
     public JoinInfo {
         Objects.requireNonNull(joinType, "joinType");
     }
-    
-    // Legacy constructor for backward compatibility
-    public JoinInfo(JoinType joinType, boolean isCollection, FieldModel linkField, 
-                   TableInfo childTable, JoinCondition joinCondition, 
-                   JoinTableInfo joinTableInfo, QueryTree subquery) {
-        this(joinType, isCollection, linkField, childTable, joinCondition, joinTableInfo, subquery, null);
-    }
 
     public static JoinInfo manyToMany(TableInfo childTable, FieldModel linkField, JoinTableInfo joinTableInfo) {
-        return new JoinInfo(JoinType.LEFT, true, linkField, childTable, null, joinTableInfo, null, null);
+        return new JoinInfo(JoinType.LEFT, true, linkField, childTable, null, joinTableInfo, null);
     }
 
     public static JoinInfo leftJoinMany(TableInfo childTable, FieldModel linkField) {
-        return new JoinInfo(JoinType.LEFT, true, linkField, childTable, null, null, null, null);
+        return new JoinInfo(JoinType.LEFT, true, linkField, childTable, null, null, null);
     }
 
     public static JoinInfo leftJoinOne(TableInfo childTable, FieldModel linkField) {
-        return new JoinInfo(JoinType.LEFT, false, linkField, childTable, null, null, null, null);
+        return new JoinInfo(JoinType.LEFT, false, linkField, childTable, null, null, null);
     }
 
     public static JoinInfo leftJoinSubClass(TableInfo childTable, JoinCondition.SharedPrimaryKey condition) {
-        return new JoinInfo(JoinType.LEFT, false, null, childTable, condition, null, null, null);
+        return new JoinInfo(JoinType.LEFT, false, null, childTable, condition, null, null);
     }
 
-    public static JoinInfo leftJoinSuperClass(TableInfo childTable, JoinCondition.SharedPrimaryKey condition, String childAliasPrefix) {
-        return new JoinInfo(JoinType.LEFT, false, null, childTable, condition, null, null, childAliasPrefix);
+    public static JoinInfo leftJoinSuperClass(TableInfo childTable, JoinCondition.SharedPrimaryKey condition) {
+        return new JoinInfo(JoinType.LEFT, false, null, childTable, condition, null, null);
     }
 
-    public static JoinInfo innerJoinSuperClass(TableInfo childTable, JoinCondition.SharedPrimaryKey condition, String childAliasPrefix) {
-        return new JoinInfo(JoinType.INNER, false, null, childTable, condition, null, null, childAliasPrefix);
+    public static JoinInfo innerJoinSuperClass(TableInfo childTable, JoinCondition.SharedPrimaryKey condition) {
+        return new JoinInfo(JoinType.INNER, false, null, childTable, condition, null, null);
     }
 
     public JoinInfo withJoinCondition(JoinCondition joinCondition) {
-        return new JoinInfo(joinType, isCollection, linkField, childTable, joinCondition, joinTableInfo, subquery, childAliasPrefix);
+        return new JoinInfo(joinType, isCollection, linkField, childTable, joinCondition, joinTableInfo, subquery);
     }
 
     /**
@@ -70,11 +61,11 @@ public record JoinInfo(
      */
     @Deprecated
     public JoinInfo withCondition(SqlExpression condition) {
-        return new JoinInfo(joinType, isCollection, linkField, childTable, new JoinCondition.Custom(condition), joinTableInfo, subquery, childAliasPrefix);
+        return new JoinInfo(joinType, isCollection, linkField, childTable, new JoinCondition.Custom(condition), joinTableInfo, subquery);
     }
 
     public JoinInfo withSubQuery(QueryTree subquery) {
-        return new JoinInfo(joinType, isCollection, linkField, childTable, joinCondition, joinTableInfo, subquery, childAliasPrefix);
+        return new JoinInfo(joinType, isCollection, linkField, childTable, joinCondition, joinTableInfo, subquery);
     }
 
     public boolean isManyToMany() {
@@ -117,9 +108,6 @@ public record JoinInfo(
         }
         if (subquery != null) {
             sb.append(indent).append("  subquery: ").append(subquery.toStringWithIndent(indent + "  ")).append("\n");
-        }
-        if (childAliasPrefix != null) {
-            sb.append(indent).append("  childAliasPrefix: \"").append(childAliasPrefix).append("\"\n");
         }
         sb.append(indent).append("}");
         return sb.toString();

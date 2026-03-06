@@ -5,6 +5,7 @@ import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.JoinTableInfo;
+import org.pojoquery.pipeline.querytree.LinkedValueNode;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
@@ -91,6 +92,17 @@ public class SQLQueryFromTree {
 				
 				// Recursively add nested joins
 				addJoinsFromNode(query, childTable);
+			} else if (child instanceof LinkedValueNode valueNode) {
+				// Handle value collections (e.g., @Link(fetchColumn))
+				if (joinInfo != null) {
+					SqlExpression condition = joinInfo.toSqlCondition(tableNode.alias(), valueNode.alias());
+					query.addJoin(joinInfo.joinType(), valueNode.linkTableSchema(), valueNode.linkTableName(),
+						valueNode.alias(), condition);
+				}
+				
+				// Add the fetch column as a field
+				String fieldExpr = query.getDbContext().quoteObjectNames(valueNode.alias(), valueNode.fetchColumn());
+				query.addField(SqlExpression.sql(fieldExpr), valueNode.alias() + ".value");
 			}
 		}
 	}
