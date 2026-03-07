@@ -34,12 +34,10 @@ public class TestSingleTableInheritance {
 		Double area;
 	}
 
-	@Table("room")
 	static class STIBedRoom extends STIRoom {
 		Integer numberOfBeds;
 	}
 
-	@Table("room")
 	static class STIKitchen extends STIRoom {
 		Boolean hasDishWasher;
 	}
@@ -51,7 +49,6 @@ public class TestSingleTableInheritance {
 		Double area;
 	}
 
-	@Table("room")
 	static class CustomDiscBedRoom extends CustomDiscRoom {
 		Integer numberOfBeds;
 	}

@@ -158,7 +158,7 @@ public class QueryClassCodeGenerator {
         List<GenJoin> joins = new ArrayList<>();
         
         // Collect fields from root
-        for (FieldSelection fs : rootTable.fields()) {
+        for (FieldSelection fs : rootTable.resolvedFields()) {
             fields.add(new GenField(fs.alias(), fs.expression().getSql()));
         }
         
@@ -209,7 +209,7 @@ public class QueryClassCodeGenerator {
                 }
                 
                 // Add fields from the joined table
-                for (FieldSelection fs : childTable.fields()) {
+                for (FieldSelection fs : childTable.resolvedFields()) {
                     fields.add(new GenField(fs.alias(), fs.expression().getSql()));
                 }
                 

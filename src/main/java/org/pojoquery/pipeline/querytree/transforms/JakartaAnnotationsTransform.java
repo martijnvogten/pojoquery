@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.pojoquery.pipeline.querytree.EmbeddedNode;
 import org.pojoquery.pipeline.querytree.FieldSelection;
+import org.pojoquery.pipeline.querytree.FieldSelectionBase;
 import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
@@ -66,9 +67,9 @@ public class JakartaAnnotationsTransform implements QueryTreeTransform {
     }
     
     private JoinedNode transformJoinedNode(JoinedNode node) {
-        // Transform field models in field selections
-        List<FieldSelection> transformedFields = node.fields().stream()
-            .map(JakartaAnnotations::transformFieldSelection)
+        // Transform field models in field selections (only resolved ones)
+        List<FieldSelectionBase> transformedFields = node.fields().stream()
+            .map(f -> f instanceof FieldSelection fs ? JakartaAnnotations.transformFieldSelection(fs) : f)
             .toList();
         
         // Transform the type annotations and fields
@@ -78,9 +79,9 @@ public class JakartaAnnotationsTransform implements QueryTreeTransform {
     }
     
     private EmbeddedNode transformEmbeddedNode(EmbeddedNode node) {
-        // Transform field models in field selections
-        List<FieldSelection> transformedFields = node.fields().stream()
-            .map(JakartaAnnotations::transformFieldSelection)
+        // Transform field models in field selections (only resolved ones)
+        List<FieldSelectionBase> transformedFields = node.fields().stream()
+            .map(f -> f instanceof FieldSelection fs ? JakartaAnnotations.transformFieldSelection(fs) : f)
             .toList();
         
         // Transform the type annotations and fields

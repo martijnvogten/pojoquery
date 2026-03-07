@@ -1,6 +1,10 @@
 package org.pojoquery.pipeline.querytree;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
@@ -48,10 +52,10 @@ public class TestQueryTreeBuilder {
         assertNull(root.tableInfo().schemaName());
         
         // Should have 3 fields: id, name, email
-        assertEquals(3, root.fields().size());
+        assertEquals(3, root.resolvedFields().size());
         
         // Check field aliases
-        var fieldAliases = root.fields().stream()
+        var fieldAliases = root.resolvedFields().stream()
             .map(FieldSelection::alias)
             .toList();
         assertTrue(fieldAliases.contains("person.id"));
@@ -76,7 +80,7 @@ public class TestQueryTreeBuilder {
         assertEquals("book", root.tableInfo().tableName());
         
         // Should have 2 fields: id, title
-        assertEquals(2, root.fields().size());
+        assertEquals(2, root.resolvedFields().size());
         
         // Should have 1 child for author
         assertEquals(1, root.children().size());

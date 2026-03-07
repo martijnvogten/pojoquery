@@ -128,15 +128,15 @@ public class TestInheritance {
 				norm("""
 					SELECT
 					 `bedroom`.`numberOfBeds` AS `bedroom.numberOfBeds`,
-					 `room`.`id` AS `bedroom.id`,
-					 `room`.`area` AS `bedroom.area`
+					 `bedroom.room`.`id` AS `bedroom.room.id`,
+					 `bedroom.room`.`area` AS `bedroom.room.area`
 					FROM `bedroom` AS `bedroom`
-					 INNER JOIN `room` AS `room` ON `room`.`id` = `bedroom`.`id`
+					 INNER JOIN `room` AS `bedroom.room` ON `bedroom.room`.`id` = `bedroom`.`id`
 					"""),
 				norm(sql));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
-				"bedroom.id", "bedroom.area", "bedroom.numberOfBeds" }, 
+				"bedroom.room.id", "bedroom.room.area", "bedroom.numberOfBeds" }, 
 			     1L,           100.0,          1);
 		
 		List<BedRoom> list = PojoQuery.build(BedRoom.class).processRows(result);
@@ -156,8 +156,8 @@ public class TestInheritance {
 				SELECT
 				 `apartment`.`id` AS `apartment.id`,
 				 `bedrooms`.`numberOfBeds` AS `bedrooms.numberOfBeds`,
-				 `bedrooms.room`.`id` AS `bedrooms.id`,
-				 `bedrooms.room`.`area` AS `bedrooms.area`
+				 `bedrooms.room`.`id` AS `bedrooms.room.id`,
+				 `bedrooms.room`.`area` AS `bedrooms.room.area`
 				FROM `apartment` AS `apartment`
 				 LEFT JOIN `bedroom` AS `bedrooms` ON `apartment`.`id` = `bedrooms`.`apartment_id`
 				 LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms.room`.`id` = `bedrooms`.`id`

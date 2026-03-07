@@ -86,16 +86,32 @@ public final class FieldFilters {
     }
     
     /**
-     * Returns collection fields (List, Set, array) of entities without @Link.
+     * Returns collection fields (List, Set, array) of entities.
+     * Includes collections with @Link(foreignlinkfield=...) but no linktable or fetchColumn.
      * Constrained to the most specific table.
      */
     public static List<FieldModel> simpleCollections(TypeModel type) {
         return tableFields(type).stream()
             .filter(f -> isCollection(f.getType()) 
-                && !hasAnnotation(f, Link.class)
+                && !isLinkTableCollection(f)
+                && !isValueCollection(f)
                 && hasTableOnComponent(f)
                 && !PojoMetadata.isTransient(f))
             .toList();
+    }
+    
+    private static boolean isLinkTableCollection(FieldModel f) {
+        return f.getAnnotation(Link.class)
+            .flatMap(ann -> ann.getStringValue("linktable"))
+            .filter(s -> !s.isEmpty())
+            .isPresent();
+    }
+    
+    private static boolean isValueCollection(FieldModel f) {
+        return f.getAnnotation(Link.class)
+            .flatMap(ann -> ann.getStringValue("fetchColumn"))
+            .filter(s -> !s.isEmpty())
+            .isPresent();
     }
     
     /**
@@ -105,7 +121,8 @@ public final class FieldFilters {
         return tableFields(type).stream()
             .filter(f -> 
                 f.getAnnotation(Link.class)
-                .filter(ann -> ann.hasAttribute("linktable") && !ann.hasAttribute("fetchColumn"))
+                .filter(ann -> ann.getStringValue("linktable").filter(s -> !s.isEmpty()).isPresent()
+                            && ann.getStringValue("fetchColumn").filter(s -> !s.isEmpty()).isEmpty())
                 .isPresent()
             )
             .toList();
@@ -119,7 +136,7 @@ public final class FieldFilters {
         return tableFields(type).stream()
             .filter(f -> 
                 f.getAnnotation(Link.class)
-                .filter(link -> link.hasAttribute("fetchColumn"))
+                .filter(link -> link.getStringValue("fetchColumn").filter(s -> !s.isEmpty()).isPresent())
                 .isPresent()
             )
             .toList();
@@ -220,6 +237,7 @@ public final class FieldFilters {
         String name = type.getQualifiedName();
         return name.equals("java.util.Date") ||
                name.equals("java.sql.Date") ||
+               name.equals("java.sql.Time") ||
                name.equals("java.sql.Timestamp") ||
                name.equals("java.time.LocalDate") ||
                name.equals("java.time.LocalDateTime") ||

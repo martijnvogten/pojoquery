@@ -10,12 +10,14 @@ import java.util.List;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
+import org.pojoquery.pipeline.querytree.FieldSelectionBase;
 import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.JoinTableInfo;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.TableNode;
+import org.pojoquery.pipeline.querytree.UnresolvedFieldSelection;
 import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
@@ -34,6 +36,7 @@ public class JoinTableTransform implements QueryTreeTransform {
     
     private TableNode processNode(TableNode node, String rootAlias) {
         List<QueryNode> newChildren = new ArrayList<>(node.children());
+        List<FieldModel> processedFields = new ArrayList<>();
         
         for (FieldModel f : FieldFilters.linkTableFields(node.type())) {
             if (alreadyJoined(node, f)) {
@@ -73,9 +76,19 @@ public class JoinTableTransform implements QueryTreeTransform {
                 joinTableInfo);
             
             newChildren.add(EmptyTableNode.ofJoined(targetAlias, FieldFilters.getComponentType(f), joinInfo));
+            processedFields.add(f);
         }
         
-        return node.withChildren(newChildren);
+        if (processedFields.isEmpty()) {
+            return node;
+        }
+        
+        // Remove UnresolvedFieldSelection for processed fields
+        List<FieldSelectionBase> newFields = node.fields().stream()
+            .filter(fsb -> !(fsb instanceof UnresolvedFieldSelection ufs && processedFields.contains(ufs.field())))
+            .toList();
+        
+        return node.withChildren(newChildren).withFields(newFields);
     }
     
     private String resolveLinkField(AnnotationModel linkAnn, String parentTableName) {

@@ -179,10 +179,13 @@ public record QueryTree(
      * Parents are transformed before children.
      * 
      * @param transform Function to apply to each TableNode
-     * @return A new QueryTree with all TableNodes transformed
+     * @return A new QueryTree with all TableNodes transformed, or this if nothing changed
      */
     public QueryTree transformTableNodes(UnaryOperator<TableNode> transform) {
         QueryNode newRoot = transformNode(root, transform);
+        if (newRoot == root) {
+            return this;
+        }
         return new QueryTree(resultType, newRoot, groupBy, orderBy, wheres);
     }
     
@@ -191,10 +194,25 @@ public record QueryTree(
         QueryNode result = node instanceof TableNode table ? transform.apply(table) : node;
         
         // Recurse into children
-        List<QueryNode> transformedChildren = result.children().stream()
-            .map(child -> transformNode(child, transform))
-            .toList();
-        return result.withChildren(transformedChildren);
+        List<QueryNode> oldChildren = result.children();
+        List<QueryNode> transformedChildren = new ArrayList<>(oldChildren.size());
+        boolean childrenChanged = false;
+        for (QueryNode child : oldChildren) {
+            QueryNode transformed = transformNode(child, transform);
+            transformedChildren.add(transformed);
+            if (transformed != child) {
+                childrenChanged = true;
+            }
+        }
+        
+        // Only create a new node if something changed
+        if (result == node && !childrenChanged) {
+            return node;
+        }
+        if (childrenChanged) {
+            return result.withChildren(transformedChildren);
+        }
+        return result;
     }
     
     /**
@@ -251,33 +269,6 @@ public record QueryTree(
         for (QueryNode child : parent.children()) {
             result.put(child.alias(), parent);
             collectParentsRecursive(child, result);
-        }
-    }
-
-    /**
-     * Returns a map from each alias to its subclass aliases (children with isSubClass=true).
-     * Only aliases that have subclasses are included as keys.
-     */
-    public Map<String, List<String>> subClassAliases() {
-        Map<String, List<String>> result = new HashMap<>();
-        collectSubClassAliasesRecursive(root, result);
-        return result;
-    }
-
-    private static void collectSubClassAliasesRecursive(QueryNode node, Map<String, List<String>> result) {
-        if (node == null) return;
-        
-        List<String> subClasses = new ArrayList<>();
-        for (QueryNode child : node.children()) {
-            if (child instanceof JoinedNode jn && jn.isSubClass()) {
-                subClasses.add(child.alias());
-            } else if (child instanceof EmbeddedNode en && en.isSubClass()) {
-                subClasses.add(child.alias());
-            }
-            collectSubClassAliasesRecursive(child, result);
-        }
-        if (!subClasses.isEmpty()) {
-            result.put(node.alias(), subClasses);
         }
     }
 

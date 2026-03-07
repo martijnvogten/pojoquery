@@ -38,7 +38,7 @@ public class JoinPruningTransform implements QueryTreeTransform {
         Set<String> aliases = new HashSet<>();
         
         tree.visitTableNodes(node -> {
-            for (var field : node.fields()) {
+            for (var field : node.resolvedFields()) {
                 aliases.addAll(ExpressionResolver.extractAliases(field.expression()));
             }
         });

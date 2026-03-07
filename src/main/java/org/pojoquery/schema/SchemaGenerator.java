@@ -82,8 +82,14 @@ public class SchemaGenerator {
         }
         
         // Generate ALTER TABLE statements for FK constraints (after all tables are created)
+        // Deduplicate by (table + column) to avoid duplicate FK constraints
+        Set<String> generatedFkConstraints = new HashSet<>();
         for (DeferredForeignKey dfk : deferredForeignKeys) {
-            statements.add(generateAlterTableAddForeignKey(dfk, dbContext));
+            String fkKey = (dfk.tableSchema != null ? dfk.tableSchema + "." : "") + dfk.tableName + "." + dfk.columnName;
+            if (!generatedFkConstraints.contains(fkKey.toLowerCase())) {
+                generatedFkConstraints.add(fkKey.toLowerCase());
+                statements.add(generateAlterTableAddForeignKey(dfk, dbContext));
+            }
         }
         
         return statements;
@@ -156,8 +162,14 @@ public class SchemaGenerator {
         }
         
         // Generate ALTER TABLE statements for FK constraints (after all tables are created)
+        // Deduplicate by (table + column) to avoid duplicate FK constraints
+        Set<String> generatedFkConstraints = new HashSet<>();
         for (DeferredForeignKey dfk : deferredForeignKeys) {
-            statements.add(generateAlterTableAddForeignKey(dfk, dbContext));
+            String fkKey = (dfk.tableSchema != null ? dfk.tableSchema + "." : "") + dfk.tableName + "." + dfk.columnName;
+            if (!generatedFkConstraints.contains(fkKey.toLowerCase())) {
+                generatedFkConstraints.add(fkKey.toLowerCase());
+                statements.add(generateAlterTableAddForeignKey(dfk, dbContext));
+            }
         }
         
         return statements;

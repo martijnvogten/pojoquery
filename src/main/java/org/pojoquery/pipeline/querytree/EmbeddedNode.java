@@ -22,7 +22,7 @@ import org.pojoquery.typemodel.TypeModel;
 public record EmbeddedNode(
     String alias,
     TypeModel type,
-    List<FieldSelection> fields,
+    List<FieldSelectionBase> fields,
     List<QueryNode> children,
     EmbedInfo embedInfo,
     boolean isSuperClass,
@@ -38,9 +38,18 @@ public record EmbeddedNode(
     }
     
     /**
+     * Returns the source alias for SQL column references.
+     * For EmbeddedNode, this is the parent's alias since embedded nodes share the parent's table.
+     */
+    @Override
+    public String sourceAlias() {
+        return embedInfo.sourceAlias();
+    }
+    
+    /**
      * Creates an EmbeddedNode with the given embed info.
      */
-    public static EmbeddedNode of(String alias, TypeModel type, List<FieldSelection> fields, EmbedInfo embedInfo) {
+    public static EmbeddedNode of(String alias, TypeModel type, List<FieldSelectionBase> fields, EmbedInfo embedInfo) {
         return new EmbeddedNode(alias, type, fields, List.of(), embedInfo, false, false);
     }
     
@@ -54,7 +63,7 @@ public record EmbeddedNode(
     }
 
     @Override
-    public EmbeddedNode withFields(List<FieldSelection> newFields) {
+    public EmbeddedNode withFields(List<FieldSelectionBase> newFields) {
         return new EmbeddedNode(alias, type, newFields, children, embedInfo, isSuperClass, isSubClass);
     }
     
@@ -114,7 +123,7 @@ public record EmbeddedNode(
         sb.append(indent).append("  isSubClass: ").append(isSubClass).append("\n");
         if (!fields.isEmpty()) {
             sb.append(indent).append("  fields: [\n");
-            for (FieldSelection f : fields) {
+            for (FieldSelectionBase f : fields) {
                 sb.append(indent).append("    ").append(f).append("\n");
             }
             sb.append(indent).append("  ]\n");

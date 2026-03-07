@@ -38,12 +38,17 @@ public class AnnotationHelper {
 	 * Returns column metadata from @Column annotation, or null if not present.
 	 */
 	public static ColumnMetadata getColumnMetadata(FieldModel f) {
+		var columnAnn = f.getAnnotation(Column.class);
+		if (columnAnn.isEmpty()) {
+			return null;
+		}
+		var ann = columnAnn.get();
 		return new ColumnMetadata(
-			f.getAnnotation(Column.class).flatMap(am -> am.getNumberAttribute("length").map(Number::intValue)).orElse(255),
-			f.getAnnotation(Column.class).flatMap(am -> am.getNumberAttribute("precision").map(Number::intValue)).orElse(0),
-			f.getAnnotation(Column.class).flatMap(am -> am.getNumberAttribute("scale").map(Number::intValue)).orElse(0),
-			f.getAnnotation(Column.class).flatMap(am -> am.getBooleanAttribute("nullable")).orElse(true),
-			f.getAnnotation(Column.class).flatMap(am -> am.getBooleanAttribute("unique")).orElse(false)
+			ann.getNumberAttribute("length").map(Number::intValue).orElse(255),
+			ann.getNumberAttribute("precision").map(Number::intValue).orElse(0),
+			ann.getNumberAttribute("scale").map(Number::intValue).orElse(0),
+			ann.getBooleanAttribute("nullable").orElse(true),
+			ann.getBooleanAttribute("unique").orElse(false)
 		);
 	}
 	

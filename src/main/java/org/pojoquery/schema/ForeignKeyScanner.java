@@ -85,10 +85,22 @@ class ForeignKeyScanner {
                     if (rootTableClass != null) {
                         // Create FK with reference to the owning table
                         InferredForeignKey fk = new InferredForeignKey(fkColumnName, ownerMapping.tableName, ownerIdColumn, ownerMapping.schemaName);
-                        inferredForeignKeys.computeIfAbsent(rootTableClass, k -> new ArrayList<>()).add(fk);
+                        addIfNotDuplicate(inferredForeignKeys, rootTableClass, fk);
                     }
                 }
             }
+        }
+    }
+    
+    /**
+     * Adds an inferred foreign key if no duplicate (same column name) already exists.
+     */
+    private static void addIfNotDuplicate(Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys, 
+            TypeModel tableClass, InferredForeignKey fk) {
+        List<InferredForeignKey> fks = inferredForeignKeys.computeIfAbsent(tableClass, k -> new ArrayList<>());
+        boolean exists = fks.stream().anyMatch(existing -> existing.columnName.equals(fk.columnName));
+        if (!exists) {
+            fks.add(fk);
         }
     }
     
@@ -210,7 +222,7 @@ class ForeignKeyScanner {
                 TypeModel tableClass = findTableClass(entityClass);
                 if (tableClass != null) {
                     InferredForeignKey fk = new InferredForeignKey(fkColumnName, refTable, refColumn, refSchema);
-                    inferredForeignKeys.computeIfAbsent(tableClass, k -> new ArrayList<>()).add(fk);
+                    addIfNotDuplicate(inferredForeignKeys, tableClass, fk);
                 }
             }
         }

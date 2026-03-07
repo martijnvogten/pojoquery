@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Aggregate;
 import org.pojoquery.pipeline.querytree.FieldSelection;
+import org.pojoquery.pipeline.querytree.FieldSelectionBase;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
@@ -28,15 +29,15 @@ public class AggregateExpressionTransform implements QueryTreeTransform {
             return node;
         }
         
-        // Override existing field expressions with @Aggregate
-        List<FieldSelection> newFields = node.fields().stream()
-            .map(f -> overrideWithAggregate(f, node.alias()))
+        // Override existing field expressions with @Aggregate (only resolved ones)
+        List<FieldSelectionBase> newFields = node.fields().stream()
+            .map(f -> f instanceof FieldSelection fs ? overrideWithAggregate(fs, node.alias()) : f)
             .collect(Collectors.toCollection(ArrayList::new));
         
         // Add @Aggregate fields that weren't in the original field list
         Set<String> existingFieldNames = newFields.stream()
-            .filter(f -> f.field() != null)
-            .map(f -> f.field().getName())
+            .filter(f -> f instanceof FieldSelection fs && fs.field() != null)
+            .map(f -> ((FieldSelection) f).field().getName())
             .collect(Collectors.toSet());
         
         for (FieldModel f : FieldFilters.aggregateFields(node.type())) {

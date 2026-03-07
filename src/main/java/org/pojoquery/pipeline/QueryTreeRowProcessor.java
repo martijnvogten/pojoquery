@@ -44,7 +44,6 @@ public class QueryTreeRowProcessor<T> {
     // Cached lookups derived from tree
     private final Map<String, QueryNode> nodesByAlias;
     private final Map<String, QueryNode> parentNodes;
-    private final Map<String, List<String>> subClassAliases;
     private final Map<String, FieldMapping> fieldMappings;
     
     // Cached during processing
@@ -57,7 +56,6 @@ public class QueryTreeRowProcessor<T> {
         // Pre-compute lookups from tree
         this.nodesByAlias = tree.nodesByAlias();
         this.parentNodes = tree.parentNodes();
-        this.subClassAliases = tree.subClassAliases();
         this.fieldMappings = buildFieldMappings();
     }
 
@@ -68,7 +66,7 @@ public class QueryTreeRowProcessor<T> {
         Map<String, FieldMapping> result = new HashMap<>();
         for (QueryNode node : tree.allNodes()) {
             if (node instanceof TableNode tableNode) {
-                for (FieldSelection fs : tableNode.fields()) {
+                for (FieldSelection fs : tableNode.resolvedFields()) {
                     if (fs.customMapping() != null) {
                         result.put(fs.alias(), fs.customMapping());
                     } else if (fs.field() != null && fs.field() instanceof ReflectionFieldModel rfm) {
@@ -132,8 +130,8 @@ public class QueryTreeRowProcessor<T> {
                 continue;
             }
 
-            // Skip subclasses - they're handled when the superclass is processed
-            if (isSubClass(node)) {
+            // Skip subclasses and superclasses - they're handled when the main node is processed
+            if (isSubClass(node) || isSuperClass(node)) {
                 continue;
             }
 
@@ -147,6 +145,8 @@ public class QueryTreeRowProcessor<T> {
                 // Root node - primary entity
                 if (!allEntities.containsKey(id)) {
                     Values merged = new Values(values);
+                    // Merge superclass values (from TPS superclass child nodes)
+                    mergeSuperClassValues(node, onThisRow, merged);
                     TypeModel entityType = tree.resultType();
 
                     if (isSingleTableInheritance(node)) {
@@ -162,20 +162,15 @@ public class QueryTreeRowProcessor<T> {
                         }
                     } else {
                         // Table-per-subclass: check which subclass table has data
-                        List<String> subs = subClassAliases.get(alias);
-                        if (subs != null) {
-                            for (String subClassAlias : subs) {
-                                Values subClassValues = onThisRow.get(subClassAlias);
-                                if (subClassValues == null || allNulls(subClassValues)) {
-                                    continue;
-                                }
-                                merged.putAll(subClassValues);
-                                subClassId = createId(subClassAlias, merged, idFieldNames);
-                                QueryNode subClassNode = nodesByAlias.get(subClassAlias);
-                                if (subClassNode != null) {
-                                    entityType = subClassNode.type();
-                                }
+                        for (QueryNode subClassNode : getSubClassChildren(node)) {
+                            String subClassAlias = subClassNode.alias();
+                            Values subClassValues = onThisRow.get(subClassAlias);
+                            if (subClassValues == null || allNulls(subClassValues)) {
+                                continue;
                             }
+                            merged.putAll(subClassValues);
+                            subClassId = createId(subClassAlias, merged, idFieldNames);
+                            entityType = subClassNode.type();
                         }
                     }
 
@@ -201,17 +196,14 @@ public class QueryTreeRowProcessor<T> {
 
                 // Try subclass aliases if parent not found
                 if (parent == null) {
-                    List<String> parentSubs = subClassAliases.get(parentAlias);
-                    if (parentSubs != null) {
-                        for (String sub : parentSubs) {
-                            parentValues = onThisRow.get(sub);
-                            if (parentValues != null && !parentValues.isEmpty()) {
-                                QueryNode subNode = nodesByAlias.get(sub);
-                                List<String> subIdFields = getIdFieldNames(subNode);
-                                parentId = createId(sub, parentValues, subIdFields);
-                                parent = allEntities.get(parentId);
-                                if (parent != null) break;
-                            }
+                    for (QueryNode subNode : getSubClassChildren(parentNode)) {
+                        String sub = subNode.alias();
+                        parentValues = onThisRow.get(sub);
+                        if (parentValues != null && !parentValues.isEmpty()) {
+                            List<String> subIdFields = getIdFieldNames(subNode);
+                            parentId = createId(sub, parentValues, subIdFields);
+                            parent = allEntities.get(parentId);
+                            if (parent != null) break;
                         }
                     }
                 }
@@ -245,6 +237,9 @@ public class QueryTreeRowProcessor<T> {
                 } else {
                     // Linked entity
                     TypeModel entityType = node.type();
+                    
+                    // Merge superclass values (from TPS superclass child nodes)
+                    mergeSuperClassValues(node, onThisRow, values);
 
                     if (isSingleTableInheritance(node)) {
                         String discriminatorColumn = getDiscriminatorColumn(node);
@@ -258,22 +253,17 @@ public class QueryTreeRowProcessor<T> {
                         }
                     } else {
                         // Table-per-subclass
-                        List<String> subs = subClassAliases.get(alias);
-                        if (subs != null) {
-                            Values merged = new Values(values);
-                            for (String subClassAlias : subs) {
-                                Values subClassValues = onThisRow.get(subClassAlias);
-                                if (subClassValues == null || allNulls(subClassValues)) {
-                                    continue;
-                                }
-                                merged.putAll(subClassValues);
-                                id = createId(subClassAlias, merged, idFieldNames);
-                                QueryNode subClassNode = nodesByAlias.get(subClassAlias);
-                                if (subClassNode != null) {
-                                    entityType = subClassNode.type();
-                                }
-                                values = merged;
+                        Values merged = new Values(values);
+                        for (QueryNode subClassNode : getSubClassChildren(node)) {
+                            String subClassAlias = subClassNode.alias();
+                            Values subClassValues = onThisRow.get(subClassAlias);
+                            if (subClassValues == null || allNulls(subClassValues)) {
+                                continue;
                             }
+                            merged.putAll(subClassValues);
+                            id = createId(subClassAlias, merged, idFieldNames);
+                            entityType = subClassNode.type();
+                            values = merged;
                         }
                     }
 
@@ -298,6 +288,43 @@ public class QueryTreeRowProcessor<T> {
             return en.isSubClass();
         }
         return false;
+    }
+
+    /**
+     * Returns the subclass children of a node (children with isSubClass=true).
+     */
+    private List<QueryNode> getSubClassChildren(QueryNode node) {
+        List<QueryNode> result = new ArrayList<>();
+        for (QueryNode child : node.children()) {
+            if (isSubClass(child)) {
+                result.add(child);
+            }
+        }
+        return result;
+    }
+
+    private boolean isSuperClass(QueryNode node) {
+        if (node instanceof JoinedNode jn) {
+            return jn.isSuperClass();
+        }
+        return false;
+    }
+
+    /**
+     * Recursively merges values from superclass child nodes into the target Values map.
+     * For TPS inheritance, superclass tables are modeled as child nodes with isSuperClass=true.
+     */
+    private void mergeSuperClassValues(QueryNode node, Map<String, Values> onThisRow, Values target) {
+        for (QueryNode child : node.children()) {
+            if (isSuperClass(child)) {
+                Values superValues = onThisRow.get(child.alias());
+                if (superValues != null) {
+                    target.putAll(superValues);
+                }
+                // Recurse for nested superclasses (e.g., A extends B extends C)
+                mergeSuperClassValues(child, onThisRow, target);
+            }
+        }
     }
 
     private List<String> getIdFieldNames(QueryNode node) {

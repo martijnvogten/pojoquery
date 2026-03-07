@@ -27,15 +27,14 @@ public class StructureExpansionTransform implements QueryTreeTransform {
     private final List<QueryTreeTransform> structureTransforms;
     
     public StructureExpansionTransform() {
-        // Order matters: Collections/entity refs must be processed BEFORE subclass expansion
-        // so that entity refs appear before subclasses in the join list (matching QueryModel)
+        // Order matters: Inheritance first, then Collections/entity refs
         this.structureTransforms = List.of(
-            new SuperclassTableTransform(),
+            new TPSInheritanceTransform(),
+            new STIInheritanceTransform(),
             new CollectionTransform(),
             new JoinTableTransform(),
             new ValueCollectionTransform(),
-            new EntityReferenceTransform(),
-            new SubclassExpansionTransform()
+            new EntityReferenceTransform()
         );
     }
     

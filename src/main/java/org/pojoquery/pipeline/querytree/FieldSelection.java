@@ -22,7 +22,7 @@ public record FieldSelection(
     SqlExpression expression,
     FieldModel field,
     FieldMapping customMapping
-) {
+) implements FieldSelectionBase {
     
     public FieldSelection {
         Objects.requireNonNull(alias, "alias");

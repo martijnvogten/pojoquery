@@ -31,15 +31,30 @@ public class QueryTreePipeline {
     public static QueryTreePipeline standard() {
         return new QueryTreePipeline(List.of(
             new CreateRootTransform(),
-            new SuperclassTableTransform(),
-            new SubclassExpansionTransform(),
+            
+            // ═══════════════════════════════════════════════════════════════
+            // PHASE 1: INHERITANCE STRUCTURE
+            // Build complete class hierarchy as EmptyTableNodes
+            // ═══════════════════════════════════════════════════════════════
+            new TPSInheritanceTransform(),   // Table Per Subclass: adds JoinedNodes for super/subclasses
+            new STIInheritanceTransform(),   // Single Table Inheritance: adds EmbeddedNodes for STI classes
+            
+            // ═══════════════════════════════════════════════════════════════
+            // PHASE 2: TABLE RESOLUTION
+            // Convert EmptyTableNode → JoinedNode/EmbeddedNode with fields
+            // ═══════════════════════════════════════════════════════════════
             new BasicTableTransform(),
+            new TPSIdFieldTransform(),       // Adds id fields to TPS subclass nodes
+            new SingleTableInheritanceTransform(), // Adds discriminator column + discriminatorValues
+            
+            // ═══════════════════════════════════════════════════════════════
+            // PHASE 3: RELATIONSHIP EXPANSION
+            // ═══════════════════════════════════════════════════════════════
             new EntityReferenceTransform(),
             new CollectionTransform(),
             new ValueCollectionTransform(),
             new JoinTableTransform(),
             new JoinConditionTransform(),
-            new SingleTableInheritanceTransform(),
             
             // ═══════════════════════════════════════════════════════════════
             // PHASE 3: FIELD MODIFIERS
@@ -51,17 +66,28 @@ public class QueryTreePipeline {
             // 6. @Column, @JoinColumn → column name overrides
             new ColumnNameTransform(),
             
+            // 9. @Other → dynamic column capture
+            new OtherFieldTransform(),
+            
+            // ═══════════════════════════════════════════════════════════════
+            // PHASE 4: FIELD RESOLUTION
+            // Convert remaining UnresolvedFieldSelection → FieldSelection
+            // ═══════════════════════════════════════════════════════════════
+            new SimpleFieldTransform(),
+            
+            // ═══════════════════════════════════════════════════════════════
+            // PHASE 4b: FIELD EXPRESSION MODIFIERS
+            // These run after SimpleFieldTransform since they operate on resolved fields
+            // ═══════════════════════════════════════════════════════════════
+            
             // 7. @Select → custom SQL expression
             new SelectExpressionTransform(),
             
             // 8. @Aggregate → aggregate SQL expression
             new AggregateExpressionTransform(),
             
-            // 9. @Other → dynamic column capture
-            new OtherFieldTransform(),
-            
             // ═══════════════════════════════════════════════════════════════
-            // PHASE 4: CUSTOM JOINS
+            // PHASE 5: CUSTOM JOINS
             // ═══════════════════════════════════════════════════════════════
             
             // 10. @JoinCondition → override auto-generated join conditions
@@ -91,8 +117,9 @@ public class QueryTreePipeline {
      */
     public static QueryTreePipeline forSubquery() {
         return new QueryTreePipeline(List.of(
+            new TPSInheritanceTransform(),
+            new STIInheritanceTransform(),
             new BasicTableTransform(),
-            new SuperclassTableTransform(),
             new EntityReferenceTransform(),
             new CollectionTransform(),
             new SelectExpressionTransform(),

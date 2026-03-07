@@ -260,7 +260,7 @@ final class CascadingUpdater {
         String parentLinkField = PojoMetadata.determineLinkTableOwnerColumn(entityClass, linkAnn);
         
         // Check if this is a value collection (using fetchColumn) or entity collection
-        boolean isValueCollection = linkAnn.hasAttribute("fetchColumn");
+        boolean isValueCollection = linkAnn.getStringValue("fetchColumn").filter(s -> !s.isEmpty()).isPresent();
         String foreignLinkField = PojoMetadata.determineLinkTableForeignColumn(
                 isValueCollection ? null : componentType, linkAnn);
         
@@ -474,7 +474,7 @@ final class CascadingUpdater {
     
     private static ForeignKeyInfo findForeignKeyInfo(TypeModel childClass, TypeModel parentClass, FieldModel collectionField) {
         return collectionField.getAnnotation(Link.class)
-            .filter(link -> link.hasAttribute("foreignlinkfield"))
+            .filter(link -> link.getStringValue("foreignlinkfield").filter(s -> !s.isEmpty()).isPresent())
             .map(link -> {
                 String fkColumnName = link.getStringValue("foreignlinkfield").orElse(null);
                 FieldModel fkField = findField(childClass, fkColumnName);

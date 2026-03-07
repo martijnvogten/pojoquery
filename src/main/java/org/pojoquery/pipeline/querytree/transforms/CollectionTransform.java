@@ -7,11 +7,13 @@ import java.util.List;
 
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
+import org.pojoquery.pipeline.querytree.FieldSelectionBase;
 import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.TableNode;
+import org.pojoquery.pipeline.querytree.UnresolvedFieldSelection;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 
@@ -33,6 +35,8 @@ public class CollectionTransform implements QueryTreeTransform {
         }
         
         List<QueryNode> newChildren = new ArrayList<>(node.children());
+        List<FieldModel> processedFields = new ArrayList<>();
+        
         for (FieldModel f : FieldFilters.simpleCollections(node.type())) {
             if (alreadyJoined(node, f)) {
                 continue;
@@ -48,9 +52,19 @@ public class CollectionTransform implements QueryTreeTransform {
                 JoinInfo.leftJoinMany(TableInfo.of(tableMapping.schemaName, tableMapping.tableName), f));
             
             newChildren.add(joinedNode);
+            processedFields.add(f);
         }
         
-        return node.withChildren(newChildren);
+        if (processedFields.isEmpty()) {
+            return node;
+        }
+        
+        // Remove UnresolvedFieldSelection for processed fields
+        List<FieldSelectionBase> newFields = node.fields().stream()
+            .filter(fsb -> !(fsb instanceof UnresolvedFieldSelection ufs && processedFields.contains(ufs.field())))
+            .toList();
+        
+        return node.withChildren(newChildren).withFields(newFields);
     }
     
     private boolean alreadyJoined(TableNode node, FieldModel field) {

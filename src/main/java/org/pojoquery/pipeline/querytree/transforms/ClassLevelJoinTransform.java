@@ -22,11 +22,14 @@ public class ClassLevelJoinTransform implements QueryTreeTransform {
     
     @Override
     public QueryTree apply(QueryTree tree) {
-        return tree.transformTableNodes(this::processNode);
+        return tree.transformNodes(
+            node -> node instanceof JoinedNode && node.type().hasAnnotation(Join.class), 
+            this::processNode
+        );
     }
     
     private TableNode processNode(TableNode node) {
-        if (node instanceof EmbeddedNode) {
+        if (node instanceof EmbeddedNode && !((EmbeddedNode)node).isSuperClass()) {
             throw new MappingException("@Join annotations are not supported on @Embedded types: " + node.type().getQualifiedName());
         }
         return node instanceof JoinedNode joined ? processJoinedNode(joined) : node;

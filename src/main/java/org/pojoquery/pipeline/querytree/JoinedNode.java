@@ -29,7 +29,7 @@ public record JoinedNode(
     String alias,
     TypeModel type,
     TableInfo tableInfo,
-    List<FieldSelection> fields,
+    List<FieldSelectionBase> fields,
     List<QueryNode> children,
     List<String> idFieldNames,
     boolean isSingleTableInheritance,
@@ -59,7 +59,7 @@ public record JoinedNode(
             String alias,
             TypeModel type,
             TableInfo tableInfo,
-            List<FieldSelection> fields,
+            List<FieldSelectionBase> fields,
             List<QueryNode> children,
             List<String> idFieldNames) {
         return new JoinedNode(
@@ -75,7 +75,7 @@ public record JoinedNode(
             String alias,
             TypeModel type,
             TableInfo tableInfo,
-            List<FieldSelection> fields,
+            List<FieldSelectionBase> fields,
             List<QueryNode> children,
             List<String> idFieldNames,
             JoinInfo joinInfo) {
@@ -88,10 +88,19 @@ public record JoinedNode(
     // --- With methods for immutable transformations ---
     
     /**
+     * Returns the source alias for SQL column references.
+     * For JoinedNode, this is the node's own alias since it has its own table.
+     */
+    @Override
+    public String sourceAlias() {
+        return alias;
+    }
+    
+    /**
      * Returns a new TableNode with different fields.
      */
     @Override
-    public JoinedNode withFields(List<FieldSelection> newFields) {
+    public JoinedNode withFields(List<FieldSelectionBase> newFields) {
         return new JoinedNode(alias, type, tableInfo,
             newFields, children, idFieldNames,
             isSingleTableInheritance, discriminatorColumn, discriminatorValues,
@@ -155,8 +164,8 @@ public record JoinedNode(
     /**
      * Returns a new JoinedNode with additional fields appended.
      */
-    public JoinedNode withAddedFields(List<FieldSelection> additionalFields) {
-        List<FieldSelection> newFields = new java.util.ArrayList<>(fields);
+    public JoinedNode withAddedFields(List<FieldSelectionBase> additionalFields) {
+        List<FieldSelectionBase> newFields = new java.util.ArrayList<>(fields);
         newFields.addAll(additionalFields);
         return withFields(newFields);
     }
@@ -277,7 +286,7 @@ public record JoinedNode(
         }
         if (!(fields == null || fields.isEmpty())) {
             sb.append(indent).append("  fields: [\n");
-            for (FieldSelection f : fields) {
+            for (FieldSelectionBase f : fields) {
                 sb.append(indent).append("    ").append(f).append("\n");
             }
             sb.append(indent).append("  ]\n");

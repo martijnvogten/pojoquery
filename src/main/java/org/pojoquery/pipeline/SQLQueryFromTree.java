@@ -26,7 +26,7 @@ public class SQLQueryFromTree {
 			query.setTable(tableNode.tableInfo().schemaName(), tableNode.tableInfo().tableName());
 			
 			// Add fields from root table
-			for (FieldSelection field : tableNode.fields()) {
+			for (FieldSelection field : tableNode.resolvedFields()) {
 				query.addField(field.expression(), field.alias());
 			}
 			
@@ -86,7 +86,7 @@ public class SQLQueryFromTree {
 				}
 				
 				// Add fields from the joined table
-				for (FieldSelection field : childTable.fields()) {
+				for (FieldSelection field : childTable.resolvedFields()) {
 					query.addField(field.expression(), field.alias());
 				}
 				

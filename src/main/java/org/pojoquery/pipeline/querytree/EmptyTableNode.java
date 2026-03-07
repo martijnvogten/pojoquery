@@ -10,15 +10,18 @@ import org.pojoquery.typemodel.TypeModel;
  * Used during query tree building before field information is populated.
  *
  * @param alias The alias used to reference this table in the query
- * @param sourceAlias The original source alias
  * @param type The Java type that will be instantiated for rows from this table
+ * @param superType Where to stop scanning fields (null = scan all inherited fields)
  * @param children Child nodes from this table
  * @param isSuperClass True if this represents a superclass table
- * @param joinInfo Join information (null for root tables)
+ * @param isSubClass True if this represents a subclass table
+ * @param joinInfo Join information (non-null for joined tables)
+ * @param embedInfo Embed information (non-null for embedded/STI tables)
  */
 public record EmptyTableNode(
 	String alias,
 	TypeModel type,
+	TypeModel superType,
 	List<QueryNode> children,
 	boolean isSuperClass,
 	boolean isSubClass,
@@ -30,10 +33,25 @@ public record EmptyTableNode(
 		return embedInfo != null;
 	}
 
+	/**
+	 * Returns the alias to use as the source for SQL column references.
+	 * <ul>
+	 *   <li>For joined nodes (joinInfo != null): returns alias() (has its own table)</li>
+	 *   <li>For embedded nodes (embedInfo != null): returns embedInfo.sourceAlias() (shares parent's table)</li>
+	 *   <li>For root nodes: returns alias()</li>
+	 * </ul>
+	 */
+	public String sourceAlias() {
+		if (embedInfo != null) {
+			return embedInfo.sourceAlias();
+		}
+		return alias;
+	}
+
 	public static EmptyTableNode of(String alias, TypeModel type) {
 		Objects.requireNonNull(alias, "alias");
 		Objects.requireNonNull(type, "type");
-		return new EmptyTableNode(alias, type, List.of(), false, false, null, null);
+		return new EmptyTableNode(alias, type, null, List.of(), false, false, null, null);
     }
 	
 	public static EmptyTableNode ofJoined(String alias, TypeModel type, JoinInfo joinInfo) {
@@ -41,7 +59,7 @@ public record EmptyTableNode(
 		Objects.requireNonNull(type, "type");
 		Objects.requireNonNull(joinInfo, "joinInfo");
 		Objects.requireNonNull(joinInfo.childTable(), "joinInfo.childTable");
-		return new EmptyTableNode(alias, type, List.of(), false, false, joinInfo, null);
+		return new EmptyTableNode(alias, type, null, List.of(), false, false, joinInfo, null);
     }
 	
 	public static EmptyTableNode ofEmbedded(String alias, TypeModel type, EmbedInfo embedInfo) {
@@ -49,36 +67,36 @@ public record EmptyTableNode(
 		Objects.requireNonNull(type, "type");
 		Objects.requireNonNull(embedInfo, "embedInfo");
 		Objects.requireNonNull(embedInfo.sourceAlias(), "embedInfo.sourceAlias");
-		return new EmptyTableNode(alias, type, List.of(), false, false, null, embedInfo);
+		return new EmptyTableNode(alias, type, embedInfo.superType(), List.of(), false, false, null, embedInfo);
     }
 
-	public JoinedNode toJoinedNode(TableInfo table, List<FieldSelection> fields, List<String> idFields) {
+	public JoinedNode toJoinedNode(TableInfo table, List<FieldSelectionBase> fields, List<String> idFields) {
 		return new JoinedNode(alias, type, table, fields, children, idFields, false, null, null, null, null, joinInfo, List.of(), isSuperClass, isSubClass);
 	}
 
-	public EmbeddedNode toEmbeddedNode(List<FieldSelection> fields) {
+	public EmbeddedNode toEmbeddedNode(List<FieldSelectionBase> fields) {
 		return EmbeddedNode.of(alias, type, fields, embedInfo);
 	}
 
 	@Override
 	public EmptyTableNode withChildren(List<QueryNode> newChildren) {
-		return new EmptyTableNode(alias, type, newChildren, isSuperClass, isSubClass, joinInfo, embedInfo);
+		return new EmptyTableNode(alias, type, superType, newChildren, isSuperClass, isSubClass, joinInfo, embedInfo);
 	}
 
 	public EmptyTableNode withIsSuperClass(boolean isSuperClass) {
-		return new EmptyTableNode(alias, type, children, isSuperClass, isSubClass, joinInfo, embedInfo);
+		return new EmptyTableNode(alias, type, superType, children, isSuperClass, isSubClass, joinInfo, embedInfo);
 	}
 
 	public EmptyTableNode withIsSubClass(boolean isSubClass) {
-		return new EmptyTableNode(alias, type, children, isSuperClass, isSubClass, joinInfo, embedInfo);
-	}
-
-	public EmptyTableNode withSourceAlias(String sourceAlias) {
-		return new EmptyTableNode(alias, type, children, isSuperClass, isSubClass, joinInfo, embedInfo);
+		return new EmptyTableNode(alias, type, superType, children, isSuperClass, isSubClass, joinInfo, embedInfo);
 	}
 	
 	public EmptyTableNode withJoinInfo(JoinInfo newJoinInfo) {
-		return new EmptyTableNode(alias, type, children, isSuperClass, isSubClass, newJoinInfo, embedInfo);
+		return new EmptyTableNode(alias, type, superType, children, isSuperClass, isSubClass, newJoinInfo, embedInfo);
+	}
+	
+	public EmptyTableNode withSuperType(TypeModel newSuperType) {
+		return new EmptyTableNode(alias, type, newSuperType, children, isSuperClass, isSubClass, joinInfo, embedInfo);
 	}
 
 	@Override

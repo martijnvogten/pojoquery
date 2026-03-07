@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.pipeline.querytree.FieldSelection;
+import org.pojoquery.pipeline.querytree.FieldSelectionBase;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
@@ -27,15 +28,27 @@ public class SelectExpressionTransform implements QueryTreeTransform {
             return node;
         }
         
-        // Override existing field expressions with @Select
-        List<FieldSelection> newFields = node.fields().stream()
-            .map(f -> overrideWithSelect(f, node.alias()))
-            .collect(Collectors.toCollection(ArrayList::new));
+        boolean changed = false;
+        
+        // Override existing field expressions with @Select (only resolved fields)
+        List<FieldSelectionBase> newFields = new ArrayList<>();
+        for (FieldSelectionBase f : node.fields()) {
+            if (f instanceof FieldSelection fs) {
+                FieldSelection overridden = overrideWithSelect(fs, node.alias());
+                if (overridden != fs) {
+                    changed = true;
+                }
+                newFields.add(overridden);
+            } else {
+                newFields.add(f);
+            }
+        }
         
         // Add @Select fields that weren't in the original field list
         Set<String> existingFieldNames = newFields.stream()
-            .filter(f -> f.field() != null)
-            .map(f -> f.field().getName())
+            .map(FieldSelectionBase::field)
+            .filter(f -> f != null)
+            .map(FieldModel::getName)
             .collect(Collectors.toSet());
         
         for (FieldModel f : FieldFilters.selectFields(node.type())) {
@@ -44,10 +57,11 @@ public class SelectExpressionTransform implements QueryTreeTransform {
                 String resolved = ExpressionResolver.resolve(value, node.alias());
                 String fieldAlias = node.alias() + "." + f.getName();
                 newFields.add(new FieldSelection(fieldAlias, null, new SqlExpression(resolved), f, null));
+                changed = true;
             }
         }
         
-        return node.withFields(newFields);
+        return changed ? node.withFields(newFields) : node;
     }
     
     private FieldSelection overrideWithSelect(FieldSelection fs, String alias) {
@@ -58,7 +72,12 @@ public class SelectExpressionTransform implements QueryTreeTransform {
         var selectAnnOpt = fs.field().getAnnotation(Select.class);
         if (selectAnnOpt.isPresent()) {
             String resolved = ExpressionResolver.resolve(selectAnnOpt.get().getStringValue().orElseThrow(), alias);
-            return new FieldSelection(fs.alias(), fs.columnName(), new SqlExpression(resolved), fs.field(), fs.customMapping());
+            SqlExpression newExpr = new SqlExpression(resolved);
+            // Check if already has the correct expression
+            if (newExpr.equals(fs.expression())) {
+                return fs;
+            }
+            return new FieldSelection(fs.alias(), fs.columnName(), newExpr, fs.field(), fs.customMapping());
         }
         return fs;
     }

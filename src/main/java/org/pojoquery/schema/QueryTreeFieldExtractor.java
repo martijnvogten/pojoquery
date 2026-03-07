@@ -139,7 +139,7 @@ public class QueryTreeFieldExtractor {
             String table = tableInfo.tableName();
 
             // Extract columns from field selections
-            for (FieldSelection field : joined.fields()) {
+            for (FieldSelection field : joined.resolvedFields()) {
                 String column = field.columnName();
                 if (column == null) continue;
                 
@@ -232,7 +232,7 @@ public class QueryTreeFieldExtractor {
 
     private static void collectEmbeddedColumns(EmbeddedNode node, String schema, String table,
             Map<FieldKey, FieldDef> result) {
-        for (FieldSelection field : node.fields()) {
+        for (FieldSelection field : node.resolvedFields()) {
             String column = field.columnName();
             if (column == null) continue;
             if (isEmbeddedField(field.field())) continue;
