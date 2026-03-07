@@ -38,7 +38,7 @@ public class BasicTableTransform implements QueryTreeTransform {
 
         List<TableMapping> tableMappings = determineTableMapping(node.type());
         boolean hasInheritedTables = tableMappings.size() > 1 
-            && node.type().getAnnotation(DiscriminatorColumn.class) == null;
+            && !node.type().hasAnnotation(DiscriminatorColumn.class);
 
         // Determine alias prefix - for superclass nodes, use the first non-superclass ancestor's alias
         String aliasPrefix = node.alias();

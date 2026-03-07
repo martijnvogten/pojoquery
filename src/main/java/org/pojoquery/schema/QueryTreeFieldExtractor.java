@@ -252,16 +252,16 @@ public class QueryTreeFieldExtractor {
 
     private static boolean isEntityType(TypeModel type) {
         if (type == null) return false;
-        if (type.getAnnotation(org.pojoquery.annotations.Table.class) != null) return true;
+        if (type.hasAnnotation(org.pojoquery.annotations.Table.class)) return true;
         TypeModel parent = type.getSuperclass();
         while (parent != null && !"java.lang.Object".equals(parent.getQualifiedName())) {
-            if (parent.getAnnotation(org.pojoquery.annotations.Table.class) != null) return true;
+            if (parent.hasAnnotation(org.pojoquery.annotations.Table.class)) return true;
             parent = parent.getSuperclass();
         }
         return false;
     }
 
     private static boolean isEmbeddedField(FieldModel field) {
-        return field != null && field.getAnnotation(org.pojoquery.annotations.Embedded.class) != null;
+        return field != null && field.hasAnnotation(org.pojoquery.annotations.Embedded.class);
     }
 }

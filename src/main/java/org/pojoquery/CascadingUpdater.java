@@ -615,7 +615,7 @@ final class CascadingUpdater {
         // First check if this type has nested @Cascade collections
         boolean hasNestedCascade = false;
         for (FieldModel field : PojoMetadata.collectFieldsOfClass(componentType)) {
-            if (field.getAnnotation(Cascade.class) != null && PojoMetadata.isListOrArray(field.getType())) {
+            if (field.hasAnnotation(Cascade.class) && PojoMetadata.isListOrArray(field.getType())) {
                 hasNestedCascade = true;
                 break;
             }

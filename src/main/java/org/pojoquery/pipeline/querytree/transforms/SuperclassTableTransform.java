@@ -34,7 +34,7 @@ public class SuperclassTableTransform implements QueryTreeTransform {
         }
 
         // Skip single-table inheritance - handled by SingleTableInheritanceTransform
-        if (node.type().getAnnotation(DiscriminatorColumn.class) != null) {
+        if (node.type().hasAnnotation(DiscriminatorColumn.class)) {
             return node;
         }
         

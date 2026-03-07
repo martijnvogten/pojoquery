@@ -697,7 +697,7 @@ public class SchemaGenerator {
             return true;
         }
         // Check if the field type has a @Link annotation
-        if (field.getAnnotation(Link.class) != null) {
+        if (field.hasAnnotation(Link.class)) {
             return true;
         }
         // Check if the field type is an entity - reuse PojoMetadata.s logic
