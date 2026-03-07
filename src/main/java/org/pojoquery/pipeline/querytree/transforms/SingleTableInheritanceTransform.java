@@ -16,7 +16,6 @@ import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
-import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
 /**
@@ -35,14 +34,14 @@ public class SingleTableInheritanceTransform implements QueryTreeTransform {
             return node;
         }
 
-        SubClasses subClassesAnn = node.type().getAnnotation(SubClasses.class);
-        DiscriminatorColumn discAnn = node.type().getAnnotation(DiscriminatorColumn.class);
+        var subClassesAnnOpt = node.type().getAnnotation(SubClasses.class);
+        var discAnnOpt = node.type().getAnnotation(DiscriminatorColumn.class);
         
-        if (subClassesAnn == null || discAnn == null) {
+        if (subClassesAnnOpt.isEmpty() || discAnnOpt.isEmpty()) {
             return node;
         }
 
-        String discColumn = discAnn.name();
+        String discColumn = discAnnOpt.get().getStringValue("name").orElse("dtype");
 
         if (((JoinedNode)node).discriminatorValues() != null) {
             return node;
@@ -65,11 +64,11 @@ public class SingleTableInheritanceTransform implements QueryTreeTransform {
         
         List<QueryNode> newChildren = new ArrayList<>(node.children());
         // Add fields from each subclass (same table, no joins)
-        for (Class<?> subClass : subClassesAnn.value()) {
-            if (discriminatorValues.containsKey(subClass.getSimpleName())) {
+        List<TypeModel> subClasses = node.type().getTypeValuesFromAnnotation(subClassesAnnOpt.get(), "value");
+        for (TypeModel subType : subClasses) {
+            if (discriminatorValues.containsKey(subType.getSimpleName())) {
                 continue;
             }
-            TypeModel subType = new ReflectionTypeModel(subClass);
             if (alreadyJoined(node.children(), subType)) {
                 continue;
             }

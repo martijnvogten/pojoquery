@@ -1,6 +1,8 @@
 package org.pojoquery.pipeline.querytree;
 
+import java.lang.annotation.Annotation;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import org.pojoquery.typemodel.TypeModel;
@@ -54,6 +56,47 @@ public record EmbeddedNode(
     @Override
     public EmbeddedNode withFields(List<FieldSelection> newFields) {
         return new EmbeddedNode(alias, type, newFields, children, embedInfo, isSuperClass, isSubClass);
+    }
+    
+    /**
+     * Returns a new EmbeddedNode with a transformed type.
+     * The transform function should only modify annotations, not the underlying type identity.
+     *
+     * @param transform function that transforms the type (typically adds canonical annotations)
+     */
+    public EmbeddedNode withTransformedType(java.util.function.UnaryOperator<TypeModel> transform) {
+        return withType(transform.apply(type));
+    }
+    
+    /**
+     * Returns a new EmbeddedNode with a different type.
+     */
+    private EmbeddedNode withType(TypeModel newType) {
+        return new EmbeddedNode(alias, newType, fields, children, embedInfo, isSuperClass, isSubClass);
+    }
+    
+    /**
+     * Returns a new EmbeddedNode with an additional annotation on its type.
+     * The underlying type identity does not change, only its perceived annotations.
+     */
+    public EmbeddedNode withTypeAnnotation(Class<? extends Annotation> annType, Map<String, Object> values) {
+        return withType(type.withAddedAnnotation(annType, values));
+    }
+    
+    /**
+     * Returns a new EmbeddedNode with a modified annotation attribute on its type.
+     * The underlying type identity does not change, only its perceived annotations.
+     */
+    public EmbeddedNode withTypeAnnotationAttribute(Class<? extends Annotation> annType, String attr, Object value) {
+        return withType(type.withAnnotationAttribute(annType, attr, value));
+    }
+    
+    /**
+     * Returns a new EmbeddedNode with modified annotation attributes on its type.
+     * The underlying type identity does not change, only its perceived annotations.
+     */
+    public EmbeddedNode withTypeAnnotationAttributes(Class<? extends Annotation> annType, Map<String, Object> attrs) {
+        return withType(type.withAnnotationAttributes(annType, attrs));
     }
 
     @Override

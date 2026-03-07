@@ -202,11 +202,11 @@ public class SchemaGenerator {
         }
         
         // Handle @SubClasses annotation
-        SubClasses subClassesAnn = entityClass.getAnnotation(SubClasses.class);
-        if (subClassesAnn != null) {
-            DiscriminatorColumn discAnn = entityClass.getAnnotation(DiscriminatorColumn.class);
+        var subClassesAnnOpt = entityClass.getAnnotation(SubClasses.class);
+        if (subClassesAnnOpt.isPresent()) {
+            var discAnnOpt = entityClass.getAnnotation(DiscriminatorColumn.class);
 
-            if (discAnn != null) {
+            if (discAnnOpt.isPresent()) {
                 // Single table inheritance: add discriminator and subclass columns to parent table
                 // The parent table was already generated above, we need to modify the last statement
                 // to include subclass fields and discriminator column
@@ -223,7 +223,7 @@ public class SchemaGenerator {
 
                         // Regenerate with STI info
                         List<FieldModel> stiFields = new ArrayList<>();
-                        for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnn, "value")) {
+                        for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnnOpt.get(), "value")) {
                             // Collect fields declared only in the subclass
                             for (FieldModel f : PojoMetadata.collectFieldsOfClass(subClass, entityClass)) {
                                 if (!isLinkedField(f) && !PojoMetadata.isListOrArray(f.getType())) {
@@ -239,14 +239,15 @@ public class SchemaGenerator {
                             mergedAnnotations = tableColumnAnnotations.get(tableKey);
                         }
 
+                        String discColumnName = discAnnOpt.get().getStringValue("name").orElse("dtype");
                         statements.add(generateCreateTableForMappingWithSTI(parentMapping, dbContext, fks,
-                                deferredForeignKeys, mergedAnnotations, discAnn.name(), stiFields));
+                                deferredForeignKeys, mergedAnnotations, discColumnName, stiFields));
                         generatedTables.add(parentTableName);
                     }
                 }
             } else {
                 // Table-per-subclass inheritance: generate separate tables for each subclass
-                for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnn, "value")) {
+                for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnnOpt.get(), "value")) {
                     generateCreateTableStatementsInternal(subClass, dbContext, generatedTables, statements,
                             inferredForeignKeys, linkTables, deferredForeignKeys, tableColumnAnnotations);
                 }
@@ -533,9 +534,11 @@ public class SchemaGenerator {
         // Process fields from the mapping (parent class fields)
         for (FieldModel field : mapping.getFields()) {
             // Handle embedded fields
-            if (field.getAnnotation(Embedded.class) != null) {
-                Embedded embedded = field.getAnnotation(Embedded.class);
-                String prefix = Embedded.DEFAULT.equals(embedded.prefix()) ? "" : embedded.prefix();
+            var embeddedAnnOpt = field.getAnnotation(Embedded.class);
+            if (embeddedAnnOpt.isPresent()) {
+                String prefix = embeddedAnnOpt.get().getStringValue("prefix")
+                    .filter(p -> !Embedded.DEFAULT.equals(p))
+                    .orElse("");
                 addEmbeddedColumns(field.getType(), prefix, columnDefinitions, primaryKeyColumns,
                         existingColumnNames, dbContext, isCompositeKey, mergedAnnotations);
                 continue;
@@ -729,12 +732,13 @@ public class SchemaGenerator {
         
         // Check @Link for nullable and unique constraints
         if (field != null) {
-            Link linkAnn = field.getAnnotation(Link.class);
-            if (linkAnn != null) {
-                if (!linkAnn.nullable()) {
+            var linkAnnOpt = field.getAnnotation(Link.class);
+            if (linkAnnOpt.isPresent()) {
+                var linkAnn = linkAnnOpt.get();
+                if (linkAnn.getBooleanAttribute("nullable").map(b -> !b).orElse(false)) {
                     sb.append(" NOT NULL");
                 }
-                if (linkAnn.unique()) {
+                if (linkAnn.getBooleanAttribute("unique").orElse(false)) {
                     sb.append(" UNIQUE");
                 }
             }
@@ -944,9 +948,9 @@ public class SchemaGenerator {
         }
         
         // Handle @SubClasses annotation for table-per-subclass inheritance
-        SubClasses subClassesAnn = entityClass.getAnnotation(SubClasses.class);
-        if (subClassesAnn != null) {
-            for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnn, "value")) {
+        var subClassesAnnOpt = entityClass.getAnnotation(SubClasses.class);
+        if (subClassesAnnOpt.isPresent()) {
+            for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnnOpt.get(), "value")) {
                 generateMigrationStatements(subClass, schemaInfo, dbContext, processedTables, statements, inferredForeignKeys, linkTables, deferredForeignKeys);
             }
         }
@@ -1063,9 +1067,9 @@ public class SchemaGenerator {
                     if (!existingColumnNames.contains(columnName.toLowerCase())) {
                         String sqlType = dbContext.getForeignKeyColumnType();
                         // Check @Link for nullable and unique
-                        Link linkAnn = field.getAnnotation(Link.class);
-                        boolean notNull = linkAnn != null && !linkAnn.nullable();
-                        boolean unique = linkAnn != null && linkAnn.unique();
+                        var linkAnnOpt = field.getAnnotation(Link.class);
+                        boolean notNull = linkAnnOpt.map(ann -> ann.getBooleanAttribute("nullable").map(b -> !b).orElse(false)).orElse(false);
+                        boolean unique = linkAnnOpt.map(ann -> ann.getBooleanAttribute("unique").orElse(false)).orElse(false);
                         columns.add(new ColumnDefinition(columnName, sqlType, false, false, notNull, unique));
                         existingColumnNames.add(columnName.toLowerCase());
                     }
@@ -1105,8 +1109,10 @@ public class SchemaGenerator {
         for (FieldModel field : fields) {
             if (AnnotationHelper.isEmbedded(field)) {
                 // Get prefix from PojoQuery @Embedded if present, otherwise use empty string (JPA @Embedded has no prefix)
-                Embedded nested = field.getAnnotation(Embedded.class);
-                String nestedPrefix = prefix + (nested != null && !Embedded.DEFAULT.equals(nested.prefix()) ? nested.prefix() : "");
+                var nestedAnnOpt = field.getAnnotation(Embedded.class);
+                String nestedPrefix = prefix + nestedAnnOpt.flatMap(ann -> ann.getStringValue("prefix"))
+                    .filter(p -> !Embedded.DEFAULT.equals(p))
+                    .orElse("");
                 addEmbeddedColumnsToList(field.getType(), nestedPrefix, columns, existingColumnNames, dbContext, isCompositeKey);
                 continue;
             }

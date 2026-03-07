@@ -10,6 +10,7 @@ import java.time.LocalTime;
 import java.util.Date;
 import java.util.Map;
 
+import org.pojoquery.annotations.Lob;
 import org.pojoquery.dialects.HsqldbDbContext;
 import org.pojoquery.dialects.MysqlDbContext;
 import org.pojoquery.dialects.PostgresDbContext;
@@ -264,7 +265,7 @@ public interface DbContext {
 
 		// Handle String
 		if (type == String.class) {
-			if (AnnotationHelper.isLob(field)) {
+			if (field.hasAnnotation(Lob.class)) {
 				return "CLOB";
 			}
 			AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);

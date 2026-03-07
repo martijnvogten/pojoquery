@@ -1,5 +1,7 @@
 package org.pojoquery.pipeline.querytree;
 
+import java.lang.annotation.Annotation;
+import java.util.Map;
 import java.util.Objects;
 
 import org.pojoquery.FieldMapping;
@@ -41,6 +43,37 @@ public record FieldSelection(
         String alias = targetAlias + "." + (field != null ? field.getName() : columnName);
         SqlExpression expr = new SqlExpression("{" + sourceAlias + "." + columnName + "}");
         return new FieldSelection(alias, columnName, expr, field, null);
+    }
+    
+    // ========== Annotation transform methods ==========
+    /**
+     * Returns a new FieldSelection with an additional annotation on its field.
+     * The underlying field identity does not change, only its perceived annotations.
+     * Returns this unchanged if there is no field.
+     */
+    public FieldSelection withFieldAnnotation(Class<? extends Annotation> annType, Map<String, Object> values) {
+        return field == null ? this : new FieldSelection(alias, columnName, expression,
+            field.withAddedAnnotation(annType, values), customMapping);
+    }
+    
+    /**
+     * Returns a new FieldSelection with a modified annotation attribute on its field.
+     * The underlying field identity does not change, only its perceived annotations.
+     * Returns this unchanged if there is no field.
+     */
+    public FieldSelection withFieldAnnotationAttribute(Class<? extends Annotation> annType, String attr, Object value) {
+        return field == null ? this : new FieldSelection(alias, columnName, expression,
+            field.withAnnotationAttribute(annType, attr, value), customMapping);
+    }
+    
+    /**
+     * Returns a new FieldSelection with modified annotation attributes on its field.
+     * The underlying field identity does not change, only its perceived annotations.
+     * Returns this unchanged if there is no field.
+     */
+    public FieldSelection withFieldAnnotationAttributes(Class<? extends Annotation> annType, Map<String, Object> attrs) {
+        return field == null ? this : new FieldSelection(alias, columnName, expression,
+            field.withAnnotationAttributes(annType, attrs), customMapping);
     }
 
     @Override

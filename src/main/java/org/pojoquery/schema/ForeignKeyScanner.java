@@ -11,6 +11,7 @@ import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.schema.ForeignKeyInfo.InferredForeignKey;
 import org.pojoquery.schema.ForeignKeyInfo.LinkTableInfo;
+import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 import org.pojoquery.util.Types;
@@ -53,12 +54,12 @@ class ForeignKeyScanner {
         for (FieldModel field : fields) {
             if (PojoMetadata.isListOrArray(field.getType())) {
                 // Check if this is a many-to-many via linktable
-                Link linkAnn = field.getAnnotation(Link.class);
-                if (linkAnn != null && !Link.NONE.equals(linkAnn.linktable())) {
+                var linkAnnOpt = field.getAnnotation(Link.class);
+                if (linkAnnOpt.isPresent() && linkAnnOpt.get().getStringValue("linktable").filter(s -> !s.isEmpty()).isPresent()) {
                     // Many-to-many relationship - generate link table
                     TypeModel componentType = Types.getCollectionComponentType(field);
                     if (componentType != null && PojoMetadata.isLinkedClass(componentType)) {
-                        LinkTableInfo linkTableInfo = createLinkTableInfo(ownerMapping, ownerIdColumn, field, linkAnn, componentType);
+                        LinkTableInfo linkTableInfo = createLinkTableInfo(ownerMapping, ownerIdColumn, field, linkAnnOpt.get(), componentType);
                         if (linkTableInfo != null) {
                             linkTables.add(linkTableInfo);
                         }
@@ -134,7 +135,7 @@ class ForeignKeyScanner {
      * Creates a LinkTableInfo for a many-to-many relationship.
      */
     private static LinkTableInfo createLinkTableInfo(TableMapping ownerMapping, String ownerIdColumn,
-            FieldModel field, Link linkAnn, TypeModel componentType) {
+            FieldModel field, AnnotationModel linkAnn, TypeModel componentType) {
         // Get foreign table info
         List<TableMapping> foreignMappings = PojoMetadata.determineTableMapping(componentType);
         if (foreignMappings.isEmpty()) {
@@ -145,12 +146,12 @@ class ForeignKeyScanner {
         String foreignIdColumn = foreignIdFields.isEmpty() ? "id" : PojoMetadata.determineSqlFieldName(foreignIdFields.get(0));
         
         // Determine link table columns
-        String ownerColumn = !Link.NONE.equals(linkAnn.linkfield()) 
-            ? linkAnn.linkfield() 
-            : ownerMapping.tableName + "_id";
-        String foreignColumn = !Link.NONE.equals(linkAnn.foreignlinkfield())
-            ? linkAnn.foreignlinkfield()
-            : foreignMapping.tableName + "_id";
+        String ownerColumn = linkAnn.getStringValue("linkfield")
+            .filter(s -> !s.isEmpty())
+            .orElse(ownerMapping.tableName + "_id");
+        String foreignColumn = linkAnn.getStringValue("foreignlinkfield")
+            .filter(s -> !s.isEmpty())
+            .orElse(foreignMapping.tableName + "_id");
         
         // Handle self-referencing relationships (same table on both sides)
         // If columns would clash, prefix the foreign column with the field name
@@ -159,9 +160,12 @@ class ForeignKeyScanner {
             foreignColumn = field.getName() + "_id";
         }
         
+        String linkTable = linkAnn.getStringValue("linktable").orElseThrow();
+        String linkSchema = linkAnn.getStringValue("linkschema").filter(s -> !s.isEmpty()).orElse(null);
+        
         return new LinkTableInfo(
-            linkAnn.linktable(),
-            linkAnn.linkschema().isEmpty() ? null : linkAnn.linkschema(),
+            linkTable,
+            linkSchema,
             ownerColumn, ownerMapping.tableName, ownerIdColumn, ownerMapping.schemaName,
             foreignColumn, foreignMapping.tableName, foreignIdColumn, foreignMapping.schemaName
         );
@@ -181,10 +185,11 @@ class ForeignKeyScanner {
             }
             
             // Check for single entity reference with @Link annotation
-            Link linkAnn = field.getAnnotation(Link.class);
-            if (linkAnn != null && !Link.NONE.equals(linkAnn.linkfield())) {
+            var linkAnnOpt = field.getAnnotation(Link.class);
+            var linkfieldValue = linkAnnOpt.flatMap(ann -> ann.getStringValue("linkfield")).filter(s -> !s.isEmpty());
+            if (linkfieldValue.isPresent()) {
                 // This field has an explicit linkfield - the FK column goes in the declaring class's table
-                String fkColumnName = linkAnn.linkfield();
+                String fkColumnName = linkfieldValue.get();
                 
                 // Get reference table info from the linked type
                 TypeModel linkedType = field.getType();
@@ -244,12 +249,13 @@ class ForeignKeyScanner {
      * Uses the owning class's table name + "_id" by default, unless @Link specifies foreignlinkfield.
      */
     static String determineForeignKeyColumnNameForCollection(TypeModel owningClass, FieldModel field) {
-        Link linkAnn = field.getAnnotation(Link.class);
-        if (linkAnn != null && !Link.NONE.equals(linkAnn.foreignlinkfield())) {
-            return linkAnn.foreignlinkfield();
-        }
-        // Default: owning table name + "_id"
-        TableMapping ownerMapping = PojoMetadata.determineTableMapping(owningClass).get(0);
-        return ownerMapping.tableName + "_id";
+        return field.getAnnotation(Link.class)
+            .flatMap(linkAnn -> linkAnn.getStringValue("foreignlinkfield"))
+            .filter(s -> !s.isEmpty())
+            .orElseGet(() -> {
+                // Default: owning table name + "_id"
+                TableMapping ownerMapping = PojoMetadata.determineTableMapping(owningClass).get(0);
+                return ownerMapping.tableName + "_id";
+            });
     }
 }

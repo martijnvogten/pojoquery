@@ -1,8 +1,9 @@
 package org.pojoquery.typemodel;
 
-import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
@@ -18,8 +19,12 @@ import javax.lang.model.util.Types;
 /**
  * TypeModel implementation for annotation processing.
  * Wraps a TypeElement or TypeMirror for compile-time type introspection.
+ * 
+ * <p>Extends {@link AbstractAnnotatedElement} to support immutable annotation
+ * transforms. Use {@link #withAddedAnnotation} to create a new instance with
+ * additional canonical annotations.
  */
-public class ElementTypeModel implements TypeModel {
+public class ElementTypeModel extends AbstractAnnotatedElement<TypeModel> implements TypeModel {
 
     private final TypeElement typeElement;
     private final TypeMirror typeMirror;
@@ -34,6 +39,7 @@ public class ElementTypeModel implements TypeModel {
      * @param types       the Types utility from the processing environment
      */
     public ElementTypeModel(TypeElement typeElement, Elements elements, Types types) {
+        super();
         this.typeElement = typeElement;
         this.typeMirror = typeElement.asType();
         this.elements = elements;
@@ -48,6 +54,7 @@ public class ElementTypeModel implements TypeModel {
      * @param types      the Types utility from the processing environment
      */
     public ElementTypeModel(TypeMirror typeMirror, Elements elements, Types types) {
+        super();
         this.typeMirror = typeMirror;
         this.elements = elements;
         this.types = types;
@@ -59,6 +66,31 @@ public class ElementTypeModel implements TypeModel {
             this.typeElement = null;
         }
     }
+
+    /**
+     * Private constructor for creating instances with added annotations.
+     */
+    private ElementTypeModel(TypeElement typeElement, TypeMirror typeMirror,
+                             Elements elements, Types types,
+                             Map<Class<?>, AnnotationModel> addedAnnotations) {
+        super(addedAnnotations);
+        this.typeElement = typeElement;
+        this.typeMirror = typeMirror;
+        this.elements = elements;
+        this.types = types;
+    }
+
+    // ========== AbstractAnnotatedElement implementation ==========
+
+    @Override
+    protected AnnotationModel[] getSourceAnnotations() {
+        if (typeElement == null) return new AnnotationModel[0];
+        return typeElement.getAnnotationMirrors().stream()
+            .map(am -> new ElementAnnotationModel(am, elements, types))
+            .toArray(AnnotationModel[]::new);
+    }
+
+    // ========== TypeModel implementation ==========
 
     @Override
     public String getQualifiedName() {
@@ -106,52 +138,6 @@ public class ElementTypeModel implements TypeModel {
             }
         }
         return fields;
-    }
-
-    @Override
-    public <A extends Annotation> A getAnnotation(Class<A> annotationType) {
-        if (typeElement != null) {
-            return typeElement.getAnnotation(annotationType);
-        }
-        return null;
-    }
-
-    @Override
-    public <A extends Annotation> A getDeclaredAnnotation(Class<A> annotationType) {
-        // In annotation processing, getAnnotation doesn't inherit annotations,
-        // so it's equivalent to getDeclaredAnnotation
-        return getAnnotation(annotationType);
-    }
-
-    @Override
-    public boolean hasAnnotation(Class<? extends Annotation> annotationType) {
-        return getAnnotation(annotationType) != null;
-    }
-
-    @Override
-    public List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> annotationType) {
-        List<AnnotationModel> result = new ArrayList<>();
-        if (typeElement == null) return result;
-        
-        String targetTypeName = annotationType.getName();
-        
-        // Check for @Repeatable container
-        java.lang.annotation.Repeatable repeatable = annotationType.getAnnotation(java.lang.annotation.Repeatable.class);
-        String containerTypeName = repeatable != null ? repeatable.value().getName() : null;
-        
-        for (javax.lang.model.element.AnnotationMirror am : typeElement.getAnnotationMirrors()) {
-            String annTypeName = am.getAnnotationType().toString();
-            
-            if (annTypeName.equals(targetTypeName)) {
-                // Direct match
-                result.add(new ElementAnnotationModel(am, elements, types));
-            } else if (containerTypeName != null && annTypeName.equals(containerTypeName)) {
-                // Container annotation - unwrap value()
-                ElementAnnotationModel container = new ElementAnnotationModel(am, elements, types);
-                result.addAll(container.getAnnotationValues("value"));
-            }
-        }
-        return result;
     }
 
     @Override
@@ -216,14 +202,18 @@ public class ElementTypeModel implements TypeModel {
     }
 
     @Override
-    public List<TypeModel> getTypeValuesFromAnnotation(Annotation annotation, String attributeName) {
-        // For annotation processing, we need to use AnnotationMirror to get the type values
-        // since Class values are not available at compile time
-        return org.pojoquery.util.Types.getAnnotationMirrorValues(typeElement, annotation, attributeName).stream()
-                .filter(item -> item instanceof TypeMirror)
-                .map(item -> (TypeModel)new ElementTypeModel((TypeMirror) item, elements, types))
-                .toList();
+    public List<TypeModel> getTypeValuesFromAnnotation(AnnotationModel annotationModel, String attributeName) {
+        return annotationModel.getClassValues(attributeName);
     }
+
+    // ========== Factory method for annotation transforms ==========
+
+    @Override
+    protected TypeModel withAnnotations(Map<Class<?>, AnnotationModel> annotations) {
+        return new ElementTypeModel(typeElement, typeMirror, elements, types, annotations);
+    }
+
+    // ========== Compile-time specific methods ==========
 
     /**
      * Returns the underlying TypeElement, or null if this wraps a non-declared type.
@@ -247,14 +237,13 @@ public class ElementTypeModel implements TypeModel {
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
-        if (obj instanceof ElementTypeModel) {
-            return types.isSameType(this.typeMirror, ((ElementTypeModel) obj).typeMirror);
-        }
-        return false;
+        if (!(obj instanceof ElementTypeModel other)) return false;
+        return types.isSameType(this.typeMirror, other.typeMirror)
+            && getAddedAnnotations().equals(other.getAddedAnnotations());
     }
 
     @Override
     public int hashCode() {
-        return getQualifiedName().hashCode();
+        return Objects.hash(getQualifiedName(), getAddedAnnotations());
     }
 }

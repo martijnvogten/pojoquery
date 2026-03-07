@@ -47,8 +47,8 @@ public class SubqueryTransform implements QueryTreeTransform {
         if (linkField == null || joinInfo.subquery() != null) {
             return node;
         }
-        Subquery subqAnn = linkField.getAnnotation(Subquery.class);
-        if (subqAnn == null) {
+        var subqAnnOpt = linkField.getAnnotation(Subquery.class);
+        if (subqAnnOpt.isEmpty()) {
             return node;
         }
 
@@ -58,8 +58,8 @@ public class SubqueryTransform implements QueryTreeTransform {
             : linkField.getType();
         
         // The subquery type should have @From annotation
-        From fromAnn = subqType.getAnnotation(From.class);
-        if (fromAnn == null) {
+        var fromAnnOpt = subqType.getAnnotation(From.class);
+        if (fromAnnOpt.isEmpty()) {
             throw new IllegalArgumentException(
                 "@Subquery field '" + linkField.getName() + "' type must have @From annotation"
             );

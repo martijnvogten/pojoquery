@@ -3,6 +3,7 @@ package org.pojoquery.pipeline.querytree.transforms;
 import java.util.List;
 
 import org.pojoquery.SqlExpression;
+import org.pojoquery.annotations.Link;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.JoinCondition;
 import org.pojoquery.pipeline.querytree.JoinInfo;
@@ -10,6 +11,7 @@ import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
+import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 
 /**
@@ -48,11 +50,11 @@ public class JoinConditionTransform implements QueryTreeTransform {
         JoinCondition newCondition;
         FieldModel linkField = joinInfo.linkField();
         
-        org.pojoquery.annotations.JoinCondition condAnn = linkField != null ? linkField.getAnnotation(org.pojoquery.annotations.JoinCondition.class) : null;
-        if (condAnn != null) {
+        var condAnnOpt = linkField != null ? linkField.getAnnotation(org.pojoquery.annotations.JoinCondition.class) : java.util.Optional.<AnnotationModel>empty();
+        if (condAnnOpt.isPresent()) {
             // Custom join condition annotation - use Custom variant
             String resolved = ExpressionResolver.resolve(
-                condAnn.value(),
+                condAnnOpt.get().getStringValue().orElseThrow(),
                 parent.alias(),
                 child.alias(),
                 null
@@ -84,10 +86,9 @@ public class JoinConditionTransform implements QueryTreeTransform {
 
     private String getForeignLinkField(FieldModel field) {
         if (field == null) return null;
-        org.pojoquery.annotations.Link linkAnn = field.getAnnotation(org.pojoquery.annotations.Link.class);
-        if (linkAnn != null && !org.pojoquery.annotations.Link.NONE.equals(linkAnn.foreignlinkfield())) {
-            return linkAnn.foreignlinkfield();
-        }
-        return null;
+        return field.getAnnotation(Link.class)
+            .flatMap(linkAnn -> linkAnn.getStringValue("foreignlinkfield"))
+            .filter(s -> !s.isEmpty())
+            .orElse(null);
     }
 }

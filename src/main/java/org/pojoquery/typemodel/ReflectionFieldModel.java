@@ -5,8 +5,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -14,8 +14,12 @@ import java.util.Objects;
  *
  * <p>This implementation is used at runtime for query execution. It provides
  * additional runtime-only methods like {@link #getReflectionField()}.
+ * 
+ * <p>Extends {@link AbstractAnnotatedElement} to support immutable annotation
+ * transforms. Use {@link #withAddedAnnotation} to create a new instance with
+ * additional canonical annotations.
  */
-public class ReflectionFieldModel implements FieldModel {
+public class ReflectionFieldModel extends AbstractAnnotatedElement<FieldModel> implements FieldModel {
 
     private final Field field;
 
@@ -25,6 +29,15 @@ public class ReflectionFieldModel implements FieldModel {
      * @param field the field to wrap
      */
     public ReflectionFieldModel(Field field) {
+        super();
+        this.field = Objects.requireNonNull(field, "field must not be null");
+    }
+
+    /**
+     * Private constructor for creating instances with added annotations.
+     */
+    private ReflectionFieldModel(Field field, Map<Class<?>, AnnotationModel> addedAnnotations) {
+        super(addedAnnotations);
         this.field = Objects.requireNonNull(field, "field must not be null");
     }
 
@@ -34,6 +47,18 @@ public class ReflectionFieldModel implements FieldModel {
      */
     public static ReflectionFieldModel of(Field field) {
         return new ReflectionFieldModel(field);
+    }
+
+    // ========== AbstractAnnotatedElement implementation ==========
+
+    @Override
+    protected AnnotationModel[] getSourceAnnotations() {
+        Annotation[] annotations = field.getAnnotations();
+        AnnotationModel[] result = new AnnotationModel[annotations.length];
+        for (int i = 0; i < annotations.length; i++) {
+            result[i] = new ReflectionAnnotationModel(annotations[i]);
+        }
+        return result;
     }
 
     // ========== FieldModel interface methods ==========
@@ -54,36 +79,6 @@ public class ReflectionFieldModel implements FieldModel {
     }
 
     @Override
-    public <A extends Annotation> A getAnnotation(Class<A> annotationType) {
-        return field.getAnnotation(annotationType);
-    }
-
-    @Override
-    public boolean hasAnnotation(Class<? extends Annotation> annotationType) {
-        return field.getAnnotation(annotationType) != null;
-    }
-
-    @Override
-    public List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> annotationType) {
-        Annotation[] annotations = field.getAnnotationsByType(annotationType);
-        List<AnnotationModel> result = new ArrayList<>();
-        for (Annotation a : annotations) {
-            result.add(new ReflectionAnnotationModel(a));
-        }
-        return result;
-    }
-
-    @Override
-    public AnnotationModel[] getAnnotations() {
-        Annotation[] annotations = field.getAnnotations();
-        AnnotationModel[] result = new AnnotationModel[annotations.length];
-        for (int i = 0; i < annotations.length; i++) {
-            result[i] = new ReflectionAnnotationModel(annotations[i]);
-        }
-        return result;
-    }
-
-    @Override
     public boolean isStatic() {
         return (field.getModifiers() & Modifier.STATIC) != 0;
     }
@@ -91,6 +86,16 @@ public class ReflectionFieldModel implements FieldModel {
     @Override
     public boolean isTransient() {
         return (field.getModifiers() & Modifier.TRANSIENT) != 0;
+    }
+
+    @Override
+    public List<TypeModel> getTypeValuesFromAnnotation(AnnotationModel annotationModel, String attributeName) {
+        return annotationModel.getClassValues(attributeName);
+    }
+
+    @Override
+    protected FieldModel withAnnotations(Map<Class<?>, AnnotationModel> annotations) {
+        return new ReflectionFieldModel(field, annotations);
     }
 
     // ========== Runtime-specific methods ==========
@@ -109,14 +114,13 @@ public class ReflectionFieldModel implements FieldModel {
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
-        if (!(obj instanceof ReflectionFieldModel)) return false;
-        ReflectionFieldModel other = (ReflectionFieldModel) obj;
-        return field.equals(other.field);
+        if (!(obj instanceof ReflectionFieldModel other)) return false;
+        return field.equals(other.field) && getAddedAnnotations().equals(other.getAddedAnnotations());
     }
 
     @Override
     public int hashCode() {
-        return field.hashCode();
+        return Objects.hash(field, getAddedAnnotations());
     }
 
     @Override
@@ -140,8 +144,7 @@ public class ReflectionFieldModel implements FieldModel {
 
         @Override
         public TypeModel getTypeArgument() {
-            if (genericType instanceof ParameterizedType) {
-                ParameterizedType pt = (ParameterizedType) genericType;
+            if (genericType instanceof ParameterizedType pt) {
                 Type[] typeArgs = pt.getActualTypeArguments();
                 if (typeArgs.length > 0 && typeArgs[0] instanceof Class) {
                     return new ReflectionTypeModel((Class<?>) typeArgs[0]);

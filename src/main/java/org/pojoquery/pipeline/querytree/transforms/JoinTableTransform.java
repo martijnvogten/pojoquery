@@ -16,6 +16,7 @@ import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.TableNode;
+import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 
@@ -39,7 +40,7 @@ public class JoinTableTransform implements QueryTreeTransform {
                 continue;
             }
             
-            Link linkAnn = f.getAnnotation(Link.class);
+            AnnotationModel linkAnn = f.getAnnotation(Link.class).orElseThrow();
             TypeModel componentType = FieldFilters.getComponentType(f);
             List<TableMapping> tableMappings = determineTableMapping(componentType);
             TableMapping targetMapping = tableMappings.get(tableMappings.size() - 1);
@@ -54,8 +55,10 @@ public class JoinTableTransform implements QueryTreeTransform {
             String targetId = determineSqlFieldName(determineIdField(componentType));
             
             // Create JoinTableInfo with explicit column names
+            String linkSchema = linkAnn.getStringValue("linkschema").filter(s -> !s.isEmpty()).orElse(null);
+            String linkTable = linkAnn.getStringValue("linktable").orElseThrow();
             JoinTableInfo joinTableInfo = JoinTableInfo.of(
-                TableInfo.of(linkAnn.linkschema(), linkAnn.linktable()),
+                TableInfo.of(linkSchema, linkTable),
                 linkTableAlias,
                 linkField,      // parentFkColumn: e.g., "article_id" in junction table
                 parentId,       // parentRefColumn: e.g., "id" in parent table
@@ -75,19 +78,19 @@ public class JoinTableTransform implements QueryTreeTransform {
         return node.withChildren(newChildren);
     }
     
-    private String resolveLinkField(Link linkAnn, String parentTableName) {
-        if (!Link.NONE.equals(linkAnn.linkfield())) {
-            return linkAnn.linkfield();
-        }
-        return parentTableName + "_id";
+    private String resolveLinkField(AnnotationModel linkAnn, String parentTableName) {
+        return linkAnn.getStringValue("linkfield")
+            .filter(s -> !s.isEmpty())
+            .orElse(parentTableName + "_id");
     }
     
-    private String resolveForeignLinkField(Link linkAnn, TypeModel targetType) {
-        if (!Link.NONE.equals(linkAnn.foreignlinkfield())) {
-            return linkAnn.foreignlinkfield();
-        }
-        List<TableMapping> mappings = determineTableMapping(targetType);
-        return mappings.isEmpty() ? targetType.getSimpleName().toLowerCase() + "_id" : mappings.get(mappings.size() - 1).tableName + "_id";
+    private String resolveForeignLinkField(AnnotationModel linkAnn, TypeModel targetType) {
+        return linkAnn.getStringValue("foreignlinkfield")
+            .filter(s -> !s.isEmpty())
+            .orElseGet(() -> {
+                List<TableMapping> mappings = determineTableMapping(targetType);
+                return mappings.isEmpty() ? targetType.getSimpleName().toLowerCase() + "_id" : mappings.get(mappings.size() - 1).tableName + "_id";
+            });
     }
     
     private boolean alreadyJoined(TableNode node, FieldModel field) {

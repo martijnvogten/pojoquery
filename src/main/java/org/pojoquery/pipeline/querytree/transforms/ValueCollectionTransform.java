@@ -14,6 +14,7 @@ import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.TableNode;
+import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 
@@ -41,7 +42,7 @@ public class ValueCollectionTransform implements QueryTreeTransform {
                 continue;
             }
             
-            Link linkAnn = f.getAnnotation(Link.class);
+            AnnotationModel linkAnn = f.getAnnotation(Link.class).orElseThrow();
             TypeModel componentType = FieldFilters.getComponentType(f);
             
             String joinAlias = AliasNaming.childAlias(node.alias(), rootAlias, f.getName());
@@ -52,14 +53,18 @@ public class ValueCollectionTransform implements QueryTreeTransform {
             // FK is in the link table (child), pointing to parent's ID
             JoinCondition condition = new JoinCondition.ForeignKeyInChild(linkField, parentId);
             
+            String linkSchema = linkAnn.getStringValue("linkschema").filter(s -> !s.isEmpty()).orElse(null);
+            String linkTable = linkAnn.getStringValue("linktable").orElseThrow();
+            String fetchColumn = linkAnn.getStringValue("fetchColumn").orElseThrow();
+            
             // Create a LinkedValueNode for value collections
             LinkedValueNode valueNode = new LinkedValueNode(
                 joinAlias,
                 componentType,
-                linkAnn.linkschema().isEmpty() ? null : linkAnn.linkschema(),
-                linkAnn.linktable(),
-                linkAnn.fetchColumn(),
-                JoinInfo.leftJoinMany(TableInfo.of(linkAnn.linkschema(), linkAnn.linktable()), f).withJoinCondition(condition)
+                linkSchema,
+                linkTable,
+                fetchColumn,
+                JoinInfo.leftJoinMany(TableInfo.of(linkSchema, linkTable), f).withJoinCondition(condition)
             );
             
             newChildren.add(valueNode);
@@ -68,11 +73,10 @@ public class ValueCollectionTransform implements QueryTreeTransform {
         return node.withChildren(newChildren);
     }
     
-    private String resolveLinkField(Link linkAnn, String parentTableName) {
-        if (!Link.NONE.equals(linkAnn.foreignlinkfield())) {
-            return linkAnn.foreignlinkfield();
-        }
-        return parentTableName + "_id";
+    private String resolveLinkField(AnnotationModel linkAnn, String parentTableName) {
+        return linkAnn.getStringValue("foreignlinkfield")
+            .filter(s -> !s.isEmpty())
+            .orElse(parentTableName + "_id");
     }
     
     private boolean alreadyJoined(TableNode node, FieldModel field) {

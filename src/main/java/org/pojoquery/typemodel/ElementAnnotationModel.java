@@ -82,7 +82,7 @@ public class ElementAnnotationModel implements AnnotationModel {
     }
 
     @Override
-    public List<Number> getNumberValues(String attributeName) {
+    public List<Number> getNumberAttributes(String attributeName) {
         return extractValues(attributeName, Number.class, Function.identity());
     }
 
@@ -155,5 +155,19 @@ public class ElementAnnotationModel implements AnnotationModel {
     @Override
     public String toString() {
         return "ElementAnnotationModel[@" + getType().getSimpleName() + "]";
+    }
+
+    @Override
+    public Map<String, Object> getValuesMap() {
+        Map<String, Object> result = new java.util.HashMap<>();
+        Map<? extends ExecutableElement, ? extends AnnotationValue> values = 
+            elements.getElementValuesWithDefaults(annotationMirror);
+        
+        for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry : values.entrySet()) {
+            String name = entry.getKey().getSimpleName().toString();
+            Object value = entry.getValue().getValue();
+            result.put(name, value);
+        }
+        return Collections.unmodifiableMap(result);
     }
 }

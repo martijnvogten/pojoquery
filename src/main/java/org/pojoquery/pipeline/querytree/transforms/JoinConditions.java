@@ -1,7 +1,7 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
-import org.pojoquery.AnnotationHelper;
 import org.pojoquery.SqlExpression;
+import org.pojoquery.annotations.FieldName;
 import org.pojoquery.pipeline.querytree.JoinCondition;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
@@ -206,19 +206,12 @@ public final class JoinConditions {
     
     /**
      * Determines the FK column name for a field.
-     * Checks @JoinColumn, @FieldName, @Column, then defaults to fieldName_id.
+     * Checks @FieldName first, then defaults to fieldName_id.
      */
     public static String determineFkColumn(FieldModel field) {
-        // Check for @JoinColumn first
-        String joinColumn = AnnotationHelper.getJoinColumnName(field);
-        if (joinColumn != null) {
-            return joinColumn;
-        }
-        // Check for @Column/@FieldName
-        String column = AnnotationHelper.getColumnName(field);
-        if (column != null) {
-            return column;
-        }
-        return field.getName() + "_id";
+        // Check for @FieldName - this specifies the FK column name
+        return field.getAnnotation(FieldName.class)
+            .flatMap(ann -> ann.getStringValue())
+            .orElse(field.getName() + "_id");
     }
 }

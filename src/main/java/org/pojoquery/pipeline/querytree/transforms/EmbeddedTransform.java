@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import org.pojoquery.annotations.Embedded;
+import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.querytree.EmbedInfo;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.QueryNode;
@@ -39,7 +39,7 @@ public class EmbeddedTransform implements QueryTreeTransform {
             TypeModel type = f.getType();
             String alias = AliasNaming.childAlias(node.embedInfo() != null ? node.embedInfo().sourceAlias() : node.alias(), rootAlias, f.getName());
 
-            String prefix = determinePrefix(f);
+            String prefix = PojoMetadata.determinePrefix(f);
 
             if (node.embedInfo() != null) {
                 // Nested embedding: combine prefixes
@@ -53,19 +53,6 @@ public class EmbeddedTransform implements QueryTreeTransform {
         }
 
         return node.withChildren(newChildren);
-    }
-
-    private String determinePrefix(FieldModel f) {
-        Embedded embeddedAnn = f.getAnnotation(Embedded.class);
-        if (embeddedAnn != null) {
-            String prefix = embeddedAnn.prefix();
-            if (prefix.equals(Embedded.DEFAULT)) {
-                return f.getName() + "_";
-            }
-            return prefix;
-        }
-        // JPA @Embedded without PojoQuery annotation - no prefix
-        return "";
     }
 
     private boolean alreadyJoined(TableNode node, FieldModel field) {

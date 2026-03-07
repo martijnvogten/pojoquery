@@ -11,8 +11,10 @@ import java.util.Set;
 
 import org.pojoquery.annotations.Cascade;
 import org.pojoquery.annotations.Link;
+import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.pipeline.PojoMetadata;
+import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionFieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
@@ -188,13 +190,13 @@ final class CascadingUpdater {
         
         for (FieldModel field : PojoMetadata.collectFieldsOfClass(entityClass)) {
             // Handle @Cascade annotated fields (one-to-many owned relationships)
-            if (AnnotationHelper.isCascade(field)) {
+            if (field.hasAnnotation(Cascade.class)) {
                 processCascadeField(context, connection, entity, entityClass, parentId, field, operation);
                 continue;
             }
             
             // Handle @Link annotated fields with linktable (many-to-many relationships)
-            if (AnnotationHelper.isLinkTable(field)) {
+            if (field.hasAnnotation(Link.class)) {
                 processLinkTableField(context, connection, entity, entityClass, parentId, field, operation);
             }
         }
@@ -248,15 +250,17 @@ final class CascadingUpdater {
             throw new MappingException("Cannot access field " + field.getName(), e);
         }
         
-        AnnotationHelper.getLinkTable();
-        String linkTable = linkAnn.linktable();
-        String linkSchema = linkAnn.linkschema();
+        AnnotationModel linkAnn = field.getAnnotation(Link.class).orElseThrow();
+        String linkTable = linkAnn.getStringValue("linktable").orElse(null);
+        String linkSchema = linkAnn.getStringValue("linkschema").orElse(null);
+
+
         
         // Determine link field names using shared utility methods
         String parentLinkField = PojoMetadata.determineLinkTableOwnerColumn(entityClass, linkAnn);
         
         // Check if this is a value collection (using fetchColumn) or entity collection
-        boolean isValueCollection = !Link.NONE.equals(linkAnn.fetchColumn());
+        boolean isValueCollection = linkAnn.hasAttribute("fetchColumn");
         String foreignLinkField = PojoMetadata.determineLinkTableForeignColumn(
                 isValueCollection ? null : componentType, linkAnn);
         
@@ -362,7 +366,7 @@ final class CascadingUpdater {
     
     private static void updateForeignKeyColumn(DbContext context, Connection connection,
             TypeModel childClass, String fkColumn, Object childId, Object parentId) {
-        String tableName = AnnotationHelper.getTableName(childClass);
+        String tableName = childClass.getAnnotation(Table.class).flatMap(ann -> ann.getStringValue("value")).orElse(null);
         FieldModel idField = PojoMetadata.determineIdField(childClass);
         String idColumnName = PojoMetadata.determineSqlFieldName(idField);
         
@@ -469,48 +473,48 @@ final class CascadingUpdater {
     }
     
     private static ForeignKeyInfo findForeignKeyInfo(TypeModel childClass, TypeModel parentClass, FieldModel collectionField) {
-        // Check for @Link annotation on the collection field
-        Link linkAnn = collectionField.getAnnotation(Link.class);
-        if (linkAnn != null && !Link.NONE.equals(linkAnn.foreignlinkfield())) {
-            String fkColumnName = linkAnn.foreignlinkfield();
-            FieldModel fkField = findField(childClass, fkColumnName);
-            // Return with the specified column name even if no field exists (field may be null)
-            return new ForeignKeyInfo(fkField, fkColumnName, false);
-        }
-        
-        // Look for entity reference field that points to parent class
-        for (FieldModel f : PojoMetadata.collectFieldsOfClass(childClass)) {
-            if (Types.isAssignableFrom(f.getType(), parentClass) || Types.isAssignableFrom(parentClass, f.getType())) {
-                // This is an entity reference to the parent - use link field naming (fieldName_id)
-                String sqlName = PojoMetadata.determineLinkFieldName(f);
-                return new ForeignKeyInfo(f, sqlName, true);
-            }
-        }
-        
-        // Look for direct ID field with convention: parentTableName_id
-        String tableName = AnnotationHelper.getTableName(parentClass);
-        if (tableName == null) {
-            tableName = parentClass.getSimpleName().toLowerCase();
-        }
-        String expectedFieldName = tableName + "_id";
-        
-        FieldModel fkField = findField(childClass, expectedFieldName);
-        if (fkField != null) {
-            return new ForeignKeyInfo(fkField, expectedFieldName, false);
-        }
-        
-        // Also try with @FieldName annotation
-        for (FieldModel f : PojoMetadata.collectFieldsOfClass(childClass)) {
-            String sqlName = PojoMetadata.determineSqlFieldName(f);
-            if (expectedFieldName.equals(sqlName) || (tableName + "_id").equals(sqlName)) {
-                return new ForeignKeyInfo(f, sqlName, Number.class.isAssignableFrom(((ReflectionTypeModel)f.getType()).getReflectionClass()) || f.getType().isPrimitive());
-            }
-        }
-        
-        // Fallback: return info with default convention (field may not exist on child class)
-        return new ForeignKeyInfo(null, expectedFieldName, false);
+        return collectionField.getAnnotation(Link.class)
+            .filter(link -> link.hasAttribute("foreignlinkfield"))
+            .map(link -> {
+                String fkColumnName = link.getStringValue("foreignlinkfield").orElse(null);
+                FieldModel fkField = findField(childClass, fkColumnName);
+                return new ForeignKeyInfo(fkField, fkColumnName, false);
+            })
+            .orElseGet(() -> {
+                // Look for entity reference field that points to parent class
+                for (FieldModel f : PojoMetadata.collectFieldsOfClass(childClass)) {
+                    if (Types.isAssignableFrom(f.getType(), parentClass) || Types.isAssignableFrom(parentClass, f.getType())) {
+                        // This is an entity reference to the parent - use link field naming (fieldName_id)
+                        String sqlName = PojoMetadata.determineLinkFieldName(f);
+                        return new ForeignKeyInfo(f, sqlName, true);
+                    }
+                }
+                
+                // Look for direct ID field with convention: parentTableName_id
+                String tableName = AnnotationHelper.getTableName(parentClass);
+                if (tableName == null) {
+                    tableName = parentClass.getSimpleName().toLowerCase();
+                }
+                String expectedFieldName = tableName + "_id";
+                
+                FieldModel fkField = findField(childClass, expectedFieldName);
+                if (fkField != null) {
+                    return new ForeignKeyInfo(fkField, expectedFieldName, false);
+                }
+                
+                // Also try with @FieldName annotation
+                for (FieldModel f : PojoMetadata.collectFieldsOfClass(childClass)) {
+                    String sqlName = PojoMetadata.determineSqlFieldName(f);
+                    if (expectedFieldName.equals(sqlName) || (tableName + "_id").equals(sqlName)) {
+                        return new ForeignKeyInfo(f, sqlName, Number.class.isAssignableFrom(((ReflectionTypeModel)f.getType()).getReflectionClass()) || f.getType().isPrimitive());
+                    }
+                }
+                
+                // Fallback: return info with default convention (field may not exist on child class)
+                return new ForeignKeyInfo(null, expectedFieldName, false);
+            });
     }
-    
+
     /**
      * Sets the foreign key on the child item by setting a field value.
      * @return true if the FK was set via field, false if no field exists (requires SQL update)
@@ -583,8 +587,7 @@ final class CascadingUpdater {
         // First, recursively delete any nested @Cascade collections
         // We need to process any @Cascade fields on the component type
         for (FieldModel field : PojoMetadata.collectFieldsOfClass(componentType)) {
-            Cascade cascadeAnn = field.getAnnotation(Cascade.class);
-            if (cascadeAnn != null && PojoMetadata.isListOrArray(field.getType())) {
+            if (field.hasAnnotation(Cascade.class) && PojoMetadata.isListOrArray(field.getType())) {
                 TypeModel nestedType = Types.getCollectionComponentType(field);
                 if (nestedType != null && PojoMetadata.isLinkedClass(nestedType)) {
                     // Delete nested children first

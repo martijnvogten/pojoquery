@@ -41,8 +41,8 @@ public class AggregateExpressionTransform implements QueryTreeTransform {
         
         for (FieldModel f : FieldFilters.aggregateFields(node.type())) {
             if (!existingFieldNames.contains(f.getName())) {
-                Aggregate aggAnn = f.getAnnotation(Aggregate.class);
-                String resolved = ExpressionResolver.resolve(aggAnn.value(), node.alias());
+                String expression = f.getAnnotation(Aggregate.class).flatMap(ann -> ann.getStringValue("value")).orElseThrow();
+                String resolved = ExpressionResolver.resolve(expression, node.alias());
                 String fieldAlias = node.alias() + "." + f.getName();
                 newFields.add(new FieldSelection(fieldAlias, null, new SqlExpression(resolved), f, null));
             }
@@ -56,9 +56,9 @@ public class AggregateExpressionTransform implements QueryTreeTransform {
             return fs;
         }
         
-        Aggregate aggAnn = fs.field().getAnnotation(Aggregate.class);
-        if (aggAnn != null) {
-            String resolved = ExpressionResolver.resolve(aggAnn.value(), alias);
+        String expression = fs.field().getAnnotation(Aggregate.class).flatMap(ann -> ann.getStringValue("value")).orElse(null);
+        if (expression != null) {
+            String resolved = ExpressionResolver.resolve(expression, alias);
             return new FieldSelection(fs.alias(), fs.columnName(), new SqlExpression(resolved), fs.field(), fs.customMapping());
         }
         return fs;

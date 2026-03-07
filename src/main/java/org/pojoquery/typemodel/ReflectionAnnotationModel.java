@@ -5,8 +5,10 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Implementation of {@link AnnotationModel} that wraps a runtime {@link Annotation}.
@@ -72,7 +74,7 @@ public class ReflectionAnnotationModel implements AnnotationModel {
     }
 
     @Override
-    public List<Number> getNumberValues(String attributeName) {
+    public List<Number> getNumberAttributes(String attributeName) {
         Object value = getRawValue(attributeName);
         if (value == null) return Collections.emptyList();
         
@@ -169,5 +171,20 @@ public class ReflectionAnnotationModel implements AnnotationModel {
     @Override
     public String toString() {
         return "ReflectionAnnotationModel[@" + getType().getSimpleName() + "]";
+    }
+
+    @Override
+    public Map<String, Object> getValuesMap() {
+        return List.of(annotation.annotationType().getDeclaredMethods()).stream()
+            .collect(Collectors.toMap(
+                Method::getName,
+                m -> {
+                    try {
+                        return m.invoke(annotation);
+                    } catch (ReflectiveOperationException e) {
+                        throw new RuntimeException("Failed to get annotation value: " + m.getName(), e);
+                    }
+                }
+            ));
     }
 }

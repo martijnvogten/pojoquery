@@ -1,8 +1,5 @@
 package org.pojoquery.typemodel;
 
-import java.lang.annotation.Annotation;
-import java.util.List;
-
 /**
  * Abstraction over field introspection that works with both runtime Fields
  * and compile-time VariableElements.
@@ -13,8 +10,11 @@ import java.util.List;
  *   <li>{@link ReflectionFieldModel} - wraps {@code Field} for runtime use</li>
  *   <li>ElementFieldModel (in processor module) - wraps {@code VariableElement} for annotation processing</li>
  * </ul>
+ * 
+ * <p>FieldModel is immutable. Transform methods like {@link #withAddedAnnotation}
+ * return new instances with the specified modifications.
  */
-public interface FieldModel extends AnnotatedElementModel {
+public interface FieldModel extends AnnotatedElementModel<FieldModel> {
 
     /**
      * Returns the name of this field.
@@ -30,30 +30,6 @@ public interface FieldModel extends AnnotatedElementModel {
      * Returns the type that declares this field.
      */
     TypeModel getDeclaringType();
-
-    /**
-     * Returns all annotations present on this field.
-     *
-     * @return an array of annotation models
-     */
-    AnnotationModel[] getAnnotations();
-
-    /**
-     * Returns true if this field has the specified annotation.
-     *
-     * @param annotationType the annotation type to check for
-     * @return true if the annotation is present
-     */
-    boolean hasAnnotation(Class<? extends Annotation> annotationType);
-
-    /**
-     * Returns all annotations of the specified type on this field.
-     * This handles repeatable annotations by unwrapping container annotations.
-     *
-     * @param annotationType the annotation type to find
-     * @return list of matching annotation models, empty if none found
-     */
-    List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> annotationType);
 
     /**
      * Returns true if this field is static.

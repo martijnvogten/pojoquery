@@ -1,6 +1,5 @@
 package org.pojoquery.typemodel;
 
-import java.lang.annotation.Annotation;
 import java.util.List;
 
 /**
@@ -13,8 +12,11 @@ import java.util.List;
  *   <li>{@link ReflectionTypeModel} - wraps {@code Class<?>} for runtime use</li>
  *   <li>ElementTypeModel (in processor module) - wraps {@code TypeElement} for annotation processing</li>
  * </ul>
+ * 
+ * <p>TypeModel is immutable. Transform methods like {@link #withAddedAnnotation}
+ * return new instances with the specified modifications.
  */
-public interface TypeModel extends AnnotatedElementModel {
+public interface TypeModel extends AnnotatedElementModel<TypeModel> {
 
     /**
      * Returns the fully qualified name of this type.
@@ -38,15 +40,6 @@ public interface TypeModel extends AnnotatedElementModel {
      * Returns the fields declared directly in this type (not inherited fields).
      */
     List<FieldModel> getDeclaredFields();
-
-    /**
-     * Returns all annotations of the specified type on this type.
-     * This handles repeatable annotations by unwrapping container annotations.
-     *
-     * @param annotationType the annotation type to find
-     * @return list of matching annotation models, empty if none found
-     */
-    List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> annotationType);
 
     /**
      * Returns true if this type represents a primitive type.
@@ -86,14 +79,4 @@ public interface TypeModel extends AnnotatedElementModel {
      * with the given type.
      */
     boolean isSameType(TypeModel other);
-
-    /**
-     * Extracts Class[] values from an annotation attribute and returns them as TypeModels.
-     * This is used to read annotation attributes like {@code @SubClasses(value = {A.class, B.class})}.
-     *
-     * @param annotation the annotation instance
-     * @param attributeName the name of the attribute containing Class[] values
-     * @return list of TypeModels for the classes referenced in the annotation attribute
-     */
-    List<TypeModel> getTypeValuesFromAnnotation(Annotation annotation, String attributeName);
 }

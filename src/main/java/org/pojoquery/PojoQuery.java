@@ -631,7 +631,7 @@ public class PojoQuery<T> {
 						}
 					}
 				} else if (f.getAnnotation(NoUpdate.class) != null) {
-				} else if (f.getAnnotation(Link.class) != null && !f.getAnnotation(Link.class).linktable().equals(Link.NONE)) {
+				} else if (f.getAnnotation(Link.class) != null && !f.getAnnotation(Link.class).linktable().isEmpty()) {
 				} else if (f.getType().isArray()) {
 					if (f.getType().getComponentType().isPrimitive()) {
 						// Data like byte[] long[]

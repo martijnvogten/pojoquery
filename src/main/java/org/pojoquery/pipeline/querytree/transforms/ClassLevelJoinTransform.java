@@ -45,15 +45,16 @@ public class ClassLevelJoinTransform implements QueryTreeTransform {
         List<BareJoinInfo> newJoins = new ArrayList<>(node.extraJoins());
         
         for (AnnotationModel joinAnn : joinAnns) {
-            String alias = (joinAnn.getStringValue("alias").isEmpty() ? joinAnn.getStringValue("tableName") : joinAnn.getStringValue("alias"));
+            String alias = joinAnn.getStringValue("alias").filter(s -> !s.isEmpty()).orElse(joinAnn.getStringValue("tableName").orElseThrow());
             if ((node.extraJoins().stream().anyMatch(j -> j.alias().equals(alias)))) {
                 continue; // Skip if a join with this alias already exists
             }
             JoinType joinType = joinAnn.getEnumValue(JoinType.class, "type");
             
-            String schemaName = joinAnn.getStringValue("schemaName");
-            String tableName = joinAnn.getStringValue("tableName");
-            newJoins.add(BareJoinInfo.of(alias, joinType, TableInfo.of(schemaName, tableName), new SqlExpression(joinAnn.getStringValue("joinCondition"))));
+            String schemaName = joinAnn.getStringValue("schemaName").orElse(null);
+            String tableName = joinAnn.getStringValue("tableName").orElseThrow();
+            newJoins.add(BareJoinInfo.of(alias, joinType, TableInfo.of(schemaName, tableName), 
+                new SqlExpression(joinAnn.getStringValue("joinCondition").orElseThrow())));
         }
         return node.withExtraJoins(newJoins);
     }

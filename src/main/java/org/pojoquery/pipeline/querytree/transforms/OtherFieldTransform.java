@@ -29,15 +29,15 @@ public class OtherFieldTransform implements QueryTreeTransform {
         }
 
         FieldModel otherField = otherFields.get(0);
-        Other otherAnn = otherField.getAnnotation(Other.class);
-        if (otherAnn != null && !(node instanceof JoinedNode)) {
+        var otherAnnOpt = otherField.getAnnotation(Other.class);
+        if (otherAnnOpt.isPresent() && !(node instanceof JoinedNode)) {
             throw new IllegalArgumentException("@Other field is not supported on embedded types: " + otherField);
         }
         if (node instanceof JoinedNode joinedNode) {
             if (joinedNode.otherField() != null) {
                 return node; // Already has an @Other field, skip
             }
-            String prefix = (otherAnn != null && !otherAnn.prefix().isEmpty()) ? otherAnn.prefix() : null;
+            String prefix = otherAnnOpt.flatMap(ann -> ann.getStringValue("prefix")).filter(p -> !p.isEmpty()).orElse(null);
             return ((JoinedNode) node).withOtherField(otherField, prefix);
         }
         return node;

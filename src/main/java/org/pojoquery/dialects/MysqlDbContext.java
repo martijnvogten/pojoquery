@@ -12,6 +12,7 @@ import java.util.Date;
 import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
+import org.pojoquery.annotations.Lob;
 import org.pojoquery.pipeline.SimpleFieldMapping;
 import org.pojoquery.typemodel.FieldModel;
 
@@ -94,7 +95,7 @@ public class MysqlDbContext implements DbContext {
         }
 
         if (type.equals(String.class.getName())) {
-            if (AnnotationHelper.isLob(field)) {
+            if (field.hasAnnotation(Lob.class)) {
                 return "LONGTEXT";
             }
             AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);

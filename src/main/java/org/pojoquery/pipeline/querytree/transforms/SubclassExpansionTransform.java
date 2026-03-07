@@ -16,7 +16,6 @@ import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableInfo;
-import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
 /**
@@ -39,8 +38,9 @@ public class SubclassExpansionTransform implements QueryTreeTransform {
     
     private QueryNode processNode(EmptyTableNode node) {
         // Only expand if @SubClasses is declared directly on this type, not inherited
-        SubClasses subClassesAnn = node.type().getDeclaredAnnotation(SubClasses.class);
-        if (subClassesAnn == null) {
+        // Use getAnnotation which returns Optional<AnnotationModel>
+        var subClassesAnnOpt = node.type().getAnnotation(SubClasses.class);
+        if (subClassesAnnOpt.isEmpty()) {
             return node;
         }
         
@@ -57,8 +57,8 @@ public class SubclassExpansionTransform implements QueryTreeTransform {
         List<QueryNode> newChildren = new ArrayList<>(node.children());
         String idField = determineSqlFieldName(determineIdField(node.type()));
         
-        for (Class<?> subClass : subClassesAnn.value()) {
-            TypeModel subType = ReflectionTypeModel.of(subClass);
+        List<TypeModel> subClasses = node.type().getTypeValuesFromAnnotation(subClassesAnnOpt.get(), "value");
+        for (TypeModel subType : subClasses) {
             List<TableMapping> subTableMappings = determineTableMapping(subType);
             TableMapping subTableMapping = subTableMappings.get(subTableMappings.size() - 1); // Get most specific @Table mapping
             

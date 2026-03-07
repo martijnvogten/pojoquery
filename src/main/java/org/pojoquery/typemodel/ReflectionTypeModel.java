@@ -4,6 +4,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -12,8 +13,12 @@ import java.util.Objects;
  * <p>This implementation is used at runtime for query execution. It provides
  * additional runtime-only methods like {@link #getReflectionClass()} and
  * {@link #isAssignableTo(Class)}.
+ * 
+ * <p>Extends {@link AbstractAnnotatedElement} to support immutable annotation
+ * transforms. Use {@link #withAddedAnnotation} to create a new instance with
+ * additional canonical annotations.
  */
-public class ReflectionTypeModel implements TypeModel {
+public class ReflectionTypeModel extends AbstractAnnotatedElement<TypeModel> implements TypeModel {
 
     private final Class<?> clazz;
 
@@ -23,6 +28,15 @@ public class ReflectionTypeModel implements TypeModel {
      * @param clazz the class to wrap
      */
     public ReflectionTypeModel(Class<?> clazz) {
+        super();
+        this.clazz = Objects.requireNonNull(clazz, "clazz must not be null");
+    }
+
+    /**
+     * Private constructor for creating instances with added annotations.
+     */
+    protected ReflectionTypeModel(Class<?> clazz, Map<Class<?>, AnnotationModel> addedAnnotations) {
+        super(addedAnnotations);
         this.clazz = Objects.requireNonNull(clazz, "clazz must not be null");
     }
 
@@ -32,6 +46,18 @@ public class ReflectionTypeModel implements TypeModel {
      */
     public static ReflectionTypeModel of(Class<?> clazz) {
         return new ReflectionTypeModel(clazz);
+    }
+
+    // ========== AbstractAnnotatedElement implementation ==========
+
+    @Override
+    protected AnnotationModel[] getSourceAnnotations() {
+        Annotation[] annotations = clazz.getAnnotations();
+        AnnotationModel[] result = new AnnotationModel[annotations.length];
+        for (int i = 0; i < annotations.length; i++) {
+            result[i] = new ReflectionAnnotationModel(annotations[i]);
+        }
+        return result;
     }
 
     // ========== TypeModel interface methods ==========
@@ -57,31 +83,6 @@ public class ReflectionTypeModel implements TypeModel {
         List<FieldModel> result = new ArrayList<>();
         for (Field f : clazz.getDeclaredFields()) {
             result.add(new ReflectionFieldModel(f));
-        }
-        return result;
-    }
-
-    @Override
-    public <A extends Annotation> A getAnnotation(Class<A> annotationType) {
-        return clazz.getAnnotation(annotationType);
-    }
-
-    @Override
-    public <A extends Annotation> A getDeclaredAnnotation(Class<A> annotationType) {
-        return clazz.getDeclaredAnnotation(annotationType);
-    }
-
-    @Override
-    public boolean hasAnnotation(Class<? extends Annotation> annotationType) {
-        return clazz.getAnnotation(annotationType) != null;
-    }
-
-    @Override
-    public List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> annotationType) {
-        Annotation[] annotations = clazz.getAnnotationsByType(annotationType);
-        List<AnnotationModel> result = new ArrayList<>();
-        for (Annotation a : annotations) {
-            result.add(new ReflectionAnnotationModel(a));
         }
         return result;
     }
@@ -131,18 +132,13 @@ public class ReflectionTypeModel implements TypeModel {
     }
 
     @Override
-    public List<TypeModel> getTypeValuesFromAnnotation(Annotation annotation, String attributeName) {
-        try {
-            java.lang.reflect.Method method = annotation.annotationType().getMethod(attributeName);
-            Class<?>[] classes = (Class<?>[]) method.invoke(annotation);
-            List<TypeModel> result = new ArrayList<>();
-            for (Class<?> c : classes) {
-                result.add(new ReflectionTypeModel(c));
-            }
-            return result;
-        } catch (NoSuchMethodException | IllegalAccessException | java.lang.reflect.InvocationTargetException e) {
-            throw new RuntimeException("Failed to extract " + attributeName + " from annotation " + annotation, e);
-        }
+    public List<TypeModel> getTypeValuesFromAnnotation(AnnotationModel annotationModel, String attributeName) {
+        return annotationModel.getClassValues(attributeName);
+    }
+
+    @Override
+    protected TypeModel withAnnotations(Map<Class<?>, AnnotationModel> annotations) {
+        return new ReflectionTypeModel(clazz, annotations);
     }
 
     // ========== Runtime-specific methods ==========
@@ -168,14 +164,13 @@ public class ReflectionTypeModel implements TypeModel {
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
-        if (!(obj instanceof ReflectionTypeModel)) return false;
-        ReflectionTypeModel other = (ReflectionTypeModel) obj;
-        return clazz.equals(other.clazz);
+        if (!(obj instanceof ReflectionTypeModel other)) return false;
+        return clazz.equals(other.clazz) && getAddedAnnotations().equals(other.getAddedAnnotations());
     }
 
     @Override
     public int hashCode() {
-        return clazz.hashCode();
+        return Objects.hash(clazz, getAddedAnnotations());
     }
 
     @Override

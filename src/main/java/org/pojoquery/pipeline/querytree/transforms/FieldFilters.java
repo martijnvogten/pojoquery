@@ -7,13 +7,14 @@ import static org.pojoquery.pipeline.PojoMetadata.isListOrArray;
 import java.lang.annotation.Annotation;
 import java.util.List;
 
-import org.pojoquery.AnnotationHelper;
 import org.pojoquery.annotations.Aggregate;
+import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Other;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Subquery;
 import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 
@@ -60,7 +61,7 @@ public final class FieldFilters {
      */
     public static List<FieldModel> withAnnotation(TypeModel type, Class<? extends Annotation> ann) {
         return tableFields(type).stream()
-            .filter(f -> f.getAnnotation(ann) != null)
+            .filter(f -> f.hasAnnotation(ann))
             .toList();
     }
     
@@ -80,7 +81,7 @@ public final class FieldFilters {
      */
     public static List<FieldModel> entityReferences(TypeModel type) {
         return tableFields(type).stream()
-            .filter(f -> isEntityReference(f) && !isTransient(f) && !f.getType().isEnum())
+            .filter(f -> isEntityReference(f) && !PojoMetadata.isTransient(f) && !f.getType().isEnum())
             .toList();
     }
     
@@ -93,22 +94,20 @@ public final class FieldFilters {
             .filter(f -> isCollection(f.getType()) 
                 && !hasAnnotation(f, Link.class)
                 && hasTableOnComponent(f)
-                && !isTransient(f))
+                && !PojoMetadata.isTransient(f))
             .toList();
     }
     
     /**
      * Returns fields with @Link annotation that have a linktable (many-to-many).
-     * Constrained to the most specific table.
      */
     public static List<FieldModel> linkTableFields(TypeModel type) {
         return tableFields(type).stream()
-            .filter(f -> {
-                Link link = f.getAnnotation(Link.class);
-                return link != null 
-                    && !Link.NONE.equals(link.linktable())
-                    && Link.NONE.equals(link.fetchColumn());
-            })
+            .filter(f -> 
+                f.getAnnotation(Link.class)
+                .filter(ann -> ann.hasAttribute("linktable") && !ann.hasAttribute("fetchColumn"))
+                .isPresent()
+            )
             .toList();
     }
     
@@ -118,10 +117,11 @@ public final class FieldFilters {
      */
     public static List<FieldModel> valueCollectionFields(TypeModel type) {
         return tableFields(type).stream()
-            .filter(f -> {
-                Link link = f.getAnnotation(Link.class);
-                return link != null && !Link.NONE.equals(link.fetchColumn());
-            })
+            .filter(f -> 
+                f.getAnnotation(Link.class)
+                .filter(link -> link.hasAttribute("fetchColumn"))
+                .isPresent()
+            )
             .toList();
     }
     
@@ -166,7 +166,7 @@ public final class FieldFilters {
     // ----- Type checks -----
     
     public static boolean isSimple(FieldModel field) {
-        if (isTransient(field)) return false;
+        if ( PojoMetadata.isTransient(field)) return false;
         TypeModel type = field.getType();
         return type.isPrimitive() || isWrapper(type) || isCommonType(type) || type.isEnum();
     }
@@ -183,15 +183,11 @@ public final class FieldFilters {
     }
     
     public static boolean isEmbedded(FieldModel field) {
-        return AnnotationHelper.isEmbedded(field);
-    }
-    
-    public static boolean isTransient(FieldModel field) {
-        return AnnotationHelper.isTransient(field) || field.isTransient();
+        return field.hasAnnotation(Embedded.class);
     }
     
     public static boolean hasAnnotation(FieldModel field, Class<? extends Annotation> ann) {
-        return field.getAnnotation(ann) != null;
+        return field.hasAnnotation(ann);
     }
     
     public static TypeModel getComponentType(FieldModel field) {

@@ -1,11 +1,9 @@
 package org.pojoquery.typemodel;
 
-import java.lang.annotation.Annotation;
-import java.lang.annotation.Repeatable;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
-import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
@@ -15,8 +13,12 @@ import javax.lang.model.util.Types;
 /**
  * FieldModel implementation for annotation processing.
  * Wraps a VariableElement for compile-time field introspection.
+ * 
+ * <p>Extends {@link AbstractAnnotatedElement} to support immutable annotation
+ * transforms. Use {@link #withAddedAnnotation} to create a new instance with
+ * additional canonical annotations.
  */
-public class ElementFieldModel implements FieldModel {
+public class ElementFieldModel extends AbstractAnnotatedElement<FieldModel> implements FieldModel {
 
     private final VariableElement variableElement;
     private final TypeModel declaringType;
@@ -34,11 +36,36 @@ public class ElementFieldModel implements FieldModel {
      */
     public ElementFieldModel(VariableElement variableElement, TypeModel declaringType,
                              Elements elements, Types types) {
+        super();
         this.variableElement = variableElement;
         this.declaringType = declaringType;
         this.elements = elements;
         this.types = types;
     }
+
+    /**
+     * Private constructor for creating instances with added annotations.
+     */
+    private ElementFieldModel(VariableElement variableElement, TypeModel declaringType,
+                              Elements elements, Types types,
+                              Map<Class<?>, AnnotationModel> addedAnnotations) {
+        super(addedAnnotations);
+        this.variableElement = variableElement;
+        this.declaringType = declaringType;
+        this.elements = elements;
+        this.types = types;
+    }
+
+    // ========== AbstractAnnotatedElement implementation ==========
+
+    @Override
+    protected AnnotationModel[] getSourceAnnotations() {
+        return variableElement.getAnnotationMirrors().stream()
+            .map(am -> new ElementAnnotationModel(am, elements, types))
+            .toArray(AnnotationModel[]::new);
+    }
+
+    // ========== FieldModel implementation ==========
 
     @Override
     public String getName() {
@@ -60,47 +87,6 @@ public class ElementFieldModel implements FieldModel {
     }
 
     @Override
-    public <A extends Annotation> A getAnnotation(Class<A> annotationType) {
-        return variableElement.getAnnotation(annotationType);
-    }
-
-    @Override
-    public boolean hasAnnotation(Class<? extends Annotation> annotationType) {
-        return getAnnotation(annotationType) != null;
-    }
-
-    @Override
-    public List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> annotationType) {
-        List<AnnotationModel> result = new ArrayList<>();
-        String targetTypeName = annotationType.getName();
-        
-        // Check for @Repeatable container
-        Repeatable repeatable = annotationType.getAnnotation(Repeatable.class);
-        String containerTypeName = repeatable != null ? repeatable.value().getName() : null;
-        
-        for (AnnotationMirror am : variableElement.getAnnotationMirrors()) {
-            String annTypeName = am.getAnnotationType().toString();
-            
-            if (annTypeName.equals(targetTypeName)) {
-                // Direct match
-                result.add(new ElementAnnotationModel(am, elements, types));
-            } else if (containerTypeName != null && annTypeName.equals(containerTypeName)) {
-                // Container annotation - unwrap value()
-                ElementAnnotationModel container = new ElementAnnotationModel(am, elements, types);
-                result.addAll(container.getAnnotationValues("value"));
-            }
-        }
-        return result;
-    }
-
-    @Override
-    public AnnotationModel[] getAnnotations() {
-        return variableElement.getAnnotationMirrors().stream()
-            .map(am -> new ElementAnnotationModel(am, elements, types))
-            .toArray(AnnotationModel[]::new);
-    }
-
-    @Override
     public boolean isStatic() {
         return variableElement.getModifiers().contains(Modifier.STATIC);
     }
@@ -110,6 +96,18 @@ public class ElementFieldModel implements FieldModel {
         // Check Java transient modifier
         return variableElement.getModifiers().contains(Modifier.TRANSIENT);
     }
+
+    @Override
+    public List<TypeModel> getTypeValuesFromAnnotation(AnnotationModel annotationModel, String attributeName) {
+        return annotationModel.getClassValues(attributeName);
+    }
+
+    @Override
+    protected FieldModel withAnnotations(Map<Class<?>, AnnotationModel> annotations) {
+        return new ElementFieldModel(variableElement, declaringType, elements, types, annotations);
+    }
+
+    // ========== Compile-time specific methods ==========
 
     /**
      * Returns the underlying VariableElement.
@@ -126,15 +124,13 @@ public class ElementFieldModel implements FieldModel {
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
-        if (obj instanceof ElementFieldModel) {
-            ElementFieldModel other = (ElementFieldModel) obj;
-            return variableElement.equals(other.variableElement);
-        }
-        return false;
+        if (!(obj instanceof ElementFieldModel other)) return false;
+        return variableElement.equals(other.variableElement) 
+            && getAddedAnnotations().equals(other.getAddedAnnotations());
     }
 
     @Override
     public int hashCode() {
-        return variableElement.hashCode();
+        return Objects.hash(variableElement, getAddedAnnotations());
     }
 }

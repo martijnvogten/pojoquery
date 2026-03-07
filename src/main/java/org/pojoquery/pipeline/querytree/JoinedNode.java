@@ -1,5 +1,6 @@
 package org.pojoquery.pipeline.querytree;
 
+import java.lang.annotation.Annotation;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -105,6 +106,50 @@ public record JoinedNode(
             fields, newChildren, idFieldNames,
             isSingleTableInheritance, discriminatorColumn, discriminatorValues,
             otherField, otherColumnPrefix, joinInfo, extraJoins, isSuperClass, isSubClass);
+    }
+    
+    /**
+     * Returns a new JoinedNode with a transformed type.
+     * The transform function should only modify annotations, not the underlying type identity.
+     *
+     * @param transform function that transforms the type (typically adds canonical annotations)
+     */
+    public JoinedNode withTransformedType(java.util.function.UnaryOperator<TypeModel> transform) {
+        return withType(transform.apply(type));
+    }
+    
+    /**
+     * Returns a new JoinedNode with a different type.
+     */
+    private JoinedNode withType(TypeModel newType) {
+        return new JoinedNode(alias, newType, tableInfo,
+            fields, children, idFieldNames,
+            isSingleTableInheritance, discriminatorColumn, discriminatorValues,
+            otherField, otherColumnPrefix, joinInfo, extraJoins, isSuperClass, isSubClass);
+    }
+    
+    /**
+     * Returns a new JoinedNode with an additional annotation on its type.
+     * The underlying type identity does not change, only its perceived annotations.
+     */
+    public JoinedNode withTypeAnnotation(Class<? extends Annotation> annType, Map<String, Object> values) {
+        return withType(type.withAddedAnnotation(annType, values));
+    }
+    
+    /**
+     * Returns a new JoinedNode with a modified annotation attribute on its type.
+     * The underlying type identity does not change, only its perceived annotations.
+     */
+    public JoinedNode withTypeAnnotationAttribute(Class<? extends Annotation> annType, String attr, Object value) {
+        return withType(type.withAnnotationAttribute(annType, attr, value));
+    }
+    
+    /**
+     * Returns a new JoinedNode with modified annotation attributes on its type.
+     * The underlying type identity does not change, only its perceived annotations.
+     */
+    public JoinedNode withTypeAnnotationAttributes(Class<? extends Annotation> annType, Map<String, Object> attrs) {
+        return withType(type.withAnnotationAttributes(annType, attrs));
     }
     
     /**

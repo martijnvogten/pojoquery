@@ -1,7 +1,6 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
 import java.util.ArrayList;
-
 import java.util.List;
 
 import org.pojoquery.annotations.GroupBy;
@@ -25,18 +24,18 @@ public class GroupByOrderByTransform implements QueryTreeTransform {
         List<String> orderByClauses = new ArrayList<>(tree.orderBy());
         
         // Process @GroupBy
-        GroupBy groupByAnn = type.getAnnotation(GroupBy.class);
-        if (groupByAnn != null) {
-            for (String groupBy : groupByAnn.value()) {
+        var groupByAnnOpt = type.getAnnotation(GroupBy.class);
+        if (groupByAnnOpt.isPresent()) {
+            for (String groupBy : groupByAnnOpt.get().getStringValues("value")) {
                 String resolved = ExpressionResolver.resolve(groupBy, rootAlias);
                 groupByClauses.add(resolved);
             }
         }
         
         // Process @OrderBy
-        OrderBy orderByAnn = type.getAnnotation(OrderBy.class);
-        if (orderByAnn != null) {
-            for (String orderBy : orderByAnn.value()) {
+        var orderByAnnOpt = type.getAnnotation(OrderBy.class);
+        if (orderByAnnOpt.isPresent()) {
+            for (String orderBy : orderByAnnOpt.get().getStringValues("value")) {
                 String resolved = ExpressionResolver.resolve(orderBy, rootAlias);
                 orderByClauses.add(resolved);
             }

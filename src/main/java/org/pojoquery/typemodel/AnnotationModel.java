@@ -1,6 +1,8 @@
 package org.pojoquery.typemodel;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * Abstraction over annotation introspection that works with both runtime Annotations
@@ -55,7 +57,7 @@ public interface AnnotationModel {
      * @param attributeName the annotation attribute name
      * @return list of numbers, empty if attribute not present
      */
-    List<Number> getNumberValues(String attributeName);
+    List<Number> getNumberAttributes(String attributeName);
 
     /**
      * Returns boolean values for the specified attribute.
@@ -75,12 +77,16 @@ public interface AnnotationModel {
 
     // Convenience methods for "value" attribute
 
-    default String getStringValue(String attributeName) {
-        return getStringValues(attributeName).stream().findFirst().orElse(null);
+    default Optional<String> getStringValue(String attributeName) {
+        return getStringValues(attributeName).stream().findFirst();
+    }
+
+    default Optional<String> getStringValue() {
+        return getStringValues().stream().findFirst();
     }
 
     default List<String> getStringValues() {
-        return getStringValues("value");
+        return getStringValues("value").stream().filter(s -> !s.isEmpty()).toList();
     }
 
 	default <E extends Enum<E>> E getEnumValue(Class<E> enumType, String attributeName) {
@@ -99,23 +105,29 @@ public interface AnnotationModel {
         return getAnnotationValues("value");
     }
 
-    default Number getNumberValue(String attr) {
-        return getNumberValues(attr).stream().findFirst().orElse(null);
+    default Optional<Number> getNumberAttribute(String attr) {
+        return getNumberAttributes(attr).stream().findFirst();
     }
 
-    default Boolean getBooleanValue(String attr) {
-        return getBooleanValues(attr).stream().findFirst().orElse(null);
+    default Optional<Boolean> getBooleanAttribute(String attr) {
+        return getBooleanValues(attr).stream().findFirst();
     }
 
-    default List<Number> getNumberValues() {
-        return getNumberValues("value");
+    default List<Number> getNumberAttributes() {
+        return getNumberAttributes("value");
     }
 
-    default List<Boolean> getBooleanValues() {
+    default List<Boolean> getBooleanAttributes() {
         return getBooleanValues("value");
     }
 
-    default List<TypeModel> getClassValues() {
+    default List<TypeModel> getClassAttributes() {
         return getClassValues("value");
     }
+
+    default boolean hasAttribute(String attributeName) {
+        return getValuesMap().containsKey(attributeName);
+    }
+
+	Map<String,Object> getValuesMap();
 }
