@@ -134,18 +134,18 @@ public class TestInheritanceWithJoins {
 				norm("""
 					SELECT
 					`bedroom`.`numberOfBeds` AS `bedroom.numberOfBeds`,
-					`room`.`id` AS `bedroom.id`,
-					`room`.`area` AS `bedroom.area`,
-					`room.house`.`id` AS `room.house.id`,
-					`room.house`.`address` AS `room.house.address`
+					`bedroom.room`.`id` AS `bedroom.room.id`,
+					`bedroom.room`.`area` AS `bedroom.room.area`,
+					`bedroom.room.house`.`id` AS `bedroom.room.house.id`,
+					`bedroom.room.house`.`address` AS `bedroom.room.house.address`
 					FROM `bedroom` AS `bedroom`
-					INNER JOIN `room` AS `room` ON `room`.`id` = `bedroom`.`id`
-					LEFT JOIN `house` AS `room.house` ON `room`.`house_id` = `room.house`.`id`
+					INNER JOIN `room` AS `bedroom.room` ON `bedroom.room`.`id` = `bedroom`.`id`
+					LEFT JOIN `house` AS `bedroom.room.house` ON `bedroom.room`.`house_id` = `bedroom.room.house`.`id`
 					"""),
 				norm(sql));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
-				"bedroom.id", "bedroom.area", "bedroom.numberOfBeds", "room.house.id", "room.house.address" }, 
+				"bedroom.room.id", "bedroom.room.area", "bedroom.numberOfBeds", "bedroom.room.house.id", "bedroom.room.house.address" }, 
 			     1L,           100.0,          1                    ,  1L       , "Unity Street 1");
 		
 		List<BedRoom> list = PojoQuery.build(BedRoom.class).processRows(result);
@@ -166,14 +166,14 @@ public class TestInheritanceWithJoins {
 				SELECT
 				 `apartment`.`id` AS `apartment.id`,
 				 `bedrooms`.`numberOfBeds` AS `bedrooms.numberOfBeds`,
-				 `bedrooms.room`.`id` AS `bedrooms.id`,
-				 `bedrooms.room`.`area` AS `bedrooms.area`,
-				 `bedrooms.house`.`id` AS `bedrooms.house.id`,
-				 `bedrooms.house`.`address` AS `bedrooms.house.address`
+				 `bedrooms.room`.`id` AS `bedrooms.room.id`,
+				 `bedrooms.room`.`area` AS `bedrooms.room.area`,
+				 `bedrooms.room.house`.`id` AS `bedrooms.room.house.id`,
+				 `bedrooms.room.house`.`address` AS `bedrooms.room.house.address`
 				FROM `apartment` AS `apartment`
 				 LEFT JOIN `bedroom` AS `bedrooms` ON `apartment`.`id` = `bedrooms`.`apartment_id`
 				 LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms.room`.`id` = `bedrooms`.`id`
-				 LEFT JOIN `house` AS `bedrooms.house` ON `bedrooms.room`.`house_id` = `bedrooms.house`.`id`
+				 LEFT JOIN `house` AS `bedrooms.room.house` ON `bedrooms.room`.`house_id` = `bedrooms.room.house`.`id`
 				"""), 
 			norm(sql));
 	}
@@ -188,17 +188,17 @@ public class TestInheritanceWithJoins {
 					 `apartment`.`id` AS `apartment.id`,
 					 `rooms`.`id` AS `rooms.id`,
 					 `rooms`.`area` AS `rooms.area`,
-					 `rooms.house`.`id` AS `rooms.house.id`,
-					 `rooms.house`.`address` AS `rooms.house.address`,
 					 `rooms.bedroom`.`id` AS `rooms.bedroom.id`,
 					 `rooms.bedroom`.`numberOfBeds` AS `rooms.bedroom.numberOfBeds`,
 					 `rooms.kitchen`.`id` AS `rooms.kitchen.id`,
-					 `rooms.kitchen`.`hasDishWasher` AS `rooms.kitchen.hasDishWasher`
+					 `rooms.kitchen`.`hasDishWasher` AS `rooms.kitchen.hasDishWasher`,
+					 `rooms.house`.`id` AS `rooms.house.id`,
+					 `rooms.house`.`address` AS `rooms.house.address`
 					FROM `apartment` AS `apartment`
 					 LEFT JOIN `room` AS `rooms` ON `apartment`.`id` = `rooms`.`apartment_id`
-					 LEFT JOIN `house` AS `rooms.house` ON `rooms`.`house_id` = `rooms.house`.`id`
 					 LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.`id` = `rooms`.`id`
 					 LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.`id` = `rooms`.`id`
+					 LEFT JOIN `house` AS `rooms.house` ON `rooms`.`house_id` = `rooms.house`.`id`
 					"""),
 				norm(sql));
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {

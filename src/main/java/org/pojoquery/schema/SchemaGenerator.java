@@ -1,27 +1,26 @@
 package org.pojoquery.schema;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
-import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
-import org.pojoquery.annotations.DiscriminatorColumn;
-import org.pojoquery.annotations.Embedded;
+import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Link;
-import org.pojoquery.annotations.SubClasses;
-import org.pojoquery.internal.TableMapping;
-import org.pojoquery.pipeline.PojoMetadata;
-import org.pojoquery.schema.ForeignKeyInfo.DeferredForeignKey;
-import org.pojoquery.schema.ForeignKeyInfo.InferredForeignKey;
-import org.pojoquery.schema.ForeignKeyInfo.LinkTableInfo;
-import org.pojoquery.schema.ForeignKeyInfo.MergedColumnAnnotations;
+import org.pojoquery.pipeline.querytree.EmbeddedNode;
+import org.pojoquery.pipeline.querytree.FieldSelection;
+import org.pojoquery.pipeline.querytree.FieldSelectionBase;
+import org.pojoquery.pipeline.querytree.JoinCondition;
+import org.pojoquery.pipeline.querytree.JoinInfo;
+import org.pojoquery.pipeline.querytree.JoinTableInfo;
+import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.QueryNode;
+import org.pojoquery.pipeline.querytree.QueryTree;
+import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
+import org.pojoquery.pipeline.querytree.TableInfo;
+import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
@@ -29,7 +28,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Generates CREATE TABLE statements based on entity classes annotated with PojoQuery annotations.
+ * Generates CREATE TABLE statements based on entity classes using QueryTree.
+ * 
+ * <p>This implementation traverses the QueryTree structure instead of using
+ * PojoMetadata or AnnotationHelper directly. All information is extracted
+ * from the tree nodes (JoinedNode, EmbeddedNode, FieldSelection, JoinInfo).</p>
  * 
  * <p>Example usage:</p>
  * <pre>
@@ -42,11 +45,6 @@ public class SchemaGenerator {
 
     /**
      * Generates a list of CREATE TABLE statements for the given entity class using default DbContext.
-     * Each statement in the list represents one table.
-     * 
-     * @param entityClass the entity class annotated with @Table
-     * @return list of CREATE TABLE statements
-     * @throws IllegalArgumentException if the class does not have a @Table annotation
      */
     public static List<String> generateCreateTableStatements(Class<?> entityClass) {
         return generateCreateTableStatements(entityClass, DbContext.getDefault());
@@ -54,60 +52,29 @@ public class SchemaGenerator {
     
     /**
      * Generates a list of CREATE TABLE statements for the given entity class with custom DbContext.
-     * Each statement in the list represents one table.
-     * 
-     * @param entityClass the entity class annotated with @Table
-     * @param dbContext the database context for dialect-specific generation
-     * @return list of CREATE TABLE statements
-     * @throws IllegalArgumentException if the class does not have a @Table annotation
      */
     public static List<String> generateCreateTableStatements(Class<?> entityClass, DbContext dbContext) {
-        LOG.debug("Generating CREATE TABLE statements for {}", entityClass.getName());
-        Set<String> generatedTables = new HashSet<>();
-        List<String> statements = new ArrayList<>();
-        Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
-        List<LinkTableInfo> linkTables = new ArrayList<>();
-        List<DeferredForeignKey> deferredForeignKeys = new ArrayList<>();
-        generateCreateTableStatements(new ReflectionTypeModel(entityClass), dbContext, generatedTables, statements, inferredForeignKeys, linkTables, deferredForeignKeys);
-        
-        // Generate link tables (without FK constraints)
-        for (LinkTableInfo linkTable : linkTables) {
-            String fullTableName = linkTable.schemaName != null && !linkTable.schemaName.isEmpty()
-                ? dbContext.quoteObjectNames(linkTable.schemaName) + "." + dbContext.quoteObjectNames(linkTable.tableName)
-                : dbContext.quoteObjectNames(linkTable.tableName);
-            if (!generatedTables.contains(fullTableName)) {
-                generatedTables.add(fullTableName);
-                statements.add(generateCreateLinkTable(linkTable, dbContext, deferredForeignKeys));
-            }
-        }
-        
-        // Generate ALTER TABLE statements for FK constraints (after all tables are created)
-        // Deduplicate by (table + column) to avoid duplicate FK constraints
-        Set<String> generatedFkConstraints = new HashSet<>();
-        for (DeferredForeignKey dfk : deferredForeignKeys) {
-            String fkKey = (dfk.tableSchema != null ? dfk.tableSchema + "." : "") + dfk.tableName + "." + dfk.columnName;
-            if (!generatedFkConstraints.contains(fkKey.toLowerCase())) {
-                generatedFkConstraints.add(fkKey.toLowerCase());
-                statements.add(generateAlterTableAddForeignKey(dfk, dbContext));
-            }
-        }
-        
-        return statements;
-    }
-    
-    private static void generateCreateTableStatements(TypeModel entityClass, DbContext dbContext, 
-            Set<String> generatedTables, List<String> statements, Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys,
-            List<LinkTableInfo> linkTables, List<DeferredForeignKey> deferredForeignKeys) {
-        // Delegate to the internal method with null for merged annotations (single-class case)
-        generateCreateTableStatementsInternal(entityClass, dbContext, generatedTables, statements, 
-            inferredForeignKeys, linkTables, deferredForeignKeys, null);
+        return generateCreateTableStatements(new ReflectionTypeModel(entityClass), dbContext);
     }
     
     /**
-     * Generates a list of CREATE TABLE statements for multiple entity classes using default DbContext.
-     * 
-     * @param entityClasses the entity classes
-     * @return list of CREATE TABLE statements
+     * Generates a list of CREATE TABLE statements for the given entity type with custom DbContext.
+     */
+    public static List<String> generateCreateTableStatements(TypeModel entityType, DbContext dbContext) {
+        LOG.debug("Generating CREATE TABLE statements for {}", entityType.getSimpleName());
+        
+        // Build the QueryTree
+        QueryTree tree = QueryTreeBuilder.from(entityType);
+        
+        // Collect schema info from tree
+        SchemaCollector collector = new SchemaCollector(dbContext);
+        collector.collectFromTree(tree);
+        
+        return collector.generateStatements();
+    }
+    
+    /**
+     * Generates a list of CREATE TABLE statements for multiple entity classes.
      */
     public static List<String> generateCreateTableStatements(Class<?>... entityClasses) {
         return generateCreateTableStatements(DbContext.getDefault(), entityClasses);
@@ -115,745 +82,30 @@ public class SchemaGenerator {
     
     /**
      * Generates a list of CREATE TABLE statements for multiple entity classes with custom DbContext.
-     * 
-     * <p>When multiple classes map to the same table, their column annotations are merged.
-     * For conflicting annotations on the same column, the most restrictive constraint wins:
-     * <ul>
-     *   <li>If any class has unique=true, the column will be UNIQUE</li>
-     *   <li>If any class has nullable=false, the column will be NOT NULL</li>
-     * </ul>
-     * 
-     * @param dbContext the database context for dialect-specific generation
-     * @param entityClasses the entity classes
-     * @return list of CREATE TABLE statements
      */
     public static List<String> generateCreateTableStatements(DbContext dbContext, Class<?>... entityClasses) {
-        TypeModel[] typeModels = Arrays.stream(entityClasses)
-                                       .map(ReflectionTypeModel::new)
-                                       .toArray(TypeModel[]::new);
-        Set<String> generatedTables = new HashSet<>();
-        List<String> statements = new ArrayList<>();
-        Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
-        List<LinkTableInfo> linkTables = new ArrayList<>();
-        List<DeferredForeignKey> deferredForeignKeys = new ArrayList<>();
+        SchemaCollector collector = new SchemaCollector(dbContext);
         
-        // Collect merged column annotations for tables that have multiple class mappings
-        Map<String, Map<String, MergedColumnAnnotations>> tableColumnAnnotations = new HashMap<>();
-        collectMergedColumnAnnotations(typeModels, tableColumnAnnotations);
-        
-        // First pass: scan all classes for collection fields to build the inferred foreign keys map
-        for (TypeModel entityClass : typeModels) {
-            ForeignKeyScanner.scanForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
+        for (Class<?> entityClass : entityClasses) {
+            QueryTree tree = QueryTreeBuilder.from(entityClass);
+            collector.collectFromTree(tree);
         }
         
-        // Second pass: generate CREATE TABLE statements (without FK constraints)
-        for (TypeModel entityClass : typeModels) {
-            generateCreateTableStatementsInternal(entityClass, dbContext, generatedTables, statements, 
-                inferredForeignKeys, linkTables, deferredForeignKeys, tableColumnAnnotations);
-        }
-        
-        // Generate link tables (without FK constraints)
-        for (LinkTableInfo linkTable : linkTables) {
-            String fullTableName = getFullTableName(linkTable.schemaName, linkTable.tableName, dbContext);
-            if (!generatedTables.contains(fullTableName)) {
-                generatedTables.add(fullTableName);
-                statements.add(generateCreateLinkTable(linkTable, dbContext, deferredForeignKeys));
-            }
-        }
-        
-        // Generate ALTER TABLE statements for FK constraints (after all tables are created)
-        // Deduplicate by (table + column) to avoid duplicate FK constraints
-        Set<String> generatedFkConstraints = new HashSet<>();
-        for (DeferredForeignKey dfk : deferredForeignKeys) {
-            String fkKey = (dfk.tableSchema != null ? dfk.tableSchema + "." : "") + dfk.tableName + "." + dfk.columnName;
-            if (!generatedFkConstraints.contains(fkKey.toLowerCase())) {
-                generatedFkConstraints.add(fkKey.toLowerCase());
-                statements.add(generateAlterTableAddForeignKey(dfk, dbContext));
-            }
-        }
-        
-        return statements;
-    }
-    
-    /**
-     * Internal method that generates CREATE TABLE statements for a single entity class.
-     */
-    private static void generateCreateTableStatementsInternal(TypeModel entityClass, DbContext dbContext, 
-            Set<String> generatedTables, List<String> statements, Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys,
-            List<LinkTableInfo> linkTables, List<DeferredForeignKey> deferredForeignKeys,
-            Map<String, Map<String, MergedColumnAnnotations>> tableColumnAnnotations) {
-        // Scan for collection fields that imply foreign keys in other tables
-        ForeignKeyScanner.scanForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
-        
-        List<TableMapping> tableMappings = PojoMetadata.determineTableMapping(entityClass);
-        if (tableMappings.isEmpty()) {
-            throw new IllegalArgumentException("Class " + entityClass.getSimpleName() + " must have a @Table annotation");
-        }
-        
-        for (TableMapping mapping : tableMappings) {
-            String fullTableName = getFullTableName(mapping, dbContext);
-            // Skip if we've already generated this table
-            if (generatedTables.contains(fullTableName)) {
-                LOG.trace("Skipping already generated table: {}", fullTableName);
-                continue;
-            }
-            LOG.debug("Generating CREATE TABLE for: {}", fullTableName);
-            generatedTables.add(fullTableName);
-            
-            // Get inferred foreign keys for this class
-            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.getType());
-            
-            // Get merged column annotations for this table (may be null for single-class generation)
-            Map<String, MergedColumnAnnotations> mergedAnnotations = null;
-            if (tableColumnAnnotations != null) {
-                String tableKey = (mapping.schemaName != null ? mapping.schemaName + "." : "") + mapping.tableName;
-                mergedAnnotations = tableColumnAnnotations.get(tableKey);
-            }
-            
-            statements.add(generateCreateTableForMapping(mapping, dbContext, fks, deferredForeignKeys, mergedAnnotations));
-        }
-        
-        // Handle @SubClasses annotation
-        var subClassesAnnOpt = entityClass.getAnnotation(SubClasses.class);
-        if (subClassesAnnOpt.isPresent()) {
-            var discAnnOpt = entityClass.getAnnotation(DiscriminatorColumn.class);
-
-            if (discAnnOpt.isPresent()) {
-                // Single table inheritance: add discriminator and subclass columns to parent table
-                // The parent table was already generated above, we need to modify the last statement
-                // to include subclass fields and discriminator column
-
-                // Actually, we need to regenerate with the extra fields
-                // Remove the last statement (the parent table we just generated)
-                if (!statements.isEmpty()) {
-                    String lastStatement = statements.get(statements.size() - 1);
-                    TableMapping parentMapping = tableMappings.get(tableMappings.size() - 1);
-                    String parentTableName = getFullTableName(parentMapping, dbContext);
-                    if (lastStatement.contains(parentTableName)) {
-                        statements.remove(statements.size() - 1);
-                        generatedTables.remove(parentTableName);
-
-                        // Regenerate with STI info
-                        List<FieldModel> stiFields = new ArrayList<>();
-                        for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnnOpt.get(), "value")) {
-                            // Collect fields declared only in the subclass
-                            for (FieldModel f : PojoMetadata.collectFieldsOfClass(subClass, entityClass)) {
-                                if (!isLinkedField(f) && !PojoMetadata.isListOrArray(f.getType())) {
-                                    stiFields.add(f);
-                                }
-                            }
-                        }
-
-                        List<InferredForeignKey> fks = inferredForeignKeys.get(parentMapping.getType());
-                        Map<String, MergedColumnAnnotations> mergedAnnotations = null;
-                        if (tableColumnAnnotations != null) {
-                            String tableKey = (parentMapping.schemaName != null ? parentMapping.schemaName + "." : "") + parentMapping.tableName;
-                            mergedAnnotations = tableColumnAnnotations.get(tableKey);
-                        }
-
-                        String discColumnName = discAnnOpt.get().getStringValue("name").orElse("dtype");
-                        statements.add(generateCreateTableForMappingWithSTI(parentMapping, dbContext, fks,
-                                deferredForeignKeys, mergedAnnotations, discColumnName, stiFields));
-                        generatedTables.add(parentTableName);
-                    }
-                }
-            } else {
-                // Table-per-subclass inheritance: generate separate tables for each subclass
-                for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnnOpt.get(), "value")) {
-                    generateCreateTableStatementsInternal(subClass, dbContext, generatedTables, statements,
-                            inferredForeignKeys, linkTables, deferredForeignKeys, tableColumnAnnotations);
-                }
-            }
-        }
-    }
-    
-    /**
-     * Collects merged column annotations from all classes that map to the same table.
-     */
-    private static void collectMergedColumnAnnotations(TypeModel[] entityClasses, 
-            Map<String, Map<String, MergedColumnAnnotations>> tableColumnAnnotations) {
-        for (TypeModel entityClass : entityClasses) {
-            List<TableMapping> tableMappings = PojoMetadata.determineTableMapping(entityClass);
-            for (TableMapping mapping : tableMappings) {
-                String tableKey = (mapping.schemaName != null ? mapping.schemaName + "." : "") + mapping.tableName;
-                Map<String, MergedColumnAnnotations> columnMap = tableColumnAnnotations
-                    .computeIfAbsent(tableKey, k -> new HashMap<>());
-                
-                // Process fields from this mapping
-                for (FieldModel field : mapping.getFields()) {
-                    String columnName = PojoMetadata.determineSqlFieldName(field).toLowerCase();
-                    MergedColumnAnnotations merged = columnMap.computeIfAbsent(columnName, k -> new MergedColumnAnnotations());
-                    AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
-                    merged.mergeWith(columnMeta);
-                }
-            }
-        }
-    }
-    
-    /**
-     * Generates a CREATE TABLE statement for a link table (many-to-many relationship).
-     */
-    private static String generateCreateLinkTable(LinkTableInfo linkTable, DbContext dbContext, List<DeferredForeignKey> deferredForeignKeys) {
-        StringBuilder sb = new StringBuilder();
-        
-        // Table name
-        String tableName = getFullTableName(linkTable.schemaName, linkTable.tableName, dbContext);
-        
-        sb.append("CREATE TABLE ");
-        sb.append(tableName).append(" (\n");
-        
-        // Owner column
-        sb.append("  ").append(dbContext.quoteObjectNames(linkTable.ownerColumn));
-        sb.append(" ").append(dbContext.getForeignKeyColumnType());
-        sb.append(",\n");
-        
-        // Foreign column
-        sb.append("  ").append(dbContext.quoteObjectNames(linkTable.foreignColumn));
-        sb.append(" ").append(dbContext.getForeignKeyColumnType());
-        sb.append(",\n");
-        
-        // Primary key (composite)
-        sb.append("  PRIMARY KEY (");
-        sb.append(dbContext.quoteObjectNames(linkTable.ownerColumn));
-        sb.append(", ");
-        sb.append(dbContext.quoteObjectNames(linkTable.foreignColumn));
-        sb.append(")\n");
-        
-        sb.append(")");
-        
-        // Add engine specification based on DbContext
-        String tableSuffix = dbContext.getCreateTableSuffix();
-        if (tableSuffix != null && !tableSuffix.isEmpty()) {
-            sb.append(tableSuffix);
-        }
-        
-        sb.append(";");
-        
-        // Defer FK constraints to be added later via ALTER TABLE
-        deferredForeignKeys.add(new DeferredForeignKey(
-            linkTable.tableName, linkTable.schemaName, linkTable.ownerColumn,
-            linkTable.ownerTable, linkTable.ownerIdColumn, linkTable.ownerSchema));
-        deferredForeignKeys.add(new DeferredForeignKey(
-            linkTable.tableName, linkTable.schemaName, linkTable.foreignColumn,
-            linkTable.foreignTable, linkTable.foreignIdColumn, linkTable.foreignSchema));
-        
-        return sb.toString();
-    }
-    
-    /**
-     * Generates an ALTER TABLE statement to add a foreign key constraint.
-     */
-    private static String generateAlterTableAddForeignKey(DeferredForeignKey dfk, DbContext dbContext) {
-        StringBuilder sb = new StringBuilder();
-        
-        String tableName = getFullTableName(dfk.tableSchema, dfk.tableName, dbContext);
-        String refTableName = getFullTableName(dfk.referencedSchema, dfk.referencedTable, dbContext);
-        
-        sb.append("ALTER TABLE ").append(tableName);
-        sb.append(" ADD FOREIGN KEY (").append(dbContext.quoteObjectNames(dfk.columnName)).append(")");
-        sb.append(" REFERENCES ").append(refTableName);
-        sb.append("(").append(dbContext.quoteObjectNames(dfk.referencedColumn)).append(");");
-        
-        return sb.toString();
+        return collector.generateStatements();
     }
     
     /**
      * Creates tables in the database for the given entity classes.
-     * This is a convenience method that generates and executes CREATE TABLE statements.
-     * 
-     * @param db the data source to execute the statements on
-     * @param classes the entity classes to create tables for
      */
     public static void createTables(javax.sql.DataSource db, Class<?>... classes) {
         DB.runInTransaction(db, c -> {
             for (String ddl : generateCreateTableStatements(classes)) {
-                org.pojoquery.DB.executeDDL(c, ddl);
+                DB.executeDDL(c, ddl);
             }
         });
     }
     
-    private static String generateCreateTableForMapping(TableMapping mapping, DbContext dbContext, 
-            List<InferredForeignKey> inferredForeignKeys, List<DeferredForeignKey> deferredForeignKeys,
-            Map<String, MergedColumnAnnotations> mergedAnnotations) {
-        StringBuilder sb = new StringBuilder();
-        
-        String tableName = getFullTableName(mapping, dbContext);
-        
-        // CREATE TABLE
-        sb.append("CREATE TABLE ");
-        sb.append(tableName).append(" (\n");
-        
-        List<String> columnDefinitions = new ArrayList<>();
-        List<String> primaryKeyColumns = new ArrayList<>();
-        Set<String> existingColumnNames = new HashSet<>();
-        Set<String> existingFkColumns = new HashSet<>(); // Track FK columns to avoid duplicates
-        
-        // Determine if we have a composite key from the overall class hierarchy
-        List<FieldModel> idFields = PojoMetadata.determineIdFields(mapping.getType());
-        boolean isCompositeKey = idFields.size() > 1;
-        
-        // Check if this is a subclass table (not the root table with @Id fields)
-        // In table-per-subclass, the subclass table needs the ID field from parent as FK/PK
-        boolean hasIdFieldInThisMapping = false;
-        for (FieldModel field : mapping.getFields()) {
-            if (AnnotationHelper.isId(field)) {
-                hasIdFieldInThisMapping = true;
-                break;
-            }
-        }
-        
-        // If this mapping doesn't have its own @Id field but the class has inherited @Id,
-        // we need to add the ID field as a non-auto-increment primary key (foreign key to parent)
-        if (!hasIdFieldInThisMapping && !idFields.isEmpty()) {
-            for (FieldModel idField : idFields) {
-                String columnName = PojoMetadata.determineSqlFieldName(idField);
-                // Add as NOT NULL (not auto-increment - it references the parent table)
-                String columnDef = formatColumnDefinition(columnName, idField.getType(), false, dbContext, idField, mergedAnnotations);
-                columnDefinitions.add(columnDef);
-                primaryKeyColumns.add(dbContext.quoteObjectNames(columnName));
-                existingColumnNames.add(columnName.toLowerCase());
-            }
-        }
-        
-        for (FieldModel field : mapping.getFields()) {
-            // Handle embedded fields
-            if (AnnotationHelper.isEmbedded(field)) {
-                String prefix = PojoMetadata.determinePrefix(field);
-                addEmbeddedColumns(field.getType(), prefix, columnDefinitions, primaryKeyColumns,
-                    existingColumnNames, dbContext, isCompositeKey, mergedAnnotations);
-                continue;
-            }
-            
-            // Handle linked fields (foreign keys or collections)
-            if (isLinkedField(field)) {
-                // For single entity references, add a foreign key column
-                if (!PojoMetadata.isListOrArray(field.getType())) {
-                    String columnName = determineForeignKeyColumnName(field);
-                    // Only add if not already defined (e.g., as an @Id field)
-                    if (!existingColumnNames.contains(columnName.toLowerCase())) {
-                        String columnDef = formatForeignKeyColumnDefinition(columnName, dbContext, field);
-                        columnDefinitions.add(columnDef);
-                        existingColumnNames.add(columnName.toLowerCase());
-                    }
-                    
-                    // Defer foreign key constraint for single entity references
-                    if (!existingFkColumns.contains(columnName.toLowerCase())) {
-                        TypeModel linkedType = field.getType();
-                        List<TableMapping> linkedMappings = PojoMetadata.determineTableMapping(linkedType);
-                        if (!linkedMappings.isEmpty()) {
-                            TableMapping linkedMapping = linkedMappings.get(0);
-                            List<FieldModel> linkedIdFields = PojoMetadata.determineIdFields(linkedType);
-                            if (!linkedIdFields.isEmpty()) {
-                                String refColumn = PojoMetadata.determineSqlFieldName(linkedIdFields.get(0));
-                                deferredForeignKeys.add(new DeferredForeignKey(
-                                    mapping.tableName, mapping.schemaName, columnName,
-                                    linkedMapping.tableName, refColumn, linkedMapping.schemaName));
-                                existingFkColumns.add(columnName.toLowerCase());
-                            }
-                        }
-                    }
-                }
-                // Collections are handled via inferred foreign keys in the referenced table
-                continue;
-            }
-            
-            String columnName = PojoMetadata.determineSqlFieldName(field);
-            boolean isPrimaryKey = AnnotationHelper.isId(field);
-            // Only auto-increment if single primary key (not composite) and it's in this mapping
-            boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
-            String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext, field, mergedAnnotations);
-            columnDefinitions.add(columnDef);
-            existingColumnNames.add(columnName.toLowerCase());
-
-            if (isPrimaryKey) {
-                primaryKeyColumns.add(dbContext.quoteObjectNames(columnName));
-            }
-        }
-
-        // Add inferred foreign key columns from collection fields in other entities
-        if (inferredForeignKeys != null) {
-            for (InferredForeignKey fk : inferredForeignKeys) {
-                // Only add if not already defined in the entity
-                if (!existingColumnNames.contains(fk.columnName.toLowerCase())) {
-                    String columnDef = formatIdColumnDefinition(fk.columnName, dbContext);
-                    columnDefinitions.add(columnDef);
-                    existingColumnNames.add(fk.columnName.toLowerCase());
-                }
-                
-                // Defer foreign key constraint if reference information is available
-                if (fk.hasReference() && !existingFkColumns.contains(fk.columnName.toLowerCase())) {
-                    deferredForeignKeys.add(new DeferredForeignKey(
-                        mapping.tableName, mapping.schemaName, fk.columnName,
-                        fk.referencedTable, fk.referencedColumn, fk.referencedSchema));
-                    existingFkColumns.add(fk.columnName.toLowerCase());
-                }
-            }
-        }
-        
-        // Add column definitions
-        boolean hasMoreConstraints = !primaryKeyColumns.isEmpty();
-        for (int i = 0; i < columnDefinitions.size(); i++) {
-            sb.append("  ").append(columnDefinitions.get(i));
-            if (i < columnDefinitions.size() - 1 || hasMoreConstraints) {
-                sb.append(",");
-            }
-            sb.append("\n");
-        }
-        
-        // Add primary key constraint
-        if (!primaryKeyColumns.isEmpty()) {
-            sb.append("  PRIMARY KEY (").append(String.join(", ", primaryKeyColumns)).append(")\n");
-        }
-        
-        sb.append(")");
-        
-        // Add engine specification based on DbContext
-        String tableSuffix = dbContext.getCreateTableSuffix();
-        if (tableSuffix != null && !tableSuffix.isEmpty()) {
-            sb.append(tableSuffix);
-        }
-        
-        sb.append(";");
-
-        return sb.toString();
-    }
-
-    /**
-     * Generates a CREATE TABLE statement for a mapping with single table inheritance.
-     * Includes the discriminator column and fields from all subclasses.
-     */
-    private static String generateCreateTableForMappingWithSTI(TableMapping mapping, DbContext dbContext,
-            List<InferredForeignKey> inferredForeignKeys, List<DeferredForeignKey> deferredForeignKeys,
-            Map<String, MergedColumnAnnotations> mergedAnnotations, String discriminatorColumnName,
-            List<FieldModel> stiFields) {
-        StringBuilder sb = new StringBuilder();
-
-        String tableName = getFullTableName(mapping, dbContext);
-
-        // CREATE TABLE
-        sb.append("CREATE TABLE ");
-        sb.append(tableName).append(" (\n");
-
-        List<String> columnDefinitions = new ArrayList<>();
-        List<String> primaryKeyColumns = new ArrayList<>();
-        Set<String> existingColumnNames = new HashSet<>();
-        Set<String> existingFkColumns = new HashSet<>();
-
-        // Determine if we have a composite key
-        List<FieldModel> idFields = PojoMetadata.determineIdFields(mapping.getType());
-        boolean isCompositeKey = idFields.size() > 1;
-
-        // Process fields from the mapping (parent class fields)
-        for (FieldModel field : mapping.getFields()) {
-            // Handle embedded fields
-            var embeddedAnnOpt = field.getAnnotation(Embedded.class);
-            if (embeddedAnnOpt.isPresent()) {
-                String prefix = embeddedAnnOpt.get().getStringValue("prefix")
-                    .filter(p -> !Embedded.DEFAULT.equals(p))
-                    .orElse("");
-                addEmbeddedColumns(field.getType(), prefix, columnDefinitions, primaryKeyColumns,
-                        existingColumnNames, dbContext, isCompositeKey, mergedAnnotations);
-                continue;
-            }
-
-            // Handle linked fields
-            if (isLinkedField(field)) {
-                if (!PojoMetadata.isListOrArray(field.getType())) {
-                    String columnName = determineForeignKeyColumnName(field);
-                    if (!existingColumnNames.contains(columnName.toLowerCase())) {
-                        String columnDef = formatForeignKeyColumnDefinition(columnName, dbContext, field);
-                        columnDefinitions.add(columnDef);
-                        existingColumnNames.add(columnName.toLowerCase());
-                    }
-
-                    if (!existingFkColumns.contains(columnName.toLowerCase())) {
-                        TypeModel linkedType = field.getType();
-                        List<TableMapping> linkedMappings = PojoMetadata.determineTableMapping(linkedType);
-                        if (!linkedMappings.isEmpty()) {
-                            TableMapping linkedMapping = linkedMappings.get(0);
-                            List<FieldModel> linkedIdFields = PojoMetadata.determineIdFields(linkedType);
-                            if (!linkedIdFields.isEmpty()) {
-                                String refColumn = PojoMetadata.determineSqlFieldName(linkedIdFields.get(0));
-                                deferredForeignKeys.add(new DeferredForeignKey(
-                                        mapping.tableName, mapping.schemaName, columnName,
-                                        linkedMapping.tableName, refColumn, linkedMapping.schemaName));
-                                existingFkColumns.add(columnName.toLowerCase());
-                            }
-                        }
-                    }
-                }
-                continue;
-            }
-
-            String columnName = PojoMetadata.determineSqlFieldName(field);
-            boolean isPrimaryKey = AnnotationHelper.isId(field);
-            boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
-            String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext, field, mergedAnnotations);
-            columnDefinitions.add(columnDef);
-            existingColumnNames.add(columnName.toLowerCase());
-
-            if (isPrimaryKey) {
-                primaryKeyColumns.add(dbContext.quoteObjectNames(columnName));
-            }
-        }
-
-        // Add discriminator column (NOT NULL, VARCHAR(255))
-        String discColumnDef = dbContext.quoteObjectNames(discriminatorColumnName) + " VARCHAR(255) NOT NULL";
-        columnDefinitions.add(discColumnDef);
-        existingColumnNames.add(discriminatorColumnName.toLowerCase());
-
-        // Add fields from subclasses (single table inheritance)
-        for (FieldModel field : stiFields) {
-            String columnName = PojoMetadata.determineSqlFieldName(field);
-            if (!existingColumnNames.contains(columnName.toLowerCase())) {
-                // Subclass fields are nullable (since not all rows will be of that subclass)
-                String columnDef = formatColumnDefinition(columnName, field.getType(), false, dbContext, field, mergedAnnotations);
-                columnDefinitions.add(columnDef);
-                existingColumnNames.add(columnName.toLowerCase());
-            }
-        }
-
-        // Add inferred foreign key columns
-        if (inferredForeignKeys != null) {
-            for (InferredForeignKey fk : inferredForeignKeys) {
-                if (!existingColumnNames.contains(fk.columnName.toLowerCase())) {
-                    String columnDef = formatIdColumnDefinition(fk.columnName, dbContext);
-                    columnDefinitions.add(columnDef);
-                    existingColumnNames.add(fk.columnName.toLowerCase());
-                }
-
-                if (fk.hasReference() && !existingFkColumns.contains(fk.columnName.toLowerCase())) {
-                    deferredForeignKeys.add(new DeferredForeignKey(
-                            mapping.tableName, mapping.schemaName, fk.columnName,
-                            fk.referencedTable, fk.referencedColumn, fk.referencedSchema));
-                    existingFkColumns.add(fk.columnName.toLowerCase());
-                }
-            }
-        }
-
-        // Add column definitions
-        boolean hasMoreConstraints = !primaryKeyColumns.isEmpty();
-        for (int i = 0; i < columnDefinitions.size(); i++) {
-            sb.append("  ").append(columnDefinitions.get(i));
-            if (i < columnDefinitions.size() - 1 || hasMoreConstraints) {
-                sb.append(",");
-            }
-            sb.append("\n");
-        }
-
-        // Add primary key constraint
-        if (!primaryKeyColumns.isEmpty()) {
-            sb.append("  PRIMARY KEY (").append(String.join(", ", primaryKeyColumns)).append(")\n");
-        }
-
-        sb.append(")");
-
-        // Add engine specification
-        String tableSuffix = dbContext.getCreateTableSuffix();
-        if (tableSuffix != null && !tableSuffix.isEmpty()) {
-            sb.append(tableSuffix);
-        }
-
-        sb.append(";");
-
-        return sb.toString();
-    }
-
-    private static void addEmbeddedColumns(TypeModel embeddedClass, String prefix,
-            List<String> columnDefinitions, List<String> primaryKeyColumns, Set<String> existingColumnNames,
-            DbContext dbContext, boolean isCompositeKey, Map<String, MergedColumnAnnotations> mergedAnnotations) {
-        // filterFields already handles static, transient, and @Transient
-        Collection<FieldModel> fields = PojoMetadata.filterFields(embeddedClass);
-        for (FieldModel field : fields) {
-            // Recursively handle nested embedded
-            if (AnnotationHelper.isEmbedded(field)) {
-                String nestedPrefix = prefix + PojoMetadata.determinePrefix(field);
-                addEmbeddedColumns(field.getType(), nestedPrefix, columnDefinitions, primaryKeyColumns,
-                    existingColumnNames, dbContext, isCompositeKey, mergedAnnotations);
-                continue;
-            }
-
-            // Handle linked fields (foreign keys) inside embedded
-            if (isLinkedField(field)) {
-                // For single entity references, add a foreign key column
-                if (!PojoMetadata.isListOrArray(field.getType())) {
-                    String fkColumnName = determineForeignKeyColumnName(field);
-                    String columnName = prefix + fkColumnName;
-                    if (!existingColumnNames.contains(columnName.toLowerCase())) {
-                        String columnDef = formatForeignKeyColumnDefinition(columnName, dbContext, field);
-                        columnDefinitions.add(columnDef);
-                        existingColumnNames.add(columnName.toLowerCase());
-                    }
-                }
-                // Collections are handled via inferred foreign keys in the referenced table
-                continue;
-            }
-
-            String columnName = prefix + PojoMetadata.determineSqlFieldName(field);
-            boolean isPrimaryKey = AnnotationHelper.isId(field);
-            boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
-            String columnDef = formatColumnDefinition(columnName, field.getType(), shouldAutoIncrement, dbContext, field, mergedAnnotations);
-            columnDefinitions.add(columnDef);
-            existingColumnNames.add(columnName.toLowerCase());
-
-            if (isPrimaryKey) {
-                primaryKeyColumns.add(dbContext.quoteObjectNames(columnName));
-            }
-        }
-    }
-    
-    private static boolean isLinkedField(FieldModel field) {
-        TypeModel type = field.getType();
-        // Check if it's a collection (list, set, etc.) - reuse PojoMetadata.s logic
-        if (PojoMetadata.isListOrArray(type)) {
-            return true;
-        }
-        // Check if the field type has a @Link annotation
-        if (field.hasAnnotation(Link.class)) {
-            return true;
-        }
-        // Check if the field type is an entity - reuse PojoMetadata.s logic
-        return PojoMetadata.isLinkedClass(type);
-    }
-    
-    private static String determineForeignKeyColumnName(FieldModel field) {
-        // First check @Link(linkfield=...) then JPA @JoinColumn(name=...)
-        String columnName = AnnotationHelper.getJoinColumnName(field);
-        if (columnName != null) {
-            return columnName;
-        }
-        return field.getName() + "_id";
-    }
-    
-    private static String formatIdColumnDefinition(String columnName, DbContext dbContext) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(dbContext.quoteObjectNames(columnName));
-        sb.append(" ");
-
-        sb.append(dbContext.getForeignKeyColumnType());
-
-        return sb.toString();
-    }
-    
-    private static String formatForeignKeyColumnDefinition(String columnName, DbContext dbContext, FieldModel field) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(dbContext.quoteObjectNames(columnName));
-        sb.append(" ");
-
-        sb.append(dbContext.getForeignKeyColumnType());
-        
-        // Check @Link for nullable and unique constraints
-        if (field != null) {
-            var linkAnnOpt = field.getAnnotation(Link.class);
-            if (linkAnnOpt.isPresent()) {
-                var linkAnn = linkAnnOpt.get();
-                if (linkAnn.getBooleanAttribute("nullable").map(b -> !b).orElse(false)) {
-                    sb.append(" NOT NULL");
-                }
-                if (linkAnn.getBooleanAttribute("unique").orElse(false)) {
-                    sb.append(" UNIQUE");
-                }
-            }
-        }
-
-        return sb.toString();
-    }
-
-    private static String formatColumnDefinition(String columnName, TypeModel type, boolean autoIncrement, 
-            DbContext dbContext, FieldModel field, Map<String, MergedColumnAnnotations> mergedAnnotations) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(dbContext.quoteObjectNames(columnName));
-        sb.append(" ");
-        
-        // Get merged annotations for this column (may be null)
-        MergedColumnAnnotations merged = mergedAnnotations != null ? mergedAnnotations.get(columnName.toLowerCase()) : null;
-        
-        // For auto-increment primary keys, some databases use special types (e.g., BIGSERIAL in Postgres)
-        if (autoIncrement && !dbContext.getAutoIncrementKeyColumnType().equals("BIGINT")) {
-            // Use the auto-increment key column type which includes auto-increment semantics (e.g., BIGSERIAL)
-            sb.append(dbContext.getAutoIncrementKeyColumnType());
-        } else {
-            sb.append(dbContext.mapJavaTypeToSql(field));
-
-            // Add NOT NULL constraint - check both field annotation and merged annotations
-            if (!autoIncrement && field != null) {
-                boolean isNotNull = false;
-                AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
-                if (columnMeta != null && !columnMeta.nullable) {
-                    isNotNull = true;
-                }
-                if (merged != null && merged.notNull) {
-                    isNotNull = true;
-                }
-                if (isNotNull) {
-                    sb.append(" NOT NULL");
-                }
-            }
-
-            if (autoIncrement) {
-                String autoIncrementSyntax = dbContext.getAutoIncrementSyntax();
-                if (!autoIncrementSyntax.isEmpty()) {
-                    sb.append(" ");
-                    sb.append(autoIncrementSyntax);
-                }
-            }
-        }
-
-        // Add UNIQUE constraint - check both field annotation and merged annotations
-        if (field != null) {
-            boolean isUnique = false;
-            AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
-            if (columnMeta != null && columnMeta.unique) {
-                isUnique = true;
-            }
-            if (merged != null && merged.unique) {
-                isUnique = true;
-            }
-            if (isUnique) {
-                sb.append(" UNIQUE");
-            }
-        }
-
-        return sb.toString();
-    }
-    
-    private static String getFullTableName(TableMapping mapping, DbContext dbContext) {
-        return getFullTableName(mapping.schemaName, mapping.tableName, dbContext);
-    }
-    
-    private static String getFullTableName(String schemaName, String tableName, DbContext dbContext) {
-        if (schemaName != null && !schemaName.isEmpty()) {
-            return dbContext.quoteObjectNames(schemaName) + "." + dbContext.quoteObjectNames(tableName);
-        }
-        return dbContext.quoteObjectNames(tableName);
-    }
-    
     // ========== Schema Migration Methods ==========
-    
-    /**
-     * Represents a column definition for schema generation.
-     */
-    public static class ColumnDefinition {
-        public final String name;
-        public final String sqlType;
-        public final boolean autoIncrement;
-        public final boolean isPrimaryKey;
-        public final boolean notNull;
-        public final boolean unique;
-        
-        public ColumnDefinition(String name, String sqlType, boolean autoIncrement, boolean isPrimaryKey) {
-            this(name, sqlType, autoIncrement, isPrimaryKey, false, false);
-        }
-        
-        public ColumnDefinition(String name, String sqlType, boolean autoIncrement, boolean isPrimaryKey, boolean notNull, boolean unique) {
-            this.name = name;
-            this.sqlType = sqlType;
-            this.autoIncrement = autoIncrement;
-            this.isPrimaryKey = isPrimaryKey;
-            this.notNull = notNull;
-            this.unique = unique;
-        }
-    }
     
     /**
      * Generates DDL statements (CREATE TABLE or ALTER TABLE) based on the existing schema.
@@ -865,11 +117,7 @@ public class SchemaGenerator {
      * @return list of DDL statements
      */
     public static List<String> generateMigrationStatements(SchemaInfo schemaInfo, Class<?>... entityClasses) {
-        TypeModel[] typeModels = new TypeModel[entityClasses.length];
-        for (int i = 0; i < entityClasses.length; i++) {
-            typeModels[i] = new ReflectionTypeModel(entityClasses[i]);
-        }
-        return generateMigrationStatements(schemaInfo, DbContext.getDefault(), typeModels);
+        return generateMigrationStatements(schemaInfo, DbContext.getDefault(), entityClasses);
     }
     
     /**
@@ -882,263 +130,1074 @@ public class SchemaGenerator {
      * @param entityClasses the entity classes to generate DDL for
      * @return list of DDL statements
      */
-    public static List<String> generateMigrationStatements(SchemaInfo schemaInfo, DbContext dbContext, TypeModel... entityClasses) {
-        Set<String> processedTables = new HashSet<>();
-        List<String> statements = new ArrayList<>();
-        Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys = new HashMap<>();
-        List<LinkTableInfo> linkTables = new ArrayList<>();
-        List<DeferredForeignKey> deferredForeignKeys = new ArrayList<>();
+    public static List<String> generateMigrationStatements(SchemaInfo schemaInfo, DbContext dbContext, Class<?>... entityClasses) {
+        MigrationCollector collector = new MigrationCollector(dbContext, schemaInfo);
         
-        // First pass: scan all classes for collection fields to build the inferred foreign keys map
-        for (TypeModel entityClass : entityClasses) {
-            ForeignKeyScanner.scanForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
+        for (Class<?> entityClass : entityClasses) {
+            QueryTree tree = QueryTreeBuilder.from(entityClass);
+            collector.collectFromTree(tree);
         }
         
-        // Second pass: generate DDL statements
-        for (TypeModel entityClass : entityClasses) {
-            generateMigrationStatements(entityClass, schemaInfo, dbContext, processedTables, statements, inferredForeignKeys, linkTables, deferredForeignKeys);
+        return collector.generateStatements();
+    }
+    
+    /**
+     * Generates DDL statements (CREATE TABLE or ALTER TABLE) based on the existing schema.
+     * Uses TypeModel for better flexibility.
+     * 
+     * @param schemaInfo the existing schema information
+     * @param dbContext the database context for dialect-specific generation
+     * @param entityTypes the entity types to generate DDL for
+     * @return list of DDL statements
+     */
+    public static List<String> generateMigrationStatements(SchemaInfo schemaInfo, DbContext dbContext, TypeModel... entityTypes) {
+        MigrationCollector collector = new MigrationCollector(dbContext, schemaInfo);
+        
+        for (TypeModel entityType : entityTypes) {
+            QueryTree tree = QueryTreeBuilder.from(entityType);
+            collector.collectFromTree(tree);
         }
         
-        // Generate link tables (without FK constraints)
-        for (LinkTableInfo linkTable : linkTables) {
-            String fullTableName = linkTable.schemaName != null && !linkTable.schemaName.isEmpty()
-                ? dbContext.quoteObjectNames(linkTable.schemaName) + "." + dbContext.quoteObjectNames(linkTable.tableName)
-                : dbContext.quoteObjectNames(linkTable.tableName);
-            if (!processedTables.contains(fullTableName)) {
-                // Check if link table exists
-                SchemaInfo.TableInfo existingTable = schemaInfo.getTable(
-                    linkTable.schemaName != null && !linkTable.schemaName.isEmpty() ? linkTable.schemaName : null,
-                    linkTable.tableName);
-                if (existingTable == null) {
-                    processedTables.add(fullTableName);
-                    statements.add(generateCreateLinkTable(linkTable, dbContext, deferredForeignKeys));
+        return collector.generateStatements();
+    }
+    
+    /**
+     * Migrates the database schema: creates new tables and adds missing columns.
+     * 
+     * @param db the data source to execute the statements on
+     * @param classes the entity classes to migrate
+     */
+    public static void migrateSchema(javax.sql.DataSource db, Class<?>... classes) {
+        DB.runInTransaction(db, c -> {
+            SchemaInfo schemaInfo = SchemaInfo.fromConnection(c);
+            DbContext dbContext = DbContext.getDefault();
+            for (String ddl : generateMigrationStatements(schemaInfo, dbContext, classes)) {
+                DB.executeDDL(c, ddl);
+            }
+        });
+    }
+    
+    // ========== Internal Schema Collection ==========
+    
+    /**
+     * Represents a deferred FK column to be added to a table after all tables are collected.
+     */
+    private record DeferredFkColumn(
+        TableInfo targetTable,
+        String columnName,
+        TableInfo refTable,
+        String refColumn
+    ) {}
+    
+    /**
+     * Collects schema information from QueryTree and generates DDL statements.
+     * Only generates tables for explicitly requested classes, not for joined entities.
+     */
+    private static class SchemaCollector {
+        private final DbContext dbContext;
+        private final Set<String> generatedTables = new HashSet<>();
+        private final List<TableDefinition> tables = new ArrayList<>();
+        private final List<LinkTableDefinition> linkTables = new ArrayList<>();
+        private final List<ForeignKeyConstraint> foreignKeys = new ArrayList<>();
+        private final List<DeferredFkColumn> deferredFkColumns = new ArrayList<>();
+        
+        SchemaCollector(DbContext dbContext) {
+            this.dbContext = dbContext;
+        }
+        
+        void collectFromTree(QueryTree tree) {
+            if (tree.root() == null) {
+                return;
+            }
+            // Only collect the root table - not joined entities
+            if (tree.root() instanceof JoinedNode joined) {
+                collectRootTable(joined);
+            }
+        }
+        
+        /**
+         * Collects schema info for a root table (explicitly requested class).
+         * Does NOT recursively create tables for joined entities.
+         */
+        private void collectRootTable(JoinedNode joined) {
+            TableInfo tableInfo = joined.tableInfo();
+            String fullTableName = getFullTableName(tableInfo);
+            
+            // Skip if already generated
+            if (generatedTables.contains(fullTableName)) {
+                return;
+            }
+            
+            generatedTables.add(fullTableName);
+            LOG.debug("Collecting table: {}", fullTableName);
+            
+            // Create table definition
+            TableDefinition tableDef = new TableDefinition(tableInfo);
+            
+            // Collect columns from fields
+            collectColumns(joined, tableDef, "");
+            
+            // Handle single-table inheritance discriminator
+            if (joined.isSingleTableInheritance() && joined.discriminatorColumn() != null) {
+                ColumnDefinition discCol = new ColumnDefinition(
+                    joined.discriminatorColumn(),
+                    "VARCHAR(255)",
+                    false, false, true, false
+                );
+                tableDef.addColumnIfAbsent(discCol);
+            }
+            
+            tables.add(tableDef);
+            
+            // Process children for FK columns and link tables (but don't create their tables)
+            processChildrenForFKs(joined, tableDef);
+            
+            // For table-per-subclass inheritance, also generate tables for superclasses and subclasses
+            collectInheritanceTables(joined);
+        }
+        
+        /**
+         * Recursively collects tables for inheritance nodes (superclass and subclass) 
+         * in table-per-subclass inheritance.
+         */
+        private void collectInheritanceTables(JoinedNode parent) {
+            for (QueryNode child : parent.children()) {
+                if (child instanceof JoinedNode childJoined) {
+                    // Handle superclass tables
+                    if (childJoined.isSuperClass()) {
+                        collectInheritanceTable(childJoined);
+                    }
+                    // Handle subclass tables
+                    if (childJoined.isSubClass()) {
+                        collectInheritanceTable(childJoined);
+                    }
                 }
             }
         }
         
-        // Generate ALTER TABLE statements for FK constraints (after all tables are created)
-        for (DeferredForeignKey dfk : deferredForeignKeys) {
-            statements.add(generateAlterTableAddForeignKey(dfk, dbContext));
-        }
-        
-        return statements;
-    }
-    
-    private static void generateMigrationStatements(TypeModel entityClass, SchemaInfo schemaInfo, DbContext dbContext,
-            Set<String> processedTables, List<String> statements, Map<TypeModel, List<InferredForeignKey>> inferredForeignKeys,
-            List<LinkTableInfo> linkTables, List<DeferredForeignKey> deferredForeignKeys) {
-        // Scan for inferred foreign keys
-        ForeignKeyScanner.scanForInferredForeignKeys(entityClass, inferredForeignKeys, linkTables);
-        
-        List<TableMapping> tableMappings = PojoMetadata.determineTableMapping(entityClass);
-        if (tableMappings.isEmpty()) {
-            throw new IllegalArgumentException("Class " + entityClass.getSimpleName() + " must have a @Table annotation");
-        }
-        
-        for (TableMapping mapping : tableMappings) {
-            String fullTableName = getFullTableName(mapping, dbContext);
-            // Skip if we've already processed this table
-            if (processedTables.contains(fullTableName)) {
-                continue;
-            }
-            processedTables.add(fullTableName);
+        /**
+         * Collects schema info for an inheritance table (superclass or subclass) 
+         * in table-per-subclass inheritance.
+         */
+        private void collectInheritanceTable(JoinedNode inheritanceNode) {
+            TableInfo tableInfo = inheritanceNode.tableInfo();
+            String fullTableName = getFullTableName(tableInfo);
             
-            // Get inferred foreign keys for this class
-            List<InferredForeignKey> fks = inferredForeignKeys.get(mapping.getType());
+            // Skip if already generated
+            if (generatedTables.contains(fullTableName)) {
+                return;
+            }
             
-            // Check if table exists
-            SchemaInfo.TableInfo existingTable = schemaInfo.getTable(mapping.schemaName, mapping.tableName);
+            generatedTables.add(fullTableName);
+            LOG.debug("Collecting inheritance table: {}", fullTableName);
             
-            if (existingTable == null) {
-                // Table doesn't exist - generate CREATE TABLE (no merged annotations for migration)
-                statements.add(generateCreateTableForMapping(mapping, dbContext, fks, deferredForeignKeys, null));
-            } else {
-                // Table exists - check for missing columns and generate ALTER TABLE
-                List<String> alterStatements = generateAlterTableForMapping(mapping, existingTable, dbContext, fks);
-                statements.addAll(alterStatements);
+            // Create table definition
+            TableDefinition tableDef = new TableDefinition(tableInfo);
+            
+            // Collect columns from fields
+            collectColumns(inheritanceNode, tableDef, "");
+            
+            tables.add(tableDef);
+            
+            // Recursively process children that might also be inheritance nodes
+            collectInheritanceTables(inheritanceNode);
+        }
+        
+        /**
+         * Process children to extract FK columns and link table info.
+         * Does NOT create tables for joined entities.
+         */
+        private void processChildrenForFKs(JoinedNode parent, TableDefinition parentTableDef) {
+            for (QueryNode child : parent.children()) {
+                if (child instanceof JoinedNode childJoined) {
+                    JoinInfo joinInfo = childJoined.joinInfo();
+                    if (joinInfo == null) continue;
+                    
+                    // Handle many-to-many link tables
+                    if (joinInfo.joinTableInfo() != null) {
+                        collectLinkTable(parent, childJoined, joinInfo.joinTableInfo());
+                    }
+                    
+                    // Handle FK in parent (entity reference like Order.customer)
+                    if (joinInfo.joinCondition() instanceof JoinCondition.ForeignKeyInParent fkInParent) {
+                        // Add FK column to parent table
+                        boolean nullable = true;
+                        boolean unique = false;
+                        if (joinInfo.linkField() != null) {
+                            var linkAnn = joinInfo.linkField().getAnnotation(Link.class);
+                            if (linkAnn.isPresent()) {
+                                nullable = linkAnn.get().getBooleanAttribute("nullable").orElse(true);
+                                unique = linkAnn.get().getBooleanAttribute("unique").orElse(false);
+                            }
+                        }
+                        
+                        ColumnDefinition fkCol = new ColumnDefinition(
+                            fkInParent.foreignKeyColumn(),
+                            dbContext.getForeignKeyColumnType(),
+                            false, false, !nullable, unique
+                        );
+                        parentTableDef.addColumnIfAbsent(fkCol);
+                        
+                        // Add FK constraint
+                        foreignKeys.add(new ForeignKeyConstraint(
+                            parent.tableInfo(),
+                            fkInParent.foreignKeyColumn(),
+                            childJoined.tableInfo(),
+                            fkInParent.referencedColumn()
+                        ));
+                    }
+                    
+                    // Handle FK in child (one-to-many like Author.books)
+                    // The FK column should go in the child table - defer until all tables collected
+                    if (joinInfo.joinCondition() instanceof JoinCondition.ForeignKeyInChild fkInChild) {
+                        deferredFkColumns.add(new DeferredFkColumn(
+                            childJoined.tableInfo(),
+                            fkInChild.foreignKeyColumn(),
+                            parent.tableInfo(),
+                            fkInChild.referencedColumn()
+                        ));
+                    }
+                } else if (child instanceof EmbeddedNode embedded) {
+                    // Check embedded children for FKs
+                    for (QueryNode embeddedChild : embedded.children()) {
+                        if (embeddedChild instanceof JoinedNode embeddedJoined) {
+                            JoinInfo joinInfo = embeddedJoined.joinInfo();
+                            if (joinInfo != null && joinInfo.joinCondition() instanceof JoinCondition.ForeignKeyInParent fkInParent) {
+                                ColumnDefinition fkCol = new ColumnDefinition(
+                                    embedded.embedInfo().fieldPrefix() + fkInParent.foreignKeyColumn(),
+                                    dbContext.getForeignKeyColumnType(),
+                                    false, false, false, false
+                                );
+                                parentTableDef.addColumnIfAbsent(fkCol);
+                            }
+                        }
+                    }
+                }
             }
         }
         
-        // Handle @SubClasses annotation for table-per-subclass inheritance
-        var subClassesAnnOpt = entityClass.getAnnotation(SubClasses.class);
-        if (subClassesAnnOpt.isPresent()) {
-            for (TypeModel subClass : entityClass.getTypeValuesFromAnnotation(subClassesAnnOpt.get(), "value")) {
-                generateMigrationStatements(subClass, schemaInfo, dbContext, processedTables, statements, inferredForeignKeys, linkTables, deferredForeignKeys);
+        private void collectColumns(TableNode tableNode, TableDefinition tableDef, String prefix) {
+            boolean isCompositeKey = tableNode instanceof JoinedNode jn && jn.idFieldNames().size() > 1;
+            Set<String> idFieldNames = tableNode instanceof JoinedNode jn 
+                ? new HashSet<>(jn.idFieldNames()) 
+                : Set.of();
+            
+            for (FieldSelectionBase fsb : tableNode.fields()) {
+                if (!(fsb instanceof FieldSelection fs)) {
+                    continue;
+                }
+                
+                String columnName = fs.columnName();
+                if (columnName == null) {
+                    continue; // Skip computed fields without column name
+                }
+                columnName = prefix + columnName;
+                
+                FieldModel field = fs.field();
+                boolean isPrimaryKey = field != null && idFieldNames.contains(field.getName());
+                boolean autoIncrement = isPrimaryKey && !isCompositeKey;
+                
+                // Get column constraints from @Column annotation
+                boolean nullable = true;
+                boolean unique = false;
+                if (field != null) {
+                    var columnAnn = field.getAnnotation(Column.class);
+                    if (columnAnn.isPresent()) {
+                        nullable = columnAnn.get().getBooleanAttribute("nullable").orElse(true);
+                        unique = columnAnn.get().getBooleanAttribute("unique").orElse(false);
+                    }
+                }
+                
+                String sqlType = getSqlType(field, autoIncrement);
+                
+                ColumnDefinition colDef = new ColumnDefinition(
+                    columnName, sqlType, autoIncrement, isPrimaryKey,
+                    !nullable && !autoIncrement, unique
+                );
+                tableDef.addColumnIfAbsent(colDef);
+                
+                if (isPrimaryKey) {
+                    tableDef.addPrimaryKeyColumn(columnName);
+                }
+            }
+            
+            // Process embedded nodes for their columns
+            // Note: EmbeddedNode fields already have the prefix in their columnName 
+            // (added by SimpleFieldTransform), so we pass empty string for embedded
+            for (QueryNode child : tableNode.children()) {
+                if (child instanceof EmbeddedNode embedded) {
+                    collectColumns(embedded, tableDef, "");
+                }
             }
         }
-    }
-    
-    /**
-     * Generates ALTER TABLE statements to add missing columns to an existing table.
-     * Each column gets its own ALTER TABLE statement for maximum database compatibility.
-     * 
-     * @param mapping the table mapping
-     * @param existingTable information about the existing table
-     * @param dbContext the database context
-     * @param inferredForeignKeys inferred foreign keys to add
-     * @return list of ALTER TABLE statements, or empty list if no columns need to be added
-     */
-    private static List<String> generateAlterTableForMapping(TableMapping mapping, SchemaInfo.TableInfo existingTable, 
-            DbContext dbContext, List<InferredForeignKey> inferredForeignKeys) {
         
-        List<ColumnDefinition> requiredColumns = getRequiredColumns(mapping, dbContext, inferredForeignKeys);
-        List<ColumnDefinition> missingColumns = new ArrayList<>();
-        
-        for (ColumnDefinition col : requiredColumns) {
-            if (!existingTable.hasColumn(col.name)) {
-                missingColumns.add(col);
+        private String getSqlType(FieldModel field, boolean autoIncrement) {
+            if (autoIncrement) {
+                String autoIncType = dbContext.getAutoIncrementKeyColumnType();
+                if (!autoIncType.equals("BIGINT")) {
+                    return autoIncType; // e.g., BIGSERIAL for Postgres
+                }
             }
+            return field != null ? dbContext.mapJavaTypeToSql(field) : dbContext.getForeignKeyColumnType();
         }
         
-        if (missingColumns.isEmpty()) {
-            return new ArrayList<>();
+        private void collectLinkTable(JoinedNode parent, JoinedNode child, JoinTableInfo joinTableInfo) {
+            String linkTableFullName = getFullTableName(joinTableInfo.joinTable());
+            
+            if (generatedTables.contains(linkTableFullName)) {
+                return;
+            }
+            generatedTables.add(linkTableFullName);
+            
+            LinkTableDefinition ltd = new LinkTableDefinition(
+                joinTableInfo.joinTable(),
+                joinTableInfo.parentFkColumn(),
+                parent.tableInfo(),
+                joinTableInfo.parentRefColumn(),
+                joinTableInfo.targetFkColumn(),
+                child.tableInfo(),
+                joinTableInfo.targetRefColumn()
+            );
+            linkTables.add(ltd);
         }
         
-        // Generate separate ALTER TABLE ADD COLUMN statement for each column
-        // This ensures compatibility across all databases (some don't support multiple ADD COLUMN in one statement)
-        List<String> statements = new ArrayList<>();
-        String tableName = getFullTableName(mapping, dbContext);
+        List<String> generateStatements() {
+            List<String> statements = new ArrayList<>();
+            
+            // Process deferred FK columns (one-to-many relationships)
+            // Add FK columns to target tables before generating CREATE TABLE
+            for (DeferredFkColumn dfk : deferredFkColumns) {
+                // Find the target table
+                String targetFullName = getFullTableName(dfk.targetTable);
+                TableDefinition targetTableDef = tables.stream()
+                    .filter(td -> getFullTableName(td.tableInfo).equals(targetFullName))
+                    .findFirst()
+                    .orElse(null);
+                
+                if (targetTableDef != null) {
+                    // Add the FK column to the target table
+                    ColumnDefinition fkCol = new ColumnDefinition(
+                        dfk.columnName,
+                        dbContext.getForeignKeyColumnType(),
+                        false, false, false, false
+                    );
+                    targetTableDef.addColumnIfAbsent(fkCol);
+                    
+                    // Add FK constraint
+                    foreignKeys.add(new ForeignKeyConstraint(
+                        dfk.targetTable,
+                        dfk.columnName,
+                        dfk.refTable,
+                        dfk.refColumn
+                    ));
+                }
+            }
+            
+            // Generate CREATE TABLE for regular tables
+            for (TableDefinition td : tables) {
+                statements.add(generateCreateTable(td));
+            }
+            
+            // Generate CREATE TABLE for link tables
+            for (LinkTableDefinition ltd : linkTables) {
+                statements.add(generateCreateLinkTable(ltd));
+            }
+            
+            // Generate ALTER TABLE for FK constraints
+            Set<String> generatedFks = new HashSet<>();
+            for (ForeignKeyConstraint fk : foreignKeys) {
+                String fkKey = getFullTableName(fk.table) + "." + fk.column;
+                if (!generatedFks.contains(fkKey.toLowerCase())) {
+                    generatedFks.add(fkKey.toLowerCase());
+                    statements.add(generateAlterTableAddForeignKey(fk));
+                }
+            }
+            
+            // Add FK constraints for link tables
+            for (LinkTableDefinition ltd : linkTables) {
+                statements.add(generateAlterTableAddForeignKey(new ForeignKeyConstraint(
+                    ltd.linkTable, ltd.ownerColumn, ltd.ownerTable, ltd.ownerRefColumn
+                )));
+                statements.add(generateAlterTableAddForeignKey(new ForeignKeyConstraint(
+                    ltd.linkTable, ltd.foreignColumn, ltd.foreignTable, ltd.foreignRefColumn
+                )));
+            }
+            
+            return statements;
+        }
         
-        for (ColumnDefinition col : missingColumns) {
+        private String generateCreateTable(TableDefinition td) {
             StringBuilder sb = new StringBuilder();
-            sb.append("ALTER TABLE ");
-            sb.append(tableName);
-            sb.append(" ADD COLUMN ");
+            sb.append("CREATE TABLE ");
+            sb.append(getFullTableName(td.tableInfo));
+            sb.append(" (\n");
+            
+            List<String> colDefs = new ArrayList<>();
+            for (ColumnDefinition col : td.columns) {
+                colDefs.add(formatColumnDefinition(col));
+            }
+            
+            boolean hasPk = !td.primaryKeyColumns.isEmpty();
+            for (int i = 0; i < colDefs.size(); i++) {
+                sb.append("  ").append(colDefs.get(i));
+                if (i < colDefs.size() - 1 || hasPk) {
+                    sb.append(",");
+                }
+                sb.append("\n");
+            }
+            
+            if (hasPk) {
+                sb.append("  PRIMARY KEY (");
+                List<String> quotedPks = td.primaryKeyColumns.stream()
+                    .map(dbContext::quoteObjectNames)
+                    .toList();
+                sb.append(String.join(", ", quotedPks));
+                sb.append(")\n");
+            }
+            
+            sb.append(")");
+            
+            String suffix = dbContext.getCreateTableSuffix();
+            if (suffix != null && !suffix.isEmpty()) {
+                sb.append(suffix);
+            }
+            sb.append(";");
+            
+            return sb.toString();
+        }
+        
+        private String formatColumnDefinition(ColumnDefinition col) {
+            StringBuilder sb = new StringBuilder();
             sb.append(dbContext.quoteObjectNames(col.name));
             sb.append(" ");
             sb.append(col.sqlType);
-            // Note: We don't add AUTO_INCREMENT for ALTER TABLE as that requires PRIMARY KEY changes
             
-            // Add NOT NULL constraint if specified
-            if (col.notNull) {
-                sb.append(" NOT NULL");
+            // For auto-increment, add syntax if needed (and not already in type like BIGSERIAL)
+            if (col.autoIncrement && dbContext.getAutoIncrementKeyColumnType().equals("BIGINT")) {
+                String autoIncSyntax = dbContext.getAutoIncrementSyntax();
+                if (!autoIncSyntax.isEmpty()) {
+                    sb.append(" ").append(autoIncSyntax);
+                }
             }
             
-            // Add UNIQUE constraint if specified
+            if (col.notNull && !col.autoIncrement) {
+                sb.append(" NOT NULL");
+            }
             if (col.unique) {
                 sb.append(" UNIQUE");
             }
             
-            sb.append(";");
-            statements.add(sb.toString());
+            return sb.toString();
         }
         
-        return statements;
+        private String generateCreateLinkTable(LinkTableDefinition ltd) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE TABLE ");
+            sb.append(getFullTableName(ltd.linkTable));
+            sb.append(" (\n");
+            
+            sb.append("  ").append(dbContext.quoteObjectNames(ltd.ownerColumn));
+            sb.append(" ").append(dbContext.getForeignKeyColumnType());
+            sb.append(",\n");
+            
+            sb.append("  ").append(dbContext.quoteObjectNames(ltd.foreignColumn));
+            sb.append(" ").append(dbContext.getForeignKeyColumnType());
+            sb.append(",\n");
+            
+            sb.append("  PRIMARY KEY (");
+            sb.append(dbContext.quoteObjectNames(ltd.ownerColumn));
+            sb.append(", ");
+            sb.append(dbContext.quoteObjectNames(ltd.foreignColumn));
+            sb.append(")\n");
+            
+            sb.append(")");
+            
+            String suffix = dbContext.getCreateTableSuffix();
+            if (suffix != null && !suffix.isEmpty()) {
+                sb.append(suffix);
+            }
+            sb.append(";");
+            
+            return sb.toString();
+        }
+        
+        private String generateAlterTableAddForeignKey(ForeignKeyConstraint fk) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ALTER TABLE ").append(getFullTableName(fk.table));
+            sb.append(" ADD FOREIGN KEY (").append(dbContext.quoteObjectNames(fk.column)).append(")");
+            sb.append(" REFERENCES ").append(getFullTableName(fk.refTable));
+            sb.append("(").append(dbContext.quoteObjectNames(fk.refColumn)).append(");");
+            return sb.toString();
+        }
+        
+        private String getFullTableName(TableInfo ti) {
+            if (ti.schemaName() != null && !ti.schemaName().isEmpty()) {
+                return dbContext.quoteObjectNames(ti.schemaName()) + "." + dbContext.quoteObjectNames(ti.tableName());
+            }
+            return dbContext.quoteObjectNames(ti.tableName());
+        }
     }
     
     /**
-     * Gets all required columns for a table mapping.
+     * Collects schema information from QueryTree and generates migration DDL statements.
+     * Compares against existing schema to determine CREATE TABLE vs ALTER TABLE.
+     * Maintains entity-processing order for statements.
      */
-    private static List<ColumnDefinition> getRequiredColumns(TableMapping mapping, DbContext dbContext, 
-            List<InferredForeignKey> inferredForeignKeys) {
+    private static class MigrationCollector {
+        private final DbContext dbContext;
+        private final SchemaInfo schemaInfo;
+        private final Set<String> processedTables = new HashSet<>();
+        // Combined list to maintain processing order: either TableDefinition (new) or AlterTableDefinition (existing)
+        private final List<Object> tableOperations = new ArrayList<>();
+        private final List<LinkTableDefinition> linkTables = new ArrayList<>();
+        private final List<ForeignKeyConstraint> foreignKeys = new ArrayList<>();
+        private final List<DeferredFkColumn> deferredFkColumns = new ArrayList<>();
         
-        List<ColumnDefinition> columns = new ArrayList<>();
-        Set<String> existingColumnNames = new HashSet<>();
+        MigrationCollector(DbContext dbContext, SchemaInfo schemaInfo) {
+            this.dbContext = dbContext;
+            this.schemaInfo = schemaInfo;
+        }
         
-        // Determine if we have a composite key from the overall class hierarchy
-        List<FieldModel> idFields = PojoMetadata.determineIdFields(mapping.getType());
-        boolean isCompositeKey = idFields.size() > 1;
-        
-        // Check if this is a subclass table
-        boolean hasIdFieldInThisMapping = false;
-        for (FieldModel field : mapping.getFields()) {
-            if (AnnotationHelper.isId(field)) {
-                hasIdFieldInThisMapping = true;
-                break;
+        void collectFromTree(QueryTree tree) {
+            if (tree.root() == null) {
+                return;
+            }
+            if (tree.root() instanceof JoinedNode joined) {
+                collectRootTable(joined);
             }
         }
-
-        // Add ID fields if needed (for subclass tables)
-        if (!hasIdFieldInThisMapping && !idFields.isEmpty()) {
-            for (FieldModel idField : idFields) {
-                String columnName = PojoMetadata.determineSqlFieldName(idField);
-                String sqlType = dbContext.mapJavaTypeToSql(idField);
-                columns.add(new ColumnDefinition(columnName, sqlType, false, true));
-                existingColumnNames.add(columnName.toLowerCase());
+        
+        private void collectRootTable(JoinedNode joined) {
+            TableInfo tableInfo = joined.tableInfo();
+            String fullTableName = getFullTableName(tableInfo);
+            
+            if (processedTables.contains(fullTableName)) {
+                return;
             }
-        }
-
-        // Process fields
-        for (FieldModel field : mapping.getFields()) {
-            // Handle embedded fields
-            if (AnnotationHelper.isEmbedded(field)) {
-                String prefix = PojoMetadata.determinePrefix(field);
-                // Remove trailing underscore
-                if (prefix.endsWith("_")) {
-                    prefix = prefix.substring(0, prefix.length() - 1);
-                }
-                addEmbeddedColumnsToList(field.getType(), prefix, columns, existingColumnNames, dbContext, isCompositeKey);
-                continue;
+            processedTables.add(fullTableName);
+            LOG.debug("Processing table for migration: {}", fullTableName);
+            
+            // Check if table exists
+            SchemaInfo.TableInfo existingTable = schemaInfo.getTable(
+                tableInfo.schemaName(), tableInfo.tableName());
+            
+            // Create table definition with all required columns
+            TableDefinition tableDef = new TableDefinition(tableInfo);
+            collectColumns(joined, tableDef, "");
+            
+            // Handle single-table inheritance discriminator
+            if (joined.isSingleTableInheritance() && joined.discriminatorColumn() != null) {
+                ColumnDefinition discCol = new ColumnDefinition(
+                    joined.discriminatorColumn(),
+                    "VARCHAR(255)",
+                    false, false, true, false
+                );
+                tableDef.addColumnIfAbsent(discCol);
             }
-
-            // Handle linked fields
-            if (isLinkedField(field)) {
-                if (!PojoMetadata.isListOrArray(field.getType())) {
-                    String columnName = determineForeignKeyColumnName(field);
-                    // Only add if not already defined (e.g., as an @Id field)
-                    if (!existingColumnNames.contains(columnName.toLowerCase())) {
-                        String sqlType = dbContext.getForeignKeyColumnType();
-                        // Check @Link for nullable and unique
-                        var linkAnnOpt = field.getAnnotation(Link.class);
-                        boolean notNull = linkAnnOpt.map(ann -> ann.getBooleanAttribute("nullable").map(b -> !b).orElse(false)).orElse(false);
-                        boolean unique = linkAnnOpt.map(ann -> ann.getBooleanAttribute("unique").orElse(false)).orElse(false);
-                        columns.add(new ColumnDefinition(columnName, sqlType, false, false, notNull, unique));
-                        existingColumnNames.add(columnName.toLowerCase());
+            
+            if (existingTable == null) {
+                // Table doesn't exist - create it
+                tableOperations.add(tableDef);
+            } else {
+                // Table exists - find missing columns
+                List<ColumnDefinition> missingColumns = new ArrayList<>();
+                for (ColumnDefinition col : tableDef.columns) {
+                    if (!existingTable.hasColumn(col.name)) {
+                        missingColumns.add(col);
                     }
                 }
-                continue;
+                if (!missingColumns.isEmpty()) {
+                    tableOperations.add(new AlterTableDefinition(tableInfo, missingColumns));
+                }
             }
-
-            String columnName = PojoMetadata.determineSqlFieldName(field);
-            boolean isPrimaryKey = AnnotationHelper.isId(field);
-            boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
-            String sqlType = dbContext.mapJavaTypeToSql(field);
-            AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
-            boolean notNull = !shouldAutoIncrement && columnMeta != null && !columnMeta.nullable;
-            boolean unique = columnMeta != null && columnMeta.unique;
-
-            columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey, notNull, unique));
-            existingColumnNames.add(columnName.toLowerCase());
+            
+            // Process children for FK columns and link tables
+            processChildrenForFKs(joined, tableDef, existingTable);
         }
         
-        // Add inferred foreign key columns
-        if (inferredForeignKeys != null) {
-            for (InferredForeignKey fk : inferredForeignKeys) {
-                if (!existingColumnNames.contains(fk.columnName.toLowerCase())) {
-                    String sqlType = dbContext.getForeignKeyColumnType();
-                    columns.add(new ColumnDefinition(fk.columnName, sqlType, false, false));
-                    existingColumnNames.add(fk.columnName.toLowerCase());
+        private void processChildrenForFKs(JoinedNode parent, TableDefinition parentTableDef, 
+                                          SchemaInfo.TableInfo existingParentTable) {
+            for (QueryNode child : parent.children()) {
+                if (child instanceof JoinedNode childJoined) {
+                    JoinInfo joinInfo = childJoined.joinInfo();
+                    if (joinInfo == null) continue;
+                    
+                    // Handle many-to-many link tables
+                    if (joinInfo.joinTableInfo() != null) {
+                        collectLinkTable(parent, childJoined, joinInfo.joinTableInfo());
+                    }
+                    
+                    // Handle FK in parent
+                    if (joinInfo.joinCondition() instanceof JoinCondition.ForeignKeyInParent fkInParent) {
+                        boolean nullable = true;
+                        boolean unique = false;
+                        if (joinInfo.linkField() != null) {
+                            var linkAnn = joinInfo.linkField().getAnnotation(Link.class);
+                            if (linkAnn.isPresent()) {
+                                nullable = linkAnn.get().getBooleanAttribute("nullable").orElse(true);
+                                unique = linkAnn.get().getBooleanAttribute("unique").orElse(false);
+                            }
+                        }
+                        
+                        ColumnDefinition fkCol = new ColumnDefinition(
+                            fkInParent.foreignKeyColumn(),
+                            dbContext.getForeignKeyColumnType(),
+                            false, false, !nullable, unique
+                        );
+                        
+                        // Add to parent table if not already there
+                        if (!parentTableDef.columnNames.contains(fkCol.name.toLowerCase())) {
+                            parentTableDef.addColumnIfAbsent(fkCol);
+                            
+                            // For existing tables, add FK column to the alter definition
+                            if (existingParentTable != null && !existingParentTable.hasColumn(fkCol.name)) {
+                                addMissingColumnToAlterDef(parent.tableInfo(), fkCol);
+                            }
+                        }
+                        
+                        // Add FK constraint (only for new tables)
+                        if (existingParentTable == null) {
+                            foreignKeys.add(new ForeignKeyConstraint(
+                                parent.tableInfo(),
+                                fkInParent.foreignKeyColumn(),
+                                childJoined.tableInfo(),
+                                fkInParent.referencedColumn()
+                            ));
+                        }
+                    }
+                    
+                    // Handle FK in child
+                    if (joinInfo.joinCondition() instanceof JoinCondition.ForeignKeyInChild fkInChild) {
+                        deferredFkColumns.add(new DeferredFkColumn(
+                            childJoined.tableInfo(),
+                            fkInChild.foreignKeyColumn(),
+                            parent.tableInfo(),
+                            fkInChild.referencedColumn()
+                        ));
+                    }
+                } else if (child instanceof EmbeddedNode embedded) {
+                    for (QueryNode embeddedChild : embedded.children()) {
+                        if (embeddedChild instanceof JoinedNode embeddedJoined) {
+                            JoinInfo joinInfo = embeddedJoined.joinInfo();
+                            if (joinInfo != null && joinInfo.joinCondition() instanceof JoinCondition.ForeignKeyInParent fkInParent) {
+                                ColumnDefinition fkCol = new ColumnDefinition(
+                                    embedded.embedInfo().fieldPrefix() + fkInParent.foreignKeyColumn(),
+                                    dbContext.getForeignKeyColumnType(),
+                                    false, false, false, false
+                                );
+                                parentTableDef.addColumnIfAbsent(fkCol);
+                            }
+                        }
+                    }
                 }
             }
         }
         
-        return columns;
+        private void addMissingColumnToAlterDef(TableInfo tableInfo, ColumnDefinition fkCol) {
+            // Find existing alter definition for this table
+            for (Object op : tableOperations) {
+                if (op instanceof AlterTableDefinition alterDef && alterDef.tableInfo.equals(tableInfo)) {
+                    if (alterDef.missingColumns.stream().noneMatch(c -> c.name.equalsIgnoreCase(fkCol.name))) {
+                        alterDef.missingColumns.add(fkCol);
+                    }
+                    return;
+                }
+            }
+            // If no alter def exists yet, create one
+            AlterTableDefinition alterDef = new AlterTableDefinition(tableInfo, new ArrayList<>());
+            alterDef.missingColumns.add(fkCol);
+            tableOperations.add(alterDef);
+        }
+        
+        private void collectColumns(TableNode tableNode, TableDefinition tableDef, String prefix) {
+            boolean isCompositeKey = tableNode instanceof JoinedNode jn && jn.idFieldNames().size() > 1;
+            Set<String> idFieldNames = tableNode instanceof JoinedNode jn 
+                ? new HashSet<>(jn.idFieldNames()) 
+                : Set.of();
+            
+            for (FieldSelectionBase fsb : tableNode.fields()) {
+                if (!(fsb instanceof FieldSelection fs)) {
+                    continue;
+                }
+                
+                String columnName = fs.columnName();
+                if (columnName == null) {
+                    continue;
+                }
+                columnName = prefix + columnName;
+                
+                FieldModel field = fs.field();
+                boolean isPrimaryKey = field != null && idFieldNames.contains(field.getName());
+                boolean autoIncrement = isPrimaryKey && !isCompositeKey;
+                
+                boolean nullable = true;
+                boolean unique = false;
+                if (field != null) {
+                    var columnAnn = field.getAnnotation(Column.class);
+                    if (columnAnn.isPresent()) {
+                        nullable = columnAnn.get().getBooleanAttribute("nullable").orElse(true);
+                        unique = columnAnn.get().getBooleanAttribute("unique").orElse(false);
+                    }
+                }
+                
+                String sqlType = getSqlType(field, autoIncrement);
+                
+                ColumnDefinition colDef = new ColumnDefinition(
+                    columnName, sqlType, autoIncrement, isPrimaryKey,
+                    !nullable && !autoIncrement, unique
+                );
+                tableDef.addColumnIfAbsent(colDef);
+                
+                if (isPrimaryKey) {
+                    tableDef.addPrimaryKeyColumn(columnName);
+                }
+            }
+            
+            for (QueryNode child : tableNode.children()) {
+                if (child instanceof EmbeddedNode embedded) {
+                    String embeddedPrefix = prefix + embedded.embedInfo().fieldPrefix();
+                    collectColumns(embedded, tableDef, embeddedPrefix);
+                }
+            }
+        }
+        
+        private String getSqlType(FieldModel field, boolean autoIncrement) {
+            if (autoIncrement) {
+                String autoIncType = dbContext.getAutoIncrementKeyColumnType();
+                if (!autoIncType.equals("BIGINT")) {
+                    return autoIncType;
+                }
+            }
+            return field != null ? dbContext.mapJavaTypeToSql(field) : dbContext.getForeignKeyColumnType();
+        }
+        
+        private void collectLinkTable(JoinedNode parent, JoinedNode child, JoinTableInfo joinTableInfo) {
+            String linkTableFullName = getFullTableName(joinTableInfo.joinTable());
+            
+            if (processedTables.contains(linkTableFullName)) {
+                return;
+            }
+            processedTables.add(linkTableFullName);
+            
+            // Check if link table exists
+            SchemaInfo.TableInfo existingLinkTable = schemaInfo.getTable(
+                joinTableInfo.joinTable().schemaName(), joinTableInfo.joinTable().tableName());
+            
+            if (existingLinkTable == null) {
+                LinkTableDefinition ltd = new LinkTableDefinition(
+                    joinTableInfo.joinTable(),
+                    joinTableInfo.parentFkColumn(),
+                    parent.tableInfo(),
+                    joinTableInfo.parentRefColumn(),
+                    joinTableInfo.targetFkColumn(),
+                    child.tableInfo(),
+                    joinTableInfo.targetRefColumn()
+                );
+                linkTables.add(ltd);
+            }
+        }
+        
+        List<String> generateStatements() {
+            List<String> statements = new ArrayList<>();
+            
+            // Process deferred FK columns
+            for (DeferredFkColumn dfk : deferredFkColumns) {
+                String targetFullName = getFullTableName(dfk.targetTable);
+                
+                // Check if target table exists in database
+                SchemaInfo.TableInfo existingTargetTable = schemaInfo.getTable(
+                    dfk.targetTable.schemaName(), dfk.targetTable.tableName());
+                
+                // Find target table in table operations (new tables)
+                TableDefinition targetTableDef = null;
+                for (Object op : tableOperations) {
+                    if (op instanceof TableDefinition td && getFullTableName(td.tableInfo).equals(targetFullName)) {
+                        targetTableDef = td;
+                        break;
+                    }
+                }
+                
+                ColumnDefinition fkCol = new ColumnDefinition(
+                    dfk.columnName,
+                    dbContext.getForeignKeyColumnType(),
+                    false, false, false, false
+                );
+                
+                if (targetTableDef != null) {
+                    // Target is a new table - add column to it
+                    targetTableDef.addColumnIfAbsent(fkCol);
+                    foreignKeys.add(new ForeignKeyConstraint(
+                        dfk.targetTable,
+                        dfk.columnName,
+                        dfk.refTable,
+                        dfk.refColumn
+                    ));
+                } else if (existingTargetTable != null && !existingTargetTable.hasColumn(dfk.columnName)) {
+                    // Target exists but missing the FK column - add to alter tables
+                    addMissingColumnToAlterDef(dfk.targetTable, fkCol);
+                }
+            }
+            
+            // Generate statements in entity-processing order
+            for (Object op : tableOperations) {
+                if (op instanceof TableDefinition td) {
+                    statements.add(generateCreateTable(td));
+                } else if (op instanceof AlterTableDefinition atd) {
+                    for (ColumnDefinition col : atd.missingColumns) {
+                        statements.add(generateAlterTableAddColumn(atd.tableInfo, col));
+                    }
+                }
+            }
+            
+            // Generate CREATE TABLE for link tables (after main tables)
+            for (LinkTableDefinition ltd : linkTables) {
+                statements.add(generateCreateLinkTable(ltd));
+            }
+            
+            // Generate ALTER TABLE for FK constraints (only for new tables)
+            Set<String> generatedFks = new HashSet<>();
+            for (ForeignKeyConstraint fk : foreignKeys) {
+                String fkKey = getFullTableName(fk.table) + "." + fk.column;
+                if (!generatedFks.contains(fkKey.toLowerCase())) {
+                    generatedFks.add(fkKey.toLowerCase());
+                    statements.add(generateAlterTableAddForeignKey(fk));
+                }
+            }
+            
+            // Add FK constraints for new link tables
+            for (LinkTableDefinition ltd : linkTables) {
+                statements.add(generateAlterTableAddForeignKey(new ForeignKeyConstraint(
+                    ltd.linkTable, ltd.ownerColumn, ltd.ownerTable, ltd.ownerRefColumn
+                )));
+                statements.add(generateAlterTableAddForeignKey(new ForeignKeyConstraint(
+                    ltd.linkTable, ltd.foreignColumn, ltd.foreignTable, ltd.foreignRefColumn
+                )));
+            }
+            
+            return statements;
+        }
+        
+        private String generateCreateTable(TableDefinition td) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE TABLE ");
+            sb.append(getFullTableName(td.tableInfo));
+            sb.append(" (\n");
+            
+            List<String> colDefs = new ArrayList<>();
+            for (ColumnDefinition col : td.columns) {
+                colDefs.add(formatColumnDefinition(col));
+            }
+            
+            boolean hasPk = !td.primaryKeyColumns.isEmpty();
+            for (int i = 0; i < colDefs.size(); i++) {
+                sb.append("  ").append(colDefs.get(i));
+                if (i < colDefs.size() - 1 || hasPk) {
+                    sb.append(",");
+                }
+                sb.append("\n");
+            }
+            
+            if (hasPk) {
+                sb.append("  PRIMARY KEY (");
+                List<String> quotedPks = td.primaryKeyColumns.stream()
+                    .map(dbContext::quoteObjectNames)
+                    .toList();
+                sb.append(String.join(", ", quotedPks));
+                sb.append(")\n");
+            }
+            
+            sb.append(")");
+            
+            String suffix = dbContext.getCreateTableSuffix();
+            if (suffix != null && !suffix.isEmpty()) {
+                sb.append(suffix);
+            }
+            sb.append(";");
+            
+            return sb.toString();
+        }
+        
+        private String formatColumnDefinition(ColumnDefinition col) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(dbContext.quoteObjectNames(col.name));
+            sb.append(" ");
+            sb.append(col.sqlType);
+            
+            if (col.autoIncrement && dbContext.getAutoIncrementKeyColumnType().equals("BIGINT")) {
+                String autoIncSyntax = dbContext.getAutoIncrementSyntax();
+                if (!autoIncSyntax.isEmpty()) {
+                    sb.append(" ").append(autoIncSyntax);
+                }
+            }
+            
+            if (col.notNull && !col.autoIncrement) {
+                sb.append(" NOT NULL");
+            }
+            if (col.unique) {
+                sb.append(" UNIQUE");
+            }
+            
+            return sb.toString();
+        }
+        
+        private String generateCreateLinkTable(LinkTableDefinition ltd) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE TABLE ");
+            sb.append(getFullTableName(ltd.linkTable));
+            sb.append(" (\n");
+            
+            sb.append("  ").append(dbContext.quoteObjectNames(ltd.ownerColumn));
+            sb.append(" ").append(dbContext.getForeignKeyColumnType());
+            sb.append(",\n");
+            
+            sb.append("  ").append(dbContext.quoteObjectNames(ltd.foreignColumn));
+            sb.append(" ").append(dbContext.getForeignKeyColumnType());
+            sb.append(",\n");
+            
+            sb.append("  PRIMARY KEY (");
+            sb.append(dbContext.quoteObjectNames(ltd.ownerColumn));
+            sb.append(", ");
+            sb.append(dbContext.quoteObjectNames(ltd.foreignColumn));
+            sb.append(")\n");
+            
+            sb.append(")");
+            
+            String suffix = dbContext.getCreateTableSuffix();
+            if (suffix != null && !suffix.isEmpty()) {
+                sb.append(suffix);
+            }
+            sb.append(";");
+            
+            return sb.toString();
+        }
+        
+        private String generateAlterTableAddColumn(TableInfo table, ColumnDefinition col) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ALTER TABLE ");
+            sb.append(getFullTableName(table));
+            sb.append(" ADD COLUMN ");
+            sb.append(dbContext.quoteObjectNames(col.name));
+            sb.append(" ");
+            sb.append(col.sqlType);
+            // Note: Don't add AUTO_INCREMENT for ALTER TABLE as that requires PRIMARY KEY changes
+            
+            if (col.notNull) {
+                sb.append(" NOT NULL");
+            }
+            if (col.unique) {
+                sb.append(" UNIQUE");
+            }
+            sb.append(";");
+            return sb.toString();
+        }
+        
+        private String generateAlterTableAddForeignKey(ForeignKeyConstraint fk) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ALTER TABLE ").append(getFullTableName(fk.table));
+            sb.append(" ADD FOREIGN KEY (").append(dbContext.quoteObjectNames(fk.column)).append(")");
+            sb.append(" REFERENCES ").append(getFullTableName(fk.refTable));
+            sb.append("(").append(dbContext.quoteObjectNames(fk.refColumn)).append(");");
+            return sb.toString();
+        }
+        
+        private String getFullTableName(TableInfo ti) {
+            if (ti.schemaName() != null && !ti.schemaName().isEmpty()) {
+                return dbContext.quoteObjectNames(ti.schemaName()) + "." + dbContext.quoteObjectNames(ti.tableName());
+            }
+            return dbContext.quoteObjectNames(ti.tableName());
+        }
     }
     
-    private static void addEmbeddedColumnsToList(TypeModel embeddedClass, String prefix,
-            List<ColumnDefinition> columns, Set<String> existingColumnNames, DbContext dbContext, boolean isCompositeKey) {
-        Collection<FieldModel> fields = PojoMetadata.filterFields(embeddedClass);
-        for (FieldModel field : fields) {
-            if (AnnotationHelper.isEmbedded(field)) {
-                // Get prefix from PojoQuery @Embedded if present, otherwise use empty string (JPA @Embedded has no prefix)
-                var nestedAnnOpt = field.getAnnotation(Embedded.class);
-                String nestedPrefix = prefix + nestedAnnOpt.flatMap(ann -> ann.getStringValue("prefix"))
-                    .filter(p -> !Embedded.DEFAULT.equals(p))
-                    .orElse("");
-                addEmbeddedColumnsToList(field.getType(), nestedPrefix, columns, existingColumnNames, dbContext, isCompositeKey);
-                continue;
+    /**
+     * Represents ALTER TABLE statements for adding missing columns.
+     */
+    private static class AlterTableDefinition {
+        final TableInfo tableInfo;
+        final List<ColumnDefinition> missingColumns;
+        
+        AlterTableDefinition(TableInfo tableInfo, List<ColumnDefinition> missingColumns) {
+            this.tableInfo = tableInfo;
+            this.missingColumns = missingColumns;
+        }
+    }
+    
+    // ========== Data Classes ==========
+    
+    private static class TableDefinition {
+        final TableInfo tableInfo;
+        final List<ColumnDefinition> columns = new ArrayList<>();
+        final List<String> primaryKeyColumns = new ArrayList<>();
+        final Set<String> columnNames = new HashSet<>();
+        
+        TableDefinition(TableInfo tableInfo) {
+            this.tableInfo = tableInfo;
+        }
+        
+        void addColumnIfAbsent(ColumnDefinition col) {
+            if (!columnNames.contains(col.name.toLowerCase())) {
+                columns.add(col);
+                columnNames.add(col.name.toLowerCase());
             }
-
-            String columnName = prefix + PojoMetadata.determineSqlFieldName(field);
-            boolean isPrimaryKey = AnnotationHelper.isId(field);
-            boolean shouldAutoIncrement = isPrimaryKey && !isCompositeKey;
-            String sqlType = dbContext.mapJavaTypeToSql(field);
-            AnnotationHelper.ColumnMetadata columnMeta = AnnotationHelper.getColumnMetadata(field);
-            boolean notNull = !shouldAutoIncrement && columnMeta != null && !columnMeta.nullable;
-            boolean unique = columnMeta != null && columnMeta.unique;
-
-            columns.add(new ColumnDefinition(columnName, sqlType, shouldAutoIncrement, isPrimaryKey, notNull, unique));
-            existingColumnNames.add(columnName.toLowerCase());
+        }
+        
+        void addPrimaryKeyColumn(String colName) {
+            if (!primaryKeyColumns.contains(colName)) {
+                primaryKeyColumns.add(colName);
+            }
+        }
+    }
+    
+    private static class ColumnDefinition {
+        final String name;
+        final String sqlType;
+        final boolean autoIncrement;
+        final boolean notNull;
+        final boolean unique;
+        
+        ColumnDefinition(String name, String sqlType, boolean autoIncrement, 
+                        boolean isPrimaryKey, boolean notNull, boolean unique) {
+            this.name = name;
+            this.sqlType = sqlType;
+            this.autoIncrement = autoIncrement;
+            // isPrimaryKey tracked separately in TableDefinition.primaryKeyColumns
+            this.notNull = notNull;
+            this.unique = unique;
+        }
+    }
+    
+    private static class LinkTableDefinition {
+        final TableInfo linkTable;
+        final String ownerColumn;
+        final TableInfo ownerTable;
+        final String ownerRefColumn;
+        final String foreignColumn;
+        final TableInfo foreignTable;
+        final String foreignRefColumn;
+        
+        LinkTableDefinition(TableInfo linkTable, String ownerColumn, TableInfo ownerTable, 
+                           String ownerRefColumn, String foreignColumn, TableInfo foreignTable,
+                           String foreignRefColumn) {
+            this.linkTable = linkTable;
+            this.ownerColumn = ownerColumn;
+            this.ownerTable = ownerTable;
+            this.ownerRefColumn = ownerRefColumn;
+            this.foreignColumn = foreignColumn;
+            this.foreignTable = foreignTable;
+            this.foreignRefColumn = foreignRefColumn;
+        }
+    }
+    
+    private static class ForeignKeyConstraint {
+        final TableInfo table;
+        final String column;
+        final TableInfo refTable;
+        final String refColumn;
+        
+        ForeignKeyConstraint(TableInfo table, String column, TableInfo refTable, String refColumn) {
+            this.table = table;
+            this.column = column;
+            this.refTable = refTable;
+            this.refColumn = refColumn;
         }
     }
 }

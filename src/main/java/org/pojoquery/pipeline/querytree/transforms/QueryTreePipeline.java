@@ -56,6 +56,9 @@ public class QueryTreePipeline {
             new JoinTableTransform(),
             new JoinConditionTransform(),
             
+            // Cycle detection: fail fast if entity hierarchy contains cycles
+            new CycleDetectionTransform(),
+            
             // ═══════════════════════════════════════════════════════════════
             // PHASE 3: FIELD MODIFIERS
             // ═══════════════════════════════════════════════════════════════

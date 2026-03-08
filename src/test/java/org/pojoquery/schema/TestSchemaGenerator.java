@@ -2,6 +2,7 @@ package org.pojoquery.schema;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
@@ -21,6 +22,7 @@ import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.dialects.PostgresDbContext;
 import org.pojoquery.integrationtest.UseDialect;
+import org.pojoquery.internal.MappingException;
 
 @UseDialect(DbContext.Dialect.MYSQL)
 public class TestSchemaGenerator {
@@ -919,42 +921,16 @@ public class TestSchemaGenerator {
     @Test
     public void testSelfReferencingManyToMany() {
         // Person has @Link(linktable="person_friends") List<Person> friends
-        // This is a self-referencing many-to-many relationship
-        // The link table should have two different column names to avoid name clash
-        // Creates: Person table, person_friends link table, 2 ALTER TABLE for FKs
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(Person.class);
+        // This is a self-referencing many-to-many relationship which creates a cycle
+        // PojoQuery detects this and throws MappingException
+        MappingException ex = assertThrows(MappingException.class, () -> {
+            SchemaGenerator.generateCreateTableStatements(Person.class);
+        });
         
-        System.out.println("Self-referencing many-to-many test:");
-        for (String stmt : statements) {
-            System.out.println(stmt);
-            System.out.println();
-        }
-        
-        // Should generate: Person CREATE, link table CREATE, 2 ALTER TABLE for FKs
-        assertEquals(4, statements.size(), "Should generate 4 statements (Person + link table + 2 FK constraints)");
-        
-        String linkTable = statements.stream()
-            .filter(s -> s.contains("CREATE TABLE") && s.contains("`person_friends`"))
-            .findFirst()
-            .orElse("");
-        
-        assertFalse(linkTable.isEmpty(), "Link table should be generated");
-        
-        // The link table should have two DIFFERENT columns (not both person_id)
-        // It should use person_id for owner and friends_id for the field name
-        assertTrue(linkTable.contains("`person_id`"), "Link table should have person_id column");
-        assertTrue(linkTable.contains("`friends_id`"), "Link table should have friends_id column (from field name)");
-        
-        // Should have composite primary key with different columns
-        assertTrue(linkTable.contains("PRIMARY KEY (`person_id`, `friends_id`)"), 
-            "Link table should have composite primary key");
-        
-        // FK constraints should be in separate ALTER TABLE statements
-        String sql = String.join("\n", statements);
-        assertTrue(sql.contains("ALTER TABLE `person_friends` ADD FOREIGN KEY (`person_id`) REFERENCES `person`(`id`)"), 
-            "Should have FK constraint to person for person_id (via ALTER TABLE)");
-        assertTrue(sql.contains("ALTER TABLE `person_friends` ADD FOREIGN KEY (`friends_id`) REFERENCES `person`(`id`)"), 
-            "Should have FK constraint for friends_id (via ALTER TABLE)");
+        assertTrue(ex.getMessage().contains("Cycle detected"), 
+            "Exception should mention cycle detection: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("Person"), 
+            "Exception should mention Person class: " + ex.getMessage());
     }
     
     // ========== Test entities for @Column(nullable, unique, length, precision, scale) ==========

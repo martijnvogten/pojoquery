@@ -47,13 +47,15 @@ public class EntityReferenceTransform implements QueryTreeTransform {
             }
 
             String fieldName = f.getName();
+            String aliasParent;
             if (node instanceof EmbeddedNode en) {
-                // For embedded nodes, we want to use the source alias for join alias generation
-                // to maintain correct aliasing in nested scenarios
-                fieldName = en.embedInfo().fieldPrefix() + fieldName;
+                // For embedded nodes, use embedded alias as parent for join alias
+                // to get aliases like "home.country" instead of "home_country"
+                aliasParent = en.alias();
+            } else {
+                aliasParent = node.alias();
             }
-            String joinAlias = AliasNaming.childAlias(node instanceof EmbeddedNode en ? en.embedInfo().sourceAlias() : node.alias(), rootAlias, 
-            fieldName);
+            String joinAlias = AliasNaming.childAlias(aliasParent, rootAlias, fieldName);
             TableMapping childTableMapping = tableMapping.get(tableMapping.size() - 1);
             EmptyTableNode joinedNode = EmptyTableNode.ofJoined(joinAlias, targetType, 
                 JoinInfo.leftJoinOne(TableInfo.of(childTableMapping.schemaName, childTableMapping.tableName), f));

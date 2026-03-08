@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Link;
+import org.pojoquery.pipeline.querytree.EmbeddedNode;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.JoinCondition;
 import org.pojoquery.pipeline.querytree.JoinInfo;
@@ -60,6 +61,10 @@ public class JoinConditionTransform implements QueryTreeTransform {
                 null
             );
             newCondition = new JoinCondition.Custom(new SqlExpression(resolved));
+        } else if (joinInfo.joinTableInfo() != null) {
+            // Many-to-many: FK is in the link table, no direct join condition needed
+            // The join condition will be generated separately for the link table
+            return child;
         } else if (joinInfo.isCollection()) {
             // One-to-many: FK column is in child table
             newCondition = JoinConditions.forCollectionStructured(
@@ -67,7 +72,14 @@ public class JoinConditionTransform implements QueryTreeTransform {
                 getForeignLinkField(linkField));
         } else {
             // Entity reference (many-to-one): FK column is in parent table
-            newCondition = JoinConditions.forEntityReferenceStructured(linkField, child.type());
+            JoinCondition.ForeignKeyInParent baseCondition = JoinConditions.forEntityReferenceStructured(linkField, child.type());
+            // If parent is embedded, prepend the embedded prefix to the FK column
+            if (parent instanceof EmbeddedNode en) {
+                String prefixedFkColumn = en.embedInfo().fieldPrefix() + baseCondition.foreignKeyColumn();
+                newCondition = new JoinCondition.ForeignKeyInParent(prefixedFkColumn, baseCondition.referencedColumn());
+            } else {
+                newCondition = baseCondition;
+            }
         }
         
         JoinInfo updatedJoinInfo = joinInfo.withJoinCondition(newCondition);

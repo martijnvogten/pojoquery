@@ -22,13 +22,17 @@ public class GroupByOrderByTransform implements QueryTreeTransform {
         
         List<String> groupByClauses = new ArrayList<>(tree.groupBy());
         List<String> orderByClauses = new ArrayList<>(tree.orderBy());
+        boolean changed = false;
         
         // Process @GroupBy
         var groupByAnnOpt = type.getAnnotation(GroupBy.class);
         if (groupByAnnOpt.isPresent()) {
             for (String groupBy : groupByAnnOpt.get().getStringValues("value")) {
                 String resolved = ExpressionResolver.resolve(groupBy, rootAlias);
-                groupByClauses.add(resolved);
+                if (!groupByClauses.contains(resolved)) {
+                    groupByClauses.add(resolved);
+                    changed = true;
+                }
             }
         }
         
@@ -37,11 +41,14 @@ public class GroupByOrderByTransform implements QueryTreeTransform {
         if (orderByAnnOpt.isPresent()) {
             for (String orderBy : orderByAnnOpt.get().getStringValues("value")) {
                 String resolved = ExpressionResolver.resolve(orderBy, rootAlias);
-                orderByClauses.add(resolved);
+                if (!orderByClauses.contains(resolved)) {
+                    orderByClauses.add(resolved);
+                    changed = true;
+                }
             }
         }
         
-        if (groupByClauses.isEmpty() && orderByClauses.isEmpty()) {
+        if (!changed) {
             return tree;
         }
         

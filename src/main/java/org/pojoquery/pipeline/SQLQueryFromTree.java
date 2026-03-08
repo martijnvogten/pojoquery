@@ -54,6 +54,9 @@ public class SQLQueryFromTree {
 	 * Recursively adds joins from a TableNode to the query.
 	 */
 	private static void addJoinsFromNode(SqlQuery<?> query, TableNode tableNode) {
+		// Use sourceAlias for join conditions - for EmbeddedNode this returns the parent table's alias
+		String parentAlias = tableNode.sourceAlias();
+		
 		for (QueryNode child : tableNode.children()) {
 			JoinInfo joinInfo = child.joinInfo();
 			
@@ -64,7 +67,7 @@ public class SQLQueryFromTree {
 					if (joinInfo.subquery() != null) {
 						DefaultSqlQuery subQuery = new DefaultSqlQuery(query.getDbContext());
 						applyQueryTreeToQuery(subQuery, joinInfo.subquery());
-						SqlExpression condition = joinInfo.toSqlCondition(tableNode.alias(), child.alias());
+						SqlExpression condition = joinInfo.toSqlCondition(parentAlias, child.alias());
 						query.addSubqueryJoin(joinInfo.joinType(), subQuery.toStatement(), child.alias(), condition);
 						continue;
 					}
@@ -74,12 +77,12 @@ public class SQLQueryFromTree {
 						JoinTableInfo joinTableInfo = joinInfo.joinTableInfo();
 						// add join to join table
 						query.addJoin(JoinType.LEFT, joinTableInfo.joinTable().schemaName(), joinTableInfo.joinTable().tableName(), 
-							joinTableInfo.joinTableAlias(), joinTableInfo.parentCondition(tableNode.alias()));
+							joinTableInfo.joinTableAlias(), joinTableInfo.parentCondition(parentAlias));
 						// add join to target table
 						query.addJoin(JoinType.LEFT, joinInfo.childTable().schemaName(), joinInfo.childTable().tableName(), 
 							child.alias(), joinTableInfo.targetCondition(child.alias()));
 					} else {
-						SqlExpression condition = joinInfo.toSqlCondition(tableNode.alias(), child.alias());
+						SqlExpression condition = joinInfo.toSqlCondition(parentAlias, child.alias());
 						query.addJoin(joinInfo.joinType(), joinInfo.childTable().schemaName(), joinInfo.childTable().tableName(), 
 							child.alias(), condition);
 					}
@@ -95,7 +98,7 @@ public class SQLQueryFromTree {
 			} else if (child instanceof LinkedValueNode valueNode) {
 				// Handle value collections (e.g., @Link(fetchColumn))
 				if (joinInfo != null) {
-					SqlExpression condition = joinInfo.toSqlCondition(tableNode.alias(), valueNode.alias());
+					SqlExpression condition = joinInfo.toSqlCondition(parentAlias, valueNode.alias());
 					query.addJoin(joinInfo.joinType(), valueNode.linkTableSchema(), valueNode.linkTableName(),
 						valueNode.alias(), condition);
 				}

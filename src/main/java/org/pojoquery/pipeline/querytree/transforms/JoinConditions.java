@@ -2,6 +2,7 @@ package org.pojoquery.pipeline.querytree.transforms;
 
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.FieldName;
+import org.pojoquery.annotations.Link;
 import org.pojoquery.pipeline.querytree.JoinCondition;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
@@ -206,9 +207,17 @@ public final class JoinConditions {
     
     /**
      * Determines the FK column name for a field.
-     * Checks @FieldName first, then defaults to fieldName_id.
+     * Checks @Link(linkfield) first, then @FieldName, then defaults to fieldName_id.
      */
     public static String determineFkColumn(FieldModel field) {
+        // Check for @Link(linkfield) first - this explicitly specifies the FK column name
+        var linkfieldValue = field.getAnnotation(Link.class)
+            .flatMap(ann -> ann.getStringValue("linkfield"))
+            .filter(s -> !s.isEmpty());
+        if (linkfieldValue.isPresent()) {
+            return linkfieldValue.get();
+        }
+        
         // Check for @FieldName - this specifies the FK column name
         return field.getAnnotation(FieldName.class)
             .flatMap(ann -> ann.getStringValue())
