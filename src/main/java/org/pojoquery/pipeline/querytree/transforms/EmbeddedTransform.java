@@ -40,7 +40,7 @@ public class EmbeddedTransform implements QueryTreeTransform {
                 continue;
             }
             TypeModel type = f.getType();
-            String alias = AliasNaming.childAlias(node.embedInfo() != null ? node.embedInfo().sourceAlias() : node.alias(), rootAlias, f.getName());
+            String alias = AliasNaming.childAlias(node.alias(), rootAlias, f.getName());
 
             String prefix = PojoMetadata.determinePrefix(f);
 
