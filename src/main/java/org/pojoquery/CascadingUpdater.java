@@ -1,646 +1,309 @@
 package org.pojoquery;
 
 import java.lang.reflect.Field;
-import java.sql.Connection;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
-import org.pojoquery.annotations.Cascade;
-import org.pojoquery.annotations.Link;
-import org.pojoquery.annotations.Table;
-import org.pojoquery.internal.MappingException;
-import org.pojoquery.pipeline.PojoMetadata;
-import org.pojoquery.typemodel.AnnotationModel;
-import org.pojoquery.typemodel.FieldModel;
-import org.pojoquery.typemodel.ReflectionFieldModel;
-import org.pojoquery.typemodel.ReflectionTypeModel;
-import org.pojoquery.typemodel.TypeModel;
-import org.pojoquery.util.Types;
+import org.pojoquery.pipeline.querytree.FieldSelection;
+import org.pojoquery.pipeline.querytree.FieldSelectionBase;
+import org.pojoquery.pipeline.querytree.JoinCondition;
+import org.pojoquery.pipeline.querytree.JoinInfo;
+import org.pojoquery.pipeline.querytree.JoinTableInfo;
+import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.QueryNode;
+import org.pojoquery.pipeline.querytree.QueryTree;
+import org.pojoquery.pipeline.querytree.TableInfo;
 
-/**
- * Provides cascading update functionality for entities with related collections.
- * 
- * <p>When an entity has collection fields annotated with {@link Cascade}, this class
- * automatically handles inserting, updating, and deleting related entities based on
- * the state of the collections.</p>
- * 
- * <h2>How Cascading Works</h2>
- * <p>When {@link #update(Connection, Object)} is called:</p>
- * <ol>
- *   <li>The main entity is updated first</li>
- *   <li>For each {@code @Cascade} annotated collection:
- *     <ul>
- *       <li>Items with null ID are inserted (new items)</li>
- *       <li>Items with existing ID are updated</li>
- *       <li>Items in database but not in collection are deleted (orphan removal)</li>
- *     </ul>
- *   </li>
- * </ol>
- * 
- * <h2>Example</h2>
- * <pre>{@code
- * @Table("orders")
- * public class Order {
- *     @Id Long id;
- *     String orderNumber;
- *     
- *     @Cascade
- *     List<LineItem> lineItems;
- * }
- * 
- * // Modify an order
- * Order order = PojoQuery.build(Order.class).findById(connection, orderId);
- * order.lineItems.add(new LineItem("New Product", 5));
- * order.lineItems.get(0).quantity = 10;  // Update existing
- * order.lineItems.remove(1);  // This will be deleted
- * 
- * // Apply all changes in one call
- * CascadingUpdater.update(connection, order);
- * }</pre>
- * 
- * <h2>Foreign Key Convention</h2>
- * <p>By default, the foreign key field in child entities is assumed to be named
- * {@code <parentTable>_id} (e.g., {@code order_id} for a parent table {@code orders}).
- * This can be customized using the {@link Link} annotation.</p>
- * 
- * @see Cascade
- * @see PojoQuery#update(Connection, Object)
- */
-final class CascadingUpdater {
+public final class CascadingUpdater {
     
-    private CascadingUpdater() {
-        // Utility class, no instantiation
-    }
-    
-    /**
-     * Updates an entity and cascades operations to related collections.
-     * 
-     * <p>Uses the default {@link DbContext}.</p>
-     * 
-     * @param connection the database connection
-     * @param entity the entity to update
-     * @return the number of rows affected for the main entity
-     * @throws MappingException if there's a mapping error
-     */
-    static int update(Connection connection, Object entity) {
-        return update(DbContext.getDefault(), connection, entity);
-    }
-    
-    /**
-     * Updates an entity and cascades operations to related collections.
-     * 
-     * @param context the database context
-     * @param connection the database connection
-     * @param entity the entity to update
-     * @return the number of rows affected for the main entity
-     * @throws MappingException if there's a mapping error
-     */
-    static int update(DbContext context, Connection connection, Object entity) {
-        Objects.requireNonNull(context, "context must not be null");
-        Objects.requireNonNull(connection, "connection must not be null");
-        Objects.requireNonNull(entity, "entity must not be null");
-        
-        // First, update the main entity
-        int affectedRows = PojoQuery.updateInternal(context, connection, entity.getClass(), entity);
-        
-        // Then process cascaded collections
-        processCascadedCollections(context, connection, entity, CascadeOperation.UPDATE);
-        
-        return affectedRows;
-    }
-    
-    /**
-     * Inserts an entity and cascades insert operations to related collections.
-     * 
-     * <p>Uses the default {@link DbContext}.</p>
-     * 
-     * @param <PK> the type of the primary key
-     * @param connection the database connection
-     * @param entity the entity to insert
-     * @return the generated primary key
-     * @throws MappingException if there's a mapping error
-     */
-    static <PK> PK insert(Connection connection, Object entity) {
-        Objects.requireNonNull(connection, "connection must not be null");
-        Objects.requireNonNull(entity, "entity must not be null");
-        return insert(DbContext.getDefault(), connection, entity);
-    }
-    
-    /**
-     * Inserts an entity and cascades insert operations to related collections.
-     * 
-     * @param <PK> the type of the primary key
-     * @param context the database context
-     * @param connection the database connection
-     * @param entity the entity to insert
-     * @return the generated primary key
-     * @throws MappingException if there's a mapping error
-     */
-    static <PK> PK insert(DbContext context, Connection connection, Object entity) {
-        Objects.requireNonNull(context, "context must not be null");
-        Objects.requireNonNull(connection, "connection must not be null");
-        Objects.requireNonNull(entity, "entity must not be null");
-        
-        // First, insert the main entity
-        PK pk = PojoQuery.insertInternal(context, connection, entity);
-        
-        // Then process cascaded collections
-        processCascadedCollections(context, connection, entity, CascadeOperation.INSERT);
-        
-        return pk;
-    }
+	public interface DatabaseOperations {
+		/** Returns generated ID (or null if no auto-generated key) */
+		<PK> PK insert(String table, String schema, Map<String, Object> values);
+		int update(String table, String schema, Map<String, Object> values, Map<String, Object> where);
+		int delete(String table, String schema, Map<String, Object> where);
+		
+		/** Link table operations for many-to-many */
+		void syncLinkTable(String table, String schema, 
+			String ownerFkColumn, Object ownerId,
+			String targetFkColumn, List<Object> targetIds);
+	}
 
-    /**
-     * Deletes an entity and cascades delete operations to related collections.
-     * 
-     * @param context the database context
-     * @param connection the database connection
-     * @param entity the entity to delete
-     * @throws MappingException if there's a mapping error
-     */
-    static void delete(DbContext context, Connection connection, Object entity) {
-        Objects.requireNonNull(context, "context must not be null");
-        Objects.requireNonNull(connection, "connection must not be null");
-        Objects.requireNonNull(entity, "entity must not be null");
-        
-        // First, delete cascaded collections (must be done before parent)
-        processCascadedCollections(context, connection, entity, CascadeOperation.REMOVE);
-        
-        // Then delete the main entity
-        PojoQuery.delete(context, connection, entity);
-    }
-    
-    private enum CascadeOperation {
-        INSERT, UPDATE, REMOVE
-    }
-    
-    private static void processCascadedCollections(DbContext context, Connection connection, 
-            Object entity, CascadeOperation operation) {
-        
-        TypeModel entityClass = new ReflectionTypeModel(entity.getClass());
-        Object parentId = getEntityId(entity);
-        
-        if (parentId == null && operation != CascadeOperation.INSERT) {
-            throw new MappingException("Cannot cascade operations for entity without ID: " + entityClass.getQualifiedName());
-        }
-        
-        for (FieldModel field : PojoMetadata.collectFieldsOfClass(entityClass)) {
-            // Handle @Cascade annotated fields (one-to-many owned relationships)
-            if (field.hasAnnotation(Cascade.class)) {
-                processCascadeField(context, connection, entity, entityClass, parentId, field, operation);
-                continue;
-            }
-            
-            // Handle @Link annotated fields with linktable (many-to-many relationships)
-            if (field.hasAnnotation(Link.class) && !field.getAnnotationAttributeValue(Link.class, "linktable", String.class).isEmpty()) {
-                processLinkTableField(context, connection, entity, entityClass, parentId, field, operation);
-            }
-        }
-    }
-    
-    private static void processCascadeField(DbContext context, Connection connection,
-            Object entity, TypeModel entityClass, Object parentId, FieldModel field, CascadeOperation operation) {
-        
-        if (!PojoMetadata.isListOrArray(field.getType())) {
-            throw new RuntimeException("Only collections are supported for @Cascade fields. Invalid field: " + field.getName());
-        }
-        
-        TypeModel componentType = Types.getCollectionComponentType(field);
-        if (componentType == null || !PojoMetadata.isLinkedClass(componentType)) {
-            return;
-        }
-        
-        Collection<?> collection;
-        try {
-            collection = (Collection<?>) ((ReflectionFieldModel)field).getReflectionField().get(entity);
-        } catch (IllegalAccessException e) {
-            throw new MappingException("Cannot access field " + field.getName(), e);
-        }
-        
-        switch (operation) {
-            case INSERT:
-                cascadeInsert(context, connection, collection, entity, entityClass, componentType, field);
-                break;
-            case UPDATE:
-                cascadeUpdate(context, connection, collection, entity, entityClass, componentType, field);
-                break;
-            case REMOVE:
-                cascadeDelete(context, connection, parentId, entityClass, componentType, field);
-                break;
-        }
-    }
-    
-    private static void processLinkTableField(DbContext context, Connection connection,
-            Object entity, TypeModel entityClass, Object parentId, FieldModel field, CascadeOperation operation) {
-        TypeModel componentType = Types.getCollectionComponentType(field);
-        if (componentType == null) {
-            return;
-        }
-        
-        Collection<?> collection;
-        try {
-            Field f = ((ReflectionFieldModel)field).getReflectionField();
-            f.setAccessible(true);
-            collection = (Collection<?>) f.get(entity);
-        } catch (IllegalAccessException e) {
-            throw new MappingException("Cannot access field " + field.getName(), e);
-        }
-        
-        AnnotationModel linkAnn = field.getAnnotation(Link.class).orElseThrow();
-        String linkTable = linkAnn.getStringValue("linktable").orElse(null);
-        String linkSchema = linkAnn.getStringValue("linkschema").orElse(null);
+	public static <PK> PK insert(QueryTree tree, Object entity, DatabaseOperations db) {
+		Objects.requireNonNull(tree, "QueryTree cannot be null");
+		Objects.requireNonNull(entity, "Entity cannot be null");
+		return insertRecursive(tree.root(), entity, null, null, db);
+	}
 
+	public static int update(QueryTree tree, Object entity, DatabaseOperations db) {
+		Objects.requireNonNull(tree, "QueryTree cannot be null");
+		Objects.requireNonNull(entity, "Entity cannot be null");
+		return updateRecursive(tree.root(), entity, null, null, db);
+	}
 
-        
-        // Determine link field names using shared utility methods
-        String parentLinkField = PojoMetadata.determineLinkTableOwnerColumn(entityClass, linkAnn);
-        
-        // Check if this is a value collection (using fetchColumn) or entity collection
-        boolean isValueCollection = linkAnn.getStringValue("fetchColumn").filter(s -> !s.isEmpty()).isPresent();
-        String foreignLinkField = PojoMetadata.determineLinkTableForeignColumn(
-                isValueCollection ? null : componentType, linkAnn);
-        
-        switch (operation) {
-            case INSERT:
-            case UPDATE:
-                syncLinkTable(context, connection, linkSchema, linkTable, parentLinkField, foreignLinkField, 
-                        parentId, collection, componentType, isValueCollection);
-                break;
-            case REMOVE:
-                deleteLinkTableRows(context, connection, linkSchema, linkTable, parentLinkField, parentId);
-                break;
-        }
-    }
-    
-    private static void syncLinkTable(DbContext context, Connection connection,
-            String linkSchema, String linkTable, String parentLinkField, String foreignLinkField,
-            Object parentId, Collection<?> collection, TypeModel componentType, boolean isValueCollection) {
-        
-        // Delete existing rows for this parent
-        deleteLinkTableRows(context, connection, linkSchema, linkTable, parentLinkField, parentId);
-        
-        // Insert new rows
-        if (collection != null) {
-            for (Object item : collection) {
-                if (item == null) continue;
-                
-                Object foreignValue;
-                if (isValueCollection) {
-                    // For value collections (enums, strings, etc.), use the item value directly
-                    foreignValue = item instanceof Enum ? ((Enum<?>) item).name() : item;
-                } else {
-                    // For entity collections, get the entity ID
-                    foreignValue = getEntityId(item);
-                    if (foreignValue == null) {
-                        throw new MappingException("Cannot link to entity without ID: " + componentType.getQualifiedName());
-                    }
-                }
-                
-                insertLinkTableRow(context, connection, linkSchema, linkTable, 
-                        parentLinkField, foreignLinkField, parentId, foreignValue);
-            }
-        }
-    }
-    
-    private static void deleteLinkTableRows(DbContext context, Connection connection,
-            String linkSchema, String linkTable, String parentLinkField, Object parentId) {
-        
-        String fullTableName = linkSchema != null && !linkSchema.isEmpty()
-                ? context.quoteObjectNames(linkSchema) + "." + context.quoteObjectNames(linkTable)
-                : context.quoteObjectNames(linkTable);
-        
-        String sql = "DELETE FROM " + fullTableName + " WHERE " + context.quoteObjectNames(parentLinkField) + " = ?";
-        DB.update(connection, new SqlExpression(sql, Arrays.asList(parentId)));
-    }
-    
-    private static void insertLinkTableRow(DbContext context, Connection connection,
-            String linkSchema, String linkTable, String parentLinkField, String foreignLinkField,
-            Object parentId, Object foreignId) {
-        
-        String fullTableName = linkSchema != null && !linkSchema.isEmpty()
-                ? context.quoteObjectNames(linkSchema) + "." + context.quoteObjectNames(linkTable)
-                : context.quoteObjectNames(linkTable);
-        
-        String sql = "INSERT INTO " + fullTableName + " (" 
-                + context.quoteObjectNames(parentLinkField) + ", " 
-                + context.quoteObjectNames(foreignLinkField) + ") VALUES (?, ?)";
-        DB.update(connection, new SqlExpression(sql, Arrays.asList(parentId, foreignId)));
-    }
-    
-    private static void cascadeInsert(DbContext context, Connection connection, 
-            Collection<?> collection, Object parentEntity, TypeModel parentClass,
-            TypeModel componentType, FieldModel field) {
-        
-        if (collection == null || collection.isEmpty()) {
-            return;
-        }
-        
-        Object parentId = getEntityId(parentEntity);
-        ForeignKeyInfo fkInfo = findForeignKeyInfo(componentType, parentClass, field);
-        
-        for (Object item : collection) {
-            if (item == null) continue;
-            
-            // Try to set the foreign key to parent via field
-            boolean fkSetViaField = setForeignKey(item, parentEntity, parentClass, field);
-            
-            // Insert the child
-            PojoQuery.insertInternal(context, connection, item.getClass(), item);
-            
-            // If FK couldn't be set via field (no field in child class), update via SQL
-            if (!fkSetViaField && parentId != null && fkInfo != null) {
-                Object itemId = getEntityId(item);
-                if (itemId != null) {
-                    updateForeignKeyColumn(context, connection, componentType, fkInfo.sqlColumnName, itemId, parentId);
-                }
-            }
-            
-            // Recursively process the child's own @Cascade collections
-            processCascadedCollections(context, connection, item, CascadeOperation.INSERT);
-        }
-    }
-    
-    private static void updateForeignKeyColumn(DbContext context, Connection connection,
-            TypeModel childClass, String fkColumn, Object childId, Object parentId) {
-        String tableName = childClass.getAnnotation(Table.class).flatMap(ann -> ann.getStringValue("value")).orElse(null);
-        FieldModel idField = PojoMetadata.determineIdField(childClass);
-        String idColumnName = PojoMetadata.determineSqlFieldName(idField);
-        
-        String sql = "UPDATE " + context.quoteObjectNames(tableName) 
-                + " SET " + context.quoteObjectNames(fkColumn) + " = ?"
-                + " WHERE " + context.quoteObjectNames(idColumnName) + " = ?";
-        DB.update(connection, new SqlExpression(sql, Arrays.asList(parentId, childId)));
-    }
-    
-    private static void cascadeUpdate(DbContext context, Connection connection, 
-            Collection<?> collection, Object parentEntity, TypeModel parentClass,
-            TypeModel componentType, FieldModel field) {
-        
-        Object parentId = getEntityId(parentEntity);
-        ForeignKeyInfo fkInfo = findForeignKeyInfo(componentType, parentClass, field);
-        
-        // Get existing IDs from database
-        Set<Object> existingIds = getExistingChildIds(context, connection, componentType, 
-                fkInfo.sqlColumnName, parentId);
-        Set<Object> processedIds = new HashSet<>();
-        
-        // Process items in the collection
-        if (collection != null) {
-            for (Object item : collection) {
-                if (item == null) continue;
-                
-                Object itemId = getEntityId(item);
-                
-                // Try to set the foreign key to parent via field
-                boolean fkSetViaField = setForeignKey(item, parentEntity, parentClass, field);
-                
-                if (itemId == null || isZeroId(itemId)) {
-                    // New item - insert
-                    PojoQuery.insert(context, connection, item);
-                    
-                    // If FK couldn't be set via field, update via SQL after insert
-                    if (!fkSetViaField && parentId != null && fkInfo != null) {
-                        Object newItemId = getEntityId(item);
-                        if (newItemId != null) {
-                            updateForeignKeyColumn(context, connection, componentType, fkInfo.sqlColumnName, newItemId, parentId);
-                        }
-                    }
-                } else {
-                    // Existing item - update
-                    PojoQuery.update(context, connection, item);
-                    processedIds.add(itemId);
-                }
-            }
-        }
-        
-        // Delete orphaned items (in DB but not in collection)
-        for (Object existingId : existingIds) {
-            if (!processedIds.contains(existingId)) {
-                deleteChildById(context, connection, componentType, existingId);
-            }
-        }
-    }
-    
-    private static void cascadeDelete(DbContext context, Connection connection, 
-            Object parentId, TypeModel parentClass, TypeModel componentType, FieldModel field) {
-        
-        ForeignKeyInfo fkInfo = findForeignKeyInfo(componentType, parentClass, field);
-        
-        // Delete all children with this parent ID (with cascade support for nested collections)
-        deleteChildrenWithCascade(context, connection, componentType, fkInfo.sqlColumnName, parentId);
-    }
-    
-    private static Object getEntityId(Object entity) {
-        List<FieldModel> idFields = PojoMetadata.determineIdFields(new ReflectionTypeModel(entity.getClass()));
-        if (idFields.isEmpty()) {
-            return null;
-        }
-        
-        FieldModel idField = idFields.get(0);
-        Field f = ((ReflectionFieldModel)idField).getReflectionField();
-        f.setAccessible(true);
-        try {
-            return f.get(entity);
-        } catch (IllegalAccessException e) {
-            throw new MappingException("Cannot access ID field", e);
-        }
-    }
-    
-    private static boolean isZeroId(Object id) {
-        if (id instanceof Number) {
-            return ((Number) id).longValue() == 0L;
-        }
-        return false;
-    }
-    
-    /**
-     * Information about a foreign key relationship from child to parent.
-     */
-    private static class ForeignKeyInfo {
-        final FieldModel field;           // The field on the child class
-        final String sqlColumnName;  // The SQL column name (e.g., "order_id")
-        final boolean isEntityRef;   // True if field is an entity reference, false if direct ID
-        
-        ForeignKeyInfo(FieldModel field, String sqlColumnName, boolean isEntityRef) {
-            this.field = field;
-            this.sqlColumnName = sqlColumnName;
-            this.isEntityRef = isEntityRef;
-        }
-    }
-    
-    private static ForeignKeyInfo findForeignKeyInfo(TypeModel childClass, TypeModel parentClass, FieldModel collectionField) {
-        return collectionField.getAnnotation(Link.class)
-            .filter(link -> link.getStringValue("foreignlinkfield").filter(s -> !s.isEmpty()).isPresent())
-            .map(link -> {
-                String fkColumnName = link.getStringValue("foreignlinkfield").orElse(null);
-                FieldModel fkField = findField(childClass, fkColumnName);
-                return new ForeignKeyInfo(fkField, fkColumnName, false);
-            })
-            .orElseGet(() -> {
-                // Look for entity reference field that points to parent class
-                for (FieldModel f : PojoMetadata.collectFieldsOfClass(childClass)) {
-                    if (Types.isAssignableFrom(f.getType(), parentClass) || Types.isAssignableFrom(parentClass, f.getType())) {
-                        // This is an entity reference to the parent - use link field naming (fieldName_id)
-                        String sqlName = PojoMetadata.determineLinkFieldName(f);
-                        return new ForeignKeyInfo(f, sqlName, true);
-                    }
-                }
-                
-                // Look for direct ID field with convention: parentTableName_id
-                String tableName = AnnotationHelper.getTableName(parentClass);
-                if (tableName == null) {
-                    tableName = parentClass.getSimpleName().toLowerCase();
-                }
-                String expectedFieldName = tableName + "_id";
-                
-                FieldModel fkField = findField(childClass, expectedFieldName);
-                if (fkField != null) {
-                    return new ForeignKeyInfo(fkField, expectedFieldName, false);
-                }
-                
-                // Also try with @FieldName annotation
-                for (FieldModel f : PojoMetadata.collectFieldsOfClass(childClass)) {
-                    String sqlName = PojoMetadata.determineSqlFieldName(f);
-                    if (expectedFieldName.equals(sqlName) || (tableName + "_id").equals(sqlName)) {
-                        return new ForeignKeyInfo(f, sqlName, Number.class.isAssignableFrom(((ReflectionTypeModel)f.getType()).getReflectionClass()) || f.getType().isPrimitive());
-                    }
-                }
-                
-                // Fallback: return info with default convention (field may not exist on child class)
-                return new ForeignKeyInfo(null, expectedFieldName, false);
-            });
-    }
+	public static int delete(QueryTree tree, Object entity, DatabaseOperations db) {
+		Objects.requireNonNull(tree, "QueryTree cannot be null");
+		Objects.requireNonNull(entity, "Entity cannot be null");
+		return deleteRecursive(tree.root(), entity, db);
+	}
 
-    /**
-     * Sets the foreign key on the child item by setting a field value.
-     * @return true if the FK was set via field, false if no field exists (requires SQL update)
-     */
-    private static boolean setForeignKey(Object item, Object parentEntity, TypeModel parentClass, FieldModel collectionField) {
-        Object parentId = getEntityId(parentEntity);
-        if (parentId == null) {
-            return false;
-        }
-        
-        TypeModel itemClass = new ReflectionTypeModel(item.getClass());
-        ForeignKeyInfo fkInfo = findForeignKeyInfo(itemClass, parentClass, collectionField);
-        
-        if (fkInfo != null && fkInfo.field != null) {
-            Field f = ((ReflectionFieldModel)fkInfo.field).getReflectionField();
-            f.setAccessible(true);
-            try {
-                if (fkInfo.isEntityRef) {
-                    // Set the parent entity reference
-                    f.set(item, parentEntity);
-                } else {
-                    // Set the parent ID directly
-                    f.set(item, parentId);
-                }
-                return true;
-            } catch (IllegalAccessException e) {
-                throw new MappingException("Cannot set foreign key field " + fkInfo.field.getName(), e);
-            }
-        }
-        return false;
-    }
-    
-    private static FieldModel findField(TypeModel clazz, String fieldName) {
-        for (FieldModel f : PojoMetadata.collectFieldsOfClass(clazz)) {
-            if (f.getName().equals(fieldName)) {
-                return f;
-            }
-        }
+	/** Collected field values from an entity */
+	record FieldValues(Map<String, Object> values, Map<String, Object> idValues, String autoGenIdField) {}
+
+	private static FieldValues collectFields(JoinedNode node, Object entity) {
+		Map<String, Object> values = new LinkedHashMap<>();
+		Map<String, Object> idValues = new LinkedHashMap<>();
+		String autoGenIdField = null;
+
+		for (FieldSelectionBase fieldBase : node.fields()) {
+			if (fieldBase instanceof FieldSelection field && field.field() != null) {
+				String fieldName = field.field().getName();
+				String columnName = field.columnName() != null ? field.columnName() : fieldName;
+				Object value = getFieldValue(entity, fieldName);
+
+				if (node.idFieldNames().contains(fieldName)) {
+					if (value == null) {
+						autoGenIdField = fieldName;
+					} else {
+						idValues.put(columnName, value);
+					}
+				} else {
+					values.put(columnName, value);
+				}
+			}
+		}
+		return new FieldValues(values, idValues, autoGenIdField);
+	}
+
+	private static <PK> PK insertRecursive(QueryNode node, Object entity, Object parentId, String parentFkColumn, DatabaseOperations db) {
+		if (node instanceof JoinedNode joinedNode) {
+			TableInfo tableInfo = joinedNode.tableInfo();
+			FieldValues fields = collectFields(joinedNode, entity);
+			Map<String, Object> values = new LinkedHashMap<>(fields.values());
+			values.putAll(fields.idValues()); // include non-null IDs in insert
+
+			// Set FK to parent if this is a child in a one-to-many
+			if (parentId != null && parentFkColumn != null) {
+				values.put(parentFkColumn, parentId);
+			}
+
+			PK generatedId = db.insert(tableInfo.tableName(), tableInfo.schemaName(), values);
+			
+			if (fields.autoGenIdField() != null && generatedId != null) {
+				setFieldValue(entity, fields.autoGenIdField(), generatedId);
+			}
+
+			PK thisEntityId = generatedId != null ? generatedId : getIdValue(joinedNode, entity);
+
+			// Recurse into children
+			for (QueryNode child : joinedNode.children()) {
+				processChildForInsert(joinedNode, child, entity, thisEntityId, db);
+			}
+
+            return thisEntityId;
+		}
         return null;
-    }
-    
-    private static Set<Object> getExistingChildIds(DbContext context, Connection connection, 
-            TypeModel componentType, String foreignKeyField, Object parentId) {
-        
-        Set<Object> ids = new HashSet<>();
-        
-        String tableName = AnnotationHelper.getTableName(componentType);
-        FieldModel idField = PojoMetadata.determineIdField(componentType);
-        String idFieldName = PojoMetadata.determineSqlFieldName(idField);
-        
-        // Build query: SELECT id FROM child_table WHERE parent_id = ?
-        String sql = "SELECT " + context.quoteObjectNames(idFieldName) + 
-                     " FROM " + context.quoteObjectNames(tableName) + 
-                     " WHERE " + context.quoteObjectNames(foreignKeyField) + " = ?";
-        
-        List<java.util.Map<String, Object>> results = DB.queryRows(connection, new SqlExpression(sql, Arrays.asList(parentId)));
-        for (java.util.Map<String, Object> row : results) {
-            Object idValue = row.get(idFieldName);
-            if (idValue != null) {
-                ids.add(idValue);
-            }
-        }
-        
-        return ids;
-    }
-    
-    private static void deleteChildById(DbContext context, Connection connection, 
-            TypeModel componentType, Object id) {
-        
-        // First, recursively delete any nested @Cascade collections
-        // We need to process any @Cascade fields on the component type
-        for (FieldModel field : PojoMetadata.collectFieldsOfClass(componentType)) {
-            if (field.hasAnnotation(Cascade.class) && PojoMetadata.isListOrArray(field.getType())) {
-                TypeModel nestedType = Types.getCollectionComponentType(field);
-                if (nestedType != null && PojoMetadata.isLinkedClass(nestedType)) {
-                    // Delete nested children first
-                    ForeignKeyInfo nestedFkInfo = findForeignKeyInfo(nestedType, componentType, field);
-                    if (nestedFkInfo != null) {
-                        deleteChildrenWithCascade(context, connection, nestedType, nestedFkInfo.sqlColumnName, id);
-                    }
-                }
-            }
-        }
-        
-        String tableName = AnnotationHelper.getTableName(componentType);
-        FieldModel idField = PojoMetadata.determineIdField(componentType);
-        String idFieldName = PojoMetadata.determineSqlFieldName(idField);
-        
-        String sql = "DELETE FROM " + context.quoteObjectNames(tableName) + 
-                     " WHERE " + context.quoteObjectNames(idFieldName) + " = ?";
-        
-        DB.update(connection, new SqlExpression(sql, Arrays.asList(id)));
-    }
-    
-    private static void deleteChildrenWithCascade(DbContext context, Connection connection, 
-            TypeModel componentType, String foreignKeyField, Object parentId) {
-        
-        // First check if this type has nested @Cascade collections
-        boolean hasNestedCascade = false;
-        for (FieldModel field : PojoMetadata.collectFieldsOfClass(componentType)) {
-            if (field.hasAnnotation(Cascade.class) && PojoMetadata.isListOrArray(field.getType())) {
-                hasNestedCascade = true;
-                break;
-            }
-        }
-        
-        if (hasNestedCascade) {
-            // Need to get IDs first and delete each with cascade
-            Set<Object> childIds = getExistingChildIds(context, connection, componentType, foreignKeyField, parentId);
-            for (Object childId : childIds) {
-                deleteChildById(context, connection, componentType, childId);
-            }
-        } else {
-            // No nested cascades, simple bulk delete
-            deleteChildrenByParentId(context, connection, componentType, foreignKeyField, parentId);
-        }
-    }
-    
-    private static void deleteChildrenByParentId(DbContext context, Connection connection, 
-            TypeModel componentType, String foreignKeyField, Object parentId) {
-        
-        String tableName = AnnotationHelper.getTableName(componentType);
-        
-        String sql = "DELETE FROM " + context.quoteObjectNames(tableName) + 
-                     " WHERE " + context.quoteObjectNames(foreignKeyField) + " = ?";
-        
-        DB.update(connection, new SqlExpression(sql, Arrays.asList(parentId)));
-    }
+	}
+
+	private static void processChildForInsert(JoinedNode parentNode, QueryNode child, Object entity, Object parentId, DatabaseOperations db) {
+		if (child instanceof JoinedNode childJoined && childJoined.joinInfo() != null) {
+			JoinInfo joinInfo = childJoined.joinInfo();
+			if (joinInfo.linkField() == null) return;
+
+			Object childValue = getFieldValue(entity, joinInfo.linkField().getName());
+			if (childValue == null) return;
+
+			if (joinInfo.isCollection()) {
+				Collection<?> items = (Collection<?>) childValue;
+
+				if (joinInfo.isManyToMany()) {
+					// Many-to-many: sync link table
+					JoinTableInfo jti = joinInfo.joinTableInfo();
+					List<Object> targetIds = new ArrayList<>();
+					for (Object item : items) {
+						Object itemId = getIdValue(childJoined, item);
+						if (itemId == null) {
+							// Insert new entity first
+							insertRecursive(child, item, null, null, db);
+							itemId = getIdValue(childJoined, item);
+						}
+						targetIds.add(itemId);
+					}
+					db.syncLinkTable(
+						jti.joinTable().tableName(), jti.joinTable().schemaName(),
+						jti.parentFkColumn(), parentId,
+						jti.targetFkColumn(), targetIds
+					);
+				} else {
+					if (joinInfo.joinCondition() instanceof JoinCondition.ForeignKeyInChild fkInChild) {
+						// One-to-many with FK in child: set FK value on parent entity and insert
+						String fkColumn = fkInChild.foreignKeyColumn();
+						for (Object item : items) {
+							insertRecursive(child, item, parentId, fkColumn, db);
+						}
+					} 
+				}
+			} else {
+				// Single entity reference
+				insertRecursive(child, childValue, null, null, db);
+			}
+		}
+	}
+
+	private static int updateRecursive(QueryNode node, Object entity, Object parentId, String parentFkColumn, DatabaseOperations db) {
+		if (node instanceof JoinedNode joinedNode) {
+			TableInfo tableInfo = joinedNode.tableInfo();
+			FieldValues fields = collectFields(joinedNode, entity);
+			Map<String, Object> values = new LinkedHashMap<>(fields.values());
+
+			// Set FK to parent if provided
+			if (parentId != null && parentFkColumn != null) {
+				values.put(parentFkColumn, parentId);
+			}
+
+			int affectedRows = db.update(tableInfo.tableName(), tableInfo.schemaName(), values, fields.idValues());
+
+			Object thisEntityId = getIdValue(joinedNode, entity);
+
+			// Recurse into children
+			for (QueryNode child : joinedNode.children()) {
+				processChildForUpdate(joinedNode, child, entity, thisEntityId, db);
+			}
+			return affectedRows;
+		}
+        return 0;
+	}
+
+	private static void processChildForUpdate(JoinedNode parentNode, QueryNode child, Object entity, Object parentId, DatabaseOperations db) {
+		if (child instanceof JoinedNode childJoined && childJoined.joinInfo() != null) {
+			JoinInfo joinInfo = childJoined.joinInfo();
+			if (joinInfo.linkField() == null) return;
+
+			Object childValue = getFieldValue(entity, joinInfo.linkField().getName());
+
+			if (joinInfo.isCollection()) {
+				Collection<?> items = childValue != null ? (Collection<?>) childValue : List.of();
+
+				if (joinInfo.isManyToMany()) {
+					// Many-to-many: sync link table (delete all + insert)
+					JoinTableInfo jti = joinInfo.joinTableInfo();
+					List<Object> targetIds = new ArrayList<>();
+					for (Object item : items) {
+						Object itemId = getIdValue(childJoined, item);
+						if (itemId != null) {
+							targetIds.add(itemId);
+						}
+					}
+					db.syncLinkTable(
+						jti.joinTable().tableName(), jti.joinTable().schemaName(),
+						jti.parentFkColumn(), parentId,
+						jti.targetFkColumn(), targetIds
+					);
+				} else {
+					if (joinInfo.joinCondition() instanceof JoinCondition.ForeignKeyInChild fkInChild) {
+						// One-to-many: delete all children then reinsert
+						String fkColumn = fkInChild.foreignKeyColumn();
+						db.delete(
+							childJoined.tableInfo().tableName(), 
+							childJoined.tableInfo().schemaName(),
+							Map.of(fkColumn, parentId)
+						);
+						for (Object item : items) {
+							// Reset ID so it gets a new one
+							clearIdField(childJoined, item);
+							insertRecursive(child, item, parentId, fkColumn, db);
+						}
+					}
+				}
+			} else if (childValue != null) {
+				// Single entity reference
+				updateRecursive(child, childValue, null, null, db);
+			}
+		}
+	}
+
+	private static int deleteRecursive(QueryNode node, Object entity, DatabaseOperations db) {
+		if (node instanceof JoinedNode joinedNode) {
+			Object thisEntityId = getIdValue(joinedNode, entity);
+
+			// Delete children first (reverse order)
+			for (QueryNode child : joinedNode.children()) {
+				if (child instanceof JoinedNode childJoined && childJoined.joinInfo() != null) {
+					JoinInfo joinInfo = childJoined.joinInfo();
+					if (joinInfo.linkField() == null) continue;
+
+					if (joinInfo.isCollection()) {
+						if (joinInfo.isManyToMany()) {
+							// Delete link table rows
+							JoinTableInfo jti = joinInfo.joinTableInfo();
+						db.delete(
+							jti.joinTable().tableName(), jti.joinTable().schemaName(),
+							Map.of(jti.parentFkColumn(), thisEntityId)
+						);
+					} else {
+						if (joinInfo.joinCondition() instanceof JoinCondition.ForeignKeyInChild fkInChild) {
+							// Delete owned children
+							String fkColumn = fkInChild.foreignKeyColumn();
+							db.delete(
+								childJoined.tableInfo().tableName(),
+								childJoined.tableInfo().schemaName(),
+								Map.of(fkColumn, thisEntityId)
+								);
+							}
+						}
+					} else {
+						Object childEntity = getFieldValue(entity, joinInfo.linkField().getName());
+						if (childEntity != null) {
+							deleteRecursive(child, childEntity, db);
+						}
+					}
+				}
+			}
+
+			// Delete this entity
+			TableInfo tableInfo = joinedNode.tableInfo();
+			Map<String, Object> where = new LinkedHashMap<>();
+			for (String idFieldName : joinedNode.idFieldNames()) {
+				Object idValue = getFieldValue(entity, idFieldName);
+				where.put(idFieldName, idValue);
+			}
+			return db.delete(tableInfo.tableName(), tableInfo.schemaName(), where);
+		}
+        return 0;
+	}
+
+    @SuppressWarnings("unchecked")
+	private static <PK> PK getIdValue(JoinedNode node, Object entity) {
+		if (node.idFieldNames().isEmpty()) return null;
+		return (PK) getFieldValue(entity, node.idFieldNames().get(0));
+	}
+
+	private static void clearIdField(JoinedNode node, Object entity) {
+		if (!node.idFieldNames().isEmpty()) {
+			setFieldValue(entity, node.idFieldNames().get(0), null);
+		}
+	}
+
+	private static Object getFieldValue(Object entity, String fieldName) {
+		try {
+			Field field = entity.getClass().getDeclaredField(fieldName);
+			field.setAccessible(true);
+			return field.get(entity);
+		} catch (NoSuchFieldException | IllegalAccessException e) {
+			return null;
+		}
+	}
+
+	private static void setFieldValue(Object entity, String fieldName, Object value) {
+		try {
+			Field field = entity.getClass().getDeclaredField(fieldName);
+			field.setAccessible(true);
+			field.set(entity, value);
+		} catch (NoSuchFieldException | IllegalAccessException e) {
+			throw new RuntimeException("Cannot set field " + fieldName, e);
+		}
+	}
 }

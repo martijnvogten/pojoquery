@@ -473,9 +473,42 @@ public class PojoQuery<T> {
 		return insertCascading(context, connection, o);
 	}
 
+	private static class DatabaseOperationsImpl implements CascadingUpdater.DatabaseOperations {
+		private final DbContext context;
+		private final Connection connection;
+
+		public DatabaseOperationsImpl(DbContext context, Connection connection) {
+			this.context = context;
+			this.connection = connection;
+		}
+
+		@Override
+		public <PK> PK insert(String table, String schema, Map<String, Object> values) {
+			return DB.insert(context, connection, schema, table, values);
+		}
+
+		@Override
+		public int update(String table, String schema, Map<String, Object> values, Map<String, Object> where) {
+			return DB.update(context, connection, schema, table, values, where);
+		}
+
+		@Override
+		public int delete(String table, String schema, Map<String, Object> where) {
+			return executeDelete(context, connection, table, buildConditionFromValuesMap(context, table, where));
+		}
+
+		@Override
+		public void syncLinkTable(String table, String schema, String ownerFkColumn, Object ownerId,
+				String targetFkColumn, List<Object> targetIds) {
+			// TODO Auto-generated method stub
+			throw new UnsupportedOperationException("Unimplemented method 'syncLinkTable'");
+		}
+	}
+
 	private static <PK> PK insertCascading(DbContext context, Connection connection, Object o) {
 		Objects.requireNonNull(o, "entity must not be null");
-		return CascadingUpdater.insert(context, connection, o);
+		QueryTree tree = QueryTreeBuilder.from(o.getClass());
+		return CascadingUpdater.insert(tree, o, new DatabaseOperationsImpl(context, connection));
 	}
 
 	static <PK> PK insertInternal(DbContext context, Connection conn, Object o) {
@@ -536,7 +569,8 @@ public class PojoQuery<T> {
 
 	static int updateCascading(DbContext context, Connection connection, Object object) {
 		Objects.requireNonNull(object, "entity must not be null");
-		return CascadingUpdater.update(context, connection, object);
+		QueryTree tree = QueryTreeBuilder.from(object.getClass());
+		return CascadingUpdater.update(tree, object, new DatabaseOperationsImpl(context, connection));
 	}
 
 	static int updateInternal(DbContext context, Connection conn, Class<?> clz, Object o) {
@@ -740,7 +774,8 @@ public class PojoQuery<T> {
 	
 	public static void deleteCascading(DbContext context, Connection conn, Object entity) {
 		Objects.requireNonNull(entity, "entity must not be null");
-		CascadingUpdater.delete(context, conn, entity);
+		QueryTree tree = QueryTreeBuilder.from(entity.getClass());
+		CascadingUpdater.delete(tree, entity, new DatabaseOperationsImpl(context, conn));
 	}
 	
 	public static void delete(DbContext context, Connection conn, Object entity) {
@@ -777,10 +812,10 @@ public class PojoQuery<T> {
 		}
 	}
 
-	private static void executeDelete(DbContext context, Connection conn, String tableName, List<SqlExpression> where) {
+	private static int executeDelete(DbContext context, Connection conn, String tableName, List<SqlExpression> where) {
 		SqlExpression wheres = SqlExpression.implode(" AND ", where);
 		SqlExpression deleteStatement = new SqlExpression("DELETE FROM " + context.quoteObjectNames(tableName) + " WHERE " + wheres.getSql(), wheres.getParameters());
-		DB.update(conn, deleteStatement);
+		return DB.update(conn, deleteStatement);
 	}
 
 	private Optional<T> returnSingleRow(List<T> resultList) {
@@ -892,7 +927,7 @@ public class PojoQuery<T> {
 		}
 	}
 
-		public static List<FieldModel> assertIdFields(TypeModel type) {
+	public static List<FieldModel> assertIdFields(TypeModel type) {
 		List<FieldModel> idFields = PojoMetadata.determineIdFields(type);
 		if (idFields.size() == 0) {
 			throw new MappingException("No @Id annotations found on fields of type " + type.getQualifiedName());
@@ -910,19 +945,22 @@ public class PojoQuery<T> {
 			if (id instanceof Map) {
 				@SuppressWarnings("unchecked")
 				Map<String, Object> idvalues = (Map<String, Object>) id;
-
-				List<SqlExpression> result = new ArrayList<SqlExpression>();
-				for (String field : idvalues.keySet()) {
-					result.add(new SqlExpression(context.quoteObjectNames(tableName, field) + "=?", Arrays.asList((Object) idvalues.get(field))));
-				}
-				return result;
+				return buildConditionFromValuesMap(context, tableName, idvalues);
 			} else {
 				throw new MappingException("Multiple @Id annotations on type " + type.getQualifiedName() + ": expecting a map id.");
 			}
 		}
 	}
 
-		public SqlExpression buildListIdsStatement(List<FieldModel> idFields) {
+	public static List<SqlExpression> buildConditionFromValuesMap(DbContext context, String tableName, Map<String,Object> idvalues) {
+		List<SqlExpression> result = new ArrayList<SqlExpression>();
+		for (String field : idvalues.keySet()) {
+			result.add(new SqlExpression(context.quoteObjectNames(tableName, field) + "=?", Arrays.asList((Object) idvalues.get(field))));
+		}
+		return result;
+	}
+
+	public SqlExpression buildListIdsStatement(List<FieldModel> idFields) {
 		return query.toListIdsStatement(new SqlExpression(implode("\n , ", getFieldNames(query.getTable(), idFields))));
 	}
 

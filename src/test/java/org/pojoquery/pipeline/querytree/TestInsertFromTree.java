@@ -1,16 +1,16 @@
 package org.pojoquery.pipeline.querytree;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.Test;
+import org.pojoquery.CascadingUpdater;
+import org.pojoquery.CascadingUpdater.DatabaseOperations;
 import org.pojoquery.annotations.Id;
+import org.pojoquery.annotations.Link;
+import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 
 public class TestInsertFromTree {
@@ -46,16 +46,64 @@ public class TestInsertFromTree {
 		Integer quantity;
 	}
 
-	interface DatabaseOperations {
-		/** Returns generated ID (or null if no auto-generated key) */
-		Object insert(String table, String schema, Map<String, Object> values);
-		void update(String table, String schema, Map<String, Object> values, Map<String, Object> where);
-		void delete(String table, String schema, Map<String, Object> where);
-		
-		/** Link table operations for many-to-many */
-		void syncLinkTable(String table, String schema, 
-			String ownerFkColumn, Object ownerId,
-			String targetFkColumn, List<Object> targetIds);
+	// === Many-to-many models ===
+	@Table("tag")
+	static class Tag {
+		@Id
+		Long id;
+		String name;
+	}
+
+	@Table("post")
+	static class Post {
+		@Id
+		Long id;
+		String title;
+		@Link(linktable = "post_tag")
+		List<Tag> tags;
+	}
+
+	// === Inheritance models ===
+	@Table("vehicle")
+	@SubClasses({Car.class, Motorcycle.class})
+	static class Vehicle {
+		@Id
+		Long id;
+		String brand;
+	}
+
+	@Table("car")
+	static class Car extends Vehicle {
+		Integer numberOfDoors;
+	}
+
+	@Table("motorcycle")
+	static class Motorcycle extends Vehicle {
+		Boolean hasSidecar;
+	}
+
+	// === Models for testing different relationship types ===
+	@Table("company")
+	static class Company {
+		@Id
+		Long id;
+		String name;
+		List<Employee> employees;  // one-to-many
+	}
+
+	@Table("employee")
+	static class Employee {
+		@Id
+		Long id;
+		String firstName;
+		Department department;  // many-to-one
+	}
+
+	@Table("department")
+	static class Department {
+		@Id
+		Long id;
+		String name;
 	}
 
 	/** Recording implementation for testing */
@@ -64,23 +112,25 @@ public class TestInsertFromTree {
 		final AtomicLong idGenerator = new AtomicLong(100);
 
 		@Override
-		public Object insert(String table, String schema, Map<String, Object> values) {
+		public <PK> PK insert(String table, String schema, Map<String, Object> values) {
 			String fullTable = schema != null ? schema + "." + table : table;
 			Long generatedId = idGenerator.getAndIncrement();
 			operations.add(String.format("INSERT INTO %s %s → id=%d", fullTable, values, generatedId));
-			return generatedId;
+			return (PK) generatedId;
 		}
 
 		@Override
-		public void update(String table, String schema, Map<String, Object> values, Map<String, Object> where) {
+		public int update(String table, String schema, Map<String, Object> values, Map<String, Object> where) {
 			String fullTable = schema != null ? schema + "." + table : table;
 			operations.add(String.format("UPDATE %s SET %s WHERE %s", fullTable, values, where));
+			return 1; // Simulate one row updated
 		}
 
 		@Override
-		public void delete(String table, String schema, Map<String, Object> where) {
+		public int delete(String table, String schema, Map<String, Object> where) {
 			String fullTable = schema != null ? schema + "." + table : table;
 			operations.add(String.format("DELETE FROM %s WHERE %s", fullTable, where));
+			return 1; // Simulate one row deleted
 		}
 
 		@Override
@@ -107,7 +157,7 @@ public class TestInsertFromTree {
 		System.out.println("Query Tree:" + tree);
 
 		RecordingDb db = new RecordingDb();
-		insert(tree, article, db);
+		CascadingUpdater.insert(tree, article, db);
 		
 		System.out.println("\nOperations:");
 		for (String op : db.operations) {
@@ -128,7 +178,7 @@ public class TestInsertFromTree {
 		System.out.println("Query Tree:" + tree);
 
 		RecordingDb db = new RecordingDb();
-		update(tree, article, db);
+		CascadingUpdater.update(tree, article, db);
 		
 		System.out.println("\nOperations:");
 		for (String op : db.operations) {
@@ -148,7 +198,7 @@ public class TestInsertFromTree {
 		System.out.println("Query Tree:" + tree);
 
 		RecordingDb db = new RecordingDb();
-		insert(tree, order, db);
+		CascadingUpdater.insert(tree, order, db);
 		
 		System.out.println("\nOperations:");
 		for (String op : db.operations) {
@@ -169,7 +219,7 @@ public class TestInsertFromTree {
 		System.out.println("Query Tree:" + tree);
 
 		RecordingDb db = new RecordingDb();
-		update(tree, order, db);
+		CascadingUpdater.update(tree, order, db);
 		
 		System.out.println("\nOperations:");
 		for (String op : db.operations) {
@@ -177,277 +227,225 @@ public class TestInsertFromTree {
 		}
 	}
 
+	// === Many-to-Many Tests (LEFT JOIN through link table) ===
+
+	@Test
+	public void testInsertWithManyToMany() {
+		Post post = new Post();
+		post.title = "My Post";
+		post.tags = new ArrayList<>();
+		post.tags.add(createTag("Java"));
+		post.tags.add(createTag("Testing"));
+
+		QueryTree tree = QueryTreeBuilder.from(Post.class);
+		System.out.println("Query Tree (Many-to-Many):" + tree);
+
+		RecordingDb db = new RecordingDb();
+		CascadingUpdater.insert(tree, post, db);
+
+		System.out.println("\nOperations (Many-to-Many Insert):");
+		for (String op : db.operations) {
+			System.out.println("  " + op);
+		}
+	}
+
+	@Test
+	public void testUpdateWithManyToMany() {
+		Post post = new Post();
+		post.id = 1L;
+		post.title = "Updated Post";
+		post.tags = new ArrayList<>();
+		post.tags.add(createExistingTag(10L, "Existing Tag"));
+		post.tags.add(createExistingTag(20L, "Another Tag"));
+
+		QueryTree tree = QueryTreeBuilder.from(Post.class);
+		System.out.println("Query Tree (Many-to-Many):" + tree);
+
+		RecordingDb db = new RecordingDb();
+		CascadingUpdater.update(tree, post, db);
+
+		System.out.println("\nOperations (Many-to-Many Update):");
+		for (String op : db.operations) {
+			System.out.println("  " + op);
+		}
+	}
+
+	// === Inheritance Tests (INNER JOIN for subclass to superclass) ===
+
+	@Test
+	public void testInsertWithInheritance() {
+		Car car = new Car();
+		car.brand = "Toyota";
+		car.numberOfDoors = 4;
+
+		QueryTree tree = QueryTreeBuilder.from(Car.class);
+		System.out.println("Query Tree (Inheritance - Car):" + tree);
+
+		RecordingDb db = new RecordingDb();
+		CascadingUpdater.insert(tree, car, db);
+
+		System.out.println("\nOperations (Inheritance Insert):");
+		for (String op : db.operations) {
+			System.out.println("  " + op);
+		}
+	}
+
+	@Test
+	public void testUpdateWithInheritance() {
+		Car car = new Car();
+		car.id = 1L;
+		car.brand = "Honda";
+		car.numberOfDoors = 2;
+
+		QueryTree tree = QueryTreeBuilder.from(Car.class);
+		System.out.println("Query Tree (Inheritance - Car):" + tree);
+
+		RecordingDb db = new RecordingDb();
+		CascadingUpdater.update(tree, car, db);
+
+		System.out.println("\nOperations (Inheritance Update):");
+		for (String op : db.operations) {
+			System.out.println("  " + op);
+		}
+	}
+
+	@Test
+	public void testInsertMotorcycleVariant() {
+		Motorcycle motorcycle = new Motorcycle();
+		motorcycle.brand = "Harley";
+		motorcycle.hasSidecar = true;
+
+		QueryTree tree = QueryTreeBuilder.from(Motorcycle.class);
+		System.out.println("Query Tree (Inheritance - Motorcycle):" + tree);
+
+		RecordingDb db = new RecordingDb();
+		CascadingUpdater.insert(tree, motorcycle, db);
+
+		System.out.println("\nOperations (Motorcycle Insert):");
+		for (String op : db.operations) {
+			System.out.println("  " + op);
+		}
+	}
+
+	// === Nested Relationship Tests (One-to-Many with Many-to-One) ===
+
+	@Test
+	public void testInsertWithNestedRelationships() {
+		Company company = new Company();
+		company.name = "Tech Corp";
+		company.employees = new ArrayList<>();
+
+		Employee emp1 = new Employee();
+		emp1.firstName = "Alice";
+		emp1.department = new Department();
+		emp1.department.name = "Engineering";
+
+		Employee emp2 = new Employee();
+		emp2.firstName = "Bob";
+		emp2.department = new Department();
+		emp2.department.name = "Marketing";
+
+		company.employees.add(emp1);
+		company.employees.add(emp2);
+
+		QueryTree tree = QueryTreeBuilder.from(Company.class);
+		System.out.println("Query Tree (Nested Relationships):" + tree);
+
+		RecordingDb db = new RecordingDb();
+		CascadingUpdater.insert(tree, company, db);
+
+		System.out.println("\nOperations (Nested Relationships Insert):");
+		for (String op : db.operations) {
+			System.out.println("  " + op);
+		}
+	}
+
+	@Test
+	public void testUpdateWithNestedRelationships() {
+		Company company = new Company();
+		company.id = 1L;
+		company.name = "Updated Tech Corp";
+		company.employees = new ArrayList<>();
+
+		Employee emp1 = new Employee();
+		emp1.id = 10L;
+		emp1.firstName = "Alice Updated";
+		emp1.department = new Department();
+		emp1.department.id = 100L;
+		emp1.department.name = "Engineering Updated";
+
+		company.employees.add(emp1);
+
+		QueryTree tree = QueryTreeBuilder.from(Company.class);
+		System.out.println("Query Tree (Nested Relationships):" + tree);
+
+		RecordingDb db = new RecordingDb();
+		CascadingUpdater.update(tree, company, db);
+
+		System.out.println("\nOperations (Nested Relationships Update):");
+		for (String op : db.operations) {
+			System.out.println("  " + op);
+		}
+	}
+
+	// === Delete Tests for Different Join Types ===
+
+	@Test
+	public void testDeleteWithManyToMany() {
+		Post post = new Post();
+		post.id = 1L;
+		post.title = "Post to Delete";
+		post.tags = new ArrayList<>();
+		post.tags.add(createExistingTag(10L, "Tag1"));
+
+		QueryTree tree = QueryTreeBuilder.from(Post.class);
+
+		RecordingDb db = new RecordingDb();
+		CascadingUpdater.delete(tree, post, db);
+
+		System.out.println("\nOperations (Many-to-Many Delete):");
+		for (String op : db.operations) {
+			System.out.println("  " + op);
+		}
+	}
+
+	@Test
+	public void testDeleteWithInheritance() {
+		Car car = new Car();
+		car.id = 1L;
+		car.brand = "Toyota";
+		car.numberOfDoors = 4;
+
+		QueryTree tree = QueryTreeBuilder.from(Car.class);
+
+		RecordingDb db = new RecordingDb();
+		CascadingUpdater.delete(tree, car, db);
+
+		System.out.println("\nOperations (Inheritance Delete):");
+		for (String op : db.operations) {
+			System.out.println("  " + op);
+		}
+	}
+
+	// === Helper methods for new model classes ===
+
+	private Tag createTag(String name) {
+		Tag tag = new Tag();
+		tag.name = name;
+		return tag;
+	}
+
+	private Tag createExistingTag(Long id, String name) {
+		Tag tag = new Tag();
+		tag.id = id;
+		tag.name = name;
+		return tag;
+	}
+
 	private LineItem createLineItem(String product, int quantity) {
 		LineItem item = new LineItem();
 		item.product = product;
 		item.quantity = quantity;
 		return item;
-	}
-
-	void insert(QueryTree tree, Object entity, DatabaseOperations db) {
-		Objects.requireNonNull(tree, "QueryTree cannot be null");
-		Objects.requireNonNull(entity, "Entity cannot be null");
-		insertRecursive(tree.root(), entity, null, null, db);
-	}
-
-	void update(QueryTree tree, Object entity, DatabaseOperations db) {
-		Objects.requireNonNull(tree, "QueryTree cannot be null");
-		Objects.requireNonNull(entity, "Entity cannot be null");
-		updateRecursive(tree.root(), entity, null, null, db);
-	}
-
-	void delete(QueryTree tree, Object entity, DatabaseOperations db) {
-		Objects.requireNonNull(tree, "QueryTree cannot be null");
-		Objects.requireNonNull(entity, "Entity cannot be null");
-		deleteRecursive(tree.root(), entity, db);
-	}
-
-	/** Collected field values from an entity */
-	record FieldValues(Map<String, Object> values, Map<String, Object> idValues, String autoGenIdField) {}
-
-	FieldValues collectFields(JoinedNode node, Object entity) {
-		Map<String, Object> values = new LinkedHashMap<>();
-		Map<String, Object> idValues = new LinkedHashMap<>();
-		String autoGenIdField = null;
-
-		for (FieldSelectionBase fieldBase : node.fields()) {
-			if (fieldBase instanceof FieldSelection field && field.field() != null) {
-				String fieldName = field.field().getName();
-				String columnName = field.columnName() != null ? field.columnName() : fieldName;
-				Object value = getFieldValue(entity, fieldName);
-
-				if (node.idFieldNames().contains(fieldName)) {
-					if (value == null) {
-						autoGenIdField = fieldName;
-					} else {
-						idValues.put(columnName, value);
-					}
-				} else {
-					values.put(columnName, value);
-				}
-			}
-		}
-		return new FieldValues(values, idValues, autoGenIdField);
-	}
-
-	void insertRecursive(QueryNode node, Object entity, Object parentId, String parentFkColumn, DatabaseOperations db) {
-		if (node instanceof JoinedNode joinedNode) {
-			TableInfo tableInfo = joinedNode.tableInfo();
-			FieldValues fields = collectFields(joinedNode, entity);
-			Map<String, Object> values = new LinkedHashMap<>(fields.values());
-			values.putAll(fields.idValues()); // include non-null IDs in insert
-
-			// Set FK to parent if this is a child in a one-to-many
-			if (parentId != null && parentFkColumn != null) {
-				values.put(parentFkColumn, parentId);
-			}
-
-			Object generatedId = db.insert(tableInfo.tableName(), tableInfo.schemaName(), values);
-			
-			if (fields.autoGenIdField() != null && generatedId != null) {
-				setFieldValue(entity, fields.autoGenIdField(), generatedId);
-			}
-
-			Object thisEntityId = generatedId != null ? generatedId : getIdValue(joinedNode, entity);
-
-			// Recurse into children
-			for (QueryNode child : joinedNode.children()) {
-				processChildForInsert(joinedNode, child, entity, thisEntityId, db);
-			}
-		}
-	}
-
-	private void processChildForInsert(JoinedNode parentNode, QueryNode child, Object entity, Object parentId, DatabaseOperations db) {
-		if (child instanceof JoinedNode childJoined && childJoined.joinInfo() != null) {
-			JoinInfo joinInfo = childJoined.joinInfo();
-			if (joinInfo.linkField() == null) return;
-
-			Object childValue = getFieldValue(entity, joinInfo.linkField().getName());
-			if (childValue == null) return;
-
-			if (joinInfo.isCollection()) {
-				Collection<?> items = (Collection<?>) childValue;
-
-				if (joinInfo.isManyToMany()) {
-					// Many-to-many: sync link table
-					JoinTableInfo jti = joinInfo.joinTableInfo();
-					List<Object> targetIds = new ArrayList<>();
-					for (Object item : items) {
-						Object itemId = getIdValue(childJoined, item);
-						if (itemId == null) {
-							// Insert new entity first
-							insertRecursive(child, item, null, null, db);
-							itemId = getIdValue(childJoined, item);
-						}
-						targetIds.add(itemId);
-					}
-					db.syncLinkTable(
-						jti.joinTable().tableName(), jti.joinTable().schemaName(),
-						jti.parentFkColumn(), parentId,
-						jti.targetFkColumn(), targetIds
-					);
-				} else {
-					// One-to-many: insert children with FK to parent
-					String fkColumn = determineForeignKeyColumn(parentNode);
-					for (Object item : items) {
-						insertRecursive(child, item, parentId, fkColumn, db);
-					}
-				}
-			} else {
-				// Single entity reference
-				insertRecursive(child, childValue, null, null, db);
-			}
-		}
-	}
-
-	void updateRecursive(QueryNode node, Object entity, Object parentId, String parentFkColumn, DatabaseOperations db) {
-		if (node instanceof JoinedNode joinedNode) {
-			TableInfo tableInfo = joinedNode.tableInfo();
-			FieldValues fields = collectFields(joinedNode, entity);
-			Map<String, Object> values = new LinkedHashMap<>(fields.values());
-
-			// Set FK to parent if provided
-			if (parentId != null && parentFkColumn != null) {
-				values.put(parentFkColumn, parentId);
-			}
-
-			db.update(tableInfo.tableName(), tableInfo.schemaName(), values, fields.idValues());
-
-			Object thisEntityId = getIdValue(joinedNode, entity);
-
-			// Recurse into children
-			for (QueryNode child : joinedNode.children()) {
-				processChildForUpdate(joinedNode, child, entity, thisEntityId, db);
-			}
-		}
-	}
-
-	private void processChildForUpdate(JoinedNode parentNode, QueryNode child, Object entity, Object parentId, DatabaseOperations db) {
-		if (child instanceof JoinedNode childJoined && childJoined.joinInfo() != null) {
-			JoinInfo joinInfo = childJoined.joinInfo();
-			if (joinInfo.linkField() == null) return;
-
-			Object childValue = getFieldValue(entity, joinInfo.linkField().getName());
-
-			if (joinInfo.isCollection()) {
-				Collection<?> items = childValue != null ? (Collection<?>) childValue : List.of();
-
-				if (joinInfo.isManyToMany()) {
-					// Many-to-many: sync link table (delete all + insert)
-					JoinTableInfo jti = joinInfo.joinTableInfo();
-					List<Object> targetIds = new ArrayList<>();
-					for (Object item : items) {
-						Object itemId = getIdValue(childJoined, item);
-						if (itemId != null) {
-							targetIds.add(itemId);
-						}
-					}
-					db.syncLinkTable(
-						jti.joinTable().tableName(), jti.joinTable().schemaName(),
-						jti.parentFkColumn(), parentId,
-						jti.targetFkColumn(), targetIds
-					);
-				} else {
-					// One-to-many: delete all children then reinsert
-					String fkColumn = determineForeignKeyColumn(parentNode);
-					db.delete(
-						childJoined.tableInfo().tableName(), 
-						childJoined.tableInfo().schemaName(),
-						Map.of(fkColumn, parentId)
-					);
-					for (Object item : items) {
-						// Reset ID so it gets a new one
-						clearIdField(childJoined, item);
-						insertRecursive(child, item, parentId, fkColumn, db);
-					}
-				}
-			} else if (childValue != null) {
-				// Single entity reference
-				updateRecursive(child, childValue, null, null, db);
-			}
-		}
-	}
-
-	void deleteRecursive(QueryNode node, Object entity, DatabaseOperations db) {
-		if (node instanceof JoinedNode joinedNode) {
-			Object thisEntityId = getIdValue(joinedNode, entity);
-
-			// Delete children first (reverse order)
-			for (QueryNode child : joinedNode.children()) {
-				if (child instanceof JoinedNode childJoined && childJoined.joinInfo() != null) {
-					JoinInfo joinInfo = childJoined.joinInfo();
-					if (joinInfo.linkField() == null) continue;
-
-					if (joinInfo.isCollection()) {
-						if (joinInfo.isManyToMany()) {
-							// Delete link table rows
-							JoinTableInfo jti = joinInfo.joinTableInfo();
-						db.delete(
-							jti.joinTable().tableName(), jti.joinTable().schemaName(),
-							Map.of(jti.parentFkColumn(), thisEntityId)
-						);
-					} else {
-						// Delete owned children
-						String fkColumn = determineForeignKeyColumn(joinedNode);
-						db.delete(
-							childJoined.tableInfo().tableName(),
-							childJoined.tableInfo().schemaName(),
-							Map.of(fkColumn, thisEntityId)
-							);
-						}
-					} else {
-						Object childEntity = getFieldValue(entity, joinInfo.linkField().getName());
-						if (childEntity != null) {
-							deleteRecursive(child, childEntity, db);
-						}
-					}
-				}
-			}
-
-			// Delete this entity
-			TableInfo tableInfo = joinedNode.tableInfo();
-			Map<String, Object> where = new LinkedHashMap<>();
-			for (String idFieldName : joinedNode.idFieldNames()) {
-				Object idValue = getFieldValue(entity, idFieldName);
-				where.put(idFieldName, idValue);
-			}
-			db.delete(tableInfo.tableName(), tableInfo.schemaName(), where);
-		}
-	}
-
-	private String determineForeignKeyColumn(JoinedNode parentNode) {
-		// Convention: parentTableName_id
-		return parentNode.tableInfo().tableName() + "_id";
-	}
-
-	private Object getIdValue(JoinedNode node, Object entity) {
-		if (node.idFieldNames().isEmpty()) return null;
-		return getFieldValue(entity, node.idFieldNames().get(0));
-	}
-
-	private void clearIdField(JoinedNode node, Object entity) {
-		if (!node.idFieldNames().isEmpty()) {
-			setFieldValue(entity, node.idFieldNames().get(0), null);
-		}
-	}
-
-	private Object getFieldValue(Object entity, String fieldName) {
-		try {
-			Field field = entity.getClass().getDeclaredField(fieldName);
-			field.setAccessible(true);
-			return field.get(entity);
-		} catch (NoSuchFieldException | IllegalAccessException e) {
-			return null;
-		}
-	}
-
-	private void setFieldValue(Object entity, String fieldName, Object value) {
-		try {
-			Field field = entity.getClass().getDeclaredField(fieldName);
-			field.setAccessible(true);
-			field.set(entity, value);
-		} catch (NoSuchFieldException | IllegalAccessException e) {
-			throw new RuntimeException("Cannot set field " + fieldName, e);
-		}
 	}
 }

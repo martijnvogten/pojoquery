@@ -409,7 +409,7 @@ public interface DB {
      * @param schemaName the schema name
      * @param tableName the name of the table
      * @param values the values to update
-     * @param ids the identifiers of the records to update
+     * @param ids the identifier of the record to update
      * @return the number of rows affected
      */
     public static int update(DbContext context, Connection connection, String schemaName, String tableName, Map<String, Object> values, Map<String, Object> ids) {
