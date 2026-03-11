@@ -3,13 +3,15 @@ package org.pojoquery.pipeline.querytree.transforms;
 import java.util.List;
 
 import org.pojoquery.pipeline.querytree.EmbeddedNode;
+import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.FieldSelectionBase;
 import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
+import org.pojoquery.pipeline.querytree.TableNode;
+import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.JakartaAnnotations;
-import org.pojoquery.typemodel.TypeModel;
 
 /**
  * Pipeline transform that applies jakarta.persistence annotation mappings to all query nodes.
@@ -33,60 +35,48 @@ public class JakartaAnnotationsTransform implements QueryTreeTransform {
         if (!JakartaAnnotations.isAvailable()) {
             return tree;
         }
+
+        if (tree.root() == null) {
+            return tree.withType(JakartaAnnotations.transformType(tree.resultType()));
+        }
         
-        // Transform the result type
-        TypeModel transformedResultType = JakartaAnnotations.transformType(tree.resultType());
-        
-        // Transform all nodes in the tree
-        QueryNode newRoot = transformNode(tree.root());
-        
-        return new QueryTree(transformedResultType, newRoot, tree.groupBy(), tree.orderBy(), tree.wheres());
+        return tree.transformNodes(it -> true, this::transformNode);
     }
     
     private QueryNode transformNode(QueryNode node) {
         if (node == null) {
             return null;
         }
+
+        // Transform field models in field selections (only resolved ones)
         
         // Transform based on node type
-        QueryNode transformed;
-        if (node instanceof JoinedNode jn) {
-            transformed = transformJoinedNode(jn);
-        } else if (node instanceof EmbeddedNode en) {
-            transformed = transformEmbeddedNode(en);
+        if (node instanceof TableNode tn) {
+            return 
+                (node instanceof EmbeddedNode en ? 
+                    en.withTransformedType(JakartaAnnotations::transformType) 
+                    : 
+                    (node instanceof JoinedNode jn ? jn.withTransformedType(JakartaAnnotations::transformType) : tn)
+                )
+                .withFields(transformFields(tn.fields()));
+        } else if (node instanceof EmptyTableNode en) {
+            return en.withType(JakartaAnnotations.transformType(en.type()));
         } else {
-            transformed = node;
+            return node;
         }
-        
-        // Recursively transform children
-        List<QueryNode> transformedChildren = transformed.children().stream()
-            .map(this::transformNode)
-            .toList();
-        
-        return transformed.withChildren(transformedChildren);
     }
     
-    private JoinedNode transformJoinedNode(JoinedNode node) {
-        // Transform field models in field selections (only resolved ones)
-        List<FieldSelectionBase> transformedFields = node.fields().stream()
-            .map(f -> f instanceof FieldSelection fs ? JakartaAnnotations.transformFieldSelection(fs) : f)
+    private List<FieldSelectionBase> transformFields(List<FieldSelectionBase> fields) {
+        return fields.stream()
+            .map(fs -> {
+                FieldModel transformedField = JakartaAnnotations.transformField(fs.field());
+                if (transformedField == fs.field()) {
+                    return fs; // No changes, return original
+                }
+                return fs.withField(transformedField);
+            })
             .toList();
-        
-        // Transform the type annotations and fields
-        return node
-            .withTransformedType(JakartaAnnotations::transformType)
-            .withFields(transformedFields);
+
     }
     
-    private EmbeddedNode transformEmbeddedNode(EmbeddedNode node) {
-        // Transform field models in field selections (only resolved ones)
-        List<FieldSelectionBase> transformedFields = node.fields().stream()
-            .map(f -> f instanceof FieldSelection fs ? JakartaAnnotations.transformFieldSelection(fs) : f)
-            .toList();
-        
-        // Transform the type annotations and fields
-        return node
-            .withTransformedType(JakartaAnnotations::transformType)
-            .withFields(transformedFields);
-    }
 }

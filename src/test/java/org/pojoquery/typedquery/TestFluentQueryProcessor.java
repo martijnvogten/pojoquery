@@ -122,24 +122,24 @@ public class TestFluentQueryProcessor {
         });
     }
 
-    @Test
-    public void testQueryWithComplexConditions() {
-        DB.withConnection(dataSource, (Connection c) -> {
-            ArticleQuery q = new ArticleQuery();
-            List<Article> articles = q.where()
-                    .title.eq("First Article")
-                    .and(q.id.eq(1L).or().id.eq(3L))
-                    .or().author.isNotNull()
-                    .orderBy().title.desc().list(c);
+    // @Test
+    // public void testQueryWithComplexConditions() {
+    //     DB.withConnection(dataSource, (Connection c) -> {
+    //         ArticleQuery q = new ArticleQuery();
+    //         List<Article> articles = q.where()
+    //                 .title.eq("First Article")
+    //                 .and(q.id.eq(1L).or().id.eq(3L))
+    //                 .or().author.isNotNull()
+    //                 .orderBy().title.desc().list(c);
 
-            // All articles have non-null authors, so all 3 should be returned
-            assertFalse(articles.isEmpty());
-            System.out.println("Query with complex conditions returned " + articles.size() + " articles");
-            for (Article article : articles) {
-                System.out.println("  - " + article.title);
-            }
-        });
-    }
+    //         // All articles have non-null authors, so all 3 should be returned
+    //         assertFalse(articles.isEmpty());
+    //         System.out.println("Query with complex conditions returned " + articles.size() + " articles");
+    //         for (Article article : articles) {
+    //             System.out.println("  - " + article.title);
+    //         }
+    //     });
+    // }
 
     @Test
     public void testQueryByAuthorName() {

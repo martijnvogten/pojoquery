@@ -1,6 +1,5 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
-import static org.pojoquery.pipeline.PojoMetadata.determineIdFields;
 import static org.pojoquery.pipeline.PojoMetadata.determineTableMapping;
 
 import java.util.ArrayList;
@@ -38,8 +37,6 @@ public class BasicTableTransform implements QueryTreeTransform {
     }
 
     private QueryNode transformTableNode(EmptyTableNode node) {
-        boolean isEmbedded = node.embedInfo() != null;
-        
         // Field alias is always the node alias
         String fieldAlias = node.alias();
         
@@ -52,18 +49,15 @@ public class BasicTableTransform implements QueryTreeTransform {
             fields.add(UnresolvedFieldSelection.of(node.sourceAlias(), fieldAlias, f));
         }
         
-        // Collect ID field names
-        List<String> idFields = new ArrayList<>();
-        for (FieldModel f : determineIdFields(node.type())) {
-            idFields.add(f.getName());
-        }
+        boolean isEmbedded = node.embedInfo() != null;
         
         if (isEmbedded) {
             return node.toEmbeddedNode(fields);
         } else {
             List<TableMapping> tableMappings = determineTableMapping(node.type());
             TableMapping mapping = tableMappings.get(tableMappings.size() - 1);
-            return node.toJoinedNode(new TableInfo(mapping.schemaName, mapping.tableName), fields, idFields);
+            // ID fields are collected later by IdFieldTransform after annotation normalization
+            return node.toJoinedNode(new TableInfo(mapping.schemaName, mapping.tableName), fields, List.of());
         }
     }
 }

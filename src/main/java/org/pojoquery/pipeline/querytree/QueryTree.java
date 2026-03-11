@@ -113,6 +113,10 @@ public record QueryTree(
     public QueryTree withRoot(QueryNode newRoot) {
         return new QueryTree(resultType, newRoot, groupBy, orderBy, wheres);
     }
+
+    public QueryTree withType(TypeModel newType) {
+        return new QueryTree(newType, root, groupBy, orderBy, wheres);
+    }
     
     // --- Transformation helpers ---
 

@@ -17,4 +17,6 @@ public sealed interface FieldSelectionBase permits UnresolvedFieldSelection, Fie
      * The Java field this selection maps to (may be null for computed fields).
      */
     FieldModel field();
+
+    FieldSelectionBase withField(FieldModel newField);
 }

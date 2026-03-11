@@ -42,4 +42,9 @@ public record UnresolvedFieldSelection(
     public String toString() {
         return "UnresolvedFieldSelection{" + fieldAlias + "." + field.getName() + " <- " + sourceAlias + "}";
     }
+
+    @Override
+    public FieldSelectionBase withField(FieldModel newField) {
+        return new UnresolvedFieldSelection(sourceAlias, fieldAlias, newField);
+    }
 }

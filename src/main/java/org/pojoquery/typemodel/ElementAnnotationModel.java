@@ -77,7 +77,7 @@ public class ElementAnnotationModel implements AnnotationModel {
     }
 
     @Override
-    public List<AnnotationModel> getAnnotationValues(String attributeName) {
+    public List<AnnotationModel> getNestedAnnotations(String attributeName) {
         return extractValues(attributeName, AnnotationMirror.class, am -> new ElementAnnotationModel(am, elements, types));
     }
 

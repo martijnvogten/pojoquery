@@ -99,6 +99,10 @@ public record EmptyTableNode(
 		return new EmptyTableNode(alias, type, newSuperType, children, isSuperClass, isSubClass, joinInfo, embedInfo);
 	}
 
+	public EmptyTableNode withType(TypeModel newType) {
+		return new EmptyTableNode(alias, newType, superType, children, isSuperClass, isSubClass, joinInfo, embedInfo);
+	}
+
 	@Override
 	public String toString() {
 		return toStringWithIndent("");

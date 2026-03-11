@@ -108,6 +108,15 @@ public abstract class AbstractAnnotatedElement<T extends AnnotatedElementModel<T
     }
 
     @Override
+    public final <R> R getAnnotationAttributeValue(Class<? extends Annotation> annotationType, String attributeName, Class<R> expectedType) {
+        return getAnnotation(annotationType)
+            .map(am -> am.getValuesMap().get(attributeName))
+            .filter(expectedType::isInstance)
+            .map(expectedType::cast)
+            .orElse(null);
+    }
+
+    @Override
     public final List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> type) {
         // If we have an added annotation of this type, it replaces all source annotations
         AnnotationModel added = addedAnnotations.get(type);
@@ -131,7 +140,7 @@ public abstract class AbstractAnnotatedElement<T extends AnnotatedElementModel<T
                 result.add(ann);
             } else if (containerTypeName != null && annTypeName.equals(containerTypeName)) {
                 // Container annotation - unwrap value()
-                result.addAll(ann.getAnnotationValues("value"));
+                result.addAll(ann.getNestedAnnotations("value"));
             }
         }
         

@@ -30,6 +30,12 @@ public class QueryTreePipeline {
      */
     public static QueryTreePipeline standard() {
         return new QueryTreePipeline(List.of(
+            // ═══════════════════════════════════════════════════════════════
+            // PHASE 0: ANNOTATION NORMALIZATION
+            // Convert JPA annotations to PojoQuery canonical annotations
+            // ═══════════════════════════════════════════════════════════════
+            new JakartaAnnotationsTransform(),
+            
             new CreateRootTransform(),
             
             // ═══════════════════════════════════════════════════════════════
@@ -44,6 +50,9 @@ public class QueryTreePipeline {
             // Convert EmptyTableNode → JoinedNode/EmbeddedNode with fields
             // ═══════════════════════════════════════════════════════════════
             new BasicTableTransform(),
+            new JakartaAnnotationsTransform(),  // Transform field-level JPA annotations
+            new IdFieldTransform(),          // Collect ID fields (after annotation normalization)
+            new RemoveTransientFieldsTransform(), // Remove fields marked transient
             new TPSIdFieldTransform(),       // Adds id fields to TPS subclass nodes
             new SingleTableInheritanceTransform(), // Adds discriminator column + discriminatorValues
             
@@ -66,7 +75,7 @@ public class QueryTreePipeline {
             // 5. @Embedded → inline fields with prefix
             new EmbeddedTransform(),
             
-            // 6. @Column, @JoinColumn → column name overrides
+            // 6. @FieldName, @Column → column name overrides
             new ColumnNameTransform(),
             
             // 9. @Other → dynamic column capture
@@ -77,6 +86,7 @@ public class QueryTreePipeline {
             // Convert remaining UnresolvedFieldSelection → FieldSelection
             // ═══════════════════════════════════════════════════════════════
             new SimpleFieldTransform(),
+            
             
             // ═══════════════════════════════════════════════════════════════
             // PHASE 4b: FIELD EXPRESSION MODIFIERS

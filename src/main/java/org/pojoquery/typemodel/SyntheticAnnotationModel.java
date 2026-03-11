@@ -108,7 +108,7 @@ public final class SyntheticAnnotationModel implements AnnotationModel {
     }
 
     @Override
-    public List<AnnotationModel> getAnnotationValues(String attributeName) {
+    public List<AnnotationModel> getNestedAnnotations(String attributeName) {
         Object value = values.get(attributeName);
         if (value == null) return Collections.emptyList();
 

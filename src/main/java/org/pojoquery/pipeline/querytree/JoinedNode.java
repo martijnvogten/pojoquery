@@ -247,6 +247,16 @@ public record JoinedNode(
             otherField, otherColumnPrefix, joinInfo, extraJoins, isSuperClass, isSubClass);
     }
 
+    /**
+     * Returns a new JoinedNode with different ID field names.
+     */
+    public JoinedNode withIdFieldNames(List<String> newIdFieldNames) {
+        return new JoinedNode(alias, type, tableInfo,
+            fields, children, newIdFieldNames,
+            isSingleTableInheritance, discriminatorColumn, discriminatorValues,
+            otherField, otherColumnPrefix, joinInfo, extraJoins, isSuperClass, isSubClass);
+    }
+
     @Override
     public String toString() {
         return toStringWithIndent("");

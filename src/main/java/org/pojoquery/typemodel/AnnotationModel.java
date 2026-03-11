@@ -48,7 +48,7 @@ public interface AnnotationModel {
      * @param attributeName the annotation attribute name
      * @return list of annotation models, empty if attribute not present
      */
-    List<AnnotationModel> getAnnotationValues(String attributeName);
+    List<AnnotationModel> getNestedAnnotations(String attributeName);
 
     /**
      * Returns numeric values for the specified attribute.
@@ -102,7 +102,7 @@ public interface AnnotationModel {
     }
 
     default List<AnnotationModel> getAnnotationValues() {
-        return getAnnotationValues("value");
+        return getNestedAnnotations("value");
     }
 
     default Optional<Number> getNumberAttribute(String attr) {

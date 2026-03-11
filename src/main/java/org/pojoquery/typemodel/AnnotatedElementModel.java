@@ -67,6 +67,8 @@ public interface AnnotatedElementModel<T extends AnnotatedElementModel<T>> {
      */
     List<TypeModel> getTypeValuesFromAnnotation(AnnotationModel annotationModel, String attributeName);
 
+    <R> R getAnnotationAttributeValue(Class<? extends Annotation> annotationType, String attributeName, Class<R> expectedType);
+
     // ========== Immutable transform methods ==========
 
     /**

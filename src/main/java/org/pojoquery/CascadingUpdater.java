@@ -196,7 +196,7 @@ final class CascadingUpdater {
             }
             
             // Handle @Link annotated fields with linktable (many-to-many relationships)
-            if (field.hasAnnotation(Link.class)) {
+            if (field.hasAnnotation(Link.class) && !field.getAnnotationAttributeValue(Link.class, "linktable", String.class).isEmpty()) {
                 processLinkTableField(context, connection, entity, entityClass, parentId, field, operation);
             }
         }

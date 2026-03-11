@@ -1,10 +1,17 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import org.pojoquery.annotations.FieldName;
+import org.pojoquery.pipeline.querytree.FieldSelection;
+import org.pojoquery.pipeline.querytree.FieldSelectionBase;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
+import org.pojoquery.pipeline.querytree.UnresolvedFieldSelection;
 
 /**
- * Transform 10: @Column, @FieldName, @JoinColumn → override column names.
+ * \@FieldName override column names.
  * 
  * Note: Basic column names are already handled in TableNodeFactory.fieldSelection().
  * Join column names (@JoinColumn) are now handled directly in JoinConditionTransform
@@ -18,10 +25,25 @@ public class ColumnNameTransform implements QueryTreeTransform {
     }
     
     private TableNode processNode(TableNode node) {
-        // Column name overrides are now handled at construction time:
-        // - Field columns: TableNodeFactory.fieldSelection() uses AnnotationHelper.getColumnName()
-        // - Join FK columns: JoinConditions.determineFkColumn() uses AnnotationHelper.getJoinColumnName()
-        // This transform is kept for backward compatibility but is effectively a no-op.
-        return node;
+        List<FieldSelectionBase> newFields = new ArrayList<>();
+        boolean changed = false;
+        
+        for (UnresolvedFieldSelection fsb : node.unresolvedFields()) {
+            if (fsb.field().hasAnnotation(FieldName.class)) {
+                String columnName = fsb.field().getAnnotationAttributeValue(FieldName.class, "value", String.class);
+                FieldSelection renamed = FieldSelection.column(
+                    fsb.sourceAlias(), 
+                    fsb.fieldAlias(), 
+                    columnName, 
+                    fsb.field()
+                );
+                newFields.add(renamed);
+                changed = true;
+            } else {
+                newFields.add(fsb);
+            }
+        }
+        
+        return changed ? node.withFields(newFields) : node;
     }
 }

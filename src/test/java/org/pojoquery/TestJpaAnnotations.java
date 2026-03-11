@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import javax.sql.DataSource;
 
@@ -17,7 +18,13 @@ import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.integrationtest.UseDialect;
+import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
+import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.schema.SchemaGenerator;
+import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.JakartaAnnotations;
+import org.pojoquery.typemodel.ReflectionTypeModel;
+import org.pojoquery.typemodel.TypeModel;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
@@ -110,8 +117,30 @@ public class TestJpaAnnotations {
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
+        FieldModel idField = new ReflectionTypeModel(JpaUser.class).getDeclaredFields().stream()
+            .filter(f -> f.getName().equals("id"))
+            .findFirst().orElseThrow();
+
+        FieldModel transformed = JakartaAnnotations.transformField(idField);
+        transformed.getAnnotation(org.pojoquery.annotations.Id.class)
+            .orElseThrow(() -> new AssertionError("Field 'id' should have PojoQuery @Id annotation mapped"));
+        
+        transformed.getAnnotation(FieldName.class).flatMap(map -> map.getStringValue())
+            .filter(it -> it.equals("user_id"))
+            .orElseThrow(() -> new AssertionError("Field 'id' should have PojoQuery @FieldName annotation with value 'user_id'"));
+        
+        transformed.getAnnotation(Id.class)
+            .orElseThrow(() -> new AssertionError("Field 'id' should still have JPA @Id annotation"));
+
+        
+        ((TableNode)QueryTreeBuilder.from(JpaUser.class).root()).resolvedFields().stream()
+            .filter(f -> f.columnName().equals("user_id"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("column name of id field should be 'user_id'"));
+
         List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaUser.class);
         String sql = String.join("\n", statements);
+        System.out.println(sql);
 
         // Should use @Id field as primary key
         assertTrue(sql.contains("PRIMARY KEY (user_id)"),
@@ -123,6 +152,11 @@ public class TestJpaAnnotations {
         DbContext dbContext = DbContext.builder()
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
+
+        TypeModel transformed = JakartaAnnotations.transformType(new ReflectionTypeModel(JpaUser.class));
+        transformed.getAnnotation(org.pojoquery.annotations.Table.class)
+            .orElseThrow(() -> new AssertionError("Type should have PojoQuery @Table annotation mapped"));
+
 
         List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaUser.class);
         String sql = String.join("\n", statements);
@@ -137,6 +171,21 @@ public class TestJpaAnnotations {
         DbContext dbContext = DbContext.builder()
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
+
+        FieldModel usernameField = new ReflectionTypeModel(JpaUser.class).getDeclaredFields().stream()
+            .filter(f -> f.getName().equals("username"))
+            .map(JakartaAnnotations::transformField)
+            .findFirst().orElseThrow();
+        usernameField.getAnnotation(org.pojoquery.annotations.Column.class)
+            .orElseThrow(() -> new AssertionError("Field 'username' should have PojoQuery @Column annotation mapped"));
+
+        FieldModel emailField = new ReflectionTypeModel(JpaUser.class).getDeclaredFields().stream()
+            .filter(f -> f.getName().equals("email"))
+            .map(JakartaAnnotations::transformField)
+            .findFirst().orElseThrow();
+        Optional<Boolean> nullable =emailField.getAnnotation(org.pojoquery.annotations.Column.class)
+            .orElseThrow(() -> new AssertionError("Field 'email' should have PojoQuery @Column annotation mapped"))
+            .getBooleanAttribute("nullable");
 
         List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaUser.class);
         String sql = String.join("\n", statements);
@@ -366,6 +415,8 @@ public class TestJpaAnnotations {
         DataSource db = createTestDatabase();
         // Create table using SchemaGenerator
         SchemaGenerator.createTables(db, JpaUser.class);
+
+
 
         DB.withConnection(db, (Connection c) -> {
             // Insert entity with JPA annotations

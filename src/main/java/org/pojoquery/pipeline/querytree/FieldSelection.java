@@ -86,4 +86,8 @@ public record FieldSelection(
         }
         return sb.toString();
     }
+
+    public FieldSelection withField(FieldModel transformedField) {
+        return new FieldSelection(alias, columnName, expression, transformedField, customMapping);
+    }
 }

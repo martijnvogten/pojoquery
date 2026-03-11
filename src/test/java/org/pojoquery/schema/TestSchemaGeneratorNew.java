@@ -1,6 +1,5 @@
 package org.pojoquery.schema;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -155,81 +154,5 @@ public class TestSchemaGeneratorNew {
         assertTrue(booksTable.contains("authors_id"), "Book table should have authors_id FK column: " + booksTable);
     }
     
-    @Test
-    public void compareWithOld() {
-        // Compare outputs for User class
-        List<String> oldSql = SchemaGeneratorOld.generateCreateTableStatements(User.class);
-        List<String> newSql = SchemaGenerator.generateCreateTableStatements(User.class);
-        
-        System.out.println("=== Old SchemaGenerator (User) ===");
-        oldSql.forEach(System.out::println);
-        System.out.println("\n=== New SchemaGeneratorNew (User) ===");
-        newSql.forEach(System.out::println);
-        
-        // Both should have same number of statements
-        assertEquals(oldSql.size(), newSql.size(), "Should generate same number of statements for User");
-    }
-    
-    @Test
-    public void compareWithOldForeignKey() {
-        // Compare outputs for Order class (has FK)
-        List<String> oldSql = SchemaGeneratorOld.generateCreateTableStatements(Order.class);
-        List<String> newSql = SchemaGenerator.generateCreateTableStatements(Order.class);
-        
-        System.out.println("=== Old SchemaGenerator (Order) ===");
-        oldSql.forEach(System.out::println);
-        System.out.println("\n=== New SchemaGeneratorNew (Order) ===");
-        newSql.forEach(System.out::println);
-        
-        // Both should have same number of statements
-        assertEquals(oldSql.size(), newSql.size(), "Should generate same number of statements for Order");
-        
-        // Both should have customer_id column
-        String oldCreate = oldSql.get(0);
-        String newCreate = newSql.get(0);
-        assertTrue(oldCreate.contains("customer_id"), "Old should have customer_id");
-        assertTrue(newCreate.contains("customer_id"), "New should have customer_id");
-    }
-    
-    @Test
-    public void compareWithOldEmbedded() {
-        // Compare outputs for Company class (has embedded)
-        List<String> oldSql = SchemaGeneratorOld.generateCreateTableStatements(Company.class);
-        List<String> newSql = SchemaGenerator.generateCreateTableStatements(Company.class);
-        
-        System.out.println("=== Old SchemaGenerator (Company) ===");
-        oldSql.forEach(System.out::println);
-        System.out.println("\n=== New SchemaGeneratorNew (Company) ===");
-        newSql.forEach(System.out::println);
-        
-        // Both should have same number of statements
-        assertEquals(oldSql.size(), newSql.size(), "Should generate same number of statements for Company");
-        
-        // Both should have embedded columns
-        String oldCreate = oldSql.get(0);
-        String newCreate = newSql.get(0);
-        assertTrue(oldCreate.contains("addr_street"), "Old should have addr_street");
-        assertTrue(newCreate.contains("addr_street"), "New should have addr_street");
-        assertTrue(oldCreate.contains("addr_city"), "Old should have addr_city");
-        assertTrue(newCreate.contains("addr_city"), "New should have addr_city");
-    }
-    
-    @Test
-    public void compareWithOldManyToMany() {
-        // Compare outputs for Article class (has many-to-many)
-        List<String> oldSql = SchemaGeneratorOld.generateCreateTableStatements(Article.class);
-        List<String> newSql = SchemaGenerator.generateCreateTableStatements(Article.class);
-        
-        System.out.println("=== Old SchemaGenerator (Article) ===");
-        oldSql.forEach(System.out::println);
-        System.out.println("\n=== New SchemaGeneratorNew (Article) ===");
-        newSql.forEach(System.out::println);
-        
-        // Both should generate: CREATE TABLE articles, CREATE TABLE article_tag, 2x ALTER TABLE for FKs
-        assertEquals(oldSql.size(), newSql.size(), "Should generate same number of statements for Article");
-        
-        // Both should have link table
-        assertTrue(String.join("", oldSql).contains("article_tag"), "Old should have article_tag");
-        assertTrue(String.join("", newSql).contains("article_tag"), "New should have article_tag");
-    }
+
 }

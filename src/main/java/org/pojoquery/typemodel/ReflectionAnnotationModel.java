@@ -69,7 +69,7 @@ public class ReflectionAnnotationModel implements AnnotationModel {
     }
 
     @Override
-    public List<AnnotationModel> getAnnotationValues(String attributeName) {
+    public List<AnnotationModel> getNestedAnnotations(String attributeName) {
         return extractValues(attributeName, Annotation[].class, Annotation.class, ReflectionAnnotationModel::new);
     }
 

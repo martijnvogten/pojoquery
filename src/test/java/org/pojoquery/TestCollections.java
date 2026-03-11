@@ -87,12 +87,12 @@ public class TestCollections {
 			TestUtils.norm("""
 				SELECT
 				 `user`.`id` AS `user.id`,
-				 `roles`.`element` AS `roles.value`,
 				 `articles`.`id` AS `articles.id`,
-				 `articles`.`title` AS `articles.title`
+				 `articles`.`title` AS `articles.title`,
+				 `roles`.`element` AS `roles.value`
 				FROM `user` AS `user`
-				 LEFT JOIN `user_roles` AS `roles` ON `user`.`id` = `roles`.`user_id`
 				 LEFT JOIN `article` AS `articles` ON `user`.`id` = `articles`.`user_id`
+				 LEFT JOIN `user_roles` AS `roles` ON `user`.`id` = `roles`.`user_id`
 				"""), 
 			TestUtils.norm(pq.toSql()));
 		
@@ -121,12 +121,12 @@ public class TestCollections {
 			TestUtils.norm("""
 				SELECT
 				 `user`.`id` AS `user.id`,
-				 `roles`.`element` AS `roles.value`,
 				 `tasks`.`id` AS `tasks.id`,
-				 `tasks`.`title` AS `tasks.title`
+				 `tasks`.`title` AS `tasks.title`,
+				 `roles`.`element` AS `roles.value`
 				FROM `user` AS `user`
-				 LEFT JOIN `user_roles` AS `roles` ON `user`.`id` = `roles`.`user_id`
 				 LEFT JOIN `task` AS `tasks` ON `user`.`id` = `tasks`.`user_id`
+				 LEFT JOIN `user_roles` AS `roles` ON `user`.`id` = `roles`.`user_id`
 				"""), 
 			TestUtils.norm(pq.toSql()));
 		

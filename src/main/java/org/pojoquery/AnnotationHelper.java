@@ -4,6 +4,7 @@ import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.Id;
+import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
@@ -68,13 +69,23 @@ public class AnnotationHelper {
 	
 	/**
 	 * Determines the FK column name for an entity reference field.
-	 * Checks @FieldName first, then defaults to null (caller uses fieldName_id).
+	 * Checks @FieldName first, then @Link.linkfield, then defaults to null (caller uses fieldName_id).
 	 * 
-	 * @return column name from @FieldName, or null if not specified
+	 * @return column name from @FieldName or @Link.linkfield, or null if not specified
 	 */
 	public static String getJoinColumnName(FieldModel f) {
-		return f.getAnnotation(FieldName.class)
+		// First check @FieldName
+		String fieldName = f.getAnnotation(FieldName.class)
 			.flatMap(ann -> ann.getStringValue())
+			.orElse(null);
+		if (fieldName != null) {
+			return fieldName;
+		}
+		
+		// Then check @Link.linkfield
+		return f.getAnnotation(Link.class)
+			.flatMap(ann -> ann.getStringValue("linkfield"))
+			.filter(s -> !s.isEmpty())
 			.orElse(null);
 	}
 

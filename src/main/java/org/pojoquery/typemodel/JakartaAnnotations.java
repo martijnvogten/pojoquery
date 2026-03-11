@@ -3,9 +3,11 @@ package org.pojoquery.typemodel;
 import java.lang.annotation.Annotation;
 import java.util.Collections;
 import java.util.Map;
+import java.util.function.Function;
 
 import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Embedded;
+import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.Table;
@@ -45,6 +47,7 @@ public final class JakartaAnnotations {
     private static final Class<? extends Annotation> JAKARTA_TABLE;
     private static final Class<? extends Annotation> JAKARTA_ID;
     private static final Class<? extends Annotation> JAKARTA_COLUMN;
+    private static final Class<? extends Annotation> JAKARTA_JOIN_COLUMN;
     private static final Class<? extends Annotation> JAKARTA_TRANSIENT;
     private static final Class<? extends Annotation> JAKARTA_EMBEDDED;
     private static final Class<? extends Annotation> JAKARTA_LOB;
@@ -55,6 +58,7 @@ public final class JakartaAnnotations {
         JAKARTA_TABLE = tryLoadAnnotationClass("jakarta.persistence.Table");
         JAKARTA_ID = tryLoadAnnotationClass("jakarta.persistence.Id");
         JAKARTA_COLUMN = tryLoadAnnotationClass("jakarta.persistence.Column");
+        JAKARTA_JOIN_COLUMN = tryLoadAnnotationClass("jakarta.persistence.JoinColumn");
         JAKARTA_TRANSIENT = tryLoadAnnotationClass("jakarta.persistence.Transient");
         JAKARTA_EMBEDDED = tryLoadAnnotationClass("jakarta.persistence.Embedded");
         JAKARTA_LOB = tryLoadAnnotationClass("jakarta.persistence.Lob");
@@ -84,24 +88,16 @@ public final class JakartaAnnotations {
             return type;
         }
 
-        return type.getAnnotation(JAKARTA_TABLE)
-            .filter(an -> !type.hasAnnotation(Table.class))
-            .map(an -> type.withAddedAnnotation(Table.class, 
-                an.getStringValue("name")
-                    .filter(name -> !name.isEmpty())
-                    .<Map<String, Object>>map(name -> Map.of("value", name))
-                    .orElse(Collections.emptyMap())))
-            .orElse(type);
+        return mapAnnotation(type, JAKARTA_TABLE, Table.class, ann -> {
+            return ann.getStringValue("name")
+                .filter(name -> !name.isEmpty())
+                .map(name -> Map.of("value", (Object)name))
+                .orElse(Collections.emptyMap());
+        });
     }
 
-    /**
-     * Transforms a FieldSelection by adding PojoQuery annotations based on jakarta.persistence annotations.
-     * 
-     * @param fs the field selection to transform
-     * @return a new FieldSelection with canonical annotations added, or the original if no jakarta annotations present
-     */
-    public static FieldSelection transformFieldSelection(FieldSelection fs) {
-        if (!JAKARTA_AVAILABLE || fs == null || fs.field() == null) {
+    public static FieldModel transformField(FieldModel fs) {
+        if (!JAKARTA_AVAILABLE || fs == null) {
             return fs;
         }
 
@@ -109,24 +105,46 @@ public final class JakartaAnnotations {
         fs = mapAnnotation(fs, JAKARTA_TRANSIENT, Transient.class);
         fs = mapAnnotation(fs, JAKARTA_EMBEDDED, Embedded.class);
         fs = mapAnnotation(fs, JAKARTA_LOB, Lob.class);
+        fs = mapAnnotation(fs, JAKARTA_JOIN_COLUMN, FieldName.class, ann -> {
+            return ann.getStringValue("name")
+                .filter(n -> !n.isEmpty())
+                .map(name -> Map.of("value", (Object)name))
+                .orElse(Map.of());
+        });
+        fs = mapAnnotation(fs, JAKARTA_COLUMN, FieldName.class, ann -> {
+            return ann.getStringValue("name")
+                .filter(n -> !n.isEmpty())
+                .map(name -> Map.of("value", (Object)name))
+                .orElse(Map.of());
+        });
         fs = mapColumn(fs);
 
         return fs;
     }
 
-    private static FieldSelection mapAnnotation(FieldSelection fs, Class<? extends Annotation> source, Class<? extends Annotation> target) {
-        if (fs.field().hasAnnotation(source) && !fs.field().hasAnnotation(target)) {
-            return fs.withFieldAnnotation(target, Collections.emptyMap());
+    private static <T extends AnnotatedElementModel<T>> T mapAnnotation(T f, Class<? extends Annotation> source, Class<? extends Annotation> target) {
+        if (f.hasAnnotation(source) && !f.hasAnnotation(target)) {
+            return (T) f.withAddedAnnotation(target, Collections.emptyMap());
+        }
+        return f;
+    }
+
+    private static <T extends AnnotatedElementModel<T>> T mapAnnotation(T fs, Class<? extends Annotation> source, Class<? extends Annotation> target, Function<AnnotationModel, Map<String, Object>> attributeMapper) {
+        if (fs.hasAnnotation(source) && !fs.hasAnnotation(target)) {
+            Map<String, Object> attributes = fs.getAnnotation(source)
+                .map(attributeMapper)
+                .orElse(Collections.emptyMap());
+            return (T) fs.withAddedAnnotation(target, attributes);
         }
         return fs;
     }
 
-    private static FieldSelection mapColumn(FieldSelection fs) {
-        if (fs.field().hasAnnotation(Column.class)) {
+    private static FieldModel mapColumn(FieldModel fs) {
+        if (fs.hasAnnotation(Column.class)) {
             return fs;
         }
-        return fs.field().getAnnotation(JAKARTA_COLUMN)
-            .map(col -> fs.withFieldAnnotation(Column.class, extractColumnAttributes(col)))
+        return fs.getAnnotation(JAKARTA_COLUMN)
+            .map(col -> fs.withAddedAnnotation(Column.class, extractColumnAttributes(col)))
             .orElse(fs);
     }
 

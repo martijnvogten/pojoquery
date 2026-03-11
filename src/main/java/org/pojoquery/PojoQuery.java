@@ -486,6 +486,7 @@ public class PojoQuery<T> {
 		// If the class hierarchy contains multiple tables, create separate
 		// inserts
 		TypeModel type = new ReflectionTypeModel(clz);
+		
 		List<TableMapping> tables = PojoMetadata.determineTableMapping(type);
 		if (tables.size() == 0) {
 			throw new MappingException("Missing @Table annotation on class " + type.getQualifiedName() + " or any of its superclasses");

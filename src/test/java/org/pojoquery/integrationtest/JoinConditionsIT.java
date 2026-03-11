@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.TestUtils;
+import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
@@ -21,6 +22,7 @@ import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
+@UseDialect(Dialect.HSQLDB)
 public class JoinConditionsIT {
 
 	@Table("person")
@@ -105,12 +107,12 @@ public class JoinConditionsIT {
 		String sql = q.toSql();
 		Assertions.assertEquals(TestUtils.norm("""
 			SELECT
-			 "employee".id AS "employee.id",
-			 "department".id AS "department.id",
-			 "department".name AS "department.name"
-			FROM employee AS "employee"
-			 LEFT JOIN department AS "department" ON "employee".department_id = "department".id
-			""".replaceAll("\"", "")), norm(sql.trim().replaceAll("`", "\"").replaceAll("\"", "")));
+			 "employee"."id" AS "employee.id",
+			 "department"."id" AS "department.id",
+			 "department"."name" AS "department.name"
+			FROM "employee" AS "employee"
+			 LEFT JOIN "department" AS "department" ON "employee"."department_id" = "department"."id"
+			"""), norm(sql));
 	}
 	
 	
