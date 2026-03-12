@@ -12,7 +12,6 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.annotations.Transient;
-import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.transforms.JakartaAnnotationsTransform;
 
 /**

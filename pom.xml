@@ -221,7 +221,7 @@
             <execution>
               <id>default-testCompile</id>
               <configuration>
-                <proc>none</proc>
+                <!-- <proc>none</proc> -->
                 <!-- Explicitly include generated sources -->
                 <compileSourceRoots>
                   <compileSourceRoot>${project.basedir}/src/test/java</compileSourceRoot>

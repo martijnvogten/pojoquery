@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.pojoquery.SqlExpression;
-import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.querytree.EmbeddedNode;
 import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.JoinInfo;
@@ -21,7 +20,6 @@ import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
-import org.pojoquery.util.CurlyMarkers;
 
 /**
  * Generates fluent query builder source code from a QueryTree.
@@ -68,60 +66,44 @@ public class QueryClassCodeGenerator {
         }
     }
 
+    // === Static helper methods for QueryTree traversal ===
+
     /**
-     * Internal representation of a SQL field for code generation.
+     * Collects all resolved fields from all TableNodes in the tree.
      */
-    public static class GenField {
-        public final String alias;       // e.g., "article.title"
-        public final String expression;  // e.g., "{article.article_title}"
-        
-        public GenField(String alias, String expression) {
-            this.alias = alias;
-            this.expression = expression;
+    private static List<FieldSelection> allFields(QueryTree tree) {
+        List<FieldSelection> result = new ArrayList<>();
+        collectFieldsRecursive(tree.root(), result);
+        return result;
+    }
+
+    private static void collectFieldsRecursive(QueryNode node, List<FieldSelection> result) {
+        if (node instanceof TableNode tableNode) {
+            result.addAll(tableNode.resolvedFields());
+        }
+        for (QueryNode child : node.children()) {
+            collectFieldsRecursive(child, result);
         }
     }
 
     /**
-     * Internal representation of a SQL join for code generation.
+     * Groups all resolved fields by their table alias.
      */
-    public static class GenJoin {
-        public final JoinType joinType;
-        public final String schema;
-        public final String table;
-        public final String alias;
-        public final String joinCondition;
-
-        public GenJoin(JoinType joinType, String schema, String table, String alias, String joinCondition) {
-            this.joinType = joinType;
-            this.schema = schema;
-            this.table = table;
-            this.alias = alias;
-            this.joinCondition = joinCondition;
-        }
+    private static Map<String, List<FieldSelection>> fieldsByAlias(QueryTree tree) {
+        Map<String, List<FieldSelection>> result = new LinkedHashMap<>();
+        collectFieldsByAliasRecursive(tree.root(), result);
+        return result;
     }
 
-    /**
-     * Extracted metadata from QueryTree needed for code generation.
-     */
-    public static class QueryMetadata {
-        public final String schemaName;
-        public final String tableName;
-        public final List<GenField> fields;
-        public final List<GenJoin> joins;
-        public final Map<String, QueryNode> nodesByAlias;
-        public final Map<String, QueryNode> parentNodes;
-        public final TypeModel resultType;
-        
-        public QueryMetadata(String schemaName, String tableName, List<GenField> fields,
-                List<GenJoin> joins, Map<String, QueryNode> nodesByAlias, 
-                Map<String, QueryNode> parentNodes, TypeModel resultType) {
-            this.schemaName = schemaName;
-            this.tableName = tableName;
-            this.fields = fields;
-            this.joins = joins;
-            this.nodesByAlias = nodesByAlias;
-            this.parentNodes = parentNodes;
-            this.resultType = resultType;
+    private static void collectFieldsByAliasRecursive(QueryNode node, Map<String, List<FieldSelection>> result) {
+        if (node instanceof TableNode tableNode) {
+            List<FieldSelection> fields = tableNode.resolvedFields();
+            if (!fields.isEmpty()) {
+                result.put(node.alias(), fields);
+            }
+        }
+        for (QueryNode child : node.children()) {
+            collectFieldsByAliasRecursive(child, result);
         }
     }
 
@@ -142,84 +124,6 @@ public class QueryClassCodeGenerator {
     );
 
     /**
-     * Extracts metadata from a QueryTree that is needed for code generation.
-     */
-    public QueryMetadata extractMetadata(QueryTree tree) {
-        QueryNode root = tree.root();
-        if (!(root instanceof TableNode rootTable)) {
-            throw new IllegalArgumentException("QueryTree root must be a TableNode");
-        }
-        
-        TableInfo tableInfo = rootTable.tableInfo();
-        String schemaName = tableInfo != null ? tableInfo.schemaName() : null;
-        String tableName = tableInfo != null ? tableInfo.tableName() : root.alias();
-        
-        List<GenField> fields = new ArrayList<>();
-        List<GenJoin> joins = new ArrayList<>();
-        
-        // Collect fields from root
-        for (FieldSelection fs : rootTable.resolvedFields()) {
-            fields.add(new GenField(fs.alias(), fs.expression().getSql()));
-        }
-        
-        // Recursively collect joins and fields from children
-        collectJoinsAndFields(rootTable, fields, joins);
-        
-        return new QueryMetadata(
-            schemaName, tableName, fields, joins,
-            tree.nodesByAlias(), tree.parentNodes(), tree.resultType()
-        );
-    }
-
-    private void collectJoinsAndFields(TableNode parent, List<GenField> fields, List<GenJoin> joins) {
-        for (QueryNode child : parent.children()) {
-            JoinInfo joinInfo = child.joinInfo();
-
-            if (child instanceof TableNode childTable) {
-                if (joinInfo != null) {
-                    // Handle many-to-many joins
-                    if (joinInfo.joinTableInfo() != null) {
-                        JoinTableInfo jti = joinInfo.joinTableInfo();
-                        // Add join to the junction table
-                        SqlExpression parentCond = jti.parentCondition(parent.alias());
-                        joins.add(new GenJoin(JoinType.LEFT, 
-                            jti.joinTable().schemaName(), 
-                            jti.joinTable().tableName(),
-                            jti.joinTableAlias(),
-                            parentCond != null ? parentCond.getSql() : null));
-                        // Add join to the target table
-                        SqlExpression targetCond = jti.targetCondition(child.alias());
-                        joins.add(new GenJoin(JoinType.LEFT,
-                            joinInfo.childTable().schemaName(),
-                            joinInfo.childTable().tableName(),
-                            child.alias(),
-                            targetCond != null ? targetCond.getSql() : null));
-                    } else {
-                        // Regular join
-                        SqlExpression condition = joinInfo.toSqlCondition(parent.alias(), child.alias());
-                        TableInfo childTableInfo = joinInfo.childTable();
-                        if (childTableInfo != null) {
-                            joins.add(new GenJoin(joinInfo.joinType(),
-                                childTableInfo.schemaName(),
-                                childTableInfo.tableName(),
-                                child.alias(),
-                                condition != null ? condition.getSql() : null));
-                        }
-                    }
-                }
-                
-                // Add fields from the joined table
-                for (FieldSelection fs : childTable.resolvedFields()) {
-                    fields.add(new GenField(fs.alias(), fs.expression().getSql()));
-                }
-                
-                // Recurse
-                collectJoinsAndFields(childTable, fields, joins);
-            }
-        }
-    }
-
-    /**
      * Generates the complete query class source code.
      * 
      * @param tree The QueryTree describing the entity structure
@@ -231,21 +135,29 @@ public class QueryClassCodeGenerator {
     public void generate(QueryTree tree, String packageName, String entityName, 
             String queryClassName, Writer out) throws IOException {
         
-        QueryMetadata metadata = extractMetadata(tree);
         GeneratorConfig config = new GeneratorConfig(packageName, entityName, queryClassName);
-        
-        generate(metadata, config, out);
+        generate(tree, config, out);
     }
 
     /**
-     * Generates the complete query class source code from pre-extracted metadata.
+     * Generates the complete query class source code from a QueryTree.
      */
-    public void generate(QueryMetadata metadata, GeneratorConfig config, Writer out) throws IOException {
+    public void generate(QueryTree tree, GeneratorConfig config, Writer out) throws IOException {
+        QueryNode root = tree.root();
+        if (!(root instanceof TableNode rootTable)) {
+            throw new IllegalArgumentException("QueryTree root must be a TableNode");
+        }
+        
         String queryClassName = config.queryClassName;
         String entityName = config.entityName;
         String packageName = config.packageName;
-        String tableName = metadata.tableName;
-        String schemaName = metadata.schemaName;
+        
+        TableInfo tableInfo = rootTable.tableInfo();
+        String schemaName = tableInfo != null ? tableInfo.schemaName() : null;
+        String tableName = tableInfo != null ? tableInfo.tableName() : root.alias();
+        
+        Map<String, QueryNode> nodesByAlias = tree.nodesByAlias();
+        Map<String, QueryNode> parentNodes = tree.parentNodes();
         
         String chainClassName = queryClassName + "StaticConditionChain";
 
@@ -269,20 +181,20 @@ public class QueryClassCodeGenerator {
         out.write("@SuppressWarnings(\"all\")\n");
 
         // Determine the primary key type
-        QueryNode rootNode = metadata.nodesByAlias.get(tableName);
+        QueryNode rootNode = nodesByAlias.get(tableName);
         String pkType = determinePkType(rootNode);
 
         out.write("public class " + queryClassName + " extends TypedQuery<" + entityName + ", " + pkType + ", " + queryClassName + "> {\n\n");
 
         // Group fields by alias
-        Map<String, List<GenField>> fieldsByAlias = groupFieldsByAlias(metadata.fields);
+        Map<String, List<FieldSelection>> fieldsByAliasMap = fieldsByAlias(tree);
 
         // Generate static condition builder fields for main entity
-        List<GenField> mainFields = fieldsByAlias.getOrDefault(tableName, List.of());
+        List<FieldSelection> mainFields = fieldsByAliasMap.getOrDefault(tableName, List.of());
         out.write("    // Static condition builder fields for main entity\n");
-        for (GenField field : mainFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            String columnName = extractColumnNameFromExpression(field.expression);
+        for (FieldSelection field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
+            String columnName = field.columnName();
             FieldInfo fieldInfo = getFieldInfo(rootNode, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"
@@ -293,19 +205,19 @@ public class QueryClassCodeGenerator {
         out.write("\n");
 
         // Build tree structure for nested relationships
-        RelationNode root = buildRelationTree(tableName, fieldsByAlias.keySet());
+        RelationNode relationRoot = buildRelationTree(tableName, fieldsByAliasMap.keySet());
         
         // Generate nested static field classes for relationships
-        for (RelationNode child : root.children.values()) {
-            generateNestedStaticFields(out, queryClassName, chainClassName, child, fieldsByAlias, metadata.nodesByAlias);
+        for (RelationNode child : relationRoot.children.values()) {
+            generateNestedStaticFields(out, queryClassName, chainClassName, child, fieldsByAliasMap, nodesByAlias);
         }
 
         // Generate the StaticConditionChain inner class
-        generateStaticConditionChainClass(out, queryClassName, chainClassName, tableName, mainFields, rootNode, fieldsByAlias, metadata.nodesByAlias, "    ");
+        generateStaticConditionChainClass(out, queryClassName, chainClassName, tableName, mainFields, rootNode, fieldsByAliasMap, nodesByAlias, "    ");
         out.write("\n");
 
         // initializeQuery() method
-        generateInitializeQuery(out, schemaName, tableName, metadata.fields, metadata.joins);
+        generateInitializeQuery(out, tree, schemaName, tableName);
         out.write("\n");
 
         // Constructor
@@ -326,23 +238,23 @@ public class QueryClassCodeGenerator {
         generateOrderByGroupByMethods(out, queryClassName, orderByBuilderClass, groupByBuilderClass);
 
         // processRows method
-        generateProcessRows(out, entityName, tableName, fieldsByAlias, metadata.nodesByAlias, metadata.parentNodes);
+        generateProcessRows(out, entityName, tableName, fieldsByAliasMap, nodesByAlias, parentNodes);
         out.write("\n");
 
         // processRowStreaming method
-        generateProcessRowStreaming(out, entityName, tableName, fieldsByAlias, metadata.nodesByAlias, metadata.parentNodes);
+        generateProcessRowStreaming(out, entityName, tableName, fieldsByAliasMap, nodesByAlias, parentNodes);
         out.write("\n");
 
         // getPrimaryKeyFromRow method
-        generateGetPrimaryKeyFromRow(out, tableName, metadata.nodesByAlias, fieldsByAlias);
+        generateGetPrimaryKeyFromRow(out, tableName, nodesByAlias, fieldsByAliasMap);
         out.write("\n");
 
         // getIdFieldName method
-        generateGetIdFieldName(out, tableName, metadata.nodesByAlias, fieldsByAlias);
+        generateGetIdFieldName(out, tableName, nodesByAlias, fieldsByAliasMap);
         out.write("\n");
 
         // buildIdCondition method
-        generateBuildIdCondition(out, tableName, metadata.nodesByAlias, fieldsByAlias);
+        generateBuildIdCondition(out, tableName, nodesByAlias, fieldsByAliasMap);
         out.write("\n");
 
         // getEntityClass method
@@ -353,7 +265,7 @@ public class QueryClassCodeGenerator {
         generateGroupByBuilderClass(out, queryClassName, groupByBuilderClass, tableName, mainFields, "    ");
         out.write("\n");
 
-        generateOrderByBuilderClass(out, queryClassName, orderByBuilderClass, tableName, mainFields, fieldsByAlias, metadata.nodesByAlias, "    ");
+        generateOrderByBuilderClass(out, queryClassName, orderByBuilderClass, tableName, mainFields, fieldsByAliasMap, nodesByAlias, "    ");
         out.write("\n");
 
         generateDelegateClass(out, entityName, queryClassName, pkType, groupByBuilderClass, orderByBuilderClass, "    ");
@@ -364,7 +276,7 @@ public class QueryClassCodeGenerator {
 
         // WhereBuilder inner class
         String whereBuilderClass = queryClassName + "WhereBuilder";
-        generateWhereBuilderClass(out, queryClassName, whereBuilderClass, tableName, mainFields, rootNode, fieldsByAlias, metadata.nodesByAlias, "    ");
+        generateWhereBuilderClass(out, queryClassName, whereBuilderClass, tableName, mainFields, rootNode, fieldsByAliasMap, nodesByAlias, "    ");
         out.write("\n");
 
         out.write("}\n");
@@ -416,27 +328,9 @@ public class QueryClassCodeGenerator {
         return "Object";
     }
 
-    private Map<String, List<GenField>> groupFieldsByAlias(List<GenField> fields) {
-        Map<String, List<GenField>> result = new LinkedHashMap<>();
-        for (GenField field : fields) {
-            String alias = extractAliasFromFieldAlias(field.alias);
-            result.computeIfAbsent(alias, k -> new ArrayList<>()).add(field);
-        }
-        return result;
-    }
-
-    private String extractAliasFromFieldAlias(String fieldAlias) {
-        int lastDot = fieldAlias.lastIndexOf('.');
-        return lastDot > 0 ? fieldAlias.substring(0, lastDot) : fieldAlias;
-    }
-
     private String extractFieldNameFromAlias(String fieldAlias) {
         int lastDot = fieldAlias.lastIndexOf('.');
         return lastDot > 0 ? fieldAlias.substring(lastDot + 1) : fieldAlias;
-    }
-
-    private String extractColumnNameFromExpression(String expression) {
-        return CurlyMarkers.extractColumnName(expression);
     }
 
     private FieldModel findFieldByName(TypeModel type, String fieldName) {
@@ -563,20 +457,20 @@ public class QueryClassCodeGenerator {
     // === Code generation methods ===
 
     private void generateNestedStaticFields(Writer out, String queryClassName, String chainClassName,
-            RelationNode node, Map<String, List<GenField>> fieldsByAlias, Map<String, QueryNode> nodesByAlias) throws IOException {
+            RelationNode node, Map<String, List<FieldSelection>> fieldsByAlias, Map<String, QueryNode> nodesByAlias) throws IOException {
         
         String relationName = node.name;
         String aliasName = node.fullAlias;
         QueryNode relNode = nodesByAlias.get(aliasName);
-        List<GenField> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
+        List<FieldSelection> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
         
         out.write("    /** Static condition builder fields for the {@code " + relationName + "} relationship */\n");
         out.write("    public final " + capitalize(relationName) + "Fields " + relationName + " = new " + capitalize(relationName) + "Fields();\n\n");
         out.write("    public class " + capitalize(relationName) + "Fields {\n");
         
-        for (GenField field : relationFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            String columnName = extractColumnNameFromExpression(field.expression);
+        for (FieldSelection field : relationFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
+            String columnName = field.columnName();
             FieldInfo fieldInfo = getFieldInfo(relNode, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"
@@ -594,20 +488,20 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateNestedStaticFieldsIndented(Writer out, String queryClassName, String chainClassName,
-            RelationNode node, Map<String, List<GenField>> fieldsByAlias, Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
+            RelationNode node, Map<String, List<FieldSelection>> fieldsByAlias, Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
         
         String relationName = node.name;
         String aliasName = node.fullAlias;
         QueryNode relNode = nodesByAlias.get(aliasName);
-        List<GenField> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
+        List<FieldSelection> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
         
         out.write(indent + "/** Static condition builder fields for the {@code " + relationName + "} relationship */\n");
         out.write(indent + "public final " + capitalize(relationName) + "Fields " + relationName + " = new " + capitalize(relationName) + "Fields();\n\n");
         out.write(indent + "public class " + capitalize(relationName) + "Fields {\n");
         
-        for (GenField field : relationFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            String columnName = extractColumnNameFromExpression(field.expression);
+        for (FieldSelection field : relationFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
+            String columnName = field.columnName();
             FieldInfo fieldInfo = getFieldInfo(relNode, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"
@@ -625,8 +519,8 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateStaticConditionChainClass(Writer out, String queryClassName,
-            String chainClassName, String tableName, List<GenField> mainFields, QueryNode mainNode,
-            Map<String, List<GenField>> fieldsByAlias, Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
+            String chainClassName, String tableName, List<FieldSelection> mainFields, QueryNode mainNode,
+            Map<String, List<FieldSelection>> fieldsByAlias, Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
 
         out.write(indent + "/**\n");
         out.write(indent + " * Condition chain for building static conditions.\n");
@@ -637,9 +531,9 @@ public class QueryClassCodeGenerator {
 
         // Inner StaticConditionFields class with main entity fields
         out.write(indent + "    public class StaticConditionFields {\n");
-        for (GenField field : mainFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            String columnName = extractColumnNameFromExpression(field.expression);
+        for (FieldSelection field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
+            String columnName = field.columnName();
             FieldInfo fieldInfo = getFieldInfo(mainNode, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"
@@ -697,21 +591,21 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateNestedStaticConditionFields(Writer out, String chainClassName,
-            RelationNode node, Map<String, List<GenField>> fieldsByAlias, Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
+            RelationNode node, Map<String, List<FieldSelection>> fieldsByAlias, Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
         
         String relationName = node.name;
         String aliasName = node.fullAlias;
         QueryNode relNode = nodesByAlias.get(aliasName);
-        List<GenField> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
+        List<FieldSelection> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
         
         String innerClassName = capitalize(relationName) + "ConditionFields";
         out.write(indent + "/** Condition fields for the {@code " + relationName + "} relationship */\n");
         out.write(indent + "public final " + innerClassName + " " + relationName + " = new " + innerClassName + "();\n\n");
         out.write(indent + "public class " + innerClassName + " {\n");
         
-        for (GenField field : relationFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            String columnName = extractColumnNameFromExpression(field.expression);
+        for (FieldSelection field : relationFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
+            String columnName = field.columnName();
             FieldInfo fieldInfo = getFieldInfo(relNode, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"
@@ -728,27 +622,66 @@ public class QueryClassCodeGenerator {
         out.write(indent + "}\n");
     }
 
-    private void generateInitializeQuery(Writer out, String schemaName, String tableName,
-            List<GenField> fields, List<GenJoin> joins) throws IOException {
-
+    private void generateInitializeQuery(Writer out, QueryTree tree, String schemaName, String tableName) throws IOException {
         out.write("    @Override\n");
         out.write("    protected void initializeQuery() {\n");
         String tableSchemaArg = schemaName == null ? "null" : "\"" + escapeJava(schemaName) + "\"";
         out.write("        query.setTable(" + tableSchemaArg + ", \"" + escapeJava(tableName) + "\");\n");
         
-        for (GenJoin join : joins) {
-            String joinSchemaArg = join.schema == null ? "null" : "\"" + escapeJava(join.schema) + "\"";
-            String conditionArg = join.joinCondition == null ? "null" :
-                "SqlExpression.sql(\"" + escapeJava(join.joinCondition) + "\")";
-            out.write("        query.addJoin(org.pojoquery.pipeline.SqlQuery.JoinType." + join.joinType.name() +
-                ", " + joinSchemaArg + ", \"" + escapeJava(join.table) +
-                "\", \"" + escapeJava(join.alias) + "\", " + conditionArg + ");\n");
-        }
+        // Generate joins by iterating the tree
+        generateJoinsFromTree(out, (TableNode) tree.root());
         
-        for (GenField field : fields) {
-            out.write("        query.addField(sql(\"" + escapeJava(field.expression) + "\"), \"" + escapeJava(field.alias) + "\");\n");
+        // Generate fields from all nodes
+        List<FieldSelection> allFieldsList = allFields(tree);
+        for (FieldSelection field : allFieldsList) {
+            out.write("        query.addField(sql(\"" + escapeJava(field.expression().getSql()) + "\"), \"" + escapeJava(field.alias()) + "\");\n");
         }
         out.write("    }\n");
+    }
+
+    private void generateJoinsFromTree(Writer out, TableNode parent) throws IOException {
+        for (QueryNode child : parent.children()) {
+            JoinInfo joinInfo = child.joinInfo();
+            
+            if (child instanceof TableNode childTable) {
+                if (joinInfo != null) {
+                    // Handle many-to-many joins
+                    if (joinInfo.joinTableInfo() != null) {
+                        JoinTableInfo jti = joinInfo.joinTableInfo();
+                        // Add join to the junction table
+                        SqlExpression parentCond = jti.parentCondition(parent.alias());
+                        String joinSchemaArg = jti.joinTable().schemaName() == null ? "null" : "\"" + escapeJava(jti.joinTable().schemaName()) + "\"";
+                        String conditionArg = parentCond != null ? "SqlExpression.sql(\"" + escapeJava(parentCond.getSql()) + "\")" : "null";
+                        out.write("        query.addJoin(org.pojoquery.pipeline.SqlQuery.JoinType.LEFT, " +
+                            joinSchemaArg + ", \"" + escapeJava(jti.joinTable().tableName()) +
+                            "\", \"" + escapeJava(jti.joinTableAlias()) + "\", " + conditionArg + ");\n");
+                        // Add join to the target table
+                        SqlExpression targetCond = jti.targetCondition(child.alias());
+                        TableInfo childTableInfo = joinInfo.childTable();
+                        String targetSchemaArg = childTableInfo != null && childTableInfo.schemaName() != null ? 
+                            "\"" + escapeJava(childTableInfo.schemaName()) + "\"" : "null";
+                        String targetCondArg = targetCond != null ? "SqlExpression.sql(\"" + escapeJava(targetCond.getSql()) + "\")" : "null";
+                        out.write("        query.addJoin(org.pojoquery.pipeline.SqlQuery.JoinType.LEFT, " +
+                            targetSchemaArg + ", \"" + escapeJava(childTableInfo.tableName()) +
+                            "\", \"" + escapeJava(child.alias()) + "\", " + targetCondArg + ");\n");
+                    } else {
+                        // Regular join
+                        SqlExpression condition = joinInfo.toSqlCondition(parent.alias(), child.alias());
+                        TableInfo childTableInfo = joinInfo.childTable();
+                        if (childTableInfo != null) {
+                            String joinSchemaArg = childTableInfo.schemaName() == null ? "null" : "\"" + escapeJava(childTableInfo.schemaName()) + "\"";
+                            String conditionArg = condition != null ? "SqlExpression.sql(\"" + escapeJava(condition.getSql()) + "\")" : "null";
+                            out.write("        query.addJoin(org.pojoquery.pipeline.SqlQuery.JoinType." + joinInfo.joinType().name() +
+                                ", " + joinSchemaArg + ", \"" + escapeJava(childTableInfo.tableName()) +
+                                "\", \"" + escapeJava(child.alias()) + "\", " + conditionArg + ");\n");
+                        }
+                    }
+                }
+                
+                // Recurse into children
+                generateJoinsFromTree(out, childTable);
+            }
+        }
     }
 
     private void generateConditionHelpers(Writer out, String queryClassName, String entityName, String pkType) throws IOException {
@@ -887,7 +820,7 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateProcessRows(Writer out, String entityName, String tableName,
-            Map<String, List<GenField>> fieldsByAlias, Map<String, QueryNode> nodesByAlias,
+            Map<String, List<FieldSelection>> fieldsByAlias, Map<String, QueryNode> nodesByAlias,
             Map<String, QueryNode> parentNodes) throws IOException {
 
         out.write("    @Override\n");
@@ -903,11 +836,11 @@ public class QueryClassCodeGenerator {
             String className = node.type().getSimpleName();
             String varPrefix = "fm" + capitalize(sanitizeVarName(aliasName));
 
-            List<GenField> aliasFields = fieldsByAlias.get(aliasName);
+            List<FieldSelection> aliasFields = fieldsByAlias.get(aliasName);
             if (aliasFields != null) {
                 out.write("        // " + className + " field mappings\n");
-                for (GenField field : aliasFields) {
-                    String fieldName = extractFieldNameFromAlias(field.alias);
+                for (FieldSelection field : aliasFields) {
+                    String fieldName = extractFieldNameFromAlias(field.alias());
                     String varName = varPrefix + capitalize(fieldName);
                     out.write("        FieldMapping " + varName + " = dbContext.getFieldMapping(FieldHelper.getField(" +
                         className + ".class, \"" + fieldName + "\"));\n");
@@ -960,12 +893,12 @@ public class QueryClassCodeGenerator {
             out.write("            if (" + sanitizeVarName(tableName) + " == null) {\n");
             out.write("                " + sanitizeVarName(tableName) + " = new " + entityName + "();\n");
 
-            List<GenField> rootFields = fieldsByAlias.get(tableName);
+            List<FieldSelection> rootFields = fieldsByAlias.get(tableName);
             if (rootFields != null) {
-                for (GenField field : rootFields) {
-                    String fieldName = extractFieldNameFromAlias(field.alias);
+                for (FieldSelection field : rootFields) {
+                    String fieldName = extractFieldNameFromAlias(field.alias());
                     String fmVar = rootVarPrefix + capitalize(fieldName);
-                    out.write("                " + fmVar + ".apply(" + sanitizeVarName(tableName) + ", row.get(\"" + field.alias + "\"));\n");
+                    out.write("                " + fmVar + ".apply(" + sanitizeVarName(tableName) + ", row.get(\"" + field.alias() + "\"));\n");
                 }
             }
 
@@ -1003,12 +936,12 @@ public class QueryClassCodeGenerator {
             out.write("                if (" + entityVar + " == null) {\n");
             out.write("                    " + entityVar + " = new " + className + "();\n");
 
-            List<GenField> aliasFields = fieldsByAlias.get(aliasName);
+            List<FieldSelection> aliasFields = fieldsByAlias.get(aliasName);
             if (aliasFields != null) {
-                for (GenField field : aliasFields) {
-                    String fieldName = extractFieldNameFromAlias(field.alias);
+                for (FieldSelection field : aliasFields) {
+                    String fieldName = extractFieldNameFromAlias(field.alias());
                     String fmVar = aliasVarPrefix + capitalize(fieldName);
-                    out.write("                    " + fmVar + ".apply(" + entityVar + ", row.get(\"" + field.alias + "\"));\n");
+                    out.write("                    " + fmVar + ".apply(" + entityVar + ", row.get(\"" + field.alias() + "\"));\n");
                 }
             }
 
@@ -1042,7 +975,7 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateProcessRowStreaming(Writer out, String entityName, String tableName,
-            Map<String, List<GenField>> fieldsByAlias, Map<String, QueryNode> nodesByAlias,
+            Map<String, List<FieldSelection>> fieldsByAlias, Map<String, QueryNode> nodesByAlias,
             Map<String, QueryNode> parentNodes) throws IOException {
 
         out.write("    @Override\n");
@@ -1058,11 +991,11 @@ public class QueryClassCodeGenerator {
             String className = node.type().getSimpleName();
             String varPrefix = "fm" + capitalize(sanitizeVarName(aliasName));
 
-            List<GenField> aliasFields = fieldsByAlias.get(aliasName);
+            List<FieldSelection> aliasFields = fieldsByAlias.get(aliasName);
             if (aliasFields != null) {
                 out.write("        // " + className + " field mappings\n");
-                for (GenField field : aliasFields) {
-                    String fieldName = extractFieldNameFromAlias(field.alias);
+                for (FieldSelection field : aliasFields) {
+                    String fieldName = extractFieldNameFromAlias(field.alias());
                     String varName = varPrefix + capitalize(fieldName);
                     out.write("        FieldMapping " + varName + " = dbContext.getFieldMapping(FieldHelper.getField(" +
                         className + ".class, \"" + fieldName + "\"));\n");
@@ -1102,12 +1035,12 @@ public class QueryClassCodeGenerator {
             out.write("            if (" + sanitizeVarName(tableName) + " == null) {\n");
             out.write("                " + sanitizeVarName(tableName) + " = new " + entityName + "();\n");
 
-            List<GenField> rootFields = fieldsByAlias.get(tableName);
+            List<FieldSelection> rootFields = fieldsByAlias.get(tableName);
             if (rootFields != null) {
-                for (GenField field : rootFields) {
-                    String fieldName = extractFieldNameFromAlias(field.alias);
+                for (FieldSelection field : rootFields) {
+                    String fieldName = extractFieldNameFromAlias(field.alias());
                     String fmVar = rootVarPrefix + capitalize(fieldName);
-                    out.write("                " + fmVar + ".apply(" + sanitizeVarName(tableName) + ", row.get(\"" + field.alias + "\"));\n");
+                    out.write("                " + fmVar + ".apply(" + sanitizeVarName(tableName) + ", row.get(\"" + field.alias() + "\"));\n");
                 }
             }
 
@@ -1144,12 +1077,12 @@ public class QueryClassCodeGenerator {
             out.write("                if (" + entityVar + " == null) {\n");
             out.write("                    " + entityVar + " = new " + className + "();\n");
 
-            List<GenField> aliasFields = fieldsByAlias.get(aliasName);
+            List<FieldSelection> aliasFields = fieldsByAlias.get(aliasName);
             if (aliasFields != null) {
-                for (GenField field : aliasFields) {
-                    String fieldName = extractFieldNameFromAlias(field.alias);
+                for (FieldSelection field : aliasFields) {
+                    String fieldName = extractFieldNameFromAlias(field.alias());
                     String fmVar = aliasVarPrefix + capitalize(fieldName);
-                    out.write("                    " + fmVar + ".apply(" + entityVar + ", row.get(\"" + field.alias + "\"));\n");
+                    out.write("                    " + fmVar + ".apply(" + entityVar + ", row.get(\"" + field.alias() + "\"));\n");
                 }
             }
 
@@ -1186,7 +1119,7 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateGetPrimaryKeyFromRow(Writer out, String tableName,
-            Map<String, QueryNode> nodesByAlias, Map<String, List<GenField>> fieldsByAlias) throws IOException {
+            Map<String, QueryNode> nodesByAlias, Map<String, List<FieldSelection>> fieldsByAlias) throws IOException {
 
         QueryNode rootNode = nodesByAlias.get(tableName);
         List<String> idFieldNames = getIdFieldNames(rootNode);
@@ -1199,7 +1132,7 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateGetIdFieldName(Writer out, String tableName,
-            Map<String, QueryNode> nodesByAlias, Map<String, List<GenField>> fieldsByAlias) throws IOException {
+            Map<String, QueryNode> nodesByAlias, Map<String, List<FieldSelection>> fieldsByAlias) throws IOException {
 
         QueryNode rootNode = nodesByAlias.get(tableName);
         List<String> idFieldNames = getIdFieldNames(rootNode);
@@ -1212,7 +1145,7 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateBuildIdCondition(Writer out, String tableName,
-            Map<String, QueryNode> nodesByAlias, Map<String, List<GenField>> fieldsByAlias) throws IOException {
+            Map<String, QueryNode> nodesByAlias, Map<String, List<FieldSelection>> fieldsByAlias) throws IOException {
 
         QueryNode rootNode = nodesByAlias.get(tableName);
         List<String> idFieldNames = getIdFieldNames(rootNode);
@@ -1232,20 +1165,20 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateGroupByBuilderClass(Writer out, String queryClassName,
-            String groupByBuilderClass, String tableName, List<GenField> mainFields, String indent) throws IOException {
+            String groupByBuilderClass, String tableName, List<FieldSelection> mainFields, String indent) throws IOException {
 
         out.write(indent + "public class " + groupByBuilderClass + " {\n\n");
 
-        for (GenField field : mainFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
+        for (FieldSelection field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
             out.write(indent + "    public final " + queryClassName + "GroupByField " + fieldName + ";\n");
         }
         out.write("\n");
 
         out.write(indent + "    public " + groupByBuilderClass + "() {\n");
-        for (GenField field : mainFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            String columnName = extractColumnNameFromExpression(field.expression);
+        for (FieldSelection field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
+            String columnName = field.columnName();
             out.write(indent + "        this." + fieldName + " = new " + queryClassName + "GroupByField(\"" + tableName + "\", \"" + columnName + "\");\n");
         }
         out.write(indent + "    }\n");
@@ -1254,13 +1187,13 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateOrderByBuilderClass(Writer out, String queryClassName,
-            String orderByBuilderClass, String tableName, List<GenField> mainFields,
-            Map<String, List<GenField>> fieldsByAlias, Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
+            String orderByBuilderClass, String tableName, List<FieldSelection> mainFields,
+            Map<String, List<FieldSelection>> fieldsByAlias, Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
 
         out.write(indent + "public class " + orderByBuilderClass + " implements OrderByTarget {\n\n");
 
-        for (GenField field : mainFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
+        for (FieldSelection field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
             out.write(indent + "    public final OrderByField<" + queryClassName + "> " + fieldName + ";\n");
         }
         out.write("\n");
@@ -1272,9 +1205,9 @@ public class QueryClassCodeGenerator {
         }
 
         out.write(indent + "    public " + orderByBuilderClass + "() {\n");
-        for (GenField field : mainFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            String columnName = extractColumnNameFromExpression(field.expression);
+        for (FieldSelection field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
+            String columnName = field.columnName();
             out.write(indent + "        this." + fieldName + " = new OrderByField<>(this, " + queryClassName + ".this, \"" + tableName + "\", \"" + columnName + "\");\n");
         }
         out.write(indent + "    }\n\n");
@@ -1288,20 +1221,20 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateNestedOrderByFields(Writer out, String queryClassName,
-            RelationNode node, Map<String, List<GenField>> fieldsByAlias, Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
+            RelationNode node, Map<String, List<FieldSelection>> fieldsByAlias, Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
         
         String relationName = node.name;
         String aliasName = node.fullAlias;
-        List<GenField> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
+        List<FieldSelection> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
         
         String innerClassName = capitalize(relationName) + "OrderByFields";
         out.write(indent + "/** OrderBy fields for the {@code " + relationName + "} relationship */\n");
         out.write(indent + "public final " + innerClassName + " " + relationName + " = new " + innerClassName + "();\n\n");
         out.write(indent + "public class " + innerClassName + " {\n");
         
-        for (GenField field : relationFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            String columnName = extractColumnNameFromExpression(field.expression);
+        for (FieldSelection field : relationFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
+            String columnName = field.columnName();
             out.write(indent + "    public final OrderByField<" + queryClassName + "> " + fieldName + " =\n");
             out.write(indent + "            new OrderByField<>(" + queryClassName + "OrderByBuilder.this, " + queryClassName + ".this, \"" + aliasName + "\", \"" + columnName + "\");\n");
         }
@@ -1371,8 +1304,8 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateWhereBuilderClass(Writer out, String queryClassName,
-            String whereBuilderClass, String tableName, List<GenField> mainFields, QueryNode mainNode,
-            Map<String, List<GenField>> fieldsByAlias, Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
+            String whereBuilderClass, String tableName, List<FieldSelection> mainFields, QueryNode mainNode,
+            Map<String, List<FieldSelection>> fieldsByAlias, Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
 
         String terminatorClass = whereBuilderClass + "ConditionTerminator";
 
@@ -1382,9 +1315,9 @@ public class QueryClassCodeGenerator {
         out.write(indent + "public class " + whereBuilderClass + " implements ConditionChain<" + whereBuilderClass + "." + terminatorClass + "> {\n\n");
 
         // Fields for condition building on main entity
-        for (GenField field : mainFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            String columnName = extractColumnNameFromExpression(field.expression);
+        for (FieldSelection field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
+            String columnName = field.columnName();
             FieldInfo fieldInfo = getFieldInfo(mainNode, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"
@@ -1423,12 +1356,13 @@ public class QueryClassCodeGenerator {
         out.write(indent + "    }\n\n");
 
         // ConditionTerminator inner class
-        out.write(indent + "    public class " + terminatorClass + " extends " + queryClassName + "Delegate {\n\n");
+        out.write(indent + "    public class " + terminatorClass + " extends " + queryClassName + "Delegate \n");
+        out.write(indent + "            implements ConditionChain<" + terminatorClass + "> {\n\n");
         
         // Fields for condition building - copy from main entity
-        for (GenField field : mainFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            String columnName = extractColumnNameFromExpression(field.expression);
+        for (FieldSelection field : mainFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
+            String columnName = field.columnName();
             FieldInfo fieldInfo = getFieldInfo(mainNode, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"
@@ -1461,6 +1395,16 @@ public class QueryClassCodeGenerator {
         out.write(indent + "        public " + terminatorClass + " or(Supplier<SqlExpression> expr) {\n");
         out.write(indent + "            builder.add(sql(\" OR \")).startClause().add(expr.get()).endClause();\n");
         out.write(indent + "            return this;\n");
+        out.write(indent + "        }\n\n");
+
+        out.write(indent + "        @Override\n");
+        out.write(indent + "        public ConditionBuilder getBuilder() {\n");
+        out.write(indent + "            return builder;\n");
+        out.write(indent + "        }\n\n");
+
+        out.write(indent + "        @Override\n");
+        out.write(indent + "        public " + terminatorClass + " getContinuation() {\n");
+        out.write(indent + "            return this;\n");
         out.write(indent + "        }\n");
         out.write(indent + "    }\n\n");
 
@@ -1479,22 +1423,22 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateNestedWhereFields(Writer out, String queryClassName, String whereBuilderClass,
-            String terminatorClass, RelationNode node, Map<String, List<GenField>> fieldsByAlias,
+            String terminatorClass, RelationNode node, Map<String, List<FieldSelection>> fieldsByAlias,
             Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
 
         String relationName = node.name;
         String aliasName = node.fullAlias;
         QueryNode relNode = nodesByAlias.get(aliasName);
-        List<GenField> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
+        List<FieldSelection> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
 
         String innerClassName = capitalize(relationName) + "WhereFields";
         out.write(indent + "/** Where fields for the {@code " + relationName + "} relationship */\n");
         out.write(indent + "public final " + innerClassName + " " + relationName + " = new " + innerClassName + "();\n\n");
         out.write(indent + "public class " + innerClassName + " {\n");
 
-        for (GenField field : relationFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            String columnName = extractColumnNameFromExpression(field.expression);
+        for (FieldSelection field : relationFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
+            String columnName = field.columnName();
             FieldInfo fieldInfo = getFieldInfo(relNode, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"
@@ -1512,22 +1456,22 @@ public class QueryClassCodeGenerator {
     }
 
     private void generateNestedTerminatorFields(Writer out, String queryClassName,
-            String terminatorClass, RelationNode node, Map<String, List<GenField>> fieldsByAlias,
+            String terminatorClass, RelationNode node, Map<String, List<FieldSelection>> fieldsByAlias,
             Map<String, QueryNode> nodesByAlias, String indent) throws IOException {
 
         String relationName = node.name;
         String aliasName = node.fullAlias;
         QueryNode relNode = nodesByAlias.get(aliasName);
-        List<GenField> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
+        List<FieldSelection> relationFields = fieldsByAlias.getOrDefault(aliasName, List.of());
 
         String innerClassName = capitalize(relationName) + "TerminatorFields";
         out.write(indent + "/** Terminator fields for the {@code " + relationName + "} relationship */\n");
         out.write(indent + "public final " + innerClassName + " " + relationName + " = new " + innerClassName + "();\n\n");
         out.write(indent + "public class " + innerClassName + " {\n");
 
-        for (GenField field : relationFields) {
-            String fieldName = extractFieldNameFromAlias(field.alias);
-            String columnName = extractColumnNameFromExpression(field.expression);
+        for (FieldSelection field : relationFields) {
+            String fieldName = extractFieldNameFromAlias(field.alias());
+            String columnName = field.columnName();
             FieldInfo fieldInfo = getFieldInfo(relNode, fieldName);
             String builderClass = fieldInfo.isComparable
                 ? "ComparableConditionBuilderField"

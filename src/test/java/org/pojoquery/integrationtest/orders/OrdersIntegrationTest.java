@@ -5,6 +5,7 @@ import java.time.LocalDate;
 
 import javax.sql.DataSource;
 
+import org.junit.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
@@ -12,30 +13,30 @@ import org.pojoquery.schema.SchemaGenerator;
 
 public class OrdersIntegrationTest {
 
-	// @Test
-	// public void testOrdersQueries() {
-	// 	DataSource dataSource = initOrdersDatabase();
-	// 	DB.withConnection(dataSource, (conn) -> {
-	// 		var q = new CustomerOrderWithLineItemsQuery();
-	// 		q.where().discount.gt(0)
-	// 			.and(q.lineItems.quantity.gt(10)
-	// 				.or().lineItems.vendorPart.price.lt(BigDecimal.valueOf(1.00)))
-	// 			.and().status.in(OrderStatus.PENDING, OrderStatus.CANCELLED)
-	// 			.orderBy().lastUpdate.desc()
-	// 			.list(conn).forEach(co -> {
-	// 				System.out.printf("Order ID: %d, Status: %s%n", co.getId(), co.getStatus());
-	// 				for (var li : co.getLineItems()) {
-	// 					System.out.printf("  Line Item ID: %d, Item ID: %d, Quantity: %d%n",
-	// 							li.getId(), li.getItemId(), li.getQuantity());
-	// 					VendorPart vp = li.getVendorPart();
-	// 					Part p = vp.getPart();
-	// 					Vendor v = vp.getVendor();
-	// 					System.out.printf("    Part: %s (%s), Vendor: %s, Price: %s%n",
-	// 							p.getPartNumber(), p.getDescription(), v.getName(), vp.getPrice());
-	// 				}
-	// 			});
-	// 	});
-	// }
+	@Test
+	public void testOrdersQueries() {
+		DataSource dataSource = initOrdersDatabase();
+		DB.withConnection(dataSource, (conn) -> {
+			var q = new CustomerOrderWithLineItemsQuery();
+			q.where().discount.gt(0)
+				.and(q.lineItems.quantity.gt(10)
+					.or().lineItems.vendorPart.price.lt(BigDecimal.valueOf(1.00)))
+				.and().status.in(OrderStatus.PENDING, OrderStatus.CANCELLED)
+				.orderBy().lastUpdate.desc()
+				.list(conn).forEach(co -> {
+					System.out.printf("Order ID: %d, Status: %s%n", co.getId(), co.getStatus());
+					for (var li : co.getLineItems()) {
+						System.out.printf("  Line Item ID: %d, Item ID: %d, Quantity: %d%n",
+								li.getId(), li.getItemId(), li.getQuantity());
+						VendorPart vp = li.getVendorPart();
+						Part p = vp.getPart();
+						Vendor v = vp.getVendor();
+						System.out.printf("    Part: %s (%s), Vendor: %s, Price: %s%n",
+								p.getPartNumber(), p.getDescription(), v.getName(), vp.getPrice());
+					}
+				});
+		});
+	}
 
 	private void insertTestData(java.sql.Connection conn) {
 		// Create vendors

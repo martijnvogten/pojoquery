@@ -8,7 +8,6 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.pojoquery.annotations.Id;
-import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.MappingException;
 

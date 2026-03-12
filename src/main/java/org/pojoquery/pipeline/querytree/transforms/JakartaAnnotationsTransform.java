@@ -4,7 +4,6 @@ import java.util.List;
 
 import org.pojoquery.pipeline.querytree.EmbeddedNode;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
-import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.FieldSelectionBase;
 import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryNode;

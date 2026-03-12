@@ -44,7 +44,6 @@ public class TestCascadingUpdaterOrders {
         public List<LineItem> lineItems;
         
         public OrderWithLineItems() {
-            super();
             this.lineItems = new ArrayList<>();
         }
     }

@@ -26,10 +26,47 @@ public final class CascadingUpdater {
 		int update(String table, String schema, Map<String, Object> values, Map<String, Object> where);
 		int delete(String table, String schema, Map<String, Object> where);
 		
+		/** Delete with a SQL expression condition (for subquery-based deletes) */
+		int deleteWhere(String table, String schema, SqlExpression condition);
+		
 		/** Link table operations for many-to-many */
 		void syncLinkTable(String table, String schema, 
 			String ownerFkColumn, Object ownerId,
 			String targetFkColumn, List<Object> targetIds);
+	}
+	
+	/**
+	 * Represents an FK path for building nested subqueries.
+	 * Used to construct DELETE statements with nested IN clauses.
+	 * Produces SQL with curly brace markers like {column} that the caller resolves.
+	 */
+	record FkPath(
+		String table,
+		String schema,
+		String idColumn,      // column to select (usually "id")
+		String fkColumn,      // FK column pointing to parent
+		FkPath parent         // null for root condition
+	) {
+		/** 
+		 * Builds nested subquery condition with curly brace markers.
+		 * Base case: {fkColumn} = ?
+		 * Recursive: {fkColumn} IN (SELECT {idColumn} FROM {table} WHERE <parent condition>)
+		 * The caller (DatabaseOperations.deleteWhere) resolves markers to quoted identifiers.
+		 */
+		SqlExpression toCondition(Object rootValue) {
+			if (parent == null) {
+				// Base case: direct equality
+				return SqlExpression.sql("{" + fkColumn + "} = ?", rootValue);
+			}
+			// Recursive: build nested subquery
+			SqlExpression parentCondition = parent.toCondition(rootValue);
+			String fullTable = schema != null && !schema.isEmpty() 
+				? "{" + schema + "}.{" + table + "}"
+				: "{" + table + "}";
+			String subquerySql = "{" + fkColumn + "} IN (SELECT {" + idColumn + "} FROM " + 
+				fullTable + " WHERE " + parentCondition.getSql() + ")";
+			return new SqlExpression(subquerySql, parentCondition.getParameters());
+		}
 	}
 
 	public static <PK> PK insert(QueryTree tree, Object entity, DatabaseOperations db) {
@@ -204,13 +241,29 @@ public final class CascadingUpdater {
 					);
 				} else {
 					if (joinInfo.joinCondition() instanceof JoinCondition.ForeignKeyInChild fkInChild) {
-						// One-to-many: delete all children then reinsert
+						// One-to-many: delete all descendants then reinsert
 						String fkColumn = fkInChild.foreignKeyColumn();
+						
+						// Build root path for this child level
+						FkPath rootPath = new FkPath(
+							childJoined.tableInfo().tableName(),
+							childJoined.tableInfo().schemaName(),
+							childJoined.idFieldNames().isEmpty() ? "id" : childJoined.idFieldNames().get(0),
+							fkColumn,
+							null  // root - uses direct equality
+						);
+						
+						// Delete all descendants first (grandchildren, great-grandchildren, etc.)
+						deleteDescendantsRecursive(childJoined, rootPath, parentId, db);
+						
+						// Now safe to delete children
 						db.delete(
 							childJoined.tableInfo().tableName(), 
 							childJoined.tableInfo().schemaName(),
 							Map.of(fkColumn, parentId)
 						);
+						
+						// Reinsert items
 						for (Object item : items) {
 							// Reset ID so it gets a new one
 							clearIdField(childJoined, item);
@@ -245,13 +298,27 @@ public final class CascadingUpdater {
 						);
 					} else {
 						if (joinInfo.joinCondition() instanceof JoinCondition.ForeignKeyInChild fkInChild) {
-							// Delete owned children
+							// Delete owned children (and their descendants)
 							String fkColumn = fkInChild.foreignKeyColumn();
+							
+							// Build root path for this child level
+							FkPath rootPath = new FkPath(
+								childJoined.tableInfo().tableName(),
+								childJoined.tableInfo().schemaName(),
+								childJoined.idFieldNames().isEmpty() ? "id" : childJoined.idFieldNames().get(0),
+								fkColumn,
+								null
+							);
+							
+							// Delete all descendants first
+							deleteDescendantsRecursive(childJoined, rootPath, thisEntityId, db);
+							
+							// Now safe to delete children
 							db.delete(
 								childJoined.tableInfo().tableName(),
 								childJoined.tableInfo().schemaName(),
 								Map.of(fkColumn, thisEntityId)
-								);
+							);
 							}
 						}
 					} else {
@@ -273,6 +340,62 @@ public final class CascadingUpdater {
 			return db.delete(tableInfo.tableName(), tableInfo.schemaName(), where);
 		}
         return 0;
+	}
+
+	/**
+	 * Recursively deletes all descendants of nodes matching the given FK path.
+	 * Depth-first traversal ensures grandchildren are deleted before children.
+	 * 
+	 * @param node The node whose descendants should be deleted
+	 * @param parentPath The FK path to reach entities at the parent level
+	 * @param rootValue The root FK value (e.g., owner.id = 5)
+	 */
+	private static void deleteDescendantsRecursive(
+			JoinedNode node,
+			FkPath parentPath,
+			Object rootValue,
+			DatabaseOperations db) {
+		
+		// Check each child of this node
+		for (QueryNode child : node.children()) {
+			if (child instanceof JoinedNode childJoined && isCascadedCollection(childJoined)) {
+				JoinCondition.ForeignKeyInChild fk = 
+					(JoinCondition.ForeignKeyInChild) childJoined.joinInfo().joinCondition();
+				
+				// Build path to this child level
+				// table/schema/idColumn are from the PARENT (the table we SELECT FROM in subquery)
+				// fkColumn is the child's FK that references the parent
+				FkPath childPath = new FkPath(
+					node.tableInfo().tableName(),
+					node.tableInfo().schemaName(),
+					node.idFieldNames().isEmpty() ? "id" : node.idFieldNames().get(0),
+					fk.foreignKeyColumn(),
+					parentPath
+				);
+				
+				// Recurse deeper first (depth-first)
+				deleteDescendantsRecursive(childJoined, childPath, rootValue, db);
+				
+				// Now delete this level using nested subquery
+				SqlExpression condition = childPath.toCondition(rootValue);
+				db.deleteWhere(
+					childJoined.tableInfo().tableName(),
+					childJoined.tableInfo().schemaName(),
+					condition
+				);
+			}
+		}
+	}
+	
+	/**
+	 * Checks if a node represents a cascaded one-to-many collection.
+	 */
+	private static boolean isCascadedCollection(JoinedNode node) {
+		JoinInfo ji = node.joinInfo();
+		return ji != null
+			&& ji.isCollection()
+			&& !ji.isManyToMany()
+			&& ji.joinCondition() instanceof JoinCondition.ForeignKeyInChild;
 	}
 
     @SuppressWarnings("unchecked")

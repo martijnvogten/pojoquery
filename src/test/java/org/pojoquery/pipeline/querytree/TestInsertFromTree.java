@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Test;
 import org.pojoquery.CascadingUpdater;
 import org.pojoquery.CascadingUpdater.DatabaseOperations;
+import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.SubClasses;
@@ -112,6 +113,7 @@ public class TestInsertFromTree {
 		final AtomicLong idGenerator = new AtomicLong(100);
 
 		@Override
+		@SuppressWarnings("unchecked")
 		public <PK> PK insert(String table, String schema, Map<String, Object> values) {
 			String fullTable = schema != null ? schema + "." + table : table;
 			Long generatedId = idGenerator.getAndIncrement();
@@ -143,6 +145,13 @@ public class TestInsertFromTree {
 				operations.add(String.format("INSERT INTO %s {%s=%s, %s=%s}", 
 					fullTable, ownerFkColumn, ownerId, targetFkColumn, targetId));
 			}
+		}
+
+		@Override
+		public int deleteWhere(String table, String schema, SqlExpression condition) {
+			String fullTable = schema != null ? schema + "." + table : table;
+			operations.add(String.format("DELETE FROM %s WHERE %s", fullTable, condition));
+			return 1; // Simulate one row deleted
 		}
 	}
 

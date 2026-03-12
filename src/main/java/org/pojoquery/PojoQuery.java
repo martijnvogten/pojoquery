@@ -498,6 +498,15 @@ public class PojoQuery<T> {
 		}
 
 		@Override
+		public int deleteWhere(String table, String schema, SqlExpression condition) {
+			// Resolve curly brace markers {identifier} to quoted identifiers
+			String resolvedSql = CurlyMarkers.processMarkers(condition.getSql(), 
+				id -> context.quoteObjectNames(id));
+			SqlExpression resolvedCondition = new SqlExpression(resolvedSql, condition.getParameters());
+			return executeDelete(context, connection, table, List.of(resolvedCondition));
+		}
+
+		@Override
 		public void syncLinkTable(String table, String schema, String ownerFkColumn, Object ownerId,
 				String targetFkColumn, List<Object> targetIds) {
 			// TODO Auto-generated method stub

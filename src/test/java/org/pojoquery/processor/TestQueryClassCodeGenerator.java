@@ -3,12 +3,17 @@ package org.pojoquery.processor;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.StringWriter;
+import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.pipeline.querytree.FieldSelection;
+import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
+import org.pojoquery.pipeline.querytree.TableNode;
 
 /**
  * Tests for QueryClassCodeGenerator.
@@ -189,38 +194,41 @@ public class TestQueryClassCodeGenerator {
     }
 
     @Test 
-    public void testExtractMetadata() {
+    public void testFieldsFromTree() {
         QueryTree tree = QueryTreeBuilder.from(Book.class);
-        QueryClassCodeGenerator generator = new QueryClassCodeGenerator();
         
-        QueryClassCodeGenerator.QueryMetadata metadata = generator.extractMetadata(tree);
+        // Verify allNodes returns the tree nodes
+        Map<String, QueryNode> nodesByAlias = tree.nodesByAlias();
+        assertTrue(nodesByAlias.size() > 0, "Should have nodes");
+        assertTrue(nodesByAlias.containsKey("book"), "Should have 'book' root node");
         
-        // Verify basic metadata
-        assertTrue(metadata.tableName.equals("book"), "Table name should be 'book'");
-        assertTrue(metadata.resultType.getSimpleName().equals("Book"), "Result type should be Book");
-        
-        // Verify fields are extracted
-        assertTrue(metadata.fields.size() > 0, "Should have fields");
-        boolean hasIdField = metadata.fields.stream()
-            .anyMatch(f -> f.alias.equals("book.id"));
+        // Verify fields are accessible via resolvedFields
+        QueryNode bookNode = nodesByAlias.get("book");
+        assertTrue(bookNode instanceof TableNode, "Root node should be a TableNode");
+        List<FieldSelection> bookFields = ((TableNode) bookNode).resolvedFields();
+        assertTrue(bookFields.size() > 0, "Should have fields");
+        boolean hasIdField = bookFields.stream()
+            .anyMatch(f -> f.alias().equals("book.id"));
         assertTrue(hasIdField, "Should have book.id field");
         
-        // Verify joins are extracted for author relationship
-        assertTrue(metadata.joins.size() > 0, "Should have joins for author relationship");
+        // Verify there are multiple nodes (root + author relation)
+        assertTrue(nodesByAlias.size() > 1, "Should have more than just root node (author relationship)");
     }
 
     @Test
     public void testCodeCompilationReadiness() throws Exception {
         // This test generates code and checks it has all required import statements
         // for the generated code to compile
-        QueryTree tree = QueryTreeBuilder.from(Book.class);
+        QueryTree tree = QueryTreeBuilder.from(org.pojoquery.processor.expected.Book.class);
         QueryClassCodeGenerator generator = new QueryClassCodeGenerator();
         
         StringWriter output = new StringWriter();
-        generator.generate(tree, "test.pkg", "Book", "BookQuery", output);
+        generator.generate(tree, "org.pojoquery.processor.expected", "Book", "BookQuery", output);
         
         String code = output.toString();
         
+        System.out.println(code);
+
         // Required imports
         assertTrue(code.contains("import java.sql.Connection;"), "Should import Connection");
         assertTrue(code.contains("import java.util.List;"), "Should import List");
