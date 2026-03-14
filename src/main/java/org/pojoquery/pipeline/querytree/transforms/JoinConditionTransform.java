@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Link;
+import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.querytree.EmbeddedNode;
 import org.pojoquery.pipeline.querytree.EmptyTableNode;
 import org.pojoquery.pipeline.querytree.JoinCondition;
@@ -12,8 +13,8 @@ import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableNode;
-import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.TypeModel;
 
 /**
  * Transform that resolves join conditions for nodes that don't have them yet.
@@ -49,9 +50,13 @@ public class JoinConditionTransform implements QueryTreeTransform {
         }
         
         JoinCondition newCondition;
-        FieldModel linkField = joinInfo.linkField();
-        
-        var condAnnOpt = linkField != null ? linkField.getAnnotation(org.pojoquery.annotations.JoinCondition.class) : java.util.Optional.<AnnotationModel>empty();
+        FieldModel parentField = joinInfo.linkField();
+        if (parentField == null) {
+            // This transform only handles join conditions from actual Java properties.
+            return child;
+        }
+
+        var condAnnOpt = parentField.getAnnotation(org.pojoquery.annotations.JoinCondition.class);
         if (condAnnOpt.isPresent()) {
             // Custom join condition annotation - use Custom variant
             String resolved = ExpressionResolver.resolve(
@@ -67,12 +72,19 @@ public class JoinConditionTransform implements QueryTreeTransform {
             return child;
         } else if (joinInfo.isCollection()) {
             // One-to-many: FK column is in child table
-            newCondition = JoinConditions.forCollectionStructured(
-                parent.type(), parent.tableInfo().tableName(), 
-                getForeignLinkField(linkField));
+
+            String fkColumn = parentField.getAnnotation(Link.class)
+                .flatMap(linkAnn -> linkAnn.getStringValue("foreignlinkfield"))
+                .filter(s -> !s.isEmpty())
+                .orElse(parent.tableInfo().tableName() + "_id"); // Default FK column name if not specified
+            String targetId = PojoMetadata.determineSqlFieldName(determineIdField(parent.type()));
+            ; // Ensure link field is present for collection joins
+            newCondition = new JoinCondition.ForeignKeyInChild(fkColumn, targetId);
         } else {
             // Entity reference (many-to-one): FK column is in parent table
-            JoinCondition.ForeignKeyInParent baseCondition = JoinConditions.forEntityReferenceStructured(linkField, child.type());
+            String fkColumn = PojoMetadata.determineLinkFieldName(parentField);
+            String targetId = PojoMetadata.determineSqlFieldName(determineIdField(child.type()));
+            JoinCondition.ForeignKeyInParent baseCondition = new JoinCondition.ForeignKeyInParent(fkColumn, targetId);
             // If parent is embedded, prepend the embedded prefix to the FK column
             if (parent instanceof EmbeddedNode en) {
                 String prefixedFkColumn = en.embedInfo().fieldPrefix() + baseCondition.foreignKeyColumn();
@@ -97,10 +109,14 @@ public class JoinConditionTransform implements QueryTreeTransform {
     }
 
     private String getForeignLinkField(FieldModel field) {
-        if (field == null) return null;
         return field.getAnnotation(Link.class)
             .flatMap(linkAnn -> linkAnn.getStringValue("foreignlinkfield"))
             .filter(s -> !s.isEmpty())
             .orElse(null);
     }
+
+    private FieldModel determineIdField(TypeModel type) {
+        return org.pojoquery.pipeline.PojoMetadata.determineIdField(type);
+    }  
+
 }

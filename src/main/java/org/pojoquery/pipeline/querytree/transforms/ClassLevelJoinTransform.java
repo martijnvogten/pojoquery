@@ -5,10 +5,8 @@ import java.util.List;
 
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Join;
-import org.pojoquery.internal.MappingException;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.querytree.BareJoinInfo;
-import org.pojoquery.pipeline.querytree.EmbeddedNode;
 import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableInfo;
@@ -23,16 +21,9 @@ public class ClassLevelJoinTransform implements QueryTreeTransform {
     @Override
     public QueryTree apply(QueryTree tree) {
         return tree.transformNodes(
-            node -> node instanceof JoinedNode && node.type().hasAnnotation(Join.class), 
-            this::processNode
+            node -> node instanceof JoinedNode, 
+            this::processJoinedNode
         );
-    }
-    
-    private TableNode processNode(TableNode node) {
-        if (node instanceof EmbeddedNode && !((EmbeddedNode)node).isSuperClass()) {
-            throw new MappingException("@Join annotations are not supported on @Embedded types: " + node.type().getQualifiedName());
-        }
-        return node instanceof JoinedNode joined ? processJoinedNode(joined) : node;
     }
     
     private TableNode processJoinedNode(JoinedNode node) {

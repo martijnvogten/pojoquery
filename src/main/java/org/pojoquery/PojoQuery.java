@@ -12,6 +12,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -509,8 +510,18 @@ public class PojoQuery<T> {
 		@Override
 		public void syncLinkTable(String table, String schema, String ownerFkColumn, Object ownerId,
 				String targetFkColumn, List<Object> targetIds) {
-			// TODO Auto-generated method stub
-			throw new UnsupportedOperationException("Unimplemented method 'syncLinkTable'");
+			// Delete all existing rows for this owner
+			Map<String, Object> deleteCondition = new HashMap<>();
+			deleteCondition.put(ownerFkColumn, ownerId);
+			executeDelete(context, connection, table, buildConditionFromValuesMap(context, table, deleteCondition));
+			
+			// Insert new rows for each target
+			for (Object targetId : targetIds) {
+				Map<String, Object> values = new LinkedHashMap<>();
+				values.put(ownerFkColumn, ownerId);
+				values.put(targetFkColumn, targetId);
+				DB.insert(context, connection, schema, table, values);
+			}
 		}
 	}
 

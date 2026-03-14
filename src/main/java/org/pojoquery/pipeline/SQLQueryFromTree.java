@@ -5,6 +5,7 @@ import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.JoinTableInfo;
+import org.pojoquery.pipeline.querytree.JoinedNode;
 import org.pojoquery.pipeline.querytree.LinkedValueNode;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
@@ -33,7 +34,7 @@ public class SQLQueryFromTree {
 			// Recursively add joins
 			addJoinsFromNode(query, tableNode);
 		}
-		
+
 		// Add group by
 		for (String groupBy : tree.groupBy()) {
 			query.addGroupBy(groupBy);
@@ -56,7 +57,14 @@ public class SQLQueryFromTree {
 	private static void addJoinsFromNode(SqlQuery<?> query, TableNode tableNode) {
 		// Use sourceAlias for join conditions - for EmbeddedNode this returns the parent table's alias
 		String parentAlias = tableNode.sourceAlias();
-		
+
+		if (tableNode instanceof JoinedNode joinedNode && joinedNode.extraJoins() != null) {
+			joinedNode.extraJoins().forEach(join -> {
+				query.addJoin(join.joinType(), join.childTable().schemaName(), join.childTable().tableName(), 
+					join.alias(), join.condition());
+			});
+		}
+
 		for (QueryNode child : tableNode.children()) {
 			JoinInfo joinInfo = child.joinInfo();
 			

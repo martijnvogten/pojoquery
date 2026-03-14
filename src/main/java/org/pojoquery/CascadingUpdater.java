@@ -8,15 +8,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.FieldSelectionBase;
 import org.pojoquery.pipeline.querytree.JoinCondition;
 import org.pojoquery.pipeline.querytree.JoinInfo;
 import org.pojoquery.pipeline.querytree.JoinTableInfo;
 import org.pojoquery.pipeline.querytree.JoinedNode;
+import org.pojoquery.pipeline.querytree.LinkedValueNode;
 import org.pojoquery.pipeline.querytree.QueryNode;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.TableInfo;
+import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.ReflectionFieldModel;
 
 public final class CascadingUpdater {
     
@@ -99,7 +103,7 @@ public final class CascadingUpdater {
 			if (fieldBase instanceof FieldSelection field && field.field() != null) {
 				String fieldName = field.field().getName();
 				String columnName = field.columnName() != null ? field.columnName() : fieldName;
-				Object value = getFieldValue(entity, fieldName);
+				Object value = getFieldValue(entity, field.field());
 
 				if (node.idFieldNames().contains(fieldName)) {
 					if (value == null) {
@@ -127,10 +131,20 @@ public final class CascadingUpdater {
 				values.put(parentFkColumn, parentId);
 			}
 
+			node.children().stream()
+				.filter(c -> c.joinInfo() != null && c.joinInfo().joinCondition() instanceof JoinCondition.ForeignKeyInParent)
+				.map(c -> (JoinedNode) c)
+				.forEach(c -> {
+					JoinCondition.ForeignKeyInParent fk = (JoinCondition.ForeignKeyInParent) c.joinInfo().joinCondition();
+					String fkColumn = fk.foreignKeyColumn();
+					Object childId = getIdValue(c, getFieldValue(entity, c.joinInfo().linkField()));
+					values.put(fkColumn, childId);
+				});
+
 			PK generatedId = db.insert(tableInfo.tableName(), tableInfo.schemaName(), values);
 			
 			if (fields.autoGenIdField() != null && generatedId != null) {
-				setFieldValue(entity, fields.autoGenIdField(), generatedId);
+				setFieldValue(entity, findField(joinedNode, fields.autoGenIdField()), generatedId);
 			}
 
 			PK thisEntityId = generatedId != null ? generatedId : getIdValue(joinedNode, entity);
@@ -150,7 +164,7 @@ public final class CascadingUpdater {
 			JoinInfo joinInfo = childJoined.joinInfo();
 			if (joinInfo.linkField() == null) return;
 
-			Object childValue = getFieldValue(entity, joinInfo.linkField().getName());
+			Object childValue = getFieldValue(entity, joinInfo.linkField());
 			if (childValue == null) return;
 
 			if (joinInfo.isCollection()) {
@@ -183,10 +197,38 @@ public final class CascadingUpdater {
 						}
 					} 
 				}
-			} else {
-				// Single entity reference
-				insertRecursive(child, childValue, null, null, db);
 			}
+		}
+		if (child instanceof LinkedValueNode valueNode) {
+			// Linked value (e.g., @Link Set<Role> roles in UserDetail)
+			Object linkedValue = getFieldValue(entity, valueNode.joinInfo().linkField());
+			if (linkedValue != null) {
+				// For simplicity, only handle collections of linked values here
+				if (linkedValue instanceof Collection<?> collection) {
+					for (Object item : collection) {
+						if ((valueNode.joinInfo().joinCondition() instanceof JoinCondition.ForeignKeyInChild fkInChild)) {
+							// Set FK to parent if needed (for non-many-to-many)
+							String fkColumn = fkInChild.foreignKeyColumn();
+							db.insert(
+								valueNode.linkTableName(),
+								valueNode.linkTableSchema(),
+								Map.of(
+									fkColumn, parentId,
+									valueNode.fetchColumn(), item.toString() // Assuming fetchColumn is a simple value
+								)
+							);
+						} else {
+							// Many-to-many or no FK: just insert into link table
+							db.insert(
+								valueNode.linkTableName(),
+								valueNode.linkTableSchema(),
+								Map.of(valueNode.fetchColumn(), item.toString()) // Assuming fetchColumn is a simple value
+							);
+						}
+					}
+				}
+			}
+
 		}
 	}
 
@@ -219,7 +261,7 @@ public final class CascadingUpdater {
 			JoinInfo joinInfo = childJoined.joinInfo();
 			if (joinInfo.linkField() == null) return;
 
-			Object childValue = getFieldValue(entity, joinInfo.linkField().getName());
+			Object childValue = getFieldValue(entity, joinInfo.linkField());
 
 			if (joinInfo.isCollection()) {
 				Collection<?> items = childValue != null ? (Collection<?>) childValue : List.of();
@@ -276,6 +318,30 @@ public final class CascadingUpdater {
 				updateRecursive(child, childValue, null, null, db);
 			}
 		}
+		if (child instanceof LinkedValueNode valueNode) {
+			// Linked value collection (e.g., @Link(fetchColumn) List<AccessLevel>)
+			Object linkedValue = getFieldValue(entity, valueNode.joinInfo().linkField());
+			Collection<?> collection = linkedValue != null ? (Collection<?>) linkedValue : List.of();
+			
+			if (valueNode.joinInfo().joinCondition() instanceof JoinCondition.ForeignKeyInChild fkInChild) {
+				String fkColumn = fkInChild.foreignKeyColumn();
+				
+				// Delete existing values
+				db.delete(valueNode.linkTableName(), valueNode.linkTableSchema(), Map.of(fkColumn, parentId));
+				
+				// Insert new values
+				for (Object item : collection) {
+					db.insert(
+						valueNode.linkTableName(),
+						valueNode.linkTableSchema(),
+						Map.of(
+							fkColumn, parentId,
+							valueNode.fetchColumn(), item.toString()
+						)
+					);
+				}
+			}
+		}
 	}
 
 	private static int deleteRecursive(QueryNode node, Object entity, DatabaseOperations db) {
@@ -322,7 +388,7 @@ public final class CascadingUpdater {
 							}
 						}
 					} else {
-						Object childEntity = getFieldValue(entity, joinInfo.linkField().getName());
+						Object childEntity = getFieldValue(entity, joinInfo.linkField());
 						if (childEntity != null) {
 							deleteRecursive(child, childEntity, db);
 						}
@@ -334,7 +400,7 @@ public final class CascadingUpdater {
 			TableInfo tableInfo = joinedNode.tableInfo();
 			Map<String, Object> where = new LinkedHashMap<>();
 			for (String idFieldName : joinedNode.idFieldNames()) {
-				Object idValue = getFieldValue(entity, idFieldName);
+				Object idValue = getFieldValue(entity, findField(joinedNode, idFieldName));
 				where.put(idFieldName, idValue);
 			}
 			return db.delete(tableInfo.tableName(), tableInfo.schemaName(), where);
@@ -401,32 +467,40 @@ public final class CascadingUpdater {
     @SuppressWarnings("unchecked")
 	private static <PK> PK getIdValue(JoinedNode node, Object entity) {
 		if (node.idFieldNames().isEmpty()) return null;
-		return (PK) getFieldValue(entity, node.idFieldNames().get(0));
+		return (PK) getFieldValue(entity, findField(node, node.idFieldNames().get(0)));
 	}
 
 	private static void clearIdField(JoinedNode node, Object entity) {
 		if (!node.idFieldNames().isEmpty()) {
-			setFieldValue(entity, node.idFieldNames().get(0), null);
+			setFieldValue(entity, findField(node, node.idFieldNames().get(0)), null);
 		}
 	}
 
-	private static Object getFieldValue(Object entity, String fieldName) {
+	private static Object getFieldValue(Object entity, FieldModel fieldModel) {
 		try {
-			Field field = entity.getClass().getDeclaredField(fieldName);
+			Field field = ((ReflectionFieldModel)fieldModel).getReflectionField();
 			field.setAccessible(true);
 			return field.get(entity);
-		} catch (NoSuchFieldException | IllegalAccessException e) {
+		} catch (IllegalAccessException e) {
 			return null;
 		}
 	}
 
-	private static void setFieldValue(Object entity, String fieldName, Object value) {
+	private static FieldModel findField(JoinedNode node, String fieldName) {
+		return PojoMetadata.collectFieldsOfClass(node.type()).stream()
+			.filter(f -> f.getName().equals(fieldName))
+			.findFirst()
+			.orElseThrow(() -> new RuntimeException("Field not found: " + fieldName));
+	}
+
+	private static void setFieldValue(Object entity, FieldModel fieldModel, Object value) {
 		try {
-			Field field = entity.getClass().getDeclaredField(fieldName);
+			Field field = ((ReflectionFieldModel)fieldModel).getReflectionField();
 			field.setAccessible(true);
 			field.set(entity, value);
-		} catch (NoSuchFieldException | IllegalAccessException e) {
-			throw new RuntimeException("Cannot set field " + fieldName, e);
+		} catch (IllegalAccessException e) {
+			throw new RuntimeException("Cannot set field " + fieldModel.getName(), e);
 		}
 	}
+
 }

@@ -101,7 +101,7 @@ public class TPSInheritanceTransform implements QueryTreeTransform {
             if (alreadyJoined(children, parentAlias)) continue;
             
             // Each superclass gets its own JoinedNode (own table, own sourceAlias)
-            JoinCondition.SharedPrimaryKey condition = JoinConditions.forInheritanceStructured(idField);
+            JoinCondition.SharedPrimaryKey condition = new JoinCondition.SharedPrimaryKey(idField, idField);
             
             // Superclass of root uses INNER JOIN, superclass of already-joined uses LEFT JOIN
             JoinInfo joinInfo = isRoot 
@@ -140,7 +140,7 @@ public class TPSInheritanceTransform implements QueryTreeTransform {
             if (alreadyJoined(children, subAlias)) continue;
             
             // LEFT JOIN subclass (may not exist for every row)
-            JoinCondition.SharedPrimaryKey condition = JoinConditions.forInheritanceStructured(idField);
+            JoinCondition.SharedPrimaryKey condition = new JoinCondition.SharedPrimaryKey(idField, idField);
             
             // superType = parent table's type (to get only this table's fields)
             TypeModel superType = subMappings.size() > 1 ? subMappings.get(subMappings.size() - 2).type : subType.getSuperclass();

@@ -70,7 +70,7 @@ public class SubclassExpansionTransform implements QueryTreeTransform {
             }
             
             // LEFT JOIN subclass_table ON subclass.id = parent.id
-            JoinCondition.SharedPrimaryKey condition = JoinConditions.forInheritanceStructured(idField);
+            JoinCondition.SharedPrimaryKey condition = new JoinCondition.SharedPrimaryKey(idField, idField);
 
             EmptyTableNode subNode = EmptyTableNode.ofJoined(subAlias, subType,
                 JoinInfo.leftJoinSubClass(TableInfo.of(subTableMapping.schemaName, subTableMapping.tableName), condition)).withIsSubClass(true);

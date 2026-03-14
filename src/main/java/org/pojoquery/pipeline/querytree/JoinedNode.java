@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 
