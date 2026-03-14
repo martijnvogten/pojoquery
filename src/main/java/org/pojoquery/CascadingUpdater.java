@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.pojoquery.pipeline.PojoMetadata;
+import org.pojoquery.pipeline.querytree.EmbeddedNode;
 import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.FieldSelectionBase;
 import org.pojoquery.pipeline.querytree.JoinCondition;
@@ -130,6 +131,19 @@ public final class CascadingUpdater {
 			if (parentId != null && parentFkColumn != null) {
 				values.put(parentFkColumn, parentId);
 			}
+
+			// Find embedded children and add their values too
+			node.children().stream()
+				.filter(c -> c instanceof EmbeddedNode)
+				.map(c -> (EmbeddedNode) c)
+				.forEach(en -> {
+					Object child = getFieldValue(entity, en.embedInfo().linkField());
+					for (FieldSelectionBase fieldBase : en.fields()) {
+						if (fieldBase instanceof FieldSelection field && field.field() != null) {
+							values.put(field.columnName(), getFieldValue(child, field.field()));
+						}
+					}
+				});
 
 			node.children().stream()
 				.filter(c -> c.joinInfo() != null && c.joinInfo().joinCondition() instanceof JoinCondition.ForeignKeyInParent)

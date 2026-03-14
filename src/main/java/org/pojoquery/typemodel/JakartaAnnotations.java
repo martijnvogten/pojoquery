@@ -88,10 +88,10 @@ public final class JakartaAnnotations {
         }
 
         return mapAnnotation(type, JAKARTA_TABLE, Table.class, ann -> {
-            return ann.getStringValue("name")
-                .filter(name -> !name.isEmpty())
-                .map(name -> Map.of("value", (Object)name))
-                .orElse(Collections.emptyMap());
+            return Map.of(
+                "value", ann.getStringValue("name").orElse(""),
+                "schema", ann.getStringValue("schema").orElse("")
+            );
         });
     }
 
@@ -104,18 +104,16 @@ public final class JakartaAnnotations {
         fs = mapAnnotation(fs, JAKARTA_TRANSIENT, Transient.class);
         fs = mapAnnotation(fs, JAKARTA_EMBEDDED, Embedded.class);
         fs = mapAnnotation(fs, JAKARTA_LOB, Lob.class);
-        fs = mapAnnotation(fs, JAKARTA_JOIN_COLUMN, FieldName.class, ann -> {
-            return ann.getStringValue("name")
-                .filter(n -> !n.isEmpty())
-                .map(name -> Map.of("value", (Object)name))
-                .orElse(Map.of());
-        });
-        fs = mapAnnotation(fs, JAKARTA_COLUMN, FieldName.class, ann -> {
-            return ann.getStringValue("name")
-                .filter(n -> !n.isEmpty())
-                .map(name -> Map.of("value", (Object)name))
-                .orElse(Map.of());
-        });
+        if (fs.hasAnnotation(JAKARTA_JOIN_COLUMN) && !fs.getAnnotationAttributeValue(JAKARTA_JOIN_COLUMN, "name", String.class).isEmpty()) {
+            fs = mapAnnotation(fs, JAKARTA_JOIN_COLUMN, FieldName.class, ann -> {
+                return Map.of("value", ann.getStringValue("name").orElse(""));
+            });
+        }
+        if (fs.hasAnnotation(JAKARTA_COLUMN) && !fs.getAnnotationAttributeValue(JAKARTA_COLUMN, "name", String.class).isEmpty()) {
+            fs = mapAnnotation(fs, JAKARTA_COLUMN, FieldName.class, ann -> {
+                return Map.of("value", ann.getStringValue("name").orElse(""));
+            });
+        }
         fs = mapColumn(fs);
 
         return fs;

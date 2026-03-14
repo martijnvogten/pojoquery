@@ -54,6 +54,14 @@ public class SimpleFieldTransform implements QueryTreeTransform {
                 );
                 newFields.add(resolved);
                 changed = true;
+            // } else if (fsb instanceof FieldSelection fs) {
+            //     if (fs.columnName() == null) {
+            //         // Default to the field name if columnName is not set
+            //         String columnName = fieldPrefix + determineSqlFieldName(fs.field());
+            //         fs = new FieldSelection(fs.alias(), columnName, fs.expression(), fs.field(), fs.customMapping());
+            //         changed = true;
+            //     }
+            //     newFields.add(fs);
             } else {
                 newFields.add(fsb);
             }

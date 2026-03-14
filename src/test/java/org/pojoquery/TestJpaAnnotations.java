@@ -186,6 +186,7 @@ public class TestJpaAnnotations {
         Optional<Boolean> nullable =emailField.getAnnotation(org.pojoquery.annotations.Column.class)
             .orElseThrow(() -> new AssertionError("Field 'email' should have PojoQuery @Column annotation mapped"))
             .getBooleanAttribute("nullable");
+        assertTrue(nullable.isPresent() && !nullable.get());
 
         List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaUser.class);
         String sql = String.join("\n", statements);
