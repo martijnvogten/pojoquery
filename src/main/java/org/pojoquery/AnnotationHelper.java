@@ -1,40 +1,15 @@
 package org.pojoquery;
 
 import org.pojoquery.annotations.Column;
-import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
-import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
-import org.pojoquery.annotations.Table;
 import org.pojoquery.typemodel.FieldModel;
-import org.pojoquery.typemodel.TypeModel;
 
 /**
  * Helper class for reading annotations from classes and fields.
  * Uses canonical PojoQuery annotations via the AnnotatedElementModel interface.
  */
 public class AnnotationHelper {
-	/**
-	 * Returns the table name from @Table annotation, or null if not present.
-	 */
-	public static String getTableName(TypeModel type) {
-		return type.getAnnotation(Table.class)
-			.flatMap(ann -> ann.getStringValue())
-			.orElse(null);
-	}
-	
-	/**
-	 * Returns table info from @Table annotation, or null if not present.
-	 */
-	public static TableInfo getTableInfo(TypeModel type) {
-		return type.getAnnotation(Table.class)
-			.map(ann -> new TableInfo(
-				ann.getStringValue().orElse(null),
-				ann.getStringValue("schema").orElse("")
-			))
-			.orElse(null);
-	}
-	
 	/**
 	 * Returns column metadata from @Column annotation, or null if not present.
 	 */
@@ -51,20 +26,6 @@ public class AnnotationHelper {
 			ann.getBooleanAttribute("nullable").orElse(true),
 			ann.getBooleanAttribute("unique").orElse(false)
 		);
-	}
-	
-	/**
-	 * Checks if a field has @Embedded annotation.
-	 */
-	public static boolean isEmbedded(FieldModel f) {
-		return f.hasAnnotation(Embedded.class);
-	}
-	
-	/**
-	 * Checks if a field has @Id annotation.
-	 */
-	public static boolean isId(FieldModel f) {
-		return f.hasAnnotation(Id.class);
 	}
 	
 	/**

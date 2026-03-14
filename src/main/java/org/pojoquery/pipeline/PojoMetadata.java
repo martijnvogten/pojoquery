@@ -92,44 +92,6 @@ public final class PojoMetadata {
 		.orElse(f.getName() + "_id");
 	}
 
-	/**
-	 * Determines the owner (parent) column name for a link table.
-	 * Uses @Link(linkfield) if specified, otherwise defaults to tableName_id.
-	 *
-	 * @param ownerClass the class that owns the collection field
-	 * @param linkAnn the @Link annotation on the collection field
-	 * @return the column name for the owner's foreign key in the link table
-	 */
-	public static String determineLinkTableOwnerColumn(TypeModel ownerClass, AnnotationModel linkAnn) {
-		return linkAnn != null ? linkAnn.getStringValue("linkfield").orElseGet(() -> {
-			List<TableMapping> mappings = determineTableMapping(ownerClass);
-			return mappings.isEmpty() ? ownerClass.getSimpleName().toLowerCase() + "_id" : mappings.get(0).tableName + "_id";
-		}) : null;
-	}
-
-	/**
-	 * Determines the foreign (target) column name for a link table.
-	 * Uses @Link(foreignlinkfield) if specified, otherwise defaults to tableName_id.
-	 * For value collections, uses @Link(fetchColumn) instead.
-	 *
-	 * @param foreignClass the target class of the collection (may be null for value collections)
-	 * @param linkAnn the @Link annotation on the collection field
-	 * @return the column name for the target's foreign key in the link table
-	 */
-	public static String determineLinkTableForeignColumn(TypeModel foreignClass, AnnotationModel linkAnn) {
-		// Check for fetchColumn first (value collections like enums)
-		return linkAnn.getStringValue("fetchColumn").orElseGet(() -> 
-			linkAnn.getStringValue("foreignlinkfield").orElseGet(() -> 
-				foreignClass != null ?
-					determineTableMapping(foreignClass).stream()
-						.findFirst()
-						.map(m -> m.tableName + "_id")
-						.orElse(foreignClass.getSimpleName().toLowerCase() + "_id")
-					: 
-					null
-			)
-		);
-	}
 
 	// --- ID field determination ---
 
@@ -194,31 +156,8 @@ public final class PojoMetadata {
 		return !type.isPrimitive() && determineTableMapping(type).size() > 0;
 	}
 
-	/** Backward compatible overload */
-	public static boolean isLinkedClass(Class<?> type) {
-		return isLinkedClass(new ReflectionTypeModel(type));
-	}
-
-	/**
-	 * Checks if a field is embedded (has @Embedded annotation).
-	 */
-	public static boolean isEmbedded(FieldModel f) {
-		return f.hasAnnotation(Embedded.class);
-	}
-
 	public static boolean isTransient(FieldModel field) {
 		return field.hasAnnotation(Transient.class) || field.isTransient();
-	}
-
-	/**
-	 * Gets the component type of a collection or array field.
-	 */
-	public static TypeModel getCollectionComponentType(FieldModel field) {
-		TypeModel type = field.getType();
-		if (type.isArray()) {
-			return type.getArrayComponentType();
-		}
-		return type.getTypeArgument();
 	}
 
 	// --- Table mapping ---

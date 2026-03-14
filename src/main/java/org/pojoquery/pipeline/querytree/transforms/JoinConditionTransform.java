@@ -108,13 +108,6 @@ public class JoinConditionTransform implements QueryTreeTransform {
         return node;
     }
 
-    private String getForeignLinkField(FieldModel field) {
-        return field.getAnnotation(Link.class)
-            .flatMap(linkAnn -> linkAnn.getStringValue("foreignlinkfield"))
-            .filter(s -> !s.isEmpty())
-            .orElse(null);
-    }
-
     private FieldModel determineIdField(TypeModel type) {
         return org.pojoquery.pipeline.PojoMetadata.determineIdField(type);
     }  

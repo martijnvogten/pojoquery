@@ -5,11 +5,9 @@ import static org.pojoquery.pipeline.PojoMetadata.getFieldNames;
 import static org.pojoquery.util.Strings.implode;
 
 import java.lang.reflect.Field;
-import java.math.BigInteger;
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -21,9 +19,6 @@ import java.util.function.Consumer;
 
 import javax.sql.DataSource;
 
-import org.pojoquery.annotations.Link;
-import org.pojoquery.annotations.NoUpdate;
-import org.pojoquery.annotations.Other;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.DefaultSqlQuery;
@@ -531,53 +526,6 @@ public class PojoQuery<T> {
 		return CascadingUpdater.insert(tree, o, new DatabaseOperationsImpl(context, connection));
 	}
 
-	static <PK> PK insertInternal(DbContext context, Connection conn, Object o) {
-		return insertInternal(context, conn, o.getClass(), o);
-	}
-
-	static <PK> PK insertInternal(DbContext context, Connection conn, Class<?> clz, Object o) {
-		// If the class hierarchy contains multiple tables, create separate
-		// inserts
-		TypeModel type = new ReflectionTypeModel(clz);
-		
-		List<TableMapping> tables = PojoMetadata.determineTableMapping(type);
-		if (tables.size() == 0) {
-			throw new MappingException("Missing @Table annotation on class " + type.getQualifiedName() + " or any of its superclasses");
-		}
-
-		if (tables.size() == 1) {
-			PK ids;
-			ids = DB.insert(context, conn, tables.get(0).tableName, extractValues(clz, o));
-			if (ids != null) {
-				applyGeneratedId(o, ids);
-			}
-			return ids;
-		} else {
-			TableMapping topType = tables.remove(0);
-			Map<String, Object> values = extractValues(((ReflectionTypeModel)topType.getType()).getReflectionClass(), o);
-			PK ids;
-			ids = DB.insert(context, conn, topType.tableName, values);
-			if (ids != null) {
-				applyGeneratedId(o, ids);
-			}
-			List<FieldModel> idFields = PojoMetadata.determineIdFields(type);
-			if (idFields.size() != 1) {
-				throw new MappingException("Need single ID field annotated with @Id for inserting joined subclasses");
-			}
-			String idField = idFields.get(0).getName();
-
-			while (tables.size() > 0) {
-				TableMapping supertype = tables.remove(0);
-				Map<String, Object> subvals = extractValues(tables.size() > 0 ? ((ReflectionTypeModel)supertype.getType()).getReflectionClass() : clz, o, ((ReflectionTypeModel)topType.getType()).getReflectionClass());
-				subvals.put(idField, ids);
-				DB.insert(context, conn, supertype.tableName, subvals);
-				topType = supertype;
-			}
-			return ids;
-		}
-
-	}
-
 	public static int update(Connection connection, Object object) {
 		return updateCascading(DbContext.getDefault(), connection, object);
 	}
@@ -593,173 +541,78 @@ public class PojoQuery<T> {
 		return CascadingUpdater.update(tree, object, new DatabaseOperationsImpl(context, connection));
 	}
 
-	static int updateInternal(DbContext context, Connection conn, Class<?> clz, Object o) {
-		// If the class hierarchy contains multiple tables, create separate
-		// inserts
-		TypeModel type = new ReflectionTypeModel(clz);
-		List<TableMapping> tables = PojoMetadata.determineTableMapping(type);
-		
-		Long currentVersion = null;
-		if (o instanceof HasVersion) {
-			currentVersion = ((HasVersion) o).getVersion();
-			if (currentVersion == null) {
-				currentVersion = 0L;
-			}
-			((HasVersion) o).setVersion(currentVersion + 1);
-		}
-		
-		if (tables.size() == 1) {
-			Map<String, Object> values = extractValues(clz, o);
-			Map<String, Object> ids = splitIdFields(o, values);
-			
-			if (o instanceof HasVersion) {
-				ids.put("version", currentVersion);
-			}
 
-			int affectedRows = DB.update(context, conn, tables.get(0).tableName, values, ids);
-			if (o instanceof HasVersion && affectedRows == 0) {
-				throw new StaleObjectException();
-			}
-			return affectedRows;
-		} else {
+	// public static Map<String, Object> extractValues(Class<?> clz, Object o) {
+	// 	return extractValues(clz, o, null);
+	// }
 
-			int affectedRows = 0;
-
-			TableMapping topType = tables.remove(0);
-			Map<String, Object> values = extractValues(((ReflectionTypeModel)topType.getType()).getReflectionClass(), o);
-			Map<String, Object> ids = splitIdFields(o, values);
-			Map<String, Object> topIds = new HashMap<>(ids);
-
-			if (o instanceof HasVersion) {
-				topIds.put("version", currentVersion);
-			}
-
-			affectedRows = DB.update(context, conn, topType.tableName, values, topIds);
-			
-			if (affectedRows == 0) {
-				throw new StaleObjectException();
-			}
-
-			while (tables.size() > 0) {
-				TableMapping supertype = tables.remove(0);
-				Map<String, Object> subvals = extractValues(tables.size() > 0 ? ((ReflectionTypeModel)supertype.getType()).getReflectionClass() : clz, o, ((ReflectionTypeModel)topType.getType()).getReflectionClass());
-				DB.update(context, conn, supertype.tableName, subvals, ids);
-				topType = supertype;
-			}
-			return affectedRows;
-		}
-
-	}
-
-	public static Map<String, Object> extractValues(Class<?> clz, Object o) {
-		return extractValues(clz, o, null);
-	}
-
-	private static Map<String, Object> extractValues(Class<?> clz, Object o, Class<?> stopAtSuperclass) {
-		TypeModel type = new ReflectionTypeModel(clz);
-		TypeModel stopAtType = stopAtSuperclass != null ? new ReflectionTypeModel(stopAtSuperclass) : null;
-		try {
-			Map<String, Object> values = new HashMap<String, Object>();
-			for (FieldModel fieldModel : PojoMetadata.collectFieldsOfClass(type, stopAtType)) {
-				Field f = ((ReflectionFieldModel) fieldModel).getReflectionField();
-				f.setAccessible(true);
+	// private static Map<String, Object> extractValues(Class<?> clz, Object o, Class<?> stopAtSuperclass) {
+	// 	TypeModel type = new ReflectionTypeModel(clz);
+	// 	TypeModel stopAtType = stopAtSuperclass != null ? new ReflectionTypeModel(stopAtSuperclass) : null;
+	// 	try {
+	// 		Map<String, Object> values = new HashMap<String, Object>();
+	// 		for (FieldModel fieldModel : PojoMetadata.collectFieldsOfClass(type, stopAtType)) {
+	// 			Field f = ((ReflectionFieldModel) fieldModel).getReflectionField();
+	// 			f.setAccessible(true);
 				
-				Other otherAnn = f.getAnnotation(Other.class);
-				if (otherAnn != null) {
-					@SuppressWarnings("unchecked")
-					Map<String,Object> otherMap = (Map<String, Object>) f.get(o);
-					if (otherMap != null) {
-						for(String fieldName : otherMap.keySet()) {
-							values.put(otherAnn.prefix() + fieldName, otherMap.get(fieldName));
-						}
-					}
-					continue;
-				}
+	// 			Other otherAnn = f.getAnnotation(Other.class);
+	// 			if (otherAnn != null) {
+	// 				@SuppressWarnings("unchecked")
+	// 				Map<String,Object> otherMap = (Map<String, Object>) f.get(o);
+	// 				if (otherMap != null) {
+	// 					for(String fieldName : otherMap.keySet()) {
+	// 						values.put(otherAnn.prefix() + fieldName, otherMap.get(fieldName));
+	// 					}
+	// 				}
+	// 				continue;
+	// 			}
 
-				Object val = f.get(o);
-				if (AnnotationHelper.isEmbedded(fieldModel)) {
-					if (val != null) {
-						Map<String, Object> embeddedVals = extractValues(f.getType(), val);
-						String prefix = PojoMetadata.determinePrefix(fieldModel);
-						for (String embeddedField : embeddedVals.keySet()) {
-							values.put(prefix + embeddedField, embeddedVals.get(embeddedField));
-						}
-					}
-				} else if (f.getAnnotation(NoUpdate.class) != null) {
-				} else if (f.getAnnotation(Link.class) != null && !f.getAnnotation(Link.class).linktable().isEmpty()) {
-				} else if (f.getType().isArray()) {
-					if (f.getType().getComponentType().isPrimitive()) {
-						// Data like byte[] long[]
-						values.put(PojoMetadata.determineSqlFieldName(fieldModel), val);
-					}
-				} else if (Collection.class.isAssignableFrom(f.getType())) {
-				} else if (PojoMetadata.isLinkedClass(f.getType())) {
-					// Linked entity.
-					String linkfieldName = AnnotationHelper.getJoinColumnName(fieldModel);
-					if (linkfieldName == null) {
-						linkfieldName = f.getName() + "_id";
-					}
-					if (val == null) {
-						values.put(linkfieldName, null);
-					} else {
-						FieldModel idFieldModel = PojoMetadata.determineIdField(fieldModel.getType());
-						Field idField = ((ReflectionFieldModel) idFieldModel).getReflectionField();
-						idField.setAccessible(true);
-						Object idValue = idField.get(val);
-						values.put(linkfieldName, idValue);
-					}
-                } else if (AnnotationHelper.isId(fieldModel) && val == null) {
-                	// Skip auto-generated ID field when value is null (for INSERT)
-                } else {
-                	values.put(PojoMetadata.determineSqlFieldName(fieldModel), val);
-                }
-			}
-			return values;
-		} catch (IllegalArgumentException e) {
-			throw new MappingException(e);
-		} catch (IllegalAccessException e) {
-			throw new MappingException(e);
-		}
-	}
+	// 			Object val = f.get(o);
+	// 			if (f.getAnnotation(Embedded.class) != null) {
+	// 				if (val != null) {
+	// 					Map<String, Object> embeddedVals = extractValues(f.getType(), val);
+	// 					String prefix = PojoMetadata.determinePrefix(fieldModel);
+	// 					for (String embeddedField : embeddedVals.keySet()) {
+	// 						values.put(prefix + embeddedField, embeddedVals.get(embeddedField));
+	// 					}
+	// 				}
+	// 			} else if (f.getAnnotation(NoUpdate.class) != null) {
+	// 			} else if (f.getAnnotation(Link.class) != null && !f.getAnnotation(Link.class).linktable().isEmpty()) {
+	// 			} else if (f.getType().isArray()) {
+	// 				if (f.getType().getComponentType().isPrimitive()) {
+	// 					// Data like byte[] long[]
+	// 					values.put(PojoMetadata.determineSqlFieldName(fieldModel), val);
+	// 				}
+	// 			} else if (Collection.class.isAssignableFrom(f.getType())) {
+	// 			} else if (PojoMetadata.isLinkedClass(f.getType())) {
+	// 				// Linked entity.
+	// 				String linkfieldName = AnnotationHelper.getJoinColumnName(fieldModel);
+	// 				if (linkfieldName == null) {
+	// 					linkfieldName = f.getName() + "_id";
+	// 				}
+	// 				if (val == null) {
+	// 					values.put(linkfieldName, null);
+	// 				} else {
+	// 					FieldModel idFieldModel = PojoMetadata.determineIdField(fieldModel.getType());
+	// 					Field idField = ((ReflectionFieldModel) idFieldModel).getReflectionField();
+	// 					idField.setAccessible(true);
+	// 					Object idValue = idField.get(val);
+	// 					values.put(linkfieldName, idValue);
+	// 				}
+    //             } else if (AnnotationHelper.isId(fieldModel) && val == null) {
+    //             	// Skip auto-generated ID field when value is null (for INSERT)
+    //             } else {
+    //             	values.put(PojoMetadata.determineSqlFieldName(fieldModel), val);
+    //             }
+	// 		}
+	// 		return values;
+	// 	} catch (IllegalArgumentException e) {
+	// 		throw new MappingException(e);
+	// 	} catch (IllegalAccessException e) {
+	// 		throw new MappingException(e);
+	// 	}
+	// }
 
-	private static <PK> void applyGeneratedId(Object o, PK ids) {
-		List<FieldModel> idFields = PojoMetadata.determineIdFields(new ReflectionTypeModel(o.getClass()));
-		if (ids != null && idFields.size() == 1) {
-			Field idField = ((ReflectionFieldModel) idFields.get(0)).getReflectionField();
-			idField.setAccessible(true);
-			try {
-				Object value = ids;
-				if (ids instanceof BigInteger && idField.getType().isAssignableFrom(Long.class)) {
-					// See https://bugs.mysql.com/bug.php?id=101823
-					// generated keys are always biginteger so we must convert if idField is Long
-					value = ((BigInteger)ids).longValue();
-				} else if (ids instanceof Integer && idField.getType().isAssignableFrom(Long.class)) {
-					// HSQLDB returns Integer for BIGINT identity columns
-					value = ((Integer)ids).longValue();
-				}
-				idField.set(o, value);
-			} catch (IllegalArgumentException e) {
-				throw new MappingException("Could not set Id field value " + idField, e);
-			} catch (IllegalAccessException e) {
-				throw new MappingException("Could not set Id field value " + idField, e);
-			}
-		}
-	}
-	
-	private static Map<String, Object> splitIdFields(Object object, Map<String, Object> values) {
-		List<FieldModel> idFields = PojoMetadata.determineIdFields(new ReflectionTypeModel(object.getClass()));
-		if (idFields.size() == 0) {
-			throw new RuntimeException("No @Id annotations found on fields of class " + object.getClass().getName());
-		}
-		Map<String, Object> ids = new HashMap<String, Object>();
-		for (FieldModel fieldModel : idFields) {
-			String columnName = PojoMetadata.determineSqlFieldName(fieldModel);
-			ids.put(columnName, values.get(columnName));
-			values.remove(columnName);
-		}
-		return ids;
-	}
-	
 	/**
 	 * Converts the query to a SQL string.
 	 *
@@ -892,7 +745,7 @@ public class PojoQuery<T> {
 		return ((Long) rows.get(0).values().iterator().next()).intValue();
 	}
 
-		/**
+	/**
 	 * Ensures that the query is ordered by the primary entity's ID fields.
 	 * This is required for streaming mode to work correctly, as it ensures
 	 * all rows belonging to the same entity are consecutive in the result set.
