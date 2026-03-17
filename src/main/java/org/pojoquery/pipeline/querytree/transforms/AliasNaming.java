@@ -18,8 +18,12 @@ public final class AliasNaming {
      */
     public static String childAlias(String parentAlias, String rootAlias, String fieldName) {
         return parentAlias.equals(rootAlias) 
-            ? fieldName 
-            : parentAlias + "." + fieldName;
+        ? fieldName 
+        : parentAlias + "." + fieldName;
+    }
+    
+    public static String childAlias(boolean parentIsRoot, String parentAlias, String fieldName) {
+        return parentIsRoot ? fieldName : parentAlias + "." + fieldName;
     }
     
     /**

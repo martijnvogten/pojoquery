@@ -16,7 +16,6 @@ import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Transient;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
-import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
@@ -184,7 +183,7 @@ public final class PojoMetadata {
 							.warning("Redundant @Table(\"" + name + "\") annotation on " +
 									tables.get(0).type.getQualifiedName() + " - same table already mapped by parent " + current.getQualifiedName());
 					// Merge fields into existing mapping instead of creating a new one
-					tables.get(0).fields.addAll(0, fields);
+					// tables.get(0).fields.addAll(0, fields);
 				} else {
 					tables.add(0, new TableMapping(tableInfo.schema, name, mappedType, new ArrayList<>(fields)));
 				}
@@ -193,9 +192,9 @@ public final class PojoMetadata {
 			}
 			current = current.getSuperclass();
 		}
-		if (fields.size() > 0 && tables.size() > 0) {
-			tables.get(0).fields.addAll(0, fields);
-		}
+		// if (fields.size() > 0 && tables.size() > 0) {
+		// 	// tables.get(0).fields.addAll(0, fields);
+		// }
 		return tables;
 	}
 

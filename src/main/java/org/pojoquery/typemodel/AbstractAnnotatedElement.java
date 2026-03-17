@@ -111,8 +111,9 @@ public abstract class AbstractAnnotatedElement<T extends AnnotatedElementModel<T
     public final <R> R getAnnotationAttributeValue(Class<? extends Annotation> annotationType, String attributeName, Class<R> expectedType) {
         return getAnnotation(annotationType)
             .map(am -> am.getValuesMap().get(attributeName))
-            .filter(expectedType::isInstance)
-            .map(expectedType::cast)
+            .flatMap(value -> Optional.ofNullable(value)
+                .filter(expectedType::isInstance)
+                .map(expectedType::cast))
             .orElse(null);
     }
 
