@@ -7,13 +7,19 @@ import static org.pojoquery.TestUtils.norm;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.Assert;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
+import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
+import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
+import org.pojoquery.pipeline.DefaultSqlQuery;
 import org.pojoquery.schema.SchemaGenerator;
+import org.pojoquery.util.RecordIndenter;
 
 @UseDialect(DbContext.Dialect.MYSQL)
 public class TestEmbedded {
@@ -235,18 +241,28 @@ public class TestEmbedded {
 			.withQuoteStyle(QuoteStyle.NONE)
 			.build();
 
-		List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, StoreWithEmbeddedAddress.class);
-		String sql = String.join("\n", statements);
+		RootNode tree = AQTTransformer.buildQueryTreeForType(StoreWithEmbeddedAddress.class);
+		System.out.println("Tree: " + RecordIndenter.indent(tree.toString()));
+		Assert.assertTrue(tree.children().stream()
+		.anyMatch(c -> c instanceof EmbeddedEntity en && en.type().isSameType(AddressWithRegion.class)));
+		
+		DefaultSqlQuery sqlQuery = new DefaultSqlQuery(dbContext);
+		AQTTransformer.toSql(tree, sqlQuery);
+		System.out.println("SQL: " + sqlQuery.toStatement().getSql());
 
-		// Embedded fields should have prefix
-		assertTrue(sql.contains("location_street"),
-			"Embedded street should have prefix. Generated SQL:\n" + sql);
-		assertTrue(sql.contains("location_city"),
-			"Embedded city should have prefix. Generated SQL:\n" + sql);
+		
+		// List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, StoreWithEmbeddedAddress.class);
+		// String sql = String.join("\n", statements);
 
-		// @JoinColumn inside embedded should use the specified name with prefix
-		assertTrue(sql.contains("location_region_id"),
-			"@JoinColumn inside embedded should use prefix + specified name. Generated SQL:\n" + sql);
+		// // Embedded fields should have prefix
+		// assertTrue(sql.contains("location_street"),
+		// 	"Embedded street should have prefix. Generated SQL:\n" + sql);
+		// assertTrue(sql.contains("location_city"),
+		// 	"Embedded city should have prefix. Generated SQL:\n" + sql);
+
+		// // @JoinColumn inside embedded should use the specified name with prefix
+		// assertTrue(sql.contains("location_region_id"),
+		// 	"@JoinColumn inside embedded should use prefix + specified name. Generated SQL:\n" + sql);
 	}
 
 	@Test

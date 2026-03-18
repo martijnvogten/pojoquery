@@ -202,6 +202,11 @@ public class ElementTypeModel extends AbstractAnnotatedElement<TypeModel> implem
     }
 
     @Override
+    public boolean isSameType(Class<?> other) {
+        return getQualifiedName().equals(other.getName());
+    }
+
+    @Override
     public List<TypeModel> getTypeValuesFromAnnotation(AnnotationModel annotationModel, String attributeName) {
         return annotationModel.getClassValues(attributeName);
     }

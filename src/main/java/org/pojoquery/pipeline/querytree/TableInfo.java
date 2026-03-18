@@ -27,4 +27,11 @@ public record TableInfo(
         Objects.requireNonNull(tableName, "tableName");
         return new TableInfo("".equals(schemaName) ? null : schemaName, tableName);
     }
+
+    @Override
+    public final String toString() {
+        return "TableInfo[" + 
+            (schemaName == null ? "" : "schemaName=" + schemaName + ", ") + 
+            "tableName=" + tableName + "]";
+    }
 }

@@ -132,6 +132,11 @@ public class ReflectionTypeModel extends AbstractAnnotatedElement<TypeModel> imp
     }
 
     @Override
+    public boolean isSameType(Class<?> other) {
+        return clazz.equals(other);
+    }
+
+    @Override
     public List<TypeModel> getTypeValuesFromAnnotation(AnnotationModel annotationModel, String attributeName) {
         return annotationModel.getClassValues(attributeName);
     }
@@ -177,4 +182,5 @@ public class ReflectionTypeModel extends AbstractAnnotatedElement<TypeModel> imp
     public String toString() {
         return "ReflectionTypeModel[" + clazz.getName() + "]";
     }
+
 }
