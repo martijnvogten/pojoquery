@@ -6,8 +6,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.pojoquery.DB;
+import org.pojoquery.pipeline.AbstractQueryTree.Column;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityReference;
-import org.pojoquery.pipeline.AbstractQueryTree.FieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
@@ -42,7 +42,7 @@ public class AQTCascadingUpdater {
 		String autoGenIdField = null;
 
 		for (QueryNode children : tree.children()) {
-			if (children instanceof FieldNode fieldNode && fieldNode.field() != null) {
+			if (children instanceof Column fieldNode && fieldNode.field() != null) {
 				String fieldName = fieldNode.field().getName();
 				String columnName = fieldNode.columnName();
 				Object value = getFieldValue(entity, fieldNode.field());
