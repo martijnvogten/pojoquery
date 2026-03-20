@@ -1,7 +1,6 @@
 package org.pojoquery.pipeline;
 
-import static org.pojoquery.pipeline.PojoMetadata.collectFieldsOfClass;
-
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
@@ -13,9 +12,30 @@ import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.internal.TableMapping;
-import org.pojoquery.pipeline.AbstractQueryTree.*;
+import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
+import org.pojoquery.pipeline.AbstractQueryTree.Embedding;
+import org.pojoquery.pipeline.AbstractQueryTree.EmptyFieldNode;
+import org.pojoquery.pipeline.AbstractQueryTree.EmptyFieldNodeImpl;
+import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
+import org.pojoquery.pipeline.AbstractQueryTree.EntityReference;
+import org.pojoquery.pipeline.AbstractQueryTree.ForeignKeyInfo;
+import org.pojoquery.pipeline.AbstractQueryTree.HasJoinTableJoin;
+import org.pojoquery.pipeline.AbstractQueryTree.Join;
+import org.pojoquery.pipeline.AbstractQueryTree.JoinMany;
+import org.pojoquery.pipeline.AbstractQueryTree.JoinOne;
+import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
+import org.pojoquery.pipeline.AbstractQueryTree.JoinTableInfo;
+import org.pojoquery.pipeline.AbstractQueryTree.JoinTableJoin;
+import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
+import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
+import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
+import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
+import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.transforms.AliasNaming;
+import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
@@ -27,25 +47,76 @@ public class AQTTransformer {
 
 		public static QueryNode addDeclaredFields(QueryNode node) {
 			return (node instanceof TableNode tableNode && tableNode.children() == null)
-					? tableNode.withChildren(getFieldsOfEntity(tableNode.type()).stream()
-							.map(f -> new EmptyFieldNodeImpl(f))
-							.toList())
+					? tableNode.withChildren(PojoMetadata.determineTableMapping(tableNode.type()).stream()
+							.reduce((first, second) -> second) // get the last mapping
+							.map(mapping -> mapping.getFields().stream().map(f -> new EmptyFieldNodeImpl(f)).toList())
+							.orElse(List.of()))
 					: node;
 		}
 
+		public static QueryNode addIdFieldToSubClassTableNodes(QueryNode node) {
+			if (node instanceof TPSSubClassNode subClassNode && 
+						(subClassNode.children() != null && subClassNode.children().stream().noneMatch(PrimaryKey.class::isInstance))) {
+				FieldModel idField = PojoMetadata.determineIdField(subClassNode.type());
+				List<QueryNode> newChildren = subClassNode.children() == null ? new ArrayList<>() : new ArrayList<>(subClassNode.children());
+				newChildren.add(0, new PrimaryKey(idField, null, null, null));
+				return subClassNode.withChildren(newChildren);
+			} else {
+				return node;
+			}
+		}
+
 		public static QueryNode addSuperClassTableNodes(QueryNode node) {
-			if (node instanceof TableNode tableNode
-					&& PojoMetadata.determineTableMapping(tableNode.type()).size() > 1) {
-				List<TableMapping> mappings = PojoMetadata.determineTableMapping(tableNode.type());
+			if (node instanceof TableNode subClassNode && !(node instanceof TPSSubClassNode) && (subClassNode.children() == null || subClassNode.children().stream().noneMatch(TPSSuperClassNode.class::isInstance))
+					&& PojoMetadata.determineTableMapping(subClassNode.type()).size() > 1) {
+				
+				List<QueryNode> newChildren = subClassNode.children() == null ? new ArrayList<>() : new ArrayList<>(subClassNode.children());
+
+				List<TableMapping> mappings = PojoMetadata.determineTableMapping(subClassNode.type());
 				TableMapping superMapping = mappings.get(mappings.size() - 2);
+				String superAlias = AliasNaming.superclassAlias(subClassNode.alias(), superMapping.tableName);
+				TableInfo superTable = new TableInfo(superMapping.schemaName, superMapping.tableName);
 				ForeignKeyInfo join = new ForeignKeyInfo(
-						tableNode.tableInfo(), tableNode.alias(),
-						new TableInfo(superMapping.schemaName, superMapping.tableName),
-						AliasNaming.superclassAlias(tableNode.alias(), tableNode.alias(), superMapping.tableName),
-						PojoMetadata.determineIdField(tableNode.type()), null,
+						subClassNode.tableInfo(), subClassNode.alias(),
+						superTable,
+						superAlias,
+						PojoMetadata.determineIdField(subClassNode.type()), null,
 						PojoMetadata.determineIdField(superMapping.type), null, null);
-				return new TPSSuperClassNode(tableNode.alias(), tableNode.type(), determinTableInfo(tableNode.type()),
-						null, join, null);
+				newChildren.add(new TPSSuperClassNode(superAlias, superMapping.getType(), superTable,
+						null, join, null));
+
+				return subClassNode.withChildren(newChildren);
+			} else {
+				return node;
+			}
+		}
+
+		public static QueryNode addSubClassTableNodes(QueryNode node) {
+			if (node instanceof TableNode tableNode && !(node instanceof TPSSuperClassNode) && (tableNode.children() == null || !tableNode.children().stream().anyMatch(child -> child instanceof TPSSubClassNode))
+					&& tableNode.type().hasAnnotation(org.pojoquery.annotations.SubClasses.class)) {
+				AnnotationModel subClassesAnn = tableNode.type().getAnnotation(org.pojoquery.annotations.SubClasses.class).orElseThrow();
+				List<TypeModel> subClasses = tableNode.type().getTypeValuesFromAnnotation(subClassesAnn, "value");
+
+				List<QueryNode> newChildren = tableNode.children() == null ? new ArrayList<>() : new ArrayList<>(tableNode.children());
+				for (TypeModel subClass : subClasses) {
+					if (subClass.hasAnnotation(org.pojoquery.annotations.DiscriminatorColumn.class)) {
+						continue; // Skip if subclass uses single-table inheritance - handled by SingleTableInheritanceTransform
+					}
+					
+					List<TableMapping> subMappings = PojoMetadata.determineTableMapping(subClass);
+					if (!subMappings.isEmpty()) {
+						TableMapping subTableMapping = subMappings.get(subMappings.size() - 1);
+						String subAlias = AliasNaming.subclassAlias(tableNode.alias(), subTableMapping.tableName);
+						ForeignKeyInfo join = new ForeignKeyInfo(
+							tableNode.tableInfo(), tableNode.alias(),
+							new TableInfo(subTableMapping.schemaName, subTableMapping.tableName), subAlias,
+								PojoMetadata.determineIdField(tableNode.type()), null,
+								PojoMetadata.determineIdField(subClass), null, null);
+						newChildren.add(new TPSSubClassNode(subAlias, subClass, determinTableInfo(subClass), null, join, null));
+					}
+				}
+
+				return tableNode.withChildren(newChildren);
 			} else {
 				return node;
 			}
@@ -206,6 +277,10 @@ public class AQTTransformer {
 				ForeignKeyInfo fk = join.join();
 				String fkColumnName = fk.targetTable().tableName() + "_id";
 				return join.withJoin(fk.withFkColumnName(fkColumnName));
+			} else if (node instanceof Join join && (node instanceof TPSSubClassNode || node instanceof TPSSuperClassNode) && join.join().fkColumnName() == null) {
+				ForeignKeyInfo fk = join.join();
+				String fkColumnName = fk.idField().getName();
+				return join.withJoin(fk.withFkColumnName(fkColumnName));
 			}
 
 			return node;
@@ -228,8 +303,11 @@ public class AQTTransformer {
 		public static QueryNode applyDefaultJoinConditions(QueryNode node) {
 			if (node instanceof Join join && join.join().joinCondition() == null) {
 				ForeignKeyInfo fk = join.join();
-				SqlExpression joinCondition = SqlExpression.sql("{" + fk.referringAlias() + "." + fk.fkColumnName()
-						+ "} = {" + fk.targetAlias() + "." + fk.idColumnName() + "}");
+				SqlExpression joinCondition = 
+					SqlExpression.sql(
+						"{" + fk.targetAlias() + "." + fk.idColumnName() + "}"
+						+ " = {" + fk.referringAlias() + "." + fk.fkColumnName() + "}"
+					);
 				ForeignKeyInfo newJoin = fk.withJoinCondition(joinCondition);
 				return join.withJoin(newJoin);
 			} else if (node instanceof HasJoinTableJoin jtj && jtj.join().parentKey().joinCondition() == null
@@ -291,8 +369,8 @@ public class AQTTransformer {
 				sqlQuery.addField(pk.expression(), node.alias() + "." + pk.field().getName());
 			} else if (child instanceof Embedding embedded) {
 				toSql((TableNode) embedded, sqlQuery);
-			} else if (child instanceof EntityReference ref) {
-				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, ref.tableInfo().tableName(), ref.alias(),
+			} else if (child instanceof Join ref) {
+				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, ref.join().targetTable().tableName(), ref.join().targetAlias(),
 						ref.join().joinCondition());
 				toSql((TableNode) ref, sqlQuery);
 			} else if (child instanceof EntityCollection col) {
@@ -318,11 +396,13 @@ public class AQTTransformer {
 			oldTree = newTree;
 			newTree = Optional.<QueryNode>ofNullable(oldTree)
 					.map(transformNodesRecursively(Transformers::addDeclaredFields))
+					.map(transformNodesRecursively(Transformers::addIdFieldToSubClassTableNodes))
 					.map(transformNodesRecursively(Transformers::addEmbeddedEntities))
 					.map(transformNodesRecursively(Transformers::addJointableEntityCollections))
 					.map(transformNodesRecursively(Transformers::addEntityCollections))
 					.map(transformNodesRecursively(Transformers::addEntityReferences))
 					.map(transformNodesRecursively(Transformers::addSuperClassTableNodes))
+					.map(transformNodesRecursively(Transformers::addSubClassTableNodes))
 					.map(transformNodesRecursively(Transformers::addIdFields))
 					.map(transformNodesRecursively(Transformers::addScalarValues))
 					.map(transformNodesRecursively(Transformers::applyDefaultIdFieldNames))
@@ -338,11 +418,9 @@ public class AQTTransformer {
 	}
 
 	private static TableInfo determinTableInfo(TypeModel type) {
-		List<TableMapping> mapping = PojoMetadata.determineTableMapping(type);
-		if (mapping.isEmpty()) {
-			throw new IllegalArgumentException("Type " + type.getQualifiedName() + " is not an entity");
-		}
-		return new TableInfo(mapping.get(0).schemaName, mapping.get(0).tableName);
+		return PojoMetadata.determineTableMapping(type).stream().reduce((first, second) -> second)
+				.map(m -> new TableInfo(m.schemaName, m.tableName))
+				.orElseThrow(() -> new IllegalArgumentException("Type " + type.getQualifiedName() + " is not an entity"));
 	}
 
 	private static Function<QueryNode, QueryNode> transformNodesRecursively(Function<QueryNode, QueryNode> transform) {

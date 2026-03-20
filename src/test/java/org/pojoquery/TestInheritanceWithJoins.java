@@ -14,14 +14,17 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
-import org.pojoquery.internal.TableMapping;
-import org.pojoquery.pipeline.SQLQueryFromTree;
+import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.pipeline.AbstractQueryTree;
+import org.pojoquery.pipeline.AbstractQueryTree.FieldNode;
+import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
+import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
+import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
-import org.pojoquery.pipeline.PojoMetadata;
+import org.pojoquery.pipeline.SQLQueryFromTree;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
-import org.pojoquery.typemodel.FieldModel;
-import org.pojoquery.typemodel.ReflectionTypeModel;
 
 @UseDialect(Dialect.MYSQL)
 public class TestInheritanceWithJoins {
@@ -73,26 +76,34 @@ public class TestInheritanceWithJoins {
 	
 	@Test
 	public void testBuildTableHierarchy() throws Exception {
-		// When querying a superclasses, we want a list of all tables
-		// and fields per table
-		List<TableMapping> mapping = PojoMetadata.determineTableMapping(new ReflectionTypeModel(Room.class));
-		Assertions.assertEquals(1, mapping.size());
-		Assertions.assertEquals(List.of("id", "area", "house"), fieldNames(mapping.get(0)));
+		
+		// Room: single table with fields id, area, and EntityReference for house
+		RootNode roomTree = AQTTransformer.buildQueryTreeForType(Room.class);
+		Assertions.assertEquals("room", roomTree.tableInfo().tableName());
+		Assertions.assertEquals(List.of("id", "area", "house"), getFieldNames(roomTree));
+		// house is an EntityReference, verify it exists
 
-		List<TableMapping> bedroom = PojoMetadata.determineTableMapping(new ReflectionTypeModel(BedRoom.class));
-		Assertions.assertEquals(2, bedroom.size());
-		Assertions.assertEquals(List.of("id", "area", "house"), fieldNames(bedroom.get(0)));
-		Assertions.assertEquals(List.of("numberOfBeds"), fieldNames(bedroom.get(1)));
+		// BedRoom: bedroom table (numberOfBeds) + TPSSuperClassNode for room (id, area, house reference)
+		RootNode bedroomTree = AQTTransformer.buildQueryTreeForType(BedRoom.class);
+		Assertions.assertEquals("bedroom", bedroomTree.tableInfo().tableName());
+		Assertions.assertEquals(List.of("numberOfBeds"), getFieldNames(bedroomTree));
+		
+		// Verify TPSSuperClassNode for room table exists with id, area fields
+		TPSSuperClassNode roomSuperClass = findChild(bedroomTree, TPSSuperClassNode.class);
+		Assertions.assertNotNull(roomSuperClass);
+		Assertions.assertEquals("room", roomSuperClass.tableInfo().tableName());
+		Assertions.assertEquals(List.of("id", "area", "house"), getFieldNames(roomSuperClass));
 
-		List<TableMapping> luxury = PojoMetadata.determineTableMapping(new ReflectionTypeModel(LuxuryBedRoom.class));
-		Assertions.assertEquals(2, luxury.size());
-		Assertions.assertEquals(List.of("numberOfBeds", "tvScreenSize"), fieldNames(luxury.get(1)));
+		// LuxuryBedRoom: extends BedRoom, so bedroom table has (numberOfBeds, tvScreenSize)
+		RootNode luxuryTree = AQTTransformer.buildQueryTreeForType(LuxuryBedRoom.class);
+		Assertions.assertEquals("bedroom", luxuryTree.tableInfo().tableName());
+		Assertions.assertEquals(List.of("numberOfBeds", "tvScreenSize"), getFieldNames(luxuryTree));
 	}
 	
 	@Test
 	public void testSubClasses() {
-		PojoQuery<Room> b = PojoQuery.build(Room.class);
-		String sql = b.toSql();
+		RootNode b = PojoQuery.buildAQT(Room.class);
+		String sql = toSql(b);
 		
 		assertEquals(
 				norm("""
@@ -125,6 +136,12 @@ public class TestInheritanceWithJoins {
 		assertEquals("Unity Street 1", room.get(1).house.address);
 	}
 	
+	private String toSql(RootNode b) {
+		DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
+		AQTTransformer.toSql(b, query);
+		return query.toStatement().getSql();
+	}
+
 	@Test
 	public void testSuperclasses() {
 		PojoQuery<BedRoom> q = PojoQuery.build(BedRoom.class);
@@ -216,8 +233,20 @@ public class TestInheritanceWithJoins {
 		
 	}
 	
-	private List<String> fieldNames(TableMapping mapping) {
-		return mapping.getFields().stream().map(FieldModel::getName).toList();
+	private List<String> getFieldNames(TableNode node) {
+		return node.children().stream()
+				.filter(FieldNode.class::isInstance)
+				.map(FieldNode.class::cast)
+				.map(fn -> fn.field().getName())
+				.toList();
+	}
+	
+	@SuppressWarnings("unchecked")
+	private <T extends QueryNode> T findChild(TableNode node, Class<T> type) {
+		return (T) node.children().stream()
+				.filter(type::isInstance)
+				.findFirst()
+				.orElse(null);
 	}
 	
 	/**

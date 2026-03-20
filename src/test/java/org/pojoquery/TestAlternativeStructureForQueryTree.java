@@ -29,10 +29,10 @@ import org.pojoquery.pipeline.AbstractQueryTree.JoinTableInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
-import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
 import org.pojoquery.typemodel.ReflectionTypeModel;
+import org.pojoquery.util.RecordIndenter;
 
 @UseDialect(Dialect.HSQLDB)
 public class TestAlternativeStructureForQueryTree {
@@ -124,6 +124,7 @@ public class TestAlternativeStructureForQueryTree {
 	@Test
 	public void test() {
 		RootNode root = AQTTransformer.buildQueryTreeForType(ArticleDetail.class);
+		System.out.println("Query Tree:\n" + RecordIndenter.indent(root.toString()));
 		Assert.assertEquals("article", root.alias());
 		Assert.assertEquals(5, root.children().size());
 		Assert.assertEquals("article_category", new ReflectionTypeModel(ArticleDetail.class).getDeclaredFields().stream()
@@ -163,11 +164,11 @@ public class TestAlternativeStructureForQueryTree {
 				Assert.assertEquals("category_id", categoriesNode.join().childKey().fkColumnName());
 				Assert.assertEquals("article_category", joinTableInfo.tableInfo().tableName());
 
-				categoriesNode.children().forEach(child -> {
-					Assert.assertTrue(child instanceof ScalarValue);
-					ScalarValue scalarChild = (ScalarValue) child;
-					Assert.assertTrue(scalarChild.field().getName().equals("id") || scalarChild.field().getName().equals("name"));
-				});
+				categoriesNode.children().stream()
+					.filter(node -> node instanceof FieldNode)
+					.map(FieldNode.class::cast)
+					.map(node -> node.field().getName())
+					.toList().equals(List.of("id", "name"));;
 			}, () -> {
 				throw new AssertionError("Categories node not found");
 			});

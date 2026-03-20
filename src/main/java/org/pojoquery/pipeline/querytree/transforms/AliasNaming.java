@@ -56,10 +56,7 @@ public final class AliasNaming {
      * @param superTableName The superclass table name
      * @return The superclass alias
      */
-    public static String superclassAlias(String childAlias, String rootAlias, String superTableName) {
-        if (childAlias.equals(rootAlias)) {
-            return superTableName;
-        }
+    public static String superclassAlias(String childAlias, String superTableName) {
         return childAlias + "." + superTableName;
     }
     

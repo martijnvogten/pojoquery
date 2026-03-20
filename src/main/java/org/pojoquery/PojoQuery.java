@@ -21,6 +21,8 @@ import javax.sql.DataSource;
 
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
 import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.QueryTreeRowProcessor;
@@ -129,6 +131,11 @@ public class PojoQuery<T> {
 	public static <T> PojoQuery<T> build(Class<T> clz) {
 		Objects.requireNonNull(clz, "class must not be null");
 		return build(DbContext.getDefault(), clz);
+	}
+
+	public static RootNode buildAQT(Class<?> clz) {
+		Objects.requireNonNull(clz, "class must not be null");
+		return AQTTransformer.buildQueryTreeForType(clz);
 	}
 
 	/**

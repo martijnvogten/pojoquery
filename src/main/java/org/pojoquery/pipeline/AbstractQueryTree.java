@@ -76,8 +76,17 @@ public class AbstractQueryTree {
 		String sourceAlias();
 	}
 
-	public non-sealed interface TPSSubClassNode
-			extends TableNode, JoinOne {
+	public record TPSSubClassNode(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children,
+			ForeignKeyInfo join, String parentAlias)
+			implements TableNode, Join {
+
+		public TableNode withChildren(List<? extends QueryNode> newChildren) {
+			return new TPSSubClassNode(alias, type, tableInfo, List.copyOf(newChildren), join, parentAlias);
+		}
+
+		public QueryNode withJoin(ForeignKeyInfo newJoin) {
+			return new TPSSubClassNode(alias, type, tableInfo, children, newJoin, parentAlias);
+		}
 	}
 
 	public record TPSSuperClassNode(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children,
@@ -156,7 +165,7 @@ public class AbstractQueryTree {
 		}
 	}
 
-	public sealed interface Join permits JoinOne, JoinMany, TPSSuperClassNode {
+	public sealed interface Join permits JoinOne, JoinMany, TPSSuperClassNode, TPSSubClassNode {
 		String parentAlias();
 
 		ForeignKeyInfo join();

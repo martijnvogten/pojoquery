@@ -39,7 +39,7 @@ public class SuperclassTableTransform implements QueryTreeTransform {
         }
         
         TableMapping superClassMapping = mappings.get(mappings.size() - 2);
-        String parentAlias = AliasNaming.superclassAlias(node.alias(), tree.root().alias(), superClassMapping.tableName);
+        String parentAlias = AliasNaming.superclassAlias(node.alias(), superClassMapping.tableName);
             
         // Skip if already joined (idempotence)
         if (alreadyJoined(node.children(), parentAlias)) {

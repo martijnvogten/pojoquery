@@ -15,6 +15,9 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.pipeline.AbstractQueryTree;
+import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
 import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.SQLQueryFromTree;
@@ -22,6 +25,7 @@ import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
+import org.pojoquery.util.RecordIndenter;
 
 public class TestInheritance {
 
@@ -205,6 +209,12 @@ public class TestInheritance {
 		SQLQueryFromTree.applyQueryTreeToQuery(query, tree);
 		return query.toStatement().getSql();
 	}
+
+	private String aqtToSql(AbstractQueryTree.QueryNode node) {
+		DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
+		AQTTransformer.toSql((AbstractQueryTree.TableNode) node, query);
+		return query.toStatement().getSql();
+	}
 	
 	// ═══════════════════════════════════════════════════════════════════════
 	// QueryTree variants - compare SQL output with QueryModel
@@ -214,7 +224,11 @@ public class TestInheritance {
 	public void testSubClasses_QueryTree() {
 		String queryModelSql = PojoQuery.build(Room.class).toSql();
 		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(Room.class));
+		RootNode queryTreeForType = AQTTransformer.buildQueryTreeForType(Room.class);
+		System.out.println("AQT for Room:\n" + RecordIndenter.indent(queryTreeForType.toString()));
+		String aqtSql = aqtToSql(queryTreeForType);
 		assertEquals(norm(queryModelSql), norm(queryTreeSql));
+		assertEquals(norm(queryModelSql), norm(aqtSql));
 	}
 	
 	@Test
@@ -222,6 +236,10 @@ public class TestInheritance {
 		String queryModelSql = PojoQuery.build(BedRoom.class).toStatement().getSql();
 		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(BedRoom.class));
 		assertEquals(norm(queryModelSql), norm(queryTreeSql));
+		RootNode queryTreeForType = AQTTransformer.buildQueryTreeForType(BedRoom.class);
+		System.out.println("AQT for BedRoom:\n" + RecordIndenter.indent(queryTreeForType.toString()));
+		String aqtSql = aqtToSql(queryTreeForType);
+		assertEquals(norm(queryModelSql), norm(aqtSql));
 	}
 	
 	@Test

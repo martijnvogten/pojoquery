@@ -173,10 +173,10 @@ public final class PojoMetadata {
 			if (mappedType == null) {
 				mappedType = current;
 			}
-			TableInfo tableInfo = PojoMetadata.getTableInfo(current);
+			TableInfo tableInfoAnnotation = PojoMetadata.getTableInfo(current);
 			fields.addAll(0, collectFieldsOfClass(current, current.getSuperclass()));
-			if (tableInfo != null) {
-				String name = tableInfo.name;
+			if (tableInfoAnnotation != null) {
+				String name = tableInfoAnnotation.name;
 				// Check if this is a redundant @Table annotation targeting the same table as an existing mapping
 				if (!tables.isEmpty() && tables.get(0).tableName.equals(name)) {
 					Logger.getLogger(PojoMetadata.class.getName())
@@ -185,16 +185,16 @@ public final class PojoMetadata {
 					// Merge fields into existing mapping instead of creating a new one
 					// tables.get(0).fields.addAll(0, fields);
 				} else {
-					tables.add(0, new TableMapping(tableInfo.schema, name, mappedType, new ArrayList<>(fields)));
+					tables.add(0, new TableMapping(tableInfoAnnotation.schema, name, mappedType, new ArrayList<>(fields)));
 				}
 				fields.clear();
 				mappedType = null;
 			}
 			current = current.getSuperclass();
 		}
-		// if (fields.size() > 0 && tables.size() > 0) {
-		// 	// tables.get(0).fields.addAll(0, fields);
-		// }
+		if (fields.size() > 0 && tables.size() > 0) {
+			tables.get(0).fields.addAll(0, fields);
+		}
 		return tables;
 	}
 
