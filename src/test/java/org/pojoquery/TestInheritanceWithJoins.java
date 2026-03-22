@@ -7,6 +7,7 @@ import static org.pojoquery.TestUtils.norm;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext.Dialect;
@@ -14,8 +15,8 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
+import org.pojoquery.pipeline.AQTRowProcessor;
 import org.pojoquery.pipeline.AQTTransformer;
-import org.pojoquery.pipeline.AbstractQueryTree;
 import org.pojoquery.pipeline.AbstractQueryTree.FieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
@@ -25,6 +26,7 @@ import org.pojoquery.pipeline.DefaultSqlQuery;
 import org.pojoquery.pipeline.SQLQueryFromTree;
 import org.pojoquery.pipeline.querytree.QueryTree;
 import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
+import org.pojoquery.util.RecordIndenter;
 
 @UseDialect(Dialect.MYSQL)
 public class TestInheritanceWithJoins {
@@ -110,30 +112,32 @@ public class TestInheritanceWithJoins {
 					SELECT
 					`room`.`id` AS `room.id`,
 					`room`.`area` AS `room.area`,
+					`house`.`id` AS `house.id`,
+					`house`.`address` AS `house.address`,
 					`room.bedroom`.`id` AS `room.bedroom.id`,
 					`room.bedroom`.`numberOfBeds` AS `room.bedroom.numberOfBeds`,
 					`room.kitchen`.`id` AS `room.kitchen.id`,
-					`room.kitchen`.`hasDishWasher` AS `room.kitchen.hasDishWasher`,
-					`house`.`id` AS `house.id`,
-					`house`.`address` AS `house.address`
+					`room.kitchen`.`hasDishWasher` AS `room.kitchen.hasDishWasher`
 					FROM `room` AS `room`
-					LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.`id` = `room`.`id`
-					LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.`id` = `room`.`id`
 					LEFT JOIN `house` AS `house` ON `room`.`house_id` = `house`.`id`
+					LEFT JOIN `bedroom` AS `room.bedroom` ON `room`.`id` = `room.bedroom`.`id`
+					LEFT JOIN `kitchen` AS `room.kitchen` ON `room`.`id` = `room.kitchen`.`id`
 					"""),
 				norm(sql));
 		
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
-					"room.id", "room.area", "house.id", "house.address", "room.bedroom.id", "room.bedroom.numberOfBeds", "room.kitchen.id", "room.kitchen.hasDishWasher" }, 
-				     1L,        100.0,       1L,        "Unity Street 1",  1L,           1,                      null,         null,
-				     2L,        40.0,        1L,        "Unity Street 1",  null,         null,                   2L,           true);
+					"room.id", "room.area", "house.id", "house.address",  "room.bedroom.id", "room.bedroom.numberOfBeds", "room.kitchen.id", "room.kitchen.hasDishWasher" }, 
+				     1L,        100.0,       1L,        "Unity Street 1", 1L,                1,                           null,         null,
+				     2L,        40.0,        1L,        "Unity Street 1", null,              null,                        2L,           true);
 		
-		List<Room> room = b.processRows(result);
-		assertTrue(room.get(0) instanceof BedRoom);
-		assertEquals((Object)1, ((BedRoom)room.get(0)).numberOfBeds);
-		assertEquals(Boolean.TRUE, ((Kitchen)room.get(1)).hasDishWasher);
-		assertEquals((Object)2L, room.get(1).id);
-		assertEquals("Unity Street 1", room.get(1).house.address);
+		List<Room> rooms = AQTRowProcessor.processRows(b, result);
+		System.out.println("tree: " + RecordIndenter.indent(b.toString()));
+		assertTrue(rooms.get(0) instanceof BedRoom);
+		assertEquals(2, rooms.size());
+		assertEquals((Object)1, ((BedRoom)rooms.get(0)).numberOfBeds);
+		assertEquals(Boolean.TRUE, ((Kitchen)rooms.get(1)).hasDishWasher);
+		assertEquals((Object)2L, rooms.get(1).id);
+		assertEquals("Unity Street 1", rooms.get(1).house.address);
 	}
 	
 	private String toSql(RootNode b) {
@@ -144,8 +148,8 @@ public class TestInheritanceWithJoins {
 
 	@Test
 	public void testSuperclasses() {
-		PojoQuery<BedRoom> q = PojoQuery.build(BedRoom.class);
-		String sql = q.toStatement().getSql();
+		RootNode t = PojoQuery.buildAQT(BedRoom.class);
+		String sql = toSql(t);
 		System.out.println(sql);
 		assertEquals(
 				norm("""
@@ -156,7 +160,7 @@ public class TestInheritanceWithJoins {
 					`bedroom.room.house`.`id` AS `bedroom.room.house.id`,
 					`bedroom.room.house`.`address` AS `bedroom.room.house.address`
 					FROM `bedroom` AS `bedroom`
-					INNER JOIN `room` AS `bedroom.room` ON `bedroom.room`.`id` = `bedroom`.`id`
+					LEFT JOIN `room` AS `bedroom.room` ON `bedroom`.`id` = `bedroom.room`.`id`
 					LEFT JOIN `house` AS `bedroom.room.house` ON `bedroom.room`.`house_id` = `bedroom.room.house`.`id`
 					"""),
 				norm(sql));
@@ -165,7 +169,7 @@ public class TestInheritanceWithJoins {
 				"bedroom.room.id", "bedroom.room.area", "bedroom.numberOfBeds", "bedroom.room.house.id", "bedroom.room.house.address" }, 
 			     1L,           100.0,          1                    ,  1L       , "Unity Street 1");
 		
-		List<BedRoom> list = PojoQuery.build(BedRoom.class).processRows(result);
+		List<BedRoom> list = AQTRowProcessor.processRows(t, result);
 		Assertions.assertEquals(1, list.size());
 		BedRoom bedroom = list.get(0);
 		Assertions.assertTrue(bedroom instanceof BedRoom);
@@ -176,21 +180,28 @@ public class TestInheritanceWithJoins {
 	
 	@Test
 	public void testSuperClassOfLinked() {
-		String sql = PojoQuery.build(ApartmentWithSpecificProperties.class).toStatement().getSql();
-		System.out.println(sql);
+		RootNode tree = PojoQuery.buildAQT(ApartmentWithSpecificProperties.class);
+		String sql = toSql(tree);
+
+		Assert.assertEquals(List.of("numberOfBeds"), 
+			getFieldNames(tree.children().stream()
+				.filter(it -> it instanceof TableNode tableNode && tableNode.alias().equals("bedrooms"))
+				.map(TableNode.class::cast).findFirst().orElseThrow()));
+
+		System.out.println("tree:" + RecordIndenter.indent(tree.toString()));
 		assertEquals(
 			norm("""
 				SELECT
-				 `apartment`.`id` AS `apartment.id`,
-				 `bedrooms`.`numberOfBeds` AS `bedrooms.numberOfBeds`,
-				 `bedrooms.room`.`id` AS `bedrooms.room.id`,
-				 `bedrooms.room`.`area` AS `bedrooms.room.area`,
-				 `bedrooms.room.house`.`id` AS `bedrooms.room.house.id`,
-				 `bedrooms.room.house`.`address` AS `bedrooms.room.house.address`
+				`apartment`.`id` AS `apartment.id`,
+				`bedrooms`.`numberOfBeds` AS `bedrooms.numberOfBeds`,
+				`bedrooms.room`.`id` AS `bedrooms.room.id`,
+				`bedrooms.room`.`area` AS `bedrooms.room.area`,
+				`bedrooms.room.house`.`id` AS `bedrooms.room.house.id`,
+				`bedrooms.room.house`.`address` AS `bedrooms.room.house.address`
 				FROM `apartment` AS `apartment`
-				 LEFT JOIN `bedroom` AS `bedrooms` ON `apartment`.`id` = `bedrooms`.`apartment_id`
-				 LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms.room`.`id` = `bedrooms`.`id`
-				 LEFT JOIN `house` AS `bedrooms.room.house` ON `bedrooms.room`.`house_id` = `bedrooms.room.house`.`id`
+				LEFT JOIN `bedroom` AS `bedrooms` ON `bedrooms`.`apartment_id` = `apartment`.`id`
+				LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms`.`id` = `bedrooms.room`.`id`
+				LEFT JOIN `house` AS `bedrooms.room.house` ON `bedrooms.room`.`house_id` = `bedrooms.room.house`.`id`
 				"""), 
 			norm(sql));
 	}

@@ -135,7 +135,7 @@ public class TestInheritance {
 					 `bedroom.room`.`id` AS `bedroom.room.id`,
 					 `bedroom.room`.`area` AS `bedroom.room.area`
 					FROM `bedroom` AS `bedroom`
-					 INNER JOIN `room` AS `bedroom.room` ON `bedroom.room`.`id` = `bedroom`.`id`
+					 LEFT JOIN `room` AS `bedroom.room` ON `bedroom.room`.`id` = `bedroom`.`id`
 					"""),
 				norm(sql));
 		

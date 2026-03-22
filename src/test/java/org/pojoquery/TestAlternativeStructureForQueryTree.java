@@ -21,6 +21,7 @@ import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.pipeline.AQTCascadingUpdater;
 import org.pojoquery.pipeline.AQTSchemaGenerator;
 import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.pipeline.AbstractQueryTree.Column;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityReference;
 import org.pojoquery.pipeline.AbstractQueryTree.FieldNode;
@@ -90,10 +91,10 @@ public class TestAlternativeStructureForQueryTree {
 		RootNode tree = AQTTransformer.buildQueryTreeForType(Person.class);
 		Assert.assertEquals(2, tree.children().size());
 		tree.children().forEach(child -> {
-			Assert.assertTrue(child instanceof FieldNode);
-			FieldNode fieldNode = (FieldNode) child;
-			Assert.assertTrue(fieldNode.field().getName().equals("id") ? fieldNode instanceof PrimaryKey : true);
-			Assert.assertTrue(fieldNode.field().getName().equals("name") ? !(fieldNode instanceof PrimaryKey) : true);
+			Assert.assertTrue(child instanceof Column);
+			Column column = (Column) child;
+			Assert.assertTrue(column.field().getName().equals("id") ? column instanceof PrimaryKey : true);
+			Assert.assertTrue(column.field().getName().equals("name") ? !(column instanceof PrimaryKey) : true);
 		});
 
 		DataSource db = initDatabase();
@@ -110,8 +111,8 @@ public class TestAlternativeStructureForQueryTree {
 
 			queryRows(conn, ArticleDetail.class, row -> {
 				AQTTransformer.buildQueryTreeForType(ArticleDetail.class).children().forEach(child -> {
-					if (child instanceof FieldNode fieldNode) {
-						System.out.println("Selected column: " + fieldNode.columnName() + " (field: " + fieldNode.field().getName() + ")");
+					if (child instanceof Column col) {
+						System.out.println("Selected column: " + col.columnName() + " (field: " + col.field().getName() + ")");
 					}
 				});
 				System.out.println("Queried row: " + row);

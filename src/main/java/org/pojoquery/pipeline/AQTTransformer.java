@@ -112,7 +112,7 @@ public class AQTTransformer {
 							new TableInfo(subTableMapping.schemaName, subTableMapping.tableName), subAlias,
 								PojoMetadata.determineIdField(tableNode.type()), null,
 								PojoMetadata.determineIdField(subClass), null, null);
-						newChildren.add(new TPSSubClassNode(subAlias, subClass, determinTableInfo(subClass), null, join, null));
+						newChildren.add(new TPSSubClassNode(subAlias, subClass, determinTableInfo(subClass), null, join, tableNode.alias()));
 					}
 				}
 
@@ -305,8 +305,8 @@ public class AQTTransformer {
 				ForeignKeyInfo fk = join.join();
 				SqlExpression joinCondition = 
 					SqlExpression.sql(
+						"{" + fk.referringAlias() + "." + fk.fkColumnName() + "} = " + 
 						"{" + fk.targetAlias() + "." + fk.idColumnName() + "}"
-						+ " = {" + fk.referringAlias() + "." + fk.fkColumnName() + "}"
 					);
 				ForeignKeyInfo newJoin = fk.withJoinCondition(joinCondition);
 				return join.withJoin(newJoin);
@@ -369,10 +369,6 @@ public class AQTTransformer {
 				sqlQuery.addField(pk.expression(), node.alias() + "." + pk.field().getName());
 			} else if (child instanceof Embedding embedded) {
 				toSql((TableNode) embedded, sqlQuery);
-			} else if (child instanceof Join ref) {
-				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, ref.join().targetTable().tableName(), ref.join().targetAlias(),
-						ref.join().joinCondition());
-				toSql((TableNode) ref, sqlQuery);
 			} else if (child instanceof EntityCollection col) {
 				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, col.tableInfo().tableName(), col.alias(),
 						col.join().joinCondition());
@@ -383,6 +379,10 @@ public class AQTTransformer {
 				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, jte.tableInfo().tableName(), jte.alias(),
 						jte.join().childKey().joinCondition());
 				toSql((TableNode) jte, sqlQuery);
+			} else if (child instanceof Join ref) {
+				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, ref.join().targetTable().tableName(), ref.join().targetAlias(),
+						ref.join().joinCondition());
+				toSql((TableNode) ref, sqlQuery);
 			}
 		}
 	}
@@ -397,11 +397,11 @@ public class AQTTransformer {
 			newTree = Optional.<QueryNode>ofNullable(oldTree)
 					.map(transformNodesRecursively(Transformers::addDeclaredFields))
 					.map(transformNodesRecursively(Transformers::addIdFieldToSubClassTableNodes))
+					.map(transformNodesRecursively(Transformers::addSuperClassTableNodes))
 					.map(transformNodesRecursively(Transformers::addEmbeddedEntities))
 					.map(transformNodesRecursively(Transformers::addJointableEntityCollections))
 					.map(transformNodesRecursively(Transformers::addEntityCollections))
 					.map(transformNodesRecursively(Transformers::addEntityReferences))
-					.map(transformNodesRecursively(Transformers::addSuperClassTableNodes))
 					.map(transformNodesRecursively(Transformers::addSubClassTableNodes))
 					.map(transformNodesRecursively(Transformers::addIdFields))
 					.map(transformNodesRecursively(Transformers::addScalarValues))
@@ -435,10 +435,6 @@ public class AQTTransformer {
 				return transformed;
 			}
 		};
-	}
-
-	private static List<FieldModel> getFieldsOfEntity(TypeModel type) {
-		return PojoMetadata.collectFieldsOfClass(type);
 	}
 
 	@SuppressWarnings("unchecked")

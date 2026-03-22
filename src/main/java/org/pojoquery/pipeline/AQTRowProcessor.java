@@ -1,0 +1,159 @@
+package org.pojoquery.pipeline;
+
+import java.lang.reflect.Constructor;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
+
+import org.pojoquery.pipeline.AbstractQueryTree.EntityReference;
+import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
+import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
+import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
+import org.pojoquery.pipeline.AbstractQueryTree.ScalarNode;
+import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
+import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.ReflectionFieldModel;
+import org.pojoquery.typemodel.ReflectionTypeModel;
+import org.pojoquery.typemodel.TypeModel;
+
+
+public class AQTRowProcessor<R> {
+
+	private final RootNode tree;
+	private final Consumer<R> entityCallback;
+	private R rootEntity = null;
+	private Object rootEntityPrimaryKeyValue = null;
+	private Map<Object, Object> allEntitiesByPrimaryKey = new HashMap<>();
+
+	public AQTRowProcessor(RootNode tree, Consumer<R> entityCallback) {
+		this.tree = tree;
+		this.entityCallback = entityCallback;
+	}
+	
+	public void processRow(Map<String,Object> row) {
+		processRowRecursive(tree, row, new HashMap<>());
+	}
+
+	// Do a leave-first traversal of the query tree, constructing entities as we go
+	// and setting their fields based on the row data. 
+	@SuppressWarnings("unchecked")
+	private void processRowRecursive(TableNode tableNode, Map<String, Object> row, Map<String, Object> entitiesOnThisRow) {
+		for (AbstractQueryTree.QueryNode child : tableNode.children()) {
+			if (child instanceof TableNode childTableNode && !(child instanceof TPSSuperClassNode)) {
+				processRowRecursive(childTableNode, row, entitiesOnThisRow);
+			}
+		}
+
+		if (allNulls(tableNode, row)) {
+			return;
+		}
+		
+		Object pkValue = getPrimaryKeyValue(tableNode, row);
+		if (pkValue != null && allEntitiesByPrimaryKey.containsKey(pkValue)) {
+			entitiesOnThisRow.put(tableNode.alias(), allEntitiesByPrimaryKey.get(pkValue));
+			return;
+		}
+		Object entity = entitiesOnThisRow.get(tableNode.alias());
+		if (entity == null) {
+			entity = constructEntity(tableNode.type());
+			entitiesOnThisRow.put(tableNode.alias(), entity);
+		}
+
+		// At this point subclasses have been handled, so the concrete entity
+		// for this node has been constructed and is available in entitiesOnThisRow
+		for (QueryNode child : tableNode.children()) {
+			if (child instanceof TPSSuperClassNode superClass) {
+				entitiesOnThisRow.put(superClass.alias(), entity);
+				processRowRecursive(superClass, row, entitiesOnThisRow);
+			}
+		}
+
+		for (QueryNode child : tableNode.children()) {
+			if (child instanceof ScalarNode scalar) {
+				Object value = row.get(tableNode.alias() + "." + scalar.field().getName());
+				setFieldValue(entity, scalar.field(), value);
+			} else if (child instanceof EntityReference ref) {
+				Object referencedEntity = entitiesOnThisRow.get(ref.alias());
+				if (referencedEntity != null) {
+					setFieldValue(entity, ref.field(), referencedEntity);
+				}
+			}
+		}
+
+		if (tableNode instanceof TPSSubClassNode subClass && pkValue != null) {
+			entitiesOnThisRow.put(subClass.parentAlias(), entity);
+		}
+
+		if (tableNode instanceof RootNode) {
+			if (rootEntity == null || !pkValue.equals(rootEntityPrimaryKeyValue)) {
+				if (rootEntity != null) {
+					entityCallback.accept(rootEntity);
+				}
+				rootEntity = (R) entity;
+				rootEntityPrimaryKeyValue = pkValue;
+			}
+		}
+	}
+
+	private Object constructEntity(TypeModel type) {
+		Class<?> clz = ((ReflectionTypeModel)type).getReflectionClass();
+		try {
+			Constructor<?> declaredConstructor = clz.getDeclaredConstructor();
+			declaredConstructor.setAccessible(true);
+			return declaredConstructor.newInstance();
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to construct entity of type " + clz.getName(), e);
+		}
+	}
+
+	private void setFieldValue(Object entity, FieldModel fieldModel, Object value) {
+		try {
+			java.lang.reflect.Field field = ((ReflectionFieldModel)fieldModel).getReflectionField();
+			field.setAccessible(true);
+			field.set(entity, value);
+		} catch (IllegalAccessException e) {
+			throw new RuntimeException("Failed to set field value for field " + fieldModel.getName(), e);
+		}
+	}
+
+	private Object getPrimaryKeyValue(TableNode node, Map<String, Object> row) {
+		List<Object> pkValues = new ArrayList<>();
+		for (QueryNode child : node.children()) {
+			if (child instanceof PrimaryKey pk) {
+				Object value = row.get(node.alias() + "." + pk.field().getName());
+				if (value != null) {
+					pkValues.add(value);
+				}
+			}
+		}
+		return pkValues.size() > 0 ? List.copyOf(pkValues) : null;
+	}
+
+	private boolean allNulls(TableNode node, Map<String, Object> row) {
+		for (QueryNode child : node.children()) {
+			if (child instanceof ScalarNode scalar) {
+				Object value = row.get(node.alias() + "." + scalar.field().getName());
+				if (value != null) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	public static <R> List<R> processRows(RootNode tree, List<Map<String,Object>> rows) {
+		List<R> result = new ArrayList<>();
+		AQTRowProcessor<R> processor = new AQTRowProcessor<>(tree, result::add);
+		for (Map<String, Object> row : rows) {
+			processor.processRow(row);
+		}
+		if (processor.rootEntity != null) {
+			processor.entityCallback.accept(processor.rootEntity);
+		}
+		return result;
+	}
+}
