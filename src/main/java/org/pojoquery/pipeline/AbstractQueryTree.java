@@ -41,12 +41,12 @@ public class AbstractQueryTree {
 	 */
 
 	public sealed interface QueryNode
-			permits TableNode, ScalarNode, EmptyTableNode, EmptyFieldNode {
+			permits TableNode, ScalarNode, EmptyTableNode, EmptyFieldNode, ValueCollection {
 	}
 
 	public sealed interface ScalarNode
 			extends QueryNode, FieldNode
-			permits PrimaryKeyField, ForeignKeyField, ScalarValue, ValueCollection, JoinTableValueCollection {
+			permits PrimaryKeyField, ForeignKeyField, ScalarValue, JoinTableValueCollection {
 	}
 
 	public non-sealed interface PrimaryKeyField extends ScalarNode, Column {
@@ -187,8 +187,19 @@ public class AbstractQueryTree {
 	public sealed interface JoinOne extends Column, Join {
 	}
 
-	public non-sealed interface ValueCollection extends ScalarNode, JoinMany {
-		SqlExpression expression();
+	public record ValueCollection(FieldModel field, String alias, TypeModel componentType, TableInfo joinTable, String fetchColumn, String parentAlias, ForeignKeyInfo join, SqlExpression expression) implements JoinMany, QueryNode {
+
+		public static ValueCollection fromEmptyFieldNode(EmptyFieldNode emptyFieldNode, String alias, TypeModel componentType, TableInfo joinTable, String fetchColumn, String parentAlias, ForeignKeyInfo join) {
+			return new ValueCollection(emptyFieldNode.field(), alias, componentType, joinTable, fetchColumn, parentAlias, join, null);
+		}
+
+		public QueryNode withJoin(ForeignKeyInfo newJoin) {
+			return new ValueCollection(field, alias, componentType, joinTable, fetchColumn, parentAlias, newJoin, expression);
+		}
+
+		public QueryNode withExpression(SqlExpression sql) {
+			return new ValueCollection(field, alias, componentType, joinTable, fetchColumn, parentAlias, join, sql);
+		}
 	}
 
 	public record JoinTableInfo(TableInfo tableInfo, String joinTableAlias) {

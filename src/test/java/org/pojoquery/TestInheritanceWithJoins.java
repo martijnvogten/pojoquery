@@ -23,9 +23,6 @@ import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
-import org.pojoquery.pipeline.SQLQueryFromTree;
-import org.pojoquery.pipeline.querytree.QueryTree;
-import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
 import org.pojoquery.util.RecordIndenter;
 
 @UseDialect(Dialect.MYSQL)
@@ -130,7 +127,7 @@ public class TestInheritanceWithJoins {
 				     1L,        100.0,       1L,        "Unity Street 1", 1L,                1,                           null,         null,
 				     2L,        40.0,        1L,        "Unity Street 1", null,              null,                        2L,           true);
 		
-		List<Room> rooms = AQTRowProcessor.processRows(b, result);
+		List<Room> rooms = AQTRowProcessor.processRows(DbContext.getDefault(), b, result);
 		System.out.println("tree: " + RecordIndenter.indent(b.toString()));
 		assertTrue(rooms.get(0) instanceof BedRoom);
 		assertEquals(2, rooms.size());
@@ -169,7 +166,7 @@ public class TestInheritanceWithJoins {
 				"bedroom.room.id", "bedroom.room.area", "bedroom.numberOfBeds", "bedroom.room.house.id", "bedroom.room.house.address" }, 
 			     1L,           100.0,          1                    ,  1L       , "Unity Street 1");
 		
-		List<BedRoom> list = AQTRowProcessor.processRows(t, result);
+		List<BedRoom> list = AQTRowProcessor.processRows(DbContext.getDefault(), t, result);
 		Assertions.assertEquals(1, list.size());
 		BedRoom bedroom = list.get(0);
 		Assertions.assertTrue(bedroom instanceof BedRoom);
@@ -208,25 +205,27 @@ public class TestInheritanceWithJoins {
 	
 	@Test
 	public void testDeeper() {
+		System.out.println(RecordIndenter.indent(AQTTransformer.buildQueryTreeForType(Apartment.class).toString()));
+
 		PojoQuery<Apartment> qb = PojoQuery.build(Apartment.class);
 		String sql = qb.toStatement().getSql();
 		assertEquals(
 				norm("""
 					SELECT
-					 `apartment`.`id` AS `apartment.id`,
-					 `rooms`.`id` AS `rooms.id`,
-					 `rooms`.`area` AS `rooms.area`,
-					 `rooms.bedroom`.`id` AS `rooms.bedroom.id`,
-					 `rooms.bedroom`.`numberOfBeds` AS `rooms.bedroom.numberOfBeds`,
-					 `rooms.kitchen`.`id` AS `rooms.kitchen.id`,
-					 `rooms.kitchen`.`hasDishWasher` AS `rooms.kitchen.hasDishWasher`,
-					 `rooms.house`.`id` AS `rooms.house.id`,
-					 `rooms.house`.`address` AS `rooms.house.address`
+					`apartment`.`id` AS `apartment.id`,
+					`rooms`.`id` AS `rooms.id`,
+					`rooms`.`area` AS `rooms.area`,
+					`rooms.house`.`id` AS `rooms.house.id`,
+					`rooms.house`.`address` AS `rooms.house.address`,
+					`rooms.bedroom`.`id` AS `rooms.bedroom.id`,
+					`rooms.bedroom`.`numberOfBeds` AS `rooms.bedroom.numberOfBeds`,
+					`rooms.kitchen`.`id` AS `rooms.kitchen.id`,
+					`rooms.kitchen`.`hasDishWasher` AS `rooms.kitchen.hasDishWasher`
 					FROM `apartment` AS `apartment`
-					 LEFT JOIN `room` AS `rooms` ON `apartment`.`id` = `rooms`.`apartment_id`
-					 LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.`id` = `rooms`.`id`
-					 LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.`id` = `rooms`.`id`
-					 LEFT JOIN `house` AS `rooms.house` ON `rooms`.`house_id` = `rooms.house`.`id`
+					LEFT JOIN `room` AS `rooms` ON `rooms`.`apartment_id` = `apartment`.`id`
+					LEFT JOIN `house` AS `rooms.house` ON `rooms`.`house_id` = `rooms.house`.`id`
+					LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms`.`id` = `rooms.bedroom`.`id`
+					LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms`.`id` = `rooms.kitchen`.`id`
 					"""),
 				norm(sql));
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
@@ -260,44 +259,4 @@ public class TestInheritanceWithJoins {
 				.orElse(null);
 	}
 	
-	/**
-	 * Helper to convert QueryTree to SQL using applyQueryTreeToQuery.
-	 */
-	private String queryTreeToSql(QueryTree tree) {
-		DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
-		SQLQueryFromTree.applyQueryTreeToQuery(query, tree);
-		return query.toStatement().getSql();
-	}
-	
-	// ═══════════════════════════════════════════════════════════════════════
-	// QueryTree variants - compare SQL output with QueryModel
-	// ═══════════════════════════════════════════════════════════════════════
-	
-	@Test
-	public void testSubClasses_QueryTree() {
-		String queryModelSql = PojoQuery.build(Room.class).toSql();
-		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(Room.class));
-		assertEquals(norm(queryModelSql), norm(queryTreeSql));
-	}
-	
-	@Test
-	public void testSuperclasses_QueryTree() {
-		String queryModelSql = PojoQuery.build(BedRoom.class).toStatement().getSql();
-		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(BedRoom.class));
-		assertEquals(norm(queryModelSql), norm(queryTreeSql));
-	}
-	
-	@Test
-	public void testSuperClassOfLinked_QueryTree() {
-		String queryModelSql = PojoQuery.build(ApartmentWithSpecificProperties.class).toStatement().getSql();
-		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(ApartmentWithSpecificProperties.class));
-		assertEquals(norm(queryModelSql), norm(queryTreeSql));
-	}
-	
-	@Test
-	public void testDeeper_QueryTree() {
-		String queryModelSql = PojoQuery.build(Apartment.class).toStatement().getSql();
-		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(Apartment.class));
-		assertEquals(norm(queryModelSql), norm(queryTreeSql));
-	}
 }

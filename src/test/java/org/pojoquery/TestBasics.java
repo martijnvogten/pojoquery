@@ -11,9 +11,6 @@ import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
-import org.pojoquery.pipeline.AQTTransformer;
-import org.pojoquery.pipeline.DefaultSqlQuery;
-import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 
 @UseDialect(Dialect.MYSQL)
 public class TestBasics {
@@ -61,11 +58,7 @@ public class TestBasics {
 
 	@Test
 	public void testIt() {
-		// String sql = PojoQuery.build(ArticleDetail.class).toStatement().getSql();
-		RootNode aqt = AQTTransformer.buildQueryTreeForType(ArticleDetail.class);
-		
-		
-		// System.out.println(sql);
+		String sql = PojoQuery.build(ArticleDetail.class).toStatement().getSql();
 		
 		String expected = """
 			SELECT
@@ -92,9 +85,7 @@ public class TestBasics {
 			LEFT JOIN `user` AS `comments.author` ON `comments`.`author_id` = `comments.author`.`id`
 			""";
 		// assertEquals(norm(expected), norm(sql));
-		DefaultSqlQuery sqlQuery = new DefaultSqlQuery(DbContext.getDefault());
-		AQTTransformer.toSql(aqt, sqlQuery);
-		assertEquals(norm(expected), norm(sqlQuery.toStatement().getSql()));
+		assertEquals(norm(expected), norm(sql));
 		
 	}
 }

@@ -33,6 +33,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
+import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.transforms.AliasNaming;
 import org.pojoquery.typemodel.AnnotationModel;
@@ -67,32 +68,34 @@ public class AQTTransformer {
 		}
 
 		public static QueryNode addSuperClassTableNodes(QueryNode node) {
-			if (node instanceof TableNode subClassNode && !(node instanceof TPSSubClassNode) && (subClassNode.children() == null || subClassNode.children().stream().noneMatch(TPSSuperClassNode.class::isInstance))
-					&& PojoMetadata.determineTableMapping(subClassNode.type()).size() > 1) {
+			if (node instanceof TableNode tableNode && 
+					!(node instanceof TPSSubClassNode) && 
+					(tableNode.children() != null && tableNode.children().stream().noneMatch(TPSSuperClassNode.class::isInstance))
+					&& PojoMetadata.determineTableMapping(tableNode.type()).size() > 1) {
 				
-				List<QueryNode> newChildren = subClassNode.children() == null ? new ArrayList<>() : new ArrayList<>(subClassNode.children());
+				List<QueryNode> newChildren = tableNode.children() == null ? new ArrayList<>() : new ArrayList<>(tableNode.children());
 
-				List<TableMapping> mappings = PojoMetadata.determineTableMapping(subClassNode.type());
+				List<TableMapping> mappings = PojoMetadata.determineTableMapping(tableNode.type());
 				TableMapping superMapping = mappings.get(mappings.size() - 2);
-				String superAlias = AliasNaming.superclassAlias(subClassNode.alias(), superMapping.tableName);
+				String superAlias = AliasNaming.superclassAlias(tableNode.alias(), superMapping.tableName);
 				TableInfo superTable = new TableInfo(superMapping.schemaName, superMapping.tableName);
 				ForeignKeyInfo join = new ForeignKeyInfo(
-						subClassNode.tableInfo(), subClassNode.alias(),
+						tableNode.tableInfo(), tableNode.alias(),
 						superTable,
 						superAlias,
-						PojoMetadata.determineIdField(subClassNode.type()), null,
+						PojoMetadata.determineIdField(tableNode.type()), null,
 						PojoMetadata.determineIdField(superMapping.type), null, null);
 				newChildren.add(new TPSSuperClassNode(superAlias, superMapping.getType(), superTable,
 						null, join, null));
 
-				return subClassNode.withChildren(newChildren);
+				return tableNode.withChildren(newChildren);
 			} else {
 				return node;
 			}
 		}
 
 		public static QueryNode addSubClassTableNodes(QueryNode node) {
-			if (node instanceof TableNode tableNode && !(node instanceof TPSSuperClassNode) && (tableNode.children() == null || !tableNode.children().stream().anyMatch(child -> child instanceof TPSSubClassNode))
+			if (node instanceof TableNode tableNode && !(node instanceof TPSSuperClassNode) && (tableNode.children() != null && !tableNode.children().stream().anyMatch(child -> child instanceof TPSSubClassNode))
 					&& tableNode.type().hasAnnotation(org.pojoquery.annotations.SubClasses.class)) {
 				AnnotationModel subClassesAnn = tableNode.type().getAnnotation(org.pojoquery.annotations.SubClasses.class).orElseThrow();
 				List<TypeModel> subClasses = tableNode.type().getTypeValuesFromAnnotation(subClassesAnn, "value");
@@ -180,6 +183,36 @@ public class AQTTransformer {
 						return EntityCollection.fromEmptyFieldNode(emptyFieldNode, alias, componentType, tableInfo,
 								parentNode.alias(), join);
 					});
+		}
+
+		public static QueryNode addValueCollections(QueryNode node) {
+			return transformChildren(node,
+					child -> child instanceof EmptyFieldNode emptyFieldNode &&
+							isValueCollection(emptyFieldNode.field().getType()) &&
+							!Strings.isNullOrEmpty(emptyFieldNode.field().getAnnotationAttributeValue(Link.class,
+									"linktable", String.class)) &&
+							!Strings.isNullOrEmpty(emptyFieldNode.field().getAnnotationAttributeValue(Link.class,
+									"fetchColumn", String.class)),
+					(TableNode parentNode, EmptyFieldNode emptyFieldNode) -> {
+						FieldModel field = emptyFieldNode.field();
+
+						TypeModel componentType = field.getType().getTypeArgument();
+						
+						String joinTableName = field.getAnnotationAttributeValue(Link.class, "linktable", String.class);
+						String joinTableSchema = field.getAnnotationAttributeValue(Link.class, "linkschema", String.class);
+
+						String alias = AliasNaming.childAlias(node instanceof RootNode, parentNode.alias(), field.getName());
+
+						String fetchColumn = field.getAnnotationAttributeValue(Link.class, "fetchColumn", String.class);
+
+						TableInfo joinTable = new TableInfo(joinTableSchema.isEmpty() ? null : joinTableSchema, joinTableName);
+
+						ForeignKeyInfo join = ForeignKeyInfo.fkInChild(parentNode.tableInfo(), parentNode.alias(),
+								joinTable, alias, PojoMetadata.determineIdField(parentNode.type()));
+
+						return (QueryNode)ValueCollection.fromEmptyFieldNode(emptyFieldNode, alias, componentType, joinTable, fetchColumn, parentNode.alias(), join);
+					}
+				);
 		}
 
 		public static QueryNode addJointableEntityCollections(QueryNode node) {
@@ -286,6 +319,13 @@ public class AQTTransformer {
 			return node;
 		}
 
+		public static QueryNode applyDefaultValueCollectionExpressions(QueryNode node) {
+			return transformChildren(node,
+					child -> child instanceof ValueCollection vc && vc.expression() == null,
+					(TableNode parentNode, ValueCollection vc) -> vc.withExpression(
+							SqlExpression.sql("{" + (parentNode instanceof Embedding emb ? emb.sourceAlias() : vc.alias()) + "." + vc.fetchColumn() + "}")));
+		}
+
 		public static QueryNode applyDefaultScalarExpressions(QueryNode node) {
 			return transformChildren(node,
 					child -> child instanceof ScalarValue scalar && scalar.expression() == null,
@@ -346,6 +386,11 @@ public class AQTTransformer {
 				type.getTypeArgument() != null && isEntity(type.getTypeArgument());
 	}
 
+	private static boolean isValueCollection(TypeModel type) {
+		return type.getArrayComponentType() != null && !isEntity(type.getArrayComponentType()) ||
+				type.getTypeArgument() != null && !isEntity(type.getTypeArgument());
+	}
+
 	private static TypeModel getCollectionComponentType(TypeModel type) {
 		if (type.getArrayComponentType() != null) {
 			return type.getArrayComponentType();
@@ -369,6 +414,9 @@ public class AQTTransformer {
 				sqlQuery.addField(pk.expression(), node.alias() + "." + pk.field().getName());
 			} else if (child instanceof Embedding embedded) {
 				toSql((TableNode) embedded, sqlQuery);
+			} else if (child instanceof ValueCollection col) {
+				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, col.joinTable().tableName(), col.alias(), col.join().joinCondition());
+				sqlQuery.addField(col.expression(), col.alias() + ".value");
 			} else if (child instanceof EntityCollection col) {
 				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, col.tableInfo().tableName(), col.alias(),
 						col.join().joinCondition());
@@ -399,6 +447,7 @@ public class AQTTransformer {
 					.map(transformNodesRecursively(Transformers::addIdFieldToSubClassTableNodes))
 					.map(transformNodesRecursively(Transformers::addSuperClassTableNodes))
 					.map(transformNodesRecursively(Transformers::addEmbeddedEntities))
+					.map(transformNodesRecursively(Transformers::addValueCollections))
 					.map(transformNodesRecursively(Transformers::addJointableEntityCollections))
 					.map(transformNodesRecursively(Transformers::addEntityCollections))
 					.map(transformNodesRecursively(Transformers::addEntityReferences))
@@ -409,6 +458,7 @@ public class AQTTransformer {
 					.map(transformNodesRecursively(Transformers::applyDefaultPrimaryKeyExpressions))
 					.map(transformNodesRecursively(Transformers::applyDefaultForeignKeyColumnNames))
 					.map(transformNodesRecursively(Transformers::applyDefaultJoinConditions))
+					.map(transformNodesRecursively(Transformers::applyDefaultValueCollectionExpressions))
 					.map(transformNodesRecursively(Transformers::applyDefaultScalarExpressions))
 					.map(transformNodesRecursively(Transformers::makeSingleIdFieldsAutoIncrement))
 					.orElse(null);

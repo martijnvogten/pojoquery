@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import org.pojoquery.DbContext;
+import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityReference;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
@@ -15,21 +17,27 @@ import org.pojoquery.pipeline.AbstractQueryTree.ScalarNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
+import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionFieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
+import org.pojoquery.util.FieldHelper;
 
 
 public class AQTRowProcessor<R> {
 
+	private final DbContext dbContext;
 	private final RootNode tree;
 	private final Consumer<R> entityCallback;
 	private R rootEntity = null;
 	private Object rootEntityPrimaryKeyValue = null;
-	private Map<Object, Object> allEntitiesByPrimaryKey = new HashMap<>();
+	private Map<EntityKey, Object> allEntitiesByPrimaryKey = new HashMap<>();
+	record EntityKey(String tableAlias, Object pkValue) {
+	}
 
-	public AQTRowProcessor(RootNode tree, Consumer<R> entityCallback) {
+	public AQTRowProcessor(DbContext dbContext, RootNode tree, Consumer<R> entityCallback) {
+		this.dbContext = dbContext;
 		this.tree = tree;
 		this.entityCallback = entityCallback;
 	}
@@ -53,13 +61,13 @@ public class AQTRowProcessor<R> {
 		}
 		
 		Object pkValue = getPrimaryKeyValue(tableNode, row);
-		if (pkValue != null && allEntitiesByPrimaryKey.containsKey(pkValue)) {
-			entitiesOnThisRow.put(tableNode.alias(), allEntitiesByPrimaryKey.get(pkValue));
-			return;
+		if (pkValue != null && allEntitiesByPrimaryKey.containsKey(new EntityKey(tableNode.alias(), pkValue))) {
+			entitiesOnThisRow.put(tableNode.alias(), allEntitiesByPrimaryKey.get(new EntityKey(tableNode.alias(), pkValue)));
 		}
 		Object entity = entitiesOnThisRow.get(tableNode.alias());
 		if (entity == null) {
 			entity = constructEntity(tableNode.type());
+			allEntitiesByPrimaryKey.put(new EntityKey(tableNode.alias(), pkValue), entity);
 			entitiesOnThisRow.put(tableNode.alias(), entity);
 		}
 
@@ -73,14 +81,20 @@ public class AQTRowProcessor<R> {
 		}
 
 		for (QueryNode child : tableNode.children()) {
-			if (child instanceof ScalarNode scalar) {
-				Object value = row.get(tableNode.alias() + "." + scalar.field().getName());
-				setFieldValue(entity, scalar.field(), value);
-			} else if (child instanceof EntityReference ref) {
+			if (child instanceof EntityReference ref) {
 				Object referencedEntity = entitiesOnThisRow.get(ref.alias());
 				if (referencedEntity != null) {
 					setFieldValue(entity, ref.field(), referencedEntity);
 				}
+			} else if (child instanceof EntityCollection entityCollection) {
+				Object value = entitiesOnThisRow.get(entityCollection.alias());
+				FieldHelper.putValueIntoField(entity, ((ReflectionFieldModel)entityCollection.field()).getReflectionField(), value);
+			} else if (child instanceof ValueCollection valueCollection) {
+				Object value = row.get(valueCollection.alias() + ".value");
+				FieldHelper.putValueIntoField(entity, ((ReflectionFieldModel)valueCollection.field()).getReflectionField(), value);
+			} else if (child instanceof ScalarNode scalar) {
+				Object value = row.get(tableNode.alias() + "." + scalar.field().getName());
+				setFieldValue(entity, scalar.field(), value);
 			}
 		}
 
@@ -145,15 +159,22 @@ public class AQTRowProcessor<R> {
 		return true;
 	}
 
-	public static <R> List<R> processRows(RootNode tree, List<Map<String,Object>> rows) {
+	public void flush() {
+		if (rootEntity != null) {
+			entityCallback.accept(rootEntity);
+			rootEntity = null;
+			rootEntityPrimaryKeyValue = null;
+		}
+	}
+
+	public static <R> List<R> processRows(DbContext dbContext, RootNode tree, List<Map<String,Object>> rows) {
 		List<R> result = new ArrayList<>();
-		AQTRowProcessor<R> processor = new AQTRowProcessor<>(tree, result::add);
+		AQTRowProcessor<R> processor = new AQTRowProcessor<>(dbContext, tree, result::add);
 		for (Map<String, Object> row : rows) {
 			processor.processRow(row);
 		}
-		if (processor.rootEntity != null) {
-			processor.entityCallback.accept(processor.rootEntity);
-		}
+		processor.flush();
 		return result;
 	}
+
 }

@@ -14,18 +14,22 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
+import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.util.RecordIndenter;
 
 @UseDialect(Dialect.MYSQL)
 public class TestCollections {
 
 	@Table("article")
 	static class Article {
+		@Id
 		Long id;
 		String title;
 	}
 
 	@Table("task")
 	static class Task {
+		@Id
 		Long id;
 		String title;
 	}
@@ -55,13 +59,15 @@ public class TestCollections {
 	@Test
 	public void testBasics() {
 		PojoQuery<User> pq = PojoQuery.build(User.class);
+		System.out.println(RecordIndenter.indent(AQTTransformer.buildQueryTreeForType(User.class).toString()));
+
 		assertEquals(
 			TestUtils.norm("""
 				SELECT
-				 `user`.`id` AS `user.id`,
-				 `roles`.`element` AS `roles.value`
+				`user`.`id` AS `user.id`,
+				`roles`.`element` AS `roles.value`
 				FROM `user` AS `user`
-				 LEFT JOIN `user_roles` AS `roles` ON `user`.`id` = `roles`.`user_id`
+				LEFT JOIN `user_roles` AS `roles` ON `roles`.`user_id` = `user`.`id`
 				"""), 
 			TestUtils.norm(pq.toSql()));
 		
@@ -77,22 +83,23 @@ public class TestCollections {
 		
 		List<User> users = PojoQuery.build(User.class).processRows(result);
 		assertEquals(1, users.size());
+		assertEquals(2, users.get(0).roles.size());
 		Assertions.assertTrue(users.get(0).roles.contains(Role.ADMIN));
 	}
 	
 	@Test
 	public void testCollections() {
 		PojoQuery<UserDetail> pq = PojoQuery.build(UserDetail.class);
-		assertEquals(
+			assertEquals(
 			TestUtils.norm("""
 				SELECT
-				 `user`.`id` AS `user.id`,
-				 `articles`.`id` AS `articles.id`,
-				 `articles`.`title` AS `articles.title`,
-				 `roles`.`element` AS `roles.value`
+				`user`.`id` AS `user.id`,
+				`roles`.`element` AS `roles.value`,
+				`articles`.`id` AS `articles.id`,
+				`articles`.`title` AS `articles.title`
 				FROM `user` AS `user`
-				 LEFT JOIN `article` AS `articles` ON `user`.`id` = `articles`.`user_id`
-				 LEFT JOIN `user_roles` AS `roles` ON `user`.`id` = `roles`.`user_id`
+				LEFT JOIN `user_roles` AS `roles` ON `roles`.`user_id` = `user`.`id`
+				LEFT JOIN `article` AS `articles` ON `articles`.`user_id` = `user`.`id`
 				"""), 
 			TestUtils.norm(pq.toSql()));
 		

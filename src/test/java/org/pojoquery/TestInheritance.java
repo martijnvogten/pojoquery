@@ -125,17 +125,17 @@ public class TestInheritance {
 	
 	@Test
 	public void testSuperclasses() {
-		PojoQuery<BedRoom> q = PojoQuery.build(BedRoom.class);
-		String sql = q.toStatement().getSql();
+		RootNode n = PojoQuery.buildAQT(BedRoom.class);
+		String sql = aqtToSql(n);
 		System.out.println(sql);
 		assertEquals(
 				norm("""
 					SELECT
-					 `bedroom`.`numberOfBeds` AS `bedroom.numberOfBeds`,
-					 `bedroom.room`.`id` AS `bedroom.room.id`,
-					 `bedroom.room`.`area` AS `bedroom.room.area`
+					`bedroom`.`numberOfBeds` AS `bedroom.numberOfBeds`,
+					`bedroom.room`.`id` AS `bedroom.room.id`,
+					`bedroom.room`.`area` AS `bedroom.room.area`
 					FROM `bedroom` AS `bedroom`
-					 LEFT JOIN `room` AS `bedroom.room` ON `bedroom.room`.`id` = `bedroom`.`id`
+					LEFT JOIN `room` AS `bedroom.room` ON `bedroom`.`id` = `bedroom.room`.`id`
 					"""),
 				norm(sql));
 		
@@ -143,6 +143,7 @@ public class TestInheritance {
 				"bedroom.room.id", "bedroom.room.area", "bedroom.numberOfBeds" }, 
 			     1L,           100.0,          1);
 		
+
 		List<BedRoom> list = PojoQuery.build(BedRoom.class).processRows(result);
 		Assertions.assertEquals(1, list.size());
 		BedRoom bedroom = list.get(0);

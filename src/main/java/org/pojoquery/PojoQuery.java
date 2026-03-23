@@ -21,13 +21,11 @@ import javax.sql.DataSource;
 
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.AQTRowProcessor;
 import org.pojoquery.pipeline.AQTTransformer;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
 import org.pojoquery.pipeline.PojoMetadata;
-import org.pojoquery.pipeline.QueryTreeRowProcessor;
-import org.pojoquery.pipeline.QueryTreeRowProcessor.StreamingRowHandler;
-import org.pojoquery.pipeline.SQLQueryFromTree;
 import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.SqlQuery.SqlField;
@@ -107,7 +105,7 @@ import org.slf4j.LoggerFactory;
 public class PojoQuery<T> {
 	private static final Logger LOG = LoggerFactory.getLogger(PojoQuery.class);
 	
-	private final QueryTree tree;
+	private final RootNode tree;
 	private final SqlQuery<DefaultSqlQuery> query;
 	private Class<T> resultClass;
 	private DbContext dbContext;
@@ -116,8 +114,8 @@ public class PojoQuery<T> {
 		this.dbContext = context;
 		this.resultClass = clz;
 		this.query = new DefaultSqlQuery(context);
-		this.tree = QueryTreeBuilder.from(clz);
-		SQLQueryFromTree.applyQueryTreeToQuery(query, tree);
+		this.tree = AQTTransformer.buildQueryTreeForType(clz);
+		AQTTransformer.toSql(this.tree, this.query);
 	}
 	
 
@@ -386,11 +384,10 @@ public class PojoQuery<T> {
 	 * @param db the DataSource
 	 * @return the list of results
 	 */
-	@SuppressWarnings({ "rawtypes", "unchecked" })
 	public List<T> execute(DataSource db) {
 		SqlExpression stmt = query.toStatement();
 		LOG.debug("Executing query: {}", stmt.getSql());
-		return new QueryTreeRowProcessor(tree, this.query.getDbContext()).processRows(DB.queryRows(db, stmt));
+		return AQTRowProcessor.processRows(dbContext, tree, DB.queryRows(db, stmt));
 	}
 	
 	/**
@@ -399,11 +396,10 @@ public class PojoQuery<T> {
 	* @param connection the database connection
 	* @return the list of results
 	*/
-	@SuppressWarnings({ "rawtypes", "unchecked" })
 	public List<T> execute(Connection connection) {
 		SqlExpression stmt = query.toStatement();
 		LOG.debug("Executing query: {}", stmt.getSql());
-		return new QueryTreeRowProcessor(tree, this.query.getDbContext()).processRows(DB.queryRows(connection, stmt));
+		return AQTRowProcessor.processRows(dbContext, tree, DB.queryRows(connection, stmt));
 	}
 
 
@@ -461,9 +457,9 @@ public class PojoQuery<T> {
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	private void executeStreamingImpl(Consumer<T> consumer, Consumer<Consumer<Map<String, Object>>> queryExecutor) {
-		ensureOrderByPrimaryId(tree);
-		StreamingRowHandler handler = new QueryTreeRowProcessor<T>(tree, dbContext).createStreamingRowHandler(consumer);
-		queryExecutor.accept(handler);
+		ensureOrderByPrimaryId(this.tree);
+		AQTRowProcessor handler = new AQTRowProcessor(dbContext, tree, consumer);
+		queryExecutor.accept(row -> handler.processRow(row));
 		handler.flush();
 	}
 
@@ -715,7 +711,7 @@ public class PojoQuery<T> {
 	 * @return the list of mapped results
 	 */
 	public List<T> processRows(List<Map<String, Object>> rows) {
-		return new QueryTreeRowProcessor<T>(tree, dbContext).processRows(rows);
+		return AQTRowProcessor.processRows(dbContext, tree, rows);
 	}
 
 	/**
@@ -762,13 +758,13 @@ public class PojoQuery<T> {
 	 *
 	 * @throws MappingException if any ORDER BY clause references a non-root alias (joined table)
 	 */
-	public void ensureOrderByPrimaryId(QueryTree tree) {
+	public void ensureOrderByPrimaryId(RootNode tree) {
 		List<FieldModel> idFields = PojoMetadata.determineIdFields(new ReflectionTypeModel(resultClass));
 		String tableName = query.getTable();
 		List<String> currentOrderBy = new ArrayList<>(query.getOrderBy());
 
 		// Validate that ORDER BY clauses only reference the root alias
-		validateOrderByAliases(currentOrderBy, tree.rootAlias());
+		validateOrderByAliases(currentOrderBy, tree.alias());
 
 		// Append ID fields to the ORDER BY (if not already present) as a tiebreaker
 		// Use curly brace syntax for alias + quoted field name
@@ -858,6 +854,11 @@ public class PojoQuery<T> {
 		String selectClause = "SELECT COUNT(DISTINCT " + implode(", ", getFieldNames(query.getTable(), idFields)) + ") ";
 
 		return query.toStatement(new SqlExpression(selectClause), query.getSchema(), query.getTable(), query.getJoins(), query.getWheres(), null, null, -1, -1);
+	}
+
+
+	public RootNode getTree() {
+		return tree;
 	}
 
 }
