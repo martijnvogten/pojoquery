@@ -33,8 +33,6 @@ public class AQTSchemaGenerator {
 
 	public record DDLForeignKey(DDLColumnKey referringColumn, DDLColumnKey referencedIdColumn) {
 	}
-	public record DDLForeignKeyKey(DDLColumnKey referringColumn) {
-	}
 
 	interface DDLCollector {
 		void registerTable(TableInfo tableKey, List<DDLColumn> primaryKeyColumns);
@@ -47,7 +45,7 @@ public class AQTSchemaGenerator {
 		private HashMap<DDLColumnKey, DDLColumn> columns = new LinkedHashMap<>();
 		private HashMap<DDLColumnKey, List<FieldModel>> definingFields = new HashMap<>();
 		private HashSet<DDLColumnKey> implicitForeignKeyColumns = new HashSet<>();
-		private HashMap<DDLForeignKeyKey, DDLForeignKey> foreignKeys = new LinkedHashMap<>();
+		private HashMap<DDLColumnKey, DDLForeignKey> foreignKeys = new LinkedHashMap<>();
 		@Override
 		public void registerTable(TableInfo tableKey, List<DDLColumn> primaryKeyColumns) {
 			tables.put(tableKey, new DDLTable(tableKey, primaryKeyColumns));
@@ -69,7 +67,7 @@ public class AQTSchemaGenerator {
 		public void registerForeignKey(ForeignKeyInfo foreignKeyInfo) {
 			DDLColumnKey ddlColumnKey = new DDLColumnKey(foreignKeyInfo.referringTable(), foreignKeyInfo.fkColumnName());
 			registerColumn(foreignKeyInfo.referringTable(), foreignKeyInfo.fkColumnName(), foreignKeyInfo.foreignKeyField());
-			foreignKeys.put(new DDLForeignKeyKey(ddlColumnKey), 
+			foreignKeys.put(ddlColumnKey, 
 				new DDLForeignKey(ddlColumnKey, new DDLColumnKey(foreignKeyInfo.targetTable(), foreignKeyInfo.idColumnName()))
 			);
 		}
@@ -112,7 +110,7 @@ public class AQTSchemaGenerator {
 						colDef.append(dbContext.getAutoIncrementKeyColumnType());
 						colDef.append(" ");
 						colDef.append(dbContext.getAutoIncrementSyntax());
-					} else if (collector.foreignKeys.containsKey(new DDLForeignKeyKey(col.columnKey()))) {
+					} else if (collector.foreignKeys.containsKey(col.columnKey())) {
 						colDef.append(dbContext.getForeignKeyColumnType());
 					} else {
 						colDef.append(dbContext.mapJavaTypeToSql(col.field()));
@@ -142,15 +140,15 @@ public class AQTSchemaGenerator {
 		for (DDLForeignKey fk : collector.foreignKeys.values()) {
 			StringBuilder sb = new StringBuilder();
 			sb.append("ALTER TABLE ");
-			sb.append(dbContext.getQuoteStyle().quote(fk.referringColumn().tableKey().tableName()));
+			sb.append(dbContext.quoteObjectNames(fk.referringColumn().tableKey().tableName()));
 			sb.append(" ADD CONSTRAINT ");
-			sb.append(dbContext.getQuoteStyle().quote("fk_" + fk.referringColumn().tableKey().tableName() + "_" + fk.referringColumn().columnName()));
+			sb.append(dbContext.quoteObjectNames("fk_" + fk.referringColumn().tableKey().tableName() + "_" + fk.referringColumn().columnName()));
 			sb.append(" FOREIGN KEY (");
-			sb.append(dbContext.getQuoteStyle().quote(fk.referringColumn().columnName()));
+			sb.append(dbContext.quoteObjectNames(fk.referringColumn().columnName()));
 			sb.append(") REFERENCES ");
-			sb.append(dbContext.getQuoteStyle().quote(fk.referencedIdColumn().tableKey().tableName()));
+			sb.append(dbContext.quoteObjectNames(fk.referencedIdColumn().tableKey().tableName()));
 			sb.append(" (");
-			sb.append(dbContext.getQuoteStyle().quote(fk.referencedIdColumn().columnName()));
+			sb.append(dbContext.quoteObjectNames(fk.referencedIdColumn().columnName()));
 			sb.append(")");
 			statements.add(sb.toString());
 		}
