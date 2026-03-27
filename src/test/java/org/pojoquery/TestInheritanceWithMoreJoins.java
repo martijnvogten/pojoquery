@@ -84,7 +84,7 @@ public class TestInheritanceWithMoreJoins {
 					LEFT JOIN `bed` AS `beds` ON `beds`.`bedroom_id` = `bedroom`.`id`
 					LEFT JOIN `room` AS `bedroom.room` ON `bedroom`.`id` = `bedroom.room`.`id`
 					LEFT JOIN `house` AS `bedroom.room.house` ON `bedroom.room`.`house_id` = `bedroom.room.house`.`id`
-					LEFT JOIN `window` AS `bedroom.room.windows` ON `bedroom.room.windows`.`room_id` = `bedroom.room`.`id`
+					LEFT JOIN `window` AS `bedroom.room.windows` ON `bedroom.room`.`id` = `bedroom.room.windows`.`room_id`
 					"""),
 				norm(sql));
 	}
@@ -111,7 +111,7 @@ public class TestInheritanceWithMoreJoins {
 					FROM `apartment` AS `apartment`
 					LEFT JOIN `room` AS `rooms` ON `rooms`.`apartment_id` = `apartment`.`id`
 					LEFT JOIN `house` AS `rooms.house` ON `rooms`.`house_id` = `rooms.house`.`id`
-					LEFT JOIN `window` AS `rooms.windows` ON `rooms.windows`.`room_id` = `rooms`.`id`
+					LEFT JOIN `window` AS `rooms.windows` ON `rooms`.`id` = `rooms.windows`.`room_id`
 					LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms`.`id` = `rooms.bedroom`.`id`
 					LEFT JOIN `bed` AS `rooms.bedroom.beds` ON `rooms.bedroom.beds`.`bedroom_id` = `rooms.bedroom`.`id`
 					LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms`.`id` = `rooms.kitchen`.`id`
