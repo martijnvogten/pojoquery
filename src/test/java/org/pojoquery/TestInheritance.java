@@ -15,17 +15,9 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.TableMapping;
-import org.pojoquery.pipeline.AQTTransformer;
-import org.pojoquery.pipeline.AbstractQueryTree;
-import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
-import org.pojoquery.pipeline.DefaultSqlQuery;
 import org.pojoquery.pipeline.PojoMetadata;
-import org.pojoquery.pipeline.SQLQueryFromTree;
-import org.pojoquery.pipeline.querytree.QueryTree;
-import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
-import org.pojoquery.util.RecordIndenter;
 
 public class TestInheritance {
 
@@ -106,8 +98,8 @@ public class TestInheritance {
 					 `room.kitchen`.`id` AS `room.kitchen.id`,
 					 `room.kitchen`.`hasDishWasher` AS `room.kitchen.hasDishWasher`
 					FROM `room` AS `room`
-					 LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.`id` = `room`.`id`
-					 LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.`id` = `room`.`id`
+					 LEFT JOIN `bedroom` AS `room.bedroom` ON `room`.`id` = `room.bedroom`.`id`
+					 LEFT JOIN `kitchen` AS `room.kitchen` ON `room`.`id` = `room.kitchen`.`id`
 					"""),
 				norm(sql));
 		
@@ -125,8 +117,8 @@ public class TestInheritance {
 	
 	@Test
 	public void testSuperclasses() {
-		RootNode n = PojoQuery.buildAQT(BedRoom.class);
-		String sql = aqtToSql(n);
+		PojoQuery<BedRoom> n = PojoQuery.build(BedRoom.class);
+		String sql = n.toStatement().getSql();
 		System.out.println(sql);
 		assertEquals(
 				norm("""
@@ -164,8 +156,8 @@ public class TestInheritance {
 				 `bedrooms.room`.`id` AS `bedrooms.room.id`,
 				 `bedrooms.room`.`area` AS `bedrooms.room.area`
 				FROM `apartment` AS `apartment`
-				 LEFT JOIN `bedroom` AS `bedrooms` ON `apartment`.`id` = `bedrooms`.`apartment_id`
-				 LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms.room`.`id` = `bedrooms`.`id`
+				 LEFT JOIN `bedroom` AS `bedrooms` ON `bedrooms`.`apartment_id` = `apartment`.`id`
+ 				 LEFT JOIN `room` AS `bedrooms.room` ON `bedrooms`.`id` = `bedrooms.room`.`id`
 				"""), 
 			norm(sql));
 	}
@@ -176,17 +168,17 @@ public class TestInheritance {
 		assertEquals(
 				norm("""
 					SELECT
-					 `apartment`.`id` AS `apartment.id`,
-					 `rooms`.`id` AS `rooms.id`,
-					 `rooms`.`area` AS `rooms.area`,
-					 `rooms.bedroom`.`id` AS `rooms.bedroom.id`,
-					 `rooms.bedroom`.`numberOfBeds` AS `rooms.bedroom.numberOfBeds`,
-					 `rooms.kitchen`.`id` AS `rooms.kitchen.id`,
-					 `rooms.kitchen`.`hasDishWasher` AS `rooms.kitchen.hasDishWasher`
+					`apartment`.`id` AS `apartment.id`,
+					`rooms`.`id` AS `rooms.id`,
+					`rooms`.`area` AS `rooms.area`,
+					`rooms.bedroom`.`id` AS `rooms.bedroom.id`,
+					`rooms.bedroom`.`numberOfBeds` AS `rooms.bedroom.numberOfBeds`,
+					`rooms.kitchen`.`id` AS `rooms.kitchen.id`,
+					`rooms.kitchen`.`hasDishWasher` AS `rooms.kitchen.hasDishWasher`
 					FROM `apartment` AS `apartment`
-					 LEFT JOIN `room` AS `rooms` ON `apartment`.`id` = `rooms`.`apartment_id`
-					 LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.`id` = `rooms`.`id`
-					 LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.`id` = `rooms`.`id`
+					LEFT JOIN `room` AS `rooms` ON `rooms`.`apartment_id` = `apartment`.`id`
+					LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms`.`id` = `rooms.bedroom`.`id`
+					LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms`.`id` = `rooms.kitchen`.`id`
 					"""),
 				norm(sql));
 		
@@ -202,58 +194,4 @@ public class TestInheritance {
 		return mapping.getFields().stream().map(FieldModel::getName).toList();
 	}
 	
-	/**
-	 * Helper to convert QueryTree to SQL using applyQueryTreeToQuery.
-	 */
-	private String queryTreeToSql(QueryTree tree) {
-		DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
-		SQLQueryFromTree.applyQueryTreeToQuery(query, tree);
-		return query.toStatement().getSql();
-	}
-
-	private String aqtToSql(AbstractQueryTree.QueryNode node) {
-		DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
-		AQTTransformer.toSql((AbstractQueryTree.TableNode) node, query);
-		return query.toStatement().getSql();
-	}
-	
-	// ═══════════════════════════════════════════════════════════════════════
-	// QueryTree variants - compare SQL output with QueryModel
-	// ═══════════════════════════════════════════════════════════════════════
-	
-	@Test
-	public void testSubClasses_QueryTree() {
-		String queryModelSql = PojoQuery.build(Room.class).toSql();
-		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(Room.class));
-		RootNode queryTreeForType = AQTTransformer.buildQueryTreeForType(Room.class);
-		System.out.println("AQT for Room:\n" + RecordIndenter.indent(queryTreeForType.toString()));
-		String aqtSql = aqtToSql(queryTreeForType);
-		assertEquals(norm(queryModelSql), norm(queryTreeSql));
-		assertEquals(norm(queryModelSql), norm(aqtSql));
-	}
-	
-	@Test
-	public void testSuperclasses_QueryTree() {
-		String queryModelSql = PojoQuery.build(BedRoom.class).toStatement().getSql();
-		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(BedRoom.class));
-		assertEquals(norm(queryModelSql), norm(queryTreeSql));
-		RootNode queryTreeForType = AQTTransformer.buildQueryTreeForType(BedRoom.class);
-		System.out.println("AQT for BedRoom:\n" + RecordIndenter.indent(queryTreeForType.toString()));
-		String aqtSql = aqtToSql(queryTreeForType);
-		assertEquals(norm(queryModelSql), norm(aqtSql));
-	}
-	
-	@Test
-	public void testSuperClassOfLinked_QueryTree() {
-		String queryModelSql = PojoQuery.build(ApartmentWithSpecificProperties.class).toStatement().getSql();
-		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(ApartmentWithSpecificProperties.class));
-		assertEquals(norm(queryModelSql), norm(queryTreeSql));
-	}
-	
-	@Test
-	public void testDeeper_QueryTree() {
-		String queryModelSql = PojoQuery.build(Apartment.class).toStatement().getSql();
-		String queryTreeSql = queryTreeToSql(QueryTreeBuilder.from(Apartment.class));
-		assertEquals(norm(queryModelSql), norm(queryTreeSql));
-	}
 }

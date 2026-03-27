@@ -54,13 +54,13 @@ public class TestJoinsAndAliases {
 		assertEquals(
 			norm("""
 				SELECT
-				 `book`.`id` AS `book.id`,
-				 `articles`.`id` AS `articles.id`,
-				 `articles`.`title` AS `articles.title`,
-				 `articles.authors`.`name` AS `articles.authors.name`
+				`book`.`id` AS `book.id`,
+				`articles`.`id` AS `articles.id`,
+				`articles`.`title` AS `articles.title`,
+				`articles.authors`.`name` AS `articles.authors.name`
 				FROM `book` AS `book`
-				 LEFT JOIN `article` AS `articles` ON `book`.`id` = `articles`.`book_id`
-				 LEFT JOIN `person` AS `articles.authors` ON `articles`.`authorName` = `articles.authors`.`name`
+				LEFT JOIN `article` AS `articles` ON `articles`.`book_id` = `book`.`id`
+				LEFT JOIN `person` AS `articles.authors` ON `articles`.`authorName` = `articles.authors`.`name`
 				"""), 
 			norm(PojoQuery.build(Book.class).getQuery().toStatement().getSql()));
 	}

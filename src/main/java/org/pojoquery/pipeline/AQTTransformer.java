@@ -1,5 +1,7 @@
 package org.pojoquery.pipeline;
 
+import static org.pojoquery.util.Strings.isNullOrEmpty;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -11,6 +13,7 @@ import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.Id;
+import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.internal.TableMapping;
@@ -21,6 +24,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.EmptyFieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.EmptyFieldNodeImpl;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityReference;
+import org.pojoquery.pipeline.AbstractQueryTree.FieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ForeignKeyInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.HasJoinTableJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.Join;
@@ -207,7 +211,7 @@ public class AQTTransformer {
 								emptyFieldNode.field().getName());
 						TableInfo tableInfo = determinTableInfo(componentType);
 
-						FieldModel idField = PojoMetadata.determineIdField(componentType);
+						FieldModel idField = PojoMetadata.determineIdField(parentNode.type());
 						ForeignKeyInfo join = ForeignKeyInfo.fkInChild(parentNode.tableInfo(), parentNode.alias(),
 								tableInfo, alias, idField);
 						return EntityCollection.fromEmptyFieldNode(emptyFieldNode, alias, componentType, tableInfo,
@@ -312,6 +316,40 @@ public class AQTTransformer {
 							parentNode instanceof Embedding emb ? emb.sourceAlias() : parentNode.alias());
 						return scalar.withExpression(SqlExpression.sql(expression));
 					});
+		}
+
+		public static QueryNode applyCustomForeignKeyColumnNames(QueryNode node) {
+			return transformChildren(node,
+					child -> child instanceof JoinMany join && join.join().fkColumnName() == null &&
+						!isNullOrEmpty(join.field().getAnnotationAttributeValue(Link.class, "foreignlinkfield", String.class)),
+					(TableNode parentNode, QueryNode child) -> {
+						JoinMany join = (JoinMany) child;
+						String fkColumnName = join.field().getAnnotationAttributeValue(Link.class, "foreignlinkfield", String.class);
+						return join.withJoin(join.join().withFkColumnName(fkColumnName));
+					});
+		}
+
+		public static QueryNode applyCustomJoinConditions(QueryNode node) {
+			return transformChildren(node,
+				child -> child instanceof FieldNode &&
+					child instanceof Join join && join.join().joinCondition() == null,
+				(TableNode parentNode, QueryNode child) -> {
+					Join join = (Join) child;
+					String condition = ((FieldNode)child).field().getAnnotationAttributeValue(JoinCondition.class, "value", String.class);
+					if (!isNullOrEmpty(condition)) {
+						if (parentNode instanceof RootNode) {
+							// If we're not at the root, we need to prefix all
+							// aliases with the parent alias.
+							condition = ExpressionResolver.resolve(condition, join.parentAlias());
+						} else {
+							condition = ExpressionResolver.resolveAndPrefix(condition, join.parentAlias());
+						}
+						return join.withJoin(join.join().withJoinCondition(SqlExpression.sql(condition)));
+					} else {
+						return child;
+					}
+				});
+
 		}
 
 		public static QueryNode applyCustomColumnNames(QueryNode node) {
@@ -456,6 +494,10 @@ public class AQTTransformer {
 		public static QueryNode addDefaultValueTransformers(QueryNode node) {
 			return Optional.of(node)
 			.map(n -> transformChildren(n,
+					child -> child instanceof EntityCollection scalar && scalar.valueMapper() == null,
+					(TableNode parentNode, EntityCollection scalar) -> scalar.withValueMapper(
+							DefaultValueMappers.createMapper(scalar.type()))))
+			.map(n -> transformChildren(n,
 					child -> child instanceof ValueCollection scalar && scalar.valueMapper() == null,
 					(TableNode parentNode, ValueCollection scalar) -> scalar.withValueMapper(
 							DefaultValueMappers.createMapper(scalar.componentType()))))
@@ -545,6 +587,8 @@ public class AQTTransformer {
 					.map(transformNodesRecursively(Transformers::addSubClassTableNodes))
 					.map(transformNodesRecursively(Transformers::addIdFields))
 					.map(transformNodesRecursively(Transformers::addScalarValues))
+					.map(transformNodesRecursively(Transformers::applyCustomForeignKeyColumnNames))
+					.map(transformNodesRecursively(Transformers::applyCustomJoinConditions))
 					.map(transformNodesRecursively(Transformers::applyCustomColumnNames))
 					.map(transformNodesRecursively(Transformers::applyCustomSelectExpressions))
 					.map(transformNodesRecursively(Transformers::applyDefaultIdFieldNames))
