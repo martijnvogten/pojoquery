@@ -127,13 +127,13 @@ public class TestCollections {
 		assertEquals(
 			TestUtils.norm("""
 				SELECT
-				 `user`.`id` AS `user.id`,
-				 `tasks`.`id` AS `tasks.id`,
-				 `tasks`.`title` AS `tasks.title`,
-				 `roles`.`element` AS `roles.value`
+				`user`.`id` AS `user.id`,
+				`roles`.`element` AS `roles.value`,
+				`tasks`.`id` AS `tasks.id`,
+				`tasks`.`title` AS `tasks.title`
 				FROM `user` AS `user`
-				 LEFT JOIN `task` AS `tasks` ON `user`.`id` = `tasks`.`user_id`
-				 LEFT JOIN `user_roles` AS `roles` ON `user`.`id` = `roles`.`user_id`
+				LEFT JOIN `user_roles` AS `roles` ON `roles`.`user_id` = `user`.`id`
+				LEFT JOIN `task` AS `tasks` ON `tasks`.`user_id` = `user`.`id`
 				"""), 
 			TestUtils.norm(pq.toSql()));
 		

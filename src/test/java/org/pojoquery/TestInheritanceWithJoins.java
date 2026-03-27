@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.pojoquery.TestUtils.norm;
 
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
@@ -100,7 +101,7 @@ public class TestInheritanceWithJoins {
 	}
 	
 	@Test
-	public void testSubClasses() {
+	public void testSubClasses() throws SQLException {
 		RootNode b = PojoQuery.buildAQT(Room.class);
 		String sql = toSql(b);
 		
@@ -127,7 +128,7 @@ public class TestInheritanceWithJoins {
 				     1L,        100.0,       1L,        "Unity Street 1", 1L,                1,                           null,         null,
 				     2L,        40.0,        1L,        "Unity Street 1", null,              null,                        2L,           true);
 		
-		List<Room> rooms = AQTRowProcessor.processRows(DbContext.getDefault(), b, result);
+		List<Room> rooms = AQTRowProcessor.processRows(b, result);
 		System.out.println("tree: " + RecordIndenter.indent(b.toString()));
 		assertTrue(rooms.get(0) instanceof BedRoom);
 		assertEquals(2, rooms.size());
@@ -144,7 +145,7 @@ public class TestInheritanceWithJoins {
 	}
 
 	@Test
-	public void testSuperclasses() {
+	public void testSuperclasses() throws SQLException {
 		RootNode t = PojoQuery.buildAQT(BedRoom.class);
 		String sql = toSql(t);
 		System.out.println(sql);
@@ -166,7 +167,7 @@ public class TestInheritanceWithJoins {
 				"bedroom.room.id", "bedroom.room.area", "bedroom.numberOfBeds", "bedroom.room.house.id", "bedroom.room.house.address" }, 
 			     1L,           100.0,          1                    ,  1L       , "Unity Street 1");
 		
-		List<BedRoom> list = AQTRowProcessor.processRows(DbContext.getDefault(), t, result);
+		List<BedRoom> list = AQTRowProcessor.processRows(t, result);
 		Assertions.assertEquals(1, list.size());
 		BedRoom bedroom = list.get(0);
 		Assertions.assertTrue(bedroom instanceof BedRoom);

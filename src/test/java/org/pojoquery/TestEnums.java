@@ -42,10 +42,10 @@ public class TestEnums {
 			norm("""
 				SELECT
 				`user`.`id` AS `user.id`,
-				`user`.`state` AS `user.state`,
-				`roles`.`element` AS `roles.value`
+				`roles`.`element` AS `roles.value`,
+				`user`.`state` AS `user.state`
 				FROM `user` AS `user`
-				LEFT JOIN `user_roles` AS `roles` ON `user`.`id` = `roles`.`user_id`
+				LEFT JOIN `user_roles` AS `roles` ON `roles`.`user_id` = `user`.`id`
 				"""), 
 			norm(PojoQuery.build(User.class).toStatement().getSql()));
 		

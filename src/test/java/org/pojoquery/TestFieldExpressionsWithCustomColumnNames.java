@@ -181,7 +181,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 					 "articles.author"."last_name" AS "articles.author.lastName",
 					 CONCAT("articles.author"."first_name", ' ', "articles.author"."last_name") AS "articles.author.fullName"
 					FROM "book" AS "book"
-					 LEFT JOIN "article" AS "articles" ON "book"."book_id" = "articles"."book_id"
+					 LEFT JOIN "article" AS "articles" ON "articles"."book_id" = "book"."book_id"
 					 LEFT JOIN "person" AS "articles.author" ON "articles"."author_id" = "articles.author"."person_id"
 					WHERE CONCAT("articles.author"."first_name", ' ', "articles.author"."last_name") = ?
 					"""), 
@@ -249,7 +249,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 					 "articles.author"."last_name" AS "articles.author.lastName",
 					 CONCAT("articles.author"."first_name", ' ', "articles.author"."last_name") AS "articles.author.fullName"
 					FROM "book" AS "book"
-					 LEFT JOIN "article" AS "articles" ON "book"."book_id" = "articles"."book_id"
+					 LEFT JOIN "article" AS "articles" ON "articles"."book_id" = "book"."book_id"
 					 LEFT JOIN "person" AS "articles.author" ON "articles"."author_id" = "articles.author"."person_id"
 					ORDER BY CONCAT("articles.author"."first_name", ' ', "articles.author"."last_name") DESC
 					"""), 

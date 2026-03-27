@@ -1,14 +1,18 @@
 package org.pojoquery.pipeline;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
-import org.pojoquery.DbContext;
+import org.pojoquery.pipeline.AbstractQueryTree.Column;
+import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
+import org.pojoquery.pipeline.AbstractQueryTree.EntityNode;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityReference;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
@@ -22,12 +26,10 @@ import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionFieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
-import org.pojoquery.util.FieldHelper;
 
 
 public class AQTRowProcessor<R> {
 
-	private final DbContext dbContext;
 	private final RootNode tree;
 	private final Consumer<R> entityCallback;
 	private R rootEntity = null;
@@ -36,20 +38,19 @@ public class AQTRowProcessor<R> {
 	record EntityKey(String tableAlias, Object pkValue) {
 	}
 
-	public AQTRowProcessor(DbContext dbContext, RootNode tree, Consumer<R> entityCallback) {
-		this.dbContext = dbContext;
+	public AQTRowProcessor(RootNode tree, Consumer<R> entityCallback) {
 		this.tree = tree;
 		this.entityCallback = entityCallback;
 	}
 	
-	public void processRow(Map<String,Object> row) {
+	public void processRow(Map<String,Object> row) throws SQLException{
 		processRowRecursive(tree, row, new HashMap<>());
 	}
 
 	// Do a leave-first traversal of the query tree, constructing entities as we go
 	// and setting their fields based on the row data. 
 	@SuppressWarnings("unchecked")
-	private void processRowRecursive(TableNode tableNode, Map<String, Object> row, Map<String, Object> entitiesOnThisRow) {
+	private void processRowRecursive(TableNode tableNode, Map<String, Object> row, Map<String, Object> entitiesOnThisRow) throws SQLException {
 		for (AbstractQueryTree.QueryNode child : tableNode.children()) {
 			if (child instanceof TableNode childTableNode && !(child instanceof TPSSuperClassNode)) {
 				processRowRecursive(childTableNode, row, entitiesOnThisRow);
@@ -81,20 +82,36 @@ public class AQTRowProcessor<R> {
 		}
 
 		for (QueryNode child : tableNode.children()) {
-			if (child instanceof EntityReference ref) {
+			if (child instanceof EntityNode ref && (child instanceof EmbeddedEntity || child instanceof EntityReference)) {
 				Object referencedEntity = entitiesOnThisRow.get(ref.alias());
 				if (referencedEntity != null) {
 					setFieldValue(entity, ref.field(), referencedEntity);
 				}
 			} else if (child instanceof EntityCollection entityCollection) {
 				Object value = entitiesOnThisRow.get(entityCollection.alias());
-				FieldHelper.putValueIntoField(entity, ((ReflectionFieldModel)entityCollection.field()).getReflectionField(), value);
+				if (value != null) {
+					Field targetField = getField(entityCollection.field());
+					Object mappedValue = entityCollection.valueMapper().mapValue(value);
+					setFieldValue(entity, entityCollection.field(), DefaultValueMappers.addValueToCollection(
+						targetField.getType(), 
+						getFieldValue(entity, entityCollection.field()), 
+						getClass(entityCollection.type()),
+						mappedValue));
+				}
 			} else if (child instanceof ValueCollection valueCollection) {
 				Object value = row.get(valueCollection.alias() + ".value");
-				FieldHelper.putValueIntoField(entity, ((ReflectionFieldModel)valueCollection.field()).getReflectionField(), value);
-			} else if (child instanceof ScalarNode scalar) {
+				if (value != null) {
+					Field targetField = getField(valueCollection.field());
+					Object mappedValue = valueCollection.valueMapper().mapValue(value);
+					setFieldValue(entity, valueCollection.field(), DefaultValueMappers.addValueToCollection(
+						targetField.getType(), 
+						getFieldValue(entity, valueCollection.field()), 
+						getClass(valueCollection.componentType()),
+						mappedValue));
+				}
+			} else if (child instanceof Column scalar) {
 				Object value = row.get(tableNode.alias() + "." + scalar.field().getName());
-				setFieldValue(entity, scalar.field(), value);
+				setFieldValue(entity, scalar.field(), scalar.valueMapper().mapValue(value));
 			}
 		}
 
@@ -134,6 +151,16 @@ public class AQTRowProcessor<R> {
 		}
 	}
 
+	private Object getFieldValue(Object entity, FieldModel fieldModel) {
+		try {
+			java.lang.reflect.Field field = ((ReflectionFieldModel)fieldModel).getReflectionField();
+			field.setAccessible(true);
+			return field.get(entity);
+		} catch (IllegalAccessException e) {
+			throw new RuntimeException("Failed to get field value for field " + fieldModel.getName(), e);
+		}
+	}
+
 	private Object getPrimaryKeyValue(TableNode node, Map<String, Object> row) {
 		List<Object> pkValues = new ArrayList<>();
 		for (QueryNode child : node.children()) {
@@ -167,9 +194,17 @@ public class AQTRowProcessor<R> {
 		}
 	}
 
-	public static <R> List<R> processRows(DbContext dbContext, RootNode tree, List<Map<String,Object>> rows) {
+	public Class<?> getClass(TypeModel type) {
+		return ((ReflectionTypeModel)type).getReflectionClass();
+	}
+
+	public Field getField(FieldModel fieldModel) {
+		return ((ReflectionFieldModel)fieldModel).getReflectionField();
+	}
+
+	public static <R> List<R> processRows(RootNode tree, List<Map<String,Object>> rows) throws SQLException{
 		List<R> result = new ArrayList<>();
-		AQTRowProcessor<R> processor = new AQTRowProcessor<>(dbContext, tree, result::add);
+		AQTRowProcessor<R> processor = new AQTRowProcessor<>(tree, result::add);
 		for (Map<String, Object> row : rows) {
 			processor.processRow(row);
 		}

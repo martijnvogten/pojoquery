@@ -9,9 +9,12 @@ import java.util.function.Predicate;
 
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Embedded;
+import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
+import org.pojoquery.annotations.Select;
 import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.AbstractQueryTree.Column;
 import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
 import org.pojoquery.pipeline.AbstractQueryTree.Embedding;
 import org.pojoquery.pipeline.AbstractQueryTree.EmptyFieldNode;
@@ -36,15 +39,25 @@ import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.transforms.AliasNaming;
+import org.pojoquery.pipeline.querytree.transforms.ExpressionResolver;
 import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 import org.pojoquery.util.Strings;
+import org.pojoquery.util.Types;
 
 public class AQTTransformer {
 
 	public static class Transformers {
+
+		public static QueryNode addDeclaredFieldsToEmbeddings(QueryNode node) {
+			return (node instanceof Embedding tableNode && tableNode.children() == null)
+					? tableNode.withChildren(PojoMetadata.collectFieldsOfClass(tableNode.type()).stream()
+							.map(fieldModel -> new EmptyFieldNodeImpl(fieldModel))
+							.toList())
+					: node;
+		}
 
 		public static QueryNode addDeclaredFields(QueryNode node) {
 			return (node instanceof TableNode tableNode && tableNode.children() == null)
@@ -60,7 +73,7 @@ public class AQTTransformer {
 						(subClassNode.children() != null && subClassNode.children().stream().noneMatch(PrimaryKey.class::isInstance))) {
 				FieldModel idField = PojoMetadata.determineIdField(subClassNode.type());
 				List<QueryNode> newChildren = subClassNode.children() == null ? new ArrayList<>() : new ArrayList<>(subClassNode.children());
-				newChildren.add(0, new PrimaryKey(idField, null, null, null));
+				newChildren.add(0, PrimaryKey.fromField(idField));
 				return subClassNode.withChildren(newChildren);
 			} else {
 				return node;
@@ -128,7 +141,7 @@ public class AQTTransformer {
 		public static QueryNode addEmbeddedEntities(QueryNode node) {
 			return transformChildren(node,
 					child -> child instanceof EmptyFieldNode emptyFieldNode
-							&& emptyFieldNode.field().getAnnotation(Embedded.class).isPresent(),
+							&& emptyFieldNode.field().hasAnnotation(Embedded.class),
 					(TableNode parentNode, EmptyFieldNode emptyFieldNode) -> {
 						TypeModel embeddedType = emptyFieldNode.field().getType();
 						String alias = AliasNaming.childAlias(
@@ -136,8 +149,24 @@ public class AQTTransformer {
 								parentNode.alias(),
 								emptyFieldNode.field().getName());
 
+						String prefixAnnotationValue = emptyFieldNode.field().getAnnotationAttributeValue(Embedded.class, "prefix", String.class);
+						if (Embedded.DEFAULT.equals(prefixAnnotationValue)) {
+							prefixAnnotationValue = emptyFieldNode.field().getName() + "_";
+						}
+
+						if (parentNode instanceof EmbeddedEntity parentEmbedding) {
+							// If the parent is also an embedded entity, we need to combine the prefixes
+							String parentPrefix = parentEmbedding.fieldPrefix() != null ? parentEmbedding.fieldPrefix() : "";
+							prefixAnnotationValue = parentPrefix + prefixAnnotationValue;
+						}
+
 						return EmbeddedEntity.fromEmptyFieldNode(
-							emptyFieldNode, alias, embeddedType, (parentNode instanceof Embedding emb ? emb.sourceAlias() : parentNode.alias()), parentNode.tableInfo());
+							emptyFieldNode, 
+							alias, 
+							embeddedType, 
+							(parentNode instanceof Embedding emb ? emb.sourceAlias() : parentNode.alias()), 
+							parentNode.tableInfo(), 
+							prefixAnnotationValue);
 					});
 		}
 
@@ -161,7 +190,8 @@ public class AQTTransformer {
 								determinTableInfo(referencedType),
 								emptyFieldNode.field(),
 								parentNode.alias(),
-								ForeignKeyInfo.fkInParent(parentNode.tableInfo(), parentNode.alias(),
+								ForeignKeyInfo.fkInParent(parentNode.tableInfo(), 
+										parentNode instanceof EmbeddedEntity emb ? emb.sourceAlias() : parentNode.alias(),
 										determinTableInfo(referencedType), alias, emptyFieldNode.field(),
 										childIdField));
 					});
@@ -196,7 +226,7 @@ public class AQTTransformer {
 					(TableNode parentNode, EmptyFieldNode emptyFieldNode) -> {
 						FieldModel field = emptyFieldNode.field();
 
-						TypeModel componentType = field.getType().getTypeArgument();
+						TypeModel componentType = Types.getCollectionComponentType(field);
 						
 						String joinTableName = field.getAnnotationAttributeValue(Link.class, "linktable", String.class);
 						String joinTableSchema = field.getAnnotationAttributeValue(Link.class, "linkschema", String.class);
@@ -257,7 +287,7 @@ public class AQTTransformer {
 							&& emptyFieldNode.field().getAnnotation(Id.class).isPresent(),
 					(TableNode parentNode, EmptyFieldNode emptyFieldNode) -> {
 						FieldModel idField = emptyFieldNode.field();
-						return new PrimaryKey(idField, idField.getName(), null, null);
+						return PrimaryKey.fromField(idField);
 					});
 		}
 
@@ -265,10 +295,34 @@ public class AQTTransformer {
 			return node instanceof TableNode parentNode && parentNode.children() != null
 					? parentNode.withChildren(parentNode.children().stream()
 							.map(child -> (child instanceof EmptyFieldNode emptyFieldNode)
-									? new ScalarValue(emptyFieldNode.field(), emptyFieldNode.field().getName(), null)
+									? ScalarValue.ofEmptyFieldNode(emptyFieldNode)
 									: child)
 							.toList())
 					: node;
+		}
+
+		public static QueryNode applyCustomSelectExpressions(QueryNode node) {
+			return transformChildren(node,
+					child -> child instanceof ScalarValue scalar && 
+						scalar.field().hasAnnotation(Select.class) &&
+						scalar.expression() == null,
+					(TableNode parentNode, ScalarValue scalar) -> {
+						String expression = scalar.field().getAnnotationAttributeValue(Select.class, "value", String.class);
+						expression = ExpressionResolver.resolve(expression, 
+							parentNode instanceof Embedding emb ? emb.sourceAlias() : parentNode.alias());
+						return scalar.withExpression(SqlExpression.sql(expression));
+					});
+		}
+
+		public static QueryNode applyCustomColumnNames(QueryNode node) {
+			return transformChildren(node,
+					child -> child instanceof Column column && 
+						column.field().hasAnnotation(FieldName.class) &&
+						column.columnName() == null,
+					(TableNode parentNode, Column column) -> {
+						String columnName = column.field().getAnnotationAttributeValue(FieldName.class, "value", String.class);
+						return column.withColumnName(columnName);
+					});
 		}
 
 		public static QueryNode applyDefaultIdFieldNames(QueryNode node) {
@@ -292,31 +346,35 @@ public class AQTTransformer {
 			return node;
 		}
 
-		public static QueryNode applyDefaultForeignKeyColumnNames(QueryNode node) {
-			if (node instanceof HasJoinTableJoin jtj && jtj.join().childKey().fkColumnName() == null
-					&& jtj.join().parentKey().fkColumnName() == null) {
-				// Default foreign key column names for join tables are [target tablename]_id
-				JoinTableJoin join = jtj.join();
-				String parentFkColumn = join.parentKey().targetTable().tableName() + "_id";
-				String childFkColumn = join.childKey().targetTable().tableName() + "_id";
-				return jtj.withJoinTableJoin(join.withJoinForeignKeyInfo(
-						join.parentKey().withFkColumnName(parentFkColumn),
-						join.childKey().withFkColumnName(childFkColumn)));
-			} else if (node instanceof JoinOne join && join.join().fkColumnName() == null) {
-				ForeignKeyInfo fk = join.join();
-				String fkColumnName = fk.foreignKeyField().getName() + "_id";
-				return join.withJoin(fk.withFkColumnName(fkColumnName));
-			} else if (node instanceof JoinMany join && join.join().fkColumnName() == null) {
-				ForeignKeyInfo fk = join.join();
-				String fkColumnName = fk.targetTable().tableName() + "_id";
-				return join.withJoin(fk.withFkColumnName(fkColumnName));
-			} else if (node instanceof Join join && (node instanceof TPSSubClassNode || node instanceof TPSSuperClassNode) && join.join().fkColumnName() == null) {
-				ForeignKeyInfo fk = join.join();
-				String fkColumnName = fk.idField().getName();
-				return join.withJoin(fk.withFkColumnName(fkColumnName));
-			}
-
-			return node;
+		public static QueryNode applyDefaultForeignKeyColumnNames(QueryNode n) {
+			return transformChildren(n,
+				child -> true,
+				(TableNode parentNode, QueryNode node) -> {
+					if (node instanceof HasJoinTableJoin jtj && jtj.join().childKey().fkColumnName() == null
+							&& jtj.join().parentKey().fkColumnName() == null) {
+						// Default foreign key column names for join tables are [target tablename]_id
+						JoinTableJoin join = jtj.join();
+						String parentFkColumn = join.parentKey().targetTable().tableName() + "_id";
+						String childFkColumn = join.childKey().targetTable().tableName() + "_id";
+						return jtj.withJoinTableJoin(join.withJoinForeignKeyInfo(
+								join.parentKey().withFkColumnName(parentFkColumn),
+								join.childKey().withFkColumnName(childFkColumn)));
+					} else if (node instanceof JoinOne join && join.join().fkColumnName() == null) {
+						ForeignKeyInfo fk = join.join();
+						String prefix = parentNode instanceof EmbeddedEntity emb ? emb.fieldPrefix() : "";
+						String fkColumnName = prefix + fk.foreignKeyField().getName() + "_id";
+						return join.withJoin(fk.withFkColumnName(fkColumnName));
+					} else if (node instanceof JoinMany join && join.join().fkColumnName() == null) {
+						ForeignKeyInfo fk = join.join();
+						String fkColumnName = fk.targetTable().tableName() + "_id";
+						return join.withJoin(fk.withFkColumnName(fkColumnName));
+					} else if (node instanceof Join join && (node instanceof TPSSubClassNode || node instanceof TPSSuperClassNode) && join.join().fkColumnName() == null) {
+						ForeignKeyInfo fk = join.join();
+						String fkColumnName = fk.idField().getName();
+						return join.withJoin(fk.withFkColumnName(fkColumnName));
+					}
+					return node;
+				});
 		}
 
 		public static QueryNode applyDefaultValueCollectionExpressions(QueryNode node) {
@@ -326,18 +384,37 @@ public class AQTTransformer {
 							SqlExpression.sql("{" + (parentNode instanceof Embedding emb ? emb.sourceAlias() : vc.alias()) + "." + vc.fetchColumn() + "}")));
 		}
 
+		public static QueryNode applyEmbeddedFieldsColumnPrefix(QueryNode node) {
+			return node instanceof EmbeddedEntity emb && emb.children() != null ? emb.withChildren(
+					emb.children().stream().map(child -> {
+						if (child instanceof Column column && column.columnName() == null) {
+							String prefix = emb.fieldPrefix() != null ? emb.fieldPrefix() : "";
+							return column.withColumnName(prefix + column.field().getName());
+						} else {
+							return child;
+						}
+					}).toList())
+					: node;
+		}
+
+		public static QueryNode applyDefaultColumnNames(QueryNode node) {
+			return transformChildren(node,
+					child -> child instanceof Column scalar && scalar.columnName() == null,
+					(TableNode parentNode, Column scalar) -> scalar.withColumnName(scalar.field().getName()));
+		}
+
 		public static QueryNode applyDefaultScalarExpressions(QueryNode node) {
 			return transformChildren(node,
 					child -> child instanceof ScalarValue scalar && scalar.expression() == null,
 					(TableNode parentNode, ScalarValue scalar) -> scalar.withExpression(
-							SqlExpression.sql("{" + (parentNode instanceof Embedding emb ? emb.sourceAlias() : parentNode.alias()) + "." + scalar.field().getName() + "}")));
+							SqlExpression.sql("{" + (parentNode instanceof Embedding emb ? emb.sourceAlias() : parentNode.alias()) + "." + scalar.columnName() + "}")));
 		}
 
 		public static QueryNode applyDefaultPrimaryKeyExpressions(QueryNode node) {
 			return transformChildren(node,
 					child -> child instanceof PrimaryKey pk && pk.expression() == null,
 					(TableNode parentNode, PrimaryKey pk) -> pk.withExpression(
-							SqlExpression.sql("{" + (parentNode instanceof Embedding emb ? emb.sourceAlias() : parentNode.alias()) + "." + pk.field().getName() + "}")));
+							SqlExpression.sql("{" + (parentNode instanceof Embedding emb ? emb.sourceAlias() : parentNode.alias()) + "." + pk.columnName() + "}")));
 		}
 
 		public static QueryNode applyDefaultJoinConditions(QueryNode node) {
@@ -374,6 +451,19 @@ public class AQTTransformer {
 					(TableNode parentNode, PrimaryKey pk) -> parentNode.children().stream()
 							.filter(c -> c instanceof PrimaryKey).count() == 1 ? pk.setAutoGenerated(true)
 									: pk.setAutoGenerated(false));
+		}
+
+		public static QueryNode addDefaultValueTransformers(QueryNode node) {
+			return Optional.of(node)
+			.map(n -> transformChildren(n,
+					child -> child instanceof ValueCollection scalar && scalar.valueMapper() == null,
+					(TableNode parentNode, ValueCollection scalar) -> scalar.withValueMapper(
+							DefaultValueMappers.createMapper(scalar.componentType()))))
+			.map(n -> transformChildren(n,
+					child -> child instanceof Column scalar && scalar.valueMapper() == null,
+					(TableNode parentNode, Column scalar) -> scalar.withValueMapper(
+							DefaultValueMappers.forField(scalar.field()))))
+			.orElse(node);
 		}
 	}
 
@@ -443,6 +533,7 @@ public class AQTTransformer {
 		do {
 			oldTree = newTree;
 			newTree = Optional.<QueryNode>ofNullable(oldTree)
+					.map(transformNodesRecursively(Transformers::addDeclaredFieldsToEmbeddings))
 					.map(transformNodesRecursively(Transformers::addDeclaredFields))
 					.map(transformNodesRecursively(Transformers::addIdFieldToSubClassTableNodes))
 					.map(transformNodesRecursively(Transformers::addSuperClassTableNodes))
@@ -454,13 +545,18 @@ public class AQTTransformer {
 					.map(transformNodesRecursively(Transformers::addSubClassTableNodes))
 					.map(transformNodesRecursively(Transformers::addIdFields))
 					.map(transformNodesRecursively(Transformers::addScalarValues))
+					.map(transformNodesRecursively(Transformers::applyCustomColumnNames))
+					.map(transformNodesRecursively(Transformers::applyCustomSelectExpressions))
 					.map(transformNodesRecursively(Transformers::applyDefaultIdFieldNames))
-					.map(transformNodesRecursively(Transformers::applyDefaultPrimaryKeyExpressions))
 					.map(transformNodesRecursively(Transformers::applyDefaultForeignKeyColumnNames))
 					.map(transformNodesRecursively(Transformers::applyDefaultJoinConditions))
 					.map(transformNodesRecursively(Transformers::applyDefaultValueCollectionExpressions))
+					.map(transformNodesRecursively(Transformers::applyEmbeddedFieldsColumnPrefix))
+					.map(transformNodesRecursively(Transformers::applyDefaultColumnNames))
+					.map(transformNodesRecursively(Transformers::applyDefaultPrimaryKeyExpressions))
 					.map(transformNodesRecursively(Transformers::applyDefaultScalarExpressions))
 					.map(transformNodesRecursively(Transformers::makeSingleIdFieldsAutoIncrement))
+					.map(transformNodesRecursively(Transformers::addDefaultValueTransformers))
 					.orElse(null);
 		} while (!oldTree.equals(newTree));
 

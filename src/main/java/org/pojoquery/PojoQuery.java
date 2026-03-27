@@ -6,6 +6,7 @@ import static org.pojoquery.util.Strings.implode;
 
 import java.lang.reflect.Field;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -385,9 +386,13 @@ public class PojoQuery<T> {
 	 * @return the list of results
 	 */
 	public List<T> execute(DataSource db) {
-		SqlExpression stmt = query.toStatement();
-		LOG.debug("Executing query: {}", stmt.getSql());
-		return AQTRowProcessor.processRows(dbContext, tree, DB.queryRows(db, stmt));
+		try {
+			SqlExpression stmt = query.toStatement();
+			LOG.debug("Executing query: {}", stmt.getSql());
+			return AQTRowProcessor.processRows(tree, DB.queryRows(db, stmt));
+		} catch (SQLException e) {
+			throw new RuntimeException("Failed to execute query", e);
+		}
 	}
 	
 	/**
@@ -397,9 +402,13 @@ public class PojoQuery<T> {
 	* @return the list of results
 	*/
 	public List<T> execute(Connection connection) {
-		SqlExpression stmt = query.toStatement();
-		LOG.debug("Executing query: {}", stmt.getSql());
-		return AQTRowProcessor.processRows(dbContext, tree, DB.queryRows(connection, stmt));
+		try {
+			SqlExpression stmt = query.toStatement();
+			LOG.debug("Executing query: {}", stmt.getSql());
+			return AQTRowProcessor.processRows(tree, DB.queryRows(connection, stmt));
+		} catch (SQLException e) {
+			throw new RuntimeException("Failed to execute query", e);
+		}
 	}
 
 
@@ -458,8 +467,14 @@ public class PojoQuery<T> {
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	private void executeStreamingImpl(Consumer<T> consumer, Consumer<Consumer<Map<String, Object>>> queryExecutor) {
 		ensureOrderByPrimaryId(this.tree);
-		AQTRowProcessor handler = new AQTRowProcessor(dbContext, tree, consumer);
-		queryExecutor.accept(row -> handler.processRow(row));
+		AQTRowProcessor handler = new AQTRowProcessor(tree, consumer);
+		queryExecutor.accept(row -> { 
+			try {
+				handler.processRow(row);
+			} catch (SQLException e) {
+				throw new RuntimeException("Failed to process row", e);
+			}
+		});
 		handler.flush();
 	}
 
@@ -711,7 +726,11 @@ public class PojoQuery<T> {
 	 * @return the list of mapped results
 	 */
 	public List<T> processRows(List<Map<String, Object>> rows) {
-		return AQTRowProcessor.processRows(dbContext, tree, rows);
+		try {
+			return AQTRowProcessor.processRows(tree, rows);
+		} catch (SQLException e) {
+			throw new RuntimeException("Failed to process rows", e);
+		}
 	}
 
 	/**

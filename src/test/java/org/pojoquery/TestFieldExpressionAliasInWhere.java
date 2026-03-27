@@ -83,7 +83,7 @@ public class TestFieldExpressionAliasInWhere {
 					 `articles.author`.`lastName` AS `articles.author.lastName`,
 					 CONCAT(`articles.author`.`firstName`, ' ', `articles.author`.`lastName`) AS `articles.author.fullName`
 					FROM `book` AS `book`
-					 LEFT JOIN `article` AS `articles` ON `book`.`id` = `articles`.`book_id`
+					 LEFT JOIN `article` AS `articles` ON `articles`.`book_id` = `book`.`id`
 					 LEFT JOIN `person` AS `articles.author` ON `articles`.`author_id` = `articles.author`.`id`
 					WHERE CONCAT(`articles.author`.`firstName`, ' ', `articles.author`.`lastName`) = ?
 					"""), 
@@ -151,7 +151,7 @@ public class TestFieldExpressionAliasInWhere {
 					 `articles.author`.`lastName` AS `articles.author.lastName`,
 					 CONCAT(`articles.author`.`firstName`, ' ', `articles.author`.`lastName`) AS `articles.author.fullName`
 					FROM `book` AS `book`
-					 LEFT JOIN `article` AS `articles` ON `book`.`id` = `articles`.`book_id`
+					 LEFT JOIN `article` AS `articles` ON `articles`.`book_id` = `book`.`id`
 					 LEFT JOIN `person` AS `articles.author` ON `articles`.`author_id` = `articles.author`.`id`
 					ORDER BY CONCAT(`articles.author`.`firstName`, ' ', `articles.author`.`lastName`) DESC
 					"""), 

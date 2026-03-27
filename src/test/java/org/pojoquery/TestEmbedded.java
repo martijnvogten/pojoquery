@@ -76,6 +76,9 @@ public class TestEmbedded {
 	
 	@Test
 	public void testBasics() {
+		RootNode tree = AQTTransformer.buildQueryTreeForType(User.class);
+		System.out.println("Tree: " + RecordIndenter.indent(tree.toString()));
+
 		assertEquals(
 				norm("""
 					SELECT
