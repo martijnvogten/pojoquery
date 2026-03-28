@@ -1,14 +1,24 @@
 package org.pojoquery.fluent;
 
 import java.sql.Connection;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.Test;
+import org.pojoquery.DbContext;
 import org.pojoquery.SqlExpression;
+import org.pojoquery.annotations.Id;
+import org.pojoquery.annotations.Table;
+import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
+import org.pojoquery.pipeline.DefaultSqlQuery;
 
 public class FluentConditionChainWithInterfaces {
 
+	@Table("book")
 	static class Book {
+		@Id
+		Long id;
 		public String title;
 	}
 
@@ -17,119 +27,210 @@ public class FluentConditionChainWithInterfaces {
 	 */
 	interface Terminator<S> {
 		public S and();
+
 		public S or();
+
+		public SqlExpression toSql();
 	}
 
 	/**
 	 * R: result type (Book)
 	 * T: terminator interface (this interface)
 	 */
-	interface QueryTerminator<R, S, T extends QueryTerminator<R, S, T>> {
+	interface QueryTerminator<R> {
 		public List<R> list(Connection c);
-		public QueryTerminator<R, S, T> addOrderBy(SqlExpression orderBy);
-		public QueryTerminator<R, S, T> addGroupBy(SqlExpression groupBy);
-		public QueryTerminator<R, S, T> setLimit(int limit);
+
+		public QueryTerminator<R> addOrderBy(String orderBy);
+
+		public QueryTerminator<R> addGroupBy(String groupBy);
+
+		public QueryTerminator<R> setLimit(int limit);
 	}
 
-	interface ConditionTerminator<R,S, T extends ConditionChainTerminator<R,S,T>> extends QueryTerminator<R, S, T>, Terminator<S>  {
+	interface ConditionTerminator<R, S, T extends ConditionChainTerminator<R, S, T>>
+			extends QueryTerminator<R>, Terminator<S> {
 	}
 
 	interface Operators<T> {
-		public T eq(String value);
+		public T eq(Object value);
 	}
 
-	class ConditionChainOperators<T> implements Operators<T> {
-		private String fieldName;
-		private T terminator;
-	
+	abstract static class ConditionChainOperators<T> implements Operators<T> {
+		private final String fieldName;
+		private final T terminator;
+
 		public ConditionChainOperators(String fieldName, T terminator) {
 			this.fieldName = fieldName;
 			this.terminator = terminator;
 		}
 
-		public T eq(String value) {
+		public T eq(Object value) {
+			appendExpression("{" + fieldName + "} = ?", value);
 			return terminator;
 		}
+
+		protected abstract void appendExpression(String sql, Object... parameters);
 	}
 
-	abstract class FluentQuery<R> {
+	abstract static class FluentQuery<R> {
+		DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
+		List<SqlExpression> staticConditionSql = new ArrayList<>();
+		List<SqlExpression> whereConditionSql = new ArrayList<>();
+		private final RootNode queryTree;
+
+		FluentQuery(RootNode aqt) {
+			this.queryTree = aqt;
+			AQTTransformer.toSql(aqt, query);
+		}
+
+		protected void appendExpression(String sql, Object... parameters) {
+			whereConditionSql.add(SqlExpression.sql(sql, parameters));
+			System.out.println("APPEND EXPRESSION: " + sql + " with parameters " + List.of(parameters));
+		}
+		
+		protected void appendStaticExpression(String sql, Object... parameters) {
+			staticConditionSql.add(SqlExpression.sql(sql, parameters));
+			System.out.println("APPEND STATIC EXPRESSION: " + sql + " with parameters " + List.of(parameters));
+		}
+
+		public void addOrderBy(String orderBy) {
+			query.addOrderBy(orderBy);
+		}
+
+		public void addGroupBy(String groupBy) {
+			query.addGroupBy(groupBy);
+		}
+
+		public void setLimit(int limit) {
+			query.setLimit(limit);
+		}
+
 		public List<R> list(Connection c) {
 			return List.of();
+		}
+
+		public SqlExpression getStaticConditionSql() {
+			SqlExpression result = SqlExpression.implode(" ", staticConditionSql);
+			staticConditionSql.clear();
+			return result;
+		}
+
+		public SqlExpression getSql() {
+			query.addWhere(SqlExpression.implode(" ", whereConditionSql));
+			whereConditionSql.clear();
+			return query.toStatement();
 		}
 	}
 
 	class BookQuery extends FluentQuery<Book> {
-		public StaticBookQueryConditionOperators title = new StaticBookQueryConditionOperators("title");
+
+		static RootNode aqt = AQTTransformer.buildQueryTreeForType(Book.class);
 		
-		private class BookQueryConditionStarter {
-			BookQueryConditionOperators title = new BookQueryConditionOperators("title", conditionTerminator);
-		}
-
-		private BookQueryConditionStarter starter = new BookQueryConditionStarter();
-
 		private final ConditionTerminator<Book, BookQueryConditionStarter, BookQueryConditionTerminator> conditionTerminator;
 		private final Terminator<BookQuery> staticTerminator;
+		private final BookQueryConditionStarter starter;
+		
+		{
+			conditionTerminator = new BookQueryConditionTerminator();
+			starter = new BookQueryConditionStarter();
+			staticTerminator = new StaticConditionChainTerminator<BookQuery>(BookQuery.this, BookQuery.this);
+			((BookQueryConditionTerminator)conditionTerminator).setStarter(starter);
+		}
+		
+		public StaticBookQueryConditionOperators id = new StaticBookQueryConditionOperators("id");
+		public StaticBookQueryConditionOperators title = new StaticBookQueryConditionOperators("title");
+
+		public class BookQueryConditionStarter {
+			public BookQueryConditionOperators id = new BookQueryConditionOperators("id", conditionTerminator);
+			public BookQueryConditionOperators title = new BookQueryConditionOperators("title", conditionTerminator);
+		}
 
 		BookQuery() {
-			this.conditionTerminator = new BookQueryConditionTerminator();
-			this.staticTerminator = new StaticConditionChainTerminator<BookQuery>(this);
+			super(aqt);
 		}
 
 		class StaticBookQueryConditionOperators extends ConditionChainOperators<Terminator<BookQuery>> {
 			public StaticBookQueryConditionOperators(String fieldName) {
 				super(fieldName, staticTerminator);
 			}
-		}
 
-		class BookQueryConditionOperators extends ConditionChainOperators<ConditionTerminator<Book, BookQueryConditionStarter, BookQueryConditionTerminator>> {
-			public BookQueryConditionOperators(String fieldName, ConditionTerminator<Book, BookQueryConditionStarter, BookQueryConditionTerminator> terminator) {
-				super(fieldName, terminator);
+			@Override
+			protected void appendExpression(String sql, Object... parameters) {
+				BookQuery.this.appendStaticExpression(sql, parameters);
 			}
 		}
 
-		class BookQueryConditionTerminator 
+		class BookQueryConditionOperators extends
+				ConditionChainOperators<ConditionTerminator<Book, BookQueryConditionStarter, BookQueryConditionTerminator>> {
+			public BookQueryConditionOperators(String fieldName,
+					ConditionTerminator<Book, BookQueryConditionStarter, BookQueryConditionTerminator> terminator) {
+				super(fieldName, terminator);
+			}
+
+			@Override
+			protected void appendExpression(String sql, Object... parameters) {
+				BookQuery.this.appendExpression(sql, parameters);
+			}
+		}
+
+		class BookQueryConditionTerminator
 				extends ConditionChainTerminator<Book, BookQueryConditionStarter, BookQueryConditionTerminator> {
 			public BookQueryConditionTerminator() {
-				super(BookQuery.this, starter);
+				super(BookQuery.this);
 			}
 		}
 
 		BookQueryConditionStarter where() {
-			return new BookQueryConditionStarter();
+			return starter;
 		}
 	}
 
-	static class StaticConditionChainTerminator<S> implements Terminator<S>{
+	static class StaticConditionChainTerminator<S> implements Terminator<S> {
 		private final S starter;
+		private final FluentQuery<?> query;
 
-		protected StaticConditionChainTerminator(S starter) {
-			this.starter = starter;
-		}
-
-		public S and() {
-			return starter;
-		}
-		
-		public S or() {
-			return starter;
-		}
-
-	}
-
-	class ConditionChainTerminator<R,S, T extends ConditionChainTerminator<R,S,T>> implements ConditionTerminator<R, S, T> {
-		private S starter;
-		private FluentQuery<R> query;
-
-		protected ConditionChainTerminator(FluentQuery<R> query, S starter) {
+		public StaticConditionChainTerminator(FluentQuery<?> query, S starter) {
 			this.query = query;
 			this.starter = starter;
 		}
 
 		public S and() {
+			query.appendStaticExpression(" AND ");
+			return starter;
+		}
+
+		public S or() {
+			query.appendStaticExpression(" OR ");
+			return starter;
+		}
+
+		@Override
+		public SqlExpression toSql() {
+			return query.getStaticConditionSql();
+		}
+
+	}
+
+	class ConditionChainTerminator<R, S, T extends ConditionChainTerminator<R, S, T>>
+			implements ConditionTerminator<R, S, T> {
+		private S starter;
+		private FluentQuery<R> query;
+
+		protected ConditionChainTerminator(FluentQuery<R> query) {
+			this.query = query;
+		}
+
+		public void setStarter(S starter) {
+			this.starter = starter;
+		}
+
+		public S and() {
+			query.appendExpression(" AND ");
 			return starter;
 		}
 		
 		public S or() {
+			query.appendExpression(" OR ");
 			return starter;
 		}
 
@@ -138,29 +239,36 @@ public class FluentConditionChainWithInterfaces {
 		}
 
 		@Override
-		public QueryTerminator<R, S, T> addOrderBy(SqlExpression orderBy) {
-			return (QueryTerminator<R, S, T>) this;
+		public QueryTerminator<R> addOrderBy(String orderBy) {
+			query.addOrderBy(orderBy);
+			return (QueryTerminator<R>) this;
 		}
-		
+
 		@Override
-		public QueryTerminator<R, S, T> addGroupBy(SqlExpression groupBy) {
-			return (QueryTerminator<R, S, T>) this;
+		public QueryTerminator<R> addGroupBy(String groupBy) {
+			query.addGroupBy(groupBy);
+			return (QueryTerminator<R>) this;
 		}
-		
+
 		@Override
-		public QueryTerminator<R, S, T> setLimit(int limit) {
-			return (QueryTerminator<R, S, T>) this;
+		public QueryTerminator<R> setLimit(int limit) {
+			query.setLimit(limit);
+			return (QueryTerminator<R>) this;
+		}
+
+		@Override
+		public SqlExpression toSql() {
+			return query.getSql();
 		}
 	}
 
 	@Test
 	public void test() {
 		BookQuery q = new BookQuery();
-		q.title.eq("henk").and().title.eq("piet");
-		//  BookQueryStaticConditionTerminator cond = q.title.eq("henk").and().title.eq("piet");
-		//  BookQueryStaticConditionTerminator cond = q.title().eq("henk").and().title().eq("piet").or().;
-		Terminator<BookQuery> a = q.title.eq("The Hobbit").and().title.eq("The Lord of the Rings");
-		q.where().title.eq("The Hobbit").addGroupBy(SqlExpression.sql("lkejrl"));
-		new BookQuery().where().title.eq("The Hobbit").and().title.eq("The Lord of the Rings").list(null);
+		SqlExpression a = q.title.eq("The Hobbit").and().title.eq("The Lord of the Rings").toSql();
+		System.out.println("SQL: " + a.getSql());
+		System.out.println("PARAMS: " + a.getParameters());
+		// q.where().title.eq("The Hobbit").or().id.eq(1L).addGroupBy("lkejrl").addOrderBy("lkerj").setLimit(10).list(null);
+		System.out.println("SQL: " + new BookQuery().where().title.eq("The Hobbit").or().id.eq(1L).and().title.eq("The Lord of the Rings").toSql().getSql());
 	}
 }
