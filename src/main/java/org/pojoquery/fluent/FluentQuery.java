@@ -1,15 +1,18 @@
 package org.pojoquery.fluent;
 
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
+import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.fluent.internal.ConditionChainOperators;
 import org.pojoquery.fluent.internal.ConditionChainTerminator;
 import org.pojoquery.fluent.internal.StaticConditionChainTerminator;
+import org.pojoquery.pipeline.AQTRowProcessor;
 import org.pojoquery.pipeline.AQTTransformer;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
@@ -29,9 +32,13 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W>, W> {
 	private final ConditionChainTerminator conditionTerminator;
 	private final W whereStarter;
 
+	private static RootNode tree;
+
 	protected FluentQuery(Class<R> type, Function<FluentQuery<R, Q, W>, W> whereFactory) {
-		RootNode aqt = AQTTransformer.buildQueryTreeForType(type);
-		AQTTransformer.toSql(aqt, query);
+		if (tree == null) {
+			tree = AQTTransformer.buildQueryTreeForType(type);
+		}
+		AQTTransformer.toSql(tree, query);
 
 		this.staticTerminator = new StaticConditionChainTerminator<>((Q) this, (String sql, Object[] params) -> appendStaticExpression(sql, params), this::getStaticConditionSql);
 		this.conditionTerminator = new ConditionChainTerminator(this, (String sql, Object[] params) -> appendExpression(sql, params));
@@ -73,8 +80,9 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W>, W> {
 		query.setLimit(limit);
 	}
 
-	public List<R> list(Connection c) {
-		return List.of();
+	public List<R> list(Connection c) throws SQLException {
+		SqlExpression stmt = query.toStatement();
+		return AQTRowProcessor.processRows(tree, DB.queryRows(c, stmt));
 	}
 
 	private SqlExpression getStaticConditionSql() {

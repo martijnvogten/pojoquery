@@ -1,34 +1,48 @@
 package org.pojoquery.fluent.internal;
 
-import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 import org.pojoquery.SqlExpression;
+import org.pojoquery.fluent.FluentQuery.Appender;
+import org.pojoquery.fluent.Terminator;
 
-public class StaticConditionChainTerminator<S> implements org.pojoquery.fluent.Terminator<S> {
+public class StaticConditionChainTerminator<S> implements Terminator<S> {
 	private final S starter;
-	private final BiConsumer<String, Object[]> appendExpression;
+	private final Appender target;
 	private final Supplier<SqlExpression> toSql;
 
-	public StaticConditionChainTerminator(S starter, BiConsumer<String, Object[]> appendExpression, Supplier<SqlExpression> toSql) {
+	public StaticConditionChainTerminator(S starter, Appender target, Supplier<SqlExpression> toSql) {
 		this.starter = starter;
-		this.appendExpression = appendExpression;
+		this.target = target;
 		this.toSql = toSql;
 	}
 
 	public S and() {
-		appendExpression.accept(" AND ", new Object[0]);
+		target.append(" AND ", new Object[0]);
 		return starter;
 	}
 
+	@Override
+	public Terminator<S> and(Terminator<?> other) {
+		target.append(" AND (" + other.toSql().getSql() + ")", other.toSql().getParameters());
+		return this;
+	}
+
 	public S or() {
-		appendExpression.accept(" OR ", new Object[0]);
+		target.append(" OR ", new Object[0]);
 		return starter;
+	}
+	
+	@Override
+	public Terminator<S> or(Terminator<?> other) {
+		target.append(" OR (" + other.toSql().getSql() + ")", other.toSql().getParameters());
+		return this;
 	}
 
 	@Override
 	public SqlExpression toSql() {
 		return toSql.get();
 	}
+
 }
 

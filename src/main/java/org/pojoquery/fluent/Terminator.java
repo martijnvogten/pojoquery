@@ -7,8 +7,12 @@ import org.pojoquery.SqlExpression;
  */
 public interface Terminator<S> {
 	public S and();
+	
+	public Terminator<S> and(Terminator<?> other);
 
 	public S or();
+
+	public Terminator<S> or(Terminator<?> other);
 
 	public SqlExpression toSql();
 }

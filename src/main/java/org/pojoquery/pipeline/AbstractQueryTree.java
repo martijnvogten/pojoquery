@@ -340,15 +340,6 @@ public class AbstractQueryTree {
 		JdbcValueMapper valueMapper();
 	}
 
-	// EntityReference
-	// EntityCollection
-	// ValueCollection = EntityCollection with projection
-	// JoinTableEntityCollection
-	// JoinTableValueCollection = JoinTableEntityCollection with projection
-	// Embedding
-
-	// Superclasses zijn EntityReference of Embedded
-
 	public record EmptyFieldNodeImpl(FieldModel field) implements EmptyFieldNode {
 	}
 
