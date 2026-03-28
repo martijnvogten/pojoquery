@@ -11,10 +11,18 @@ import org.pojoquery.fluent.internal.StaticConditionChainTerminator;
 public class FluentConditionChainWithInterfaces {
 
 	@Table("book")
-	static class Book {
+	public static class Book {
 		@Id
-		Long id;
+		public Long id;
 		public String title;
+		public Person author;
+	}
+
+	@Table("person")
+	public static class Person {
+		@Id
+		public Long id;
+		public String name;
 	}
 
 	public static class BookQuery extends FluentQuery<Book> {
@@ -32,10 +40,22 @@ public class FluentConditionChainWithInterfaces {
 		
 		public StaticBookQueryConditionOperators id = new StaticBookQueryConditionOperators("book", "id");
 		public StaticBookQueryConditionOperators title = new StaticBookQueryConditionOperators("book", "title");
+		public StaticAuthorConditionStarter author = new StaticAuthorConditionStarter();
+
+		public class StaticAuthorConditionStarter {
+			public StaticBookQueryConditionOperators id = new StaticBookQueryConditionOperators("author", "id");
+			public StaticBookQueryConditionOperators name = new StaticBookQueryConditionOperators("author", "name");
+		}
 
 		public class BookQueryConditionStarter {
 			public BookQueryConditionOperators id = new BookQueryConditionOperators("book", "id");
 			public BookQueryConditionOperators title = new BookQueryConditionOperators("book", "title");
+			public AuthorConditionStarter author = new AuthorConditionStarter();
+
+			public class AuthorConditionStarter {
+				public BookQueryConditionOperators id = new BookQueryConditionOperators("author", "id");
+				public BookQueryConditionOperators name = new BookQueryConditionOperators("author", "name");
+			}
 		}
 
 		BookQuery() {
