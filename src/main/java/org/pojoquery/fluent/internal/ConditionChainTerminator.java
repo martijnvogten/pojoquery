@@ -6,15 +6,18 @@ import java.util.List;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.fluent.ConditionTerminator;
 import org.pojoquery.fluent.FluentQuery;
+import org.pojoquery.fluent.FluentQuery.Appender;
 import org.pojoquery.fluent.QueryTerminator;
 
-public abstract class ConditionChainTerminator<R, S, T extends ConditionChainTerminator<R, S, T>>
+public class ConditionChainTerminator<R, S, T extends ConditionChainTerminator<R, S, T>>
 		implements ConditionTerminator<R, S, T> {
 	private S starter;
-	private FluentQuery<R> query;
+	private final FluentQuery<R, ?, ?> query;
+	private final Appender expressionCallback;
 
-	protected ConditionChainTerminator(FluentQuery<R> query) {
+	public ConditionChainTerminator(FluentQuery<R, ?, ?> query, Appender builder) {
 		this.query = query;
+		this.expressionCallback = builder;
 	}
 
 	public void setStarter(S starter) {
@@ -22,12 +25,12 @@ public abstract class ConditionChainTerminator<R, S, T extends ConditionChainTer
 	}
 
 	public S and() {
-		appendExpression(" AND ");
+		expressionCallback.append(" AND ");
 		return starter;
 	}
 	
 	public S or() {
-		appendExpression(" OR ");
+		expressionCallback.append(" OR ");
 		return starter;
 	}
 
@@ -57,7 +60,5 @@ public abstract class ConditionChainTerminator<R, S, T extends ConditionChainTer
 	public SqlExpression toSql() {
 		return query.getSql();
 	}
-
-	protected abstract void appendExpression(String sql, Object... parameters);
 }
 
