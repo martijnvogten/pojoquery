@@ -1,7 +1,6 @@
 package org.pojoquery.typedquery;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.sql.Connection;
 import java.util.List;
