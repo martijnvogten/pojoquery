@@ -21,13 +21,13 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W>, W> {
 		void append(String sql, Object... parameters);
 	}
 
-	DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
-	List<SqlExpression> staticConditionSql = new ArrayList<>();
-	List<SqlExpression> whereConditionSql = new ArrayList<>();
+	private DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
+	private List<SqlExpression> staticConditionSql = new ArrayList<>();
+	private List<SqlExpression> whereConditionSql = new ArrayList<>();
 
-	protected final Terminator<Q> staticTerminator;
-	protected final ConditionChainTerminator conditionTerminator;
-	protected final W whereStarter;
+	private final Terminator<Q> staticTerminator;
+	private final ConditionChainTerminator conditionTerminator;
+	private final W whereStarter;
 
 	protected FluentQuery(Class<R> type, Function<FluentQuery<R, Q, W>, W> whereFactory) {
 		RootNode aqt = AQTTransformer.buildQueryTreeForType(type);
@@ -53,11 +53,11 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W>, W> {
 		return whereStarter;
 	}
 
-	void appendExpression(String sql, Object[] parameters) {
+	private void appendExpression(String sql, Object[] parameters) {
 		whereConditionSql.add(SqlExpression.sql(sql, parameters));
 	}
 	
-	void appendStaticExpression(String sql, Object[] parameters) {
+	private void appendStaticExpression(String sql, Object[] parameters) {
 		staticConditionSql.add(SqlExpression.sql(sql, parameters));
 	}
 
@@ -77,7 +77,7 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W>, W> {
 		return List.of();
 	}
 
-	public SqlExpression getStaticConditionSql() {
+	private SqlExpression getStaticConditionSql() {
 		SqlExpression result = SqlExpression.implode(" ", staticConditionSql);
 		staticConditionSql.clear();
 		return result;
