@@ -23,6 +23,9 @@ import org.pojoquery.annotations.Table;
 import org.pojoquery.dialects.PostgresDbContext;
 import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.internal.MappingException;
+import org.pojoquery.pipeline.AQTSchemaGenerator;
+import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 
 @UseDialect(DbContext.Dialect.MYSQL)
 public class TestSchemaGenerator {
@@ -179,7 +182,7 @@ public class TestSchemaGenerator {
 
     @Test
     public void testSimpleEntity() {
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(User.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), User.class);
         String sql = String.join("\n", sqlList);
         System.out.println(sql);
         
@@ -195,7 +198,7 @@ public class TestSchemaGenerator {
     
     @Test
     public void testCompositeKey() {
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(OrderItem.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), OrderItem.class);
         String sql = String.join("\n", sqlList);
         System.out.println(sql);
         
@@ -206,7 +209,7 @@ public class TestSchemaGenerator {
     
     @Test
     public void testForeignKey() {
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Order.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), Order.class);
         String sql = String.join("\n", sqlList);
         System.out.println(sql);
         
@@ -215,7 +218,7 @@ public class TestSchemaGenerator {
     
     @Test
     public void testEmbedded() {
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Company.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), Company.class);
         String sql = String.join("\n", sqlList);
         System.out.println(sql);
         
@@ -228,7 +231,7 @@ public class TestSchemaGenerator {
     public void testManyToManyDoesNotCreateColumn() {
         // Article has @Link(linktable="article_tag") List<Tag> tags
         // Creates: Article table, link table, 2 ALTER TABLE for FK constraints
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Article.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), Article.class);
         String sql = String.join("\n", sqlList);
         System.out.println(sql);
         
@@ -242,8 +245,8 @@ public class TestSchemaGenerator {
             .orElse("");
         assertTrue(!articlesTable.contains("tags")); // No tags column in articles table
         
-        // Should generate: Article CREATE + link table CREATE + 2 ALTER TABLE for FKs
-        assertEquals(4, sqlList.size(), "Should generate 4 statements (Article + link table + 2 FK constraints)");
+        // Should generate: Article CREATE + tags CREATE + link table CREATE + 2 ALTER TABLE for FKs
+        assertEquals(5, sqlList.size(), "Should generate 5 statements (Article + tags + link table + 2 FK constraints)");
         String linkTable = sqlList.stream()
             .filter(s -> s.contains("CREATE TABLE") && s.contains("`article_tag`"))
             .findFirst()
@@ -253,7 +256,7 @@ public class TestSchemaGenerator {
     
     @Test
     public void testLobAnnotation() {
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(BlogPost.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), BlogPost.class);
         String sql = String.join("\n", sqlList);
         System.out.println(sql);
         
@@ -272,7 +275,7 @@ public class TestSchemaGenerator {
         DbContext customContext = DbContext.builder()
             .withQuoteStyle(QuoteStyle.MYSQL)
             .build();
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(User.class, customContext);
+        List<String> sqlList = createSchemaDDLFromClasses(customContext, User.class);
         String sql = String.join("\n", sqlList);
         System.out.println(sql);
         
@@ -285,7 +288,7 @@ public class TestSchemaGenerator {
         DbContext postgresContext = DbContext.builder()
             .withQuoteStyle(QuoteStyle.ANSI)
             .build();
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(User.class, postgresContext);
+        List<String> sqlList = createSchemaDDLFromClasses(postgresContext, User.class);
         String sql = String.join("\n", sqlList);
         System.out.println(sql);
         
@@ -294,7 +297,7 @@ public class TestSchemaGenerator {
     
     @Test
     public void testMultipleEntities() {
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(User.class, Product.class, Tag.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), User.class, Product.class, Tag.class);
         String sql = String.join("\n", sqlList);
         System.out.println(sql);
         
@@ -302,21 +305,26 @@ public class TestSchemaGenerator {
         assertTrue(sql.contains("`products`"));
         assertTrue(sql.contains("`tags`"));
     }
+
+    @SafeVarargs
+    private final List<String> createSchemaDDLFromClasses(DbContext dbContext, Class<? extends Object>... entityClasses) {
+        return AQTSchemaGenerator.generateCreateSchemaDDL(dbContext, List.of(entityClasses).stream().map(AQTTransformer::buildQueryTreeForType).toArray(RootNode[]::new));
+    }
     
     @Test
     public void testGenerateCreateTableMatchesManual() {
         // Test against the examples.events classes
-        List<String> eventSqlList = SchemaGenerator.generateCreateTableStatements(examples.events.Event.class);
+        List<String> eventSqlList = AQTSchemaGenerator.generateCreateSchemaDDL(DbContext.getDefault(), AQTTransformer.buildQueryTreeForType(examples.events.Event.class));
         String eventSql = String.join("\n", eventSqlList);
         System.out.println("Event:");
         System.out.println(eventSql);
         
-        List<String> personSqlList = SchemaGenerator.generateCreateTableStatements(examples.events.PersonRecord.class);
+        List<String> personSqlList = AQTSchemaGenerator.generateCreateSchemaDDL(DbContext.getDefault(), AQTTransformer.buildQueryTreeForType(examples.events.PersonRecord.class));
         String personSql = String.join("\n", personSqlList);
         System.out.println("\nPersonRecord:");
         System.out.println(personSql);
         
-        List<String> emailSqlList = SchemaGenerator.generateCreateTableStatements(examples.events.EmailAddress.class);
+        List<String> emailSqlList = AQTSchemaGenerator.generateCreateSchemaDDL(DbContext.getDefault(), AQTTransformer.buildQueryTreeForType(examples.events.EmailAddress.class));
         String emailSql = String.join("\n", emailSqlList);
         System.out.println("\nEmailAddress:");
         System.out.println(emailSql);
@@ -357,7 +365,7 @@ public class TestSchemaGenerator {
     
     @Test
     public void testInheritanceWithSubClasses() {
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Room.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), Room.class);
         String sql = String.join("\n", sqlList);
         System.out.println("Inheritance hierarchy:");
         System.out.println(sql);
@@ -378,7 +386,7 @@ public class TestSchemaGenerator {
     @Test
     public void testSubclassTableHasCorrectStructure() {
         // Generate just the BedRoom table (without going through parent)
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(BedRoom.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), BedRoom.class);
         String sql = String.join("\n", sqlList);
         System.out.println("BedRoom only:");
         System.out.println(sql);
@@ -396,15 +404,15 @@ public class TestSchemaGenerator {
     @Test
     public void testInheritanceHierarchyGeneratesAllTables() {
         // Test with our own inheritance classes
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Room.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), Room.class);
         String sql = String.join("\n", sqlList);
         System.out.println("Full inheritance hierarchy:");
         System.out.println(sql);
         
         // Count occurrences - room should only appear once, not multiple times
-        int roomCount = countOccurrences(sql, "`room`");
-        int bedroomCount = countOccurrences(sql, "`bedroom`");
-        int kitchenCount = countOccurrences(sql, "`kitchen`");
+        int roomCount = countOccurrences(sql, "CREATE TABLE `room`");
+        int bedroomCount = countOccurrences(sql, "CREATE TABLE `bedroom`");
+        int kitchenCount = countOccurrences(sql, "CREATE TABLE `kitchen`");
         
         // Each table should be created exactly once (table name appears once in CREATE TABLE)
         assertTrue(roomCount == 1, "Room table should be created once");
@@ -424,7 +432,7 @@ public class TestSchemaGenerator {
     
     @Test
     public void testGenerateCreateTableStatementsList() {
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(Room.class);
+        List<String> statements = createSchemaDDLFromClasses(DbContext.getDefault(), Room.class);
         System.out.println("List of statements:");
         for (int i = 0; i < statements.size(); i++) {
             System.out.println("Statement " + (i + 1) + ":");
@@ -433,7 +441,7 @@ public class TestSchemaGenerator {
         }
         
         // Room with subclasses should generate 3 statements
-        assertEquals(3, statements.size(), "Should generate 3 statements (Room, BedRoom, Kitchen)");
+        assertEquals(5, statements.size(), "Should generate 3 create tables (Room, BedRoom, Kitchen) and two foreign key constraints");
         
         // First statement should be Room
         assertTrue(statements.get(0).contains("`room`"));
@@ -445,7 +453,7 @@ public class TestSchemaGenerator {
     
     @Test
     public void testGenerateCreateTableStatementsListForMultipleEntities() {
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(User.class, Product.class, Tag.class);
+        List<String> statements = createSchemaDDLFromClasses(DbContext.getDefault(), User.class, Product.class, Tag.class);
         
         assertEquals(3, statements.size(), "Should generate 3 statements");
         assertTrue(statements.get(0).contains("`users`"));
@@ -456,7 +464,7 @@ public class TestSchemaGenerator {
     @Test
     public void testGenerateCreateTableStatementsMatchesJoined() {
         // Verify that joining the list produces the same result as previous generateCreateTable
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(Room.class);
+        List<String> statements = createSchemaDDLFromClasses(DbContext.getDefault(), Room.class);
         String joined = String.join("\n\n", statements);
         // For consistency, just check that joined is not empty and contains expected table
         assertTrue(joined.contains("CREATE TABLE"));
@@ -488,7 +496,7 @@ public class TestSchemaGenerator {
     
     @Test
     public void testSingleTableInheritance() {
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Vehicle.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), Vehicle.class);
         String sql = String.join("\n", sqlList);
         System.out.println("Single Table Inheritance:");
         System.out.println(sql);
@@ -520,10 +528,10 @@ public class TestSchemaGenerator {
     @Test
     public void testSingleTableInheritanceVsTablePerSubclass() {
         // STI: generates 1 table
-        List<String> stiStatements = SchemaGenerator.generateCreateTableStatements(Vehicle.class);
+        List<String> stiStatements = createSchemaDDLFromClasses(DbContext.getDefault(), Vehicle.class);
         
         // Table-per-subclass: generates 3 tables
-        List<String> tpsStatements = SchemaGenerator.generateCreateTableStatements(Room.class);
+        List<String> tpsStatements = createSchemaDDLFromClasses(DbContext.getDefault(), Room.class);
         
         assertEquals(1, stiStatements.size(), "STI should generate 1 table");
         assertEquals(3, tpsStatements.size(), "Table-per-subclass should generate 3 tables");
@@ -538,15 +546,15 @@ public class TestSchemaGenerator {
         // When generating tables for Author and Book together,
         // Book should have authors_id inferred from Author.books (using table name)
         // Plus ALTER TABLE for FK constraint
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(Author.class, Book.class);
+        List<String> statements = createSchemaDDLFromClasses(DbContext.getDefault(), Author.class, Book.class);
         System.out.println("Inferred FK test:");
         for (String stmt : statements) {
             System.out.println(stmt);
             System.out.println();
         }
         
-        // 2 CREATE TABLEs + 1 ALTER TABLE for FK
-        assertEquals(3, statements.size(), "Should generate 3 statements");
+        // 3 CREATE TABLEs + 2 ALTER TABLE for FK
+        assertEquals(5, statements.size(), "Should generate 5 statements");
         
         // Find the books table statement
         String booksTable = statements.stream()
@@ -563,7 +571,7 @@ public class TestSchemaGenerator {
         // Test a chain: Author -> Book -> Chapter
         // Book should have authors_id, Chapter should have books_id
         // Plus 2 ALTER TABLE for FK constraints
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(Author.class, Book.class, Chapter.class);
+        List<String> statements = createSchemaDDLFromClasses(DbContext.getDefault(), Author.class, Book.class, Chapter.class);
         System.out.println("Inferred FK chain test:");
         for (String stmt : statements) {
             System.out.println(stmt);
@@ -589,7 +597,7 @@ public class TestSchemaGenerator {
     @Test
     public void testNoInferredForeignKeyForManyToMany() {
         // Many-to-many relationships (with linktable) should NOT add inferred FK
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(Article.class, Tag.class);
+        List<String> statements = createSchemaDDLFromClasses(DbContext.getDefault(), Article.class, Tag.class);
         
         String tagsTable = statements.stream()
             .filter(s -> s.contains("`tags`"))
@@ -604,7 +612,7 @@ public class TestSchemaGenerator {
     public void testInferredForeignKeyFromCollectionWithInheritance() {
         // FestivalWithEvents has List<EventSubclass> events with @Link(foreignlinkfield="festivalID")
         // The FK should be inferred in Event (root table), not just EventSubclass
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(Event.class, FestivalWithEvents.class);
+        List<String> statements = createSchemaDDLFromClasses(DbContext.getDefault(), Event.class, FestivalWithEvents.class);
         System.out.println("Inferred FK from collection with inheritance test:");
         for (String stmt : statements) {
             System.out.println(stmt);
@@ -625,7 +633,7 @@ public class TestSchemaGenerator {
         // When EventWithFestival has @Link(linkfield="festivalID") Festival festival,
         // the Event table (parent table) should have festivalID inferred
         // Plus ALTER TABLE for FK constraint
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(EventWithFestival.class, Festival.class);
+        List<String> statements = createSchemaDDLFromClasses(DbContext.getDefault(), EventWithFestival.class, Festival.class);
         System.out.println("Inferred FK from linkfield test:");
         for (String stmt : statements) {
             System.out.println(stmt);
@@ -743,7 +751,7 @@ public class TestSchemaGenerator {
     public void testPostgresForeignKeyUsesBigintNotBigserial() {
         // PostgreSQL FK columns should use BIGINT (non-auto-increment), not BIGSERIAL
         PostgresDbContext postgresContext = new PostgresDbContext();
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(postgresContext, EventWithFestival.class, Festival.class);
+        List<String> statements = createSchemaDDLFromClasses(postgresContext, EventWithFestival.class, Festival.class);
         
         System.out.println("PostgreSQL FK column type test:");
         for (String stmt : statements) {
@@ -785,7 +793,7 @@ public class TestSchemaGenerator {
         // When an entity has both @Id fields and linked entities that would
         // generate FK columns with the same name, the columns should not be duplicated
         // Creates: event_person CREATE + 2 ALTER TABLEs for FKs
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(EventPersonLink.class);
+        List<String> statements = createSchemaDDLFromClasses(DbContext.getDefault(), EventPersonLink.class);
         
         System.out.println("Composite key with linked entities test:");
         for (String stmt : statements) {
@@ -817,7 +825,9 @@ public class TestSchemaGenerator {
     public void testForeignKeyConstraintForLinkedEntity() {
         // Order has a 'customer' field that references User - should generate FK constraint
         // FK constraints are generated as separate ALTER TABLE statements for compatibility
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(Order.class, User.class);
+        List<String> statements = createSchemaDDLFromClasses(DbContext.getDefault(), Order.class, User.class);
+
+        System.out.println("Statements " + String.join("\n\n", statements));
         
         System.out.println("FK constraint for linked entity test:");
         for (String stmt : statements) {
@@ -835,7 +845,7 @@ public class TestSchemaGenerator {
         
         // FK constraint should be in a separate ALTER TABLE statement
         String sql = String.join("\n", statements);
-        assertTrue(sql.contains("ALTER TABLE `orders` ADD FOREIGN KEY (`customer_id`) REFERENCES `users`(`id`)"), 
+        assertTrue(sql.contains("ALTER TABLE `orders` ADD CONSTRAINT `fk_orders_customer_id` FOREIGN KEY (`customer_id`) REFERENCES `users` (`id`)"), 
             "Should have FK constraint referencing users (via ALTER TABLE)");
     }
     
@@ -843,7 +853,7 @@ public class TestSchemaGenerator {
     public void testForeignKeyConstraintForInferredFK() {
         // Author has Book[] books - Book should have inferred authors_id column with FK constraint
         // FK constraints are generated as separate ALTER TABLE statements for compatibility
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(Author.class, Book.class);
+        List<String> statements = createSchemaDDLFromClasses(DbContext.getDefault(), Author.class, Book.class);
         
         System.out.println("FK constraint for inferred FK test:");
         for (String stmt : statements) {
@@ -861,7 +871,7 @@ public class TestSchemaGenerator {
         
         // FK constraint should be in a separate ALTER TABLE statement
         String sql = String.join("\n", statements);
-        assertTrue(sql.contains("ALTER TABLE `books` ADD FOREIGN KEY (`authors_id`) REFERENCES `authors`(`id`)"), 
+        assertTrue(sql.contains("ALTER TABLE `books` ADD CONSTRAINT `fk_books_authors_id` FOREIGN KEY (`authors_id`) REFERENCES `authors` (`id`)"), 
             "Should have FK constraint referencing authors (via ALTER TABLE)");
     }
     
@@ -869,7 +879,7 @@ public class TestSchemaGenerator {
     public void testLinkTableGeneration() {
         // Article has @Link(linktable="article_tag") List<Tag> tags
         // Should generate Article, Tag, article_tag link table, plus 2 ALTER TABLE for FK constraints
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(Article.class, Tag.class);
+        List<String> statements = createSchemaDDLFromClasses(DbContext.getDefault(), Article.class, Tag.class);
         
         System.out.println("Link table generation test:");
         for (String stmt : statements) {
@@ -893,9 +903,9 @@ public class TestSchemaGenerator {
         
         // FK constraints should be in separate ALTER TABLE statements
         String sql = String.join("\n", statements);
-        assertTrue(sql.contains("ALTER TABLE `article_tag` ADD FOREIGN KEY (`articles_id`) REFERENCES `articles`(`id`)"), 
+        assertTrue(sql.contains("ALTER TABLE `article_tag` ADD CONSTRAINT `fk_article_tag_articles_id` FOREIGN KEY (`articles_id`) REFERENCES `articles` (`id`)"), 
             "Should have FK constraint to articles (via ALTER TABLE)");
-        assertTrue(sql.contains("ALTER TABLE `article_tag` ADD FOREIGN KEY (`tags_id`) REFERENCES `tags`(`id`)"), 
+        assertTrue(sql.contains("ALTER TABLE `article_tag` ADD CONSTRAINT `fk_article_tag_tags_id` FOREIGN KEY (`tags_id`) REFERENCES `tags` (`id`)"), 
             "Should have FK constraint to tags (via ALTER TABLE)");
     }
     
@@ -904,7 +914,7 @@ public class TestSchemaGenerator {
         // When EventWithFestival has @Link(linkfield="festivalID") Festival festival
         // and FestivalWithEvents has @Link(foreignlinkfield="festivalID") List<EventSubclass> events
         // There should be only ONE FK constraint for festivalID (via ALTER TABLE)
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(EventWithFestival.class, FestivalWithEvents.class);
+        List<String> statements = createSchemaDDLFromClasses(DbContext.getDefault(), EventWithFestival.class, FestivalWithEvents.class);
         
         System.out.println("No duplicate FK constraints test:");
         for (String stmt : statements) {
@@ -924,7 +934,7 @@ public class TestSchemaGenerator {
         // This is a self-referencing many-to-many relationship which creates a cycle
         // PojoQuery detects this and throws MappingException
         MappingException ex = assertThrows(MappingException.class, () -> {
-            SchemaGenerator.generateCreateTableStatements(Person.class);
+            createSchemaDDLFromClasses(DbContext.getDefault(), Person.class);
         });
         
         assertTrue(ex.getMessage().contains("Cycle detected"), 
@@ -965,7 +975,7 @@ public class TestSchemaGenerator {
     
     @Test
     public void testNotNullAnnotation() {
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), Account.class);
         String sql = String.join("\n", sqlList);
         System.out.println("Column nullable=false test:\n" + sql);
         
@@ -982,7 +992,7 @@ public class TestSchemaGenerator {
     
     @Test
     public void testUniqueAnnotation() {
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), Account.class);
         String sql = String.join("\n", sqlList);
         System.out.println("Column unique=true test:\n" + sql);
         
@@ -996,7 +1006,7 @@ public class TestSchemaGenerator {
     
     @Test
     public void testColumnLengthAnnotation() {
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), Account.class);
         String sql = String.join("\n", sqlList);
         System.out.println("Column length annotation test:\n" + sql);
         
@@ -1012,7 +1022,7 @@ public class TestSchemaGenerator {
     
     @Test
     public void testColumnPrecisionScaleAnnotation() {
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Price.class);
+        List<String> sqlList = createSchemaDDLFromClasses(DbContext.getDefault(), Price.class);
         String sql = String.join("\n", sqlList);
         System.out.println("Column precision/scale annotation test:\n" + sql);
         

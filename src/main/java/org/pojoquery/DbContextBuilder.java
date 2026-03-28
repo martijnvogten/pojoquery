@@ -4,6 +4,7 @@ import java.lang.reflect.Field;
 
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.DbContext.QuoteStyle;
+import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumnMetadata;
 import org.pojoquery.pipeline.SimpleFieldMapping;
 import org.pojoquery.typemodel.FieldModel;
 
@@ -181,8 +182,8 @@ public class DbContextBuilder {
         }
 
         @Override
-        public String mapJavaTypeToSql(FieldModel field) {
-            return base.mapJavaTypeToSql(field);
+        public String mapJavaTypeToSql(FieldModel field, DDLColumnMetadata columnMetadata) {
+            return base.mapJavaTypeToSql(field, null);
         }
 
         @Override

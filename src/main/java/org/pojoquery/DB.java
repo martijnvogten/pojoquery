@@ -702,6 +702,80 @@ public interface DB {
         return upsert(context, connection, null, tableName, values, idFields);
     }
 
+    // ==================== DELETE METHODS ====================
+
+    /**
+     * Deletes records from the database based on a map of column conditions.
+     * Each entry in the map becomes a "column = value" condition, joined with AND.
+     * 
+     * @param connection the database connection
+     * @param schemaName the schema name (may be null)
+     * @param tableName the name of the table
+     * @param where a map of column names to their values for the WHERE clause
+     * @return the number of rows affected
+     */
+    public static int delete(Connection connection, String schemaName, String tableName, Map<String, Object> where) {
+        return delete(DbContext.getDefault(), connection, schemaName, tableName, where);
+    }
+
+    /**
+     * Deletes records from the database based on a map of column conditions with explicit DbContext.
+     * Each entry in the map becomes a "column = value" condition, joined with AND.
+     * 
+     * @param context the database context
+     * @param connection the database connection
+     * @param schemaName the schema name (may be null)
+     * @param tableName the name of the table
+     * @param where a map of column names to their values for the WHERE clause
+     * @return the number of rows affected
+     */
+    public static int delete(DbContext context, Connection connection, String schemaName, String tableName, Map<String, Object> where) {
+        List<SqlExpression> conditions = new ArrayList<>();
+        String fullTableName = prefixAndQuoteTableName(context, schemaName, tableName);
+        for (Map.Entry<String, Object> entry : where.entrySet()) {
+            conditions.add(new SqlExpression(context.quoteObjectNames(tableName, entry.getKey()) + " = ?", Arrays.asList(entry.getValue())));
+        }
+        SqlExpression whereClause = SqlExpression.implode(" AND ", conditions);
+        SqlExpression deleteStmt = new SqlExpression("DELETE FROM " + fullTableName + " WHERE " + whereClause.getSql(), whereClause.getParameters());
+        return update(connection, deleteStmt);
+    }
+
+    /**
+     * Deletes records from the database using a SQL expression condition.
+     * The condition may contain curly brace markers {identifier} which will be resolved
+     * to properly quoted identifiers.
+     * 
+     * @param connection the database connection
+     * @param schemaName the schema name (may be null)
+     * @param tableName the name of the table
+     * @param condition the SQL expression for the WHERE clause
+     * @return the number of rows affected
+     */
+    public static int deleteWhere(Connection connection, String schemaName, String tableName, SqlExpression condition) {
+        return deleteWhere(DbContext.getDefault(), connection, schemaName, tableName, condition);
+    }
+
+    /**
+     * Deletes records from the database using a SQL expression condition with explicit DbContext.
+     * The condition may contain curly brace markers {identifier} which will be resolved
+     * to properly quoted identifiers.
+     * 
+     * @param context the database context
+     * @param connection the database connection
+     * @param schemaName the schema name (may be null)
+     * @param tableName the name of the table
+     * @param condition the SQL expression for the WHERE clause
+     * @return the number of rows affected
+     */
+    public static int deleteWhere(DbContext context, Connection connection, String schemaName, String tableName, SqlExpression condition) {
+        // Resolve curly brace markers {identifier} to quoted identifiers
+        String resolvedSql = org.pojoquery.util.CurlyMarkers.processMarkers(condition.getSql(), 
+            id -> context.quoteObjectNames(id));
+        String fullTableName = prefixAndQuoteTableName(context, schemaName, tableName);
+        SqlExpression deleteStmt = new SqlExpression("DELETE FROM " + fullTableName + " WHERE " + resolvedSql, condition.getParameters());
+        return update(connection, deleteStmt);
+    }
+
 	/**
      * Quotes and prefixes a table name with a schema name if provided.
      * 

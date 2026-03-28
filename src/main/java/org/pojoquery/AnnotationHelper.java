@@ -20,9 +20,9 @@ public class AnnotationHelper {
 		}
 		var ann = columnAnn.get();
 		return new ColumnMetadata(
-			ann.getNumberAttribute("length").map(Number::intValue).orElse(255),
-			ann.getNumberAttribute("precision").map(Number::intValue).orElse(0),
-			ann.getNumberAttribute("scale").map(Number::intValue).orElse(0),
+			ann.getNumberAttribute("length").intValue(),
+			ann.getNumberAttribute("precision").intValue(),
+			ann.getNumberAttribute("scale").intValue(),
 			ann.getBooleanAttribute("nullable").orElse(true),
 			ann.getBooleanAttribute("unique").orElse(false)
 		);

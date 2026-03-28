@@ -74,7 +74,7 @@ public class QueryTreeDDLGenerator {
         } else if (col.isAutoIncrement() && !dbContext.getAutoIncrementKeyColumnType().equals("BIGINT")) {
             sb.append(dbContext.getAutoIncrementKeyColumnType());
         } else if (col.field() != null) {
-            sb.append(dbContext.mapJavaTypeToSql(col.field()));
+            sb.append(dbContext.mapJavaTypeToSql(col.field(), null));
             
             // Add constraints from field annotations
             if (!col.isAutoIncrement()) {

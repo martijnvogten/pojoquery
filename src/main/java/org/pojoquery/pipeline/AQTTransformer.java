@@ -8,6 +8,8 @@ import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Embedded;
@@ -16,6 +18,7 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Select;
+import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.AbstractQueryTree.Column;
 import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
@@ -54,6 +57,14 @@ import org.pojoquery.util.Types;
 public class AQTTransformer {
 
 	public static class Transformers {
+
+		public static QueryNode checkForCycles(QueryNode tree) {
+			if (tree instanceof TableNode rootTableNode) {
+				 checkForCyclesRecursively(rootTableNode, new ArrayList<>());
+			}
+			return tree;
+		}
+
 
 		public static QueryNode addDeclaredFieldsToEmbeddings(QueryNode node) {
 			return (node instanceof Embedding tableNode && tableNode.children() == null)
@@ -128,8 +139,8 @@ public class AQTTransformer {
 						TableMapping subTableMapping = subMappings.get(subMappings.size() - 1);
 						String subAlias = AliasNaming.subclassAlias(tableNode.alias(), subTableMapping.tableName);
 						ForeignKeyInfo join = new ForeignKeyInfo(
-							tableNode.tableInfo(), tableNode.alias(),
 							new TableInfo(subTableMapping.schemaName, subTableMapping.tableName), subAlias,
+							tableNode.tableInfo(), tableNode.alias(),
 								PojoMetadata.determineIdField(tableNode.type()), null,
 								PojoMetadata.determineIdField(subClass), null, null);
 						newChildren.add(new TPSSubClassNode(subAlias, subClass, determinTableInfo(subClass), null, join, tableNode.alias()));
@@ -320,12 +331,24 @@ public class AQTTransformer {
 
 		public static QueryNode applyCustomForeignKeyColumnNames(QueryNode node) {
 			return transformChildren(node,
-					child -> child instanceof JoinMany join && join.join().fkColumnName() == null &&
-						!isNullOrEmpty(join.field().getAnnotationAttributeValue(Link.class, "foreignlinkfield", String.class)),
+					child -> child instanceof Join join && join.join().fkColumnName() == null &&
+						(join instanceof JoinOne || join instanceof JoinMany) &&
+						((FieldNode)join).field().hasAnnotation(Link.class),
 					(TableNode parentNode, QueryNode child) -> {
-						JoinMany join = (JoinMany) child;
-						String fkColumnName = join.field().getAnnotationAttributeValue(Link.class, "foreignlinkfield", String.class);
-						return join.withJoin(join.join().withFkColumnName(fkColumnName));
+						if (child instanceof Join join) {
+							String customLinkfield = 
+									join instanceof JoinOne joinOne && joinOne.field().hasAnnotation(Link.class) ?
+										joinOne.field().getAnnotationAttributeValue(Link.class, "linkfield", String.class) :
+									join instanceof JoinMany joinMany && joinMany.field().hasAnnotation(Link.class) ?
+										joinMany.field().getAnnotationAttributeValue(Link.class, "foreignlinkfield", String.class) :
+									null;
+							if (customLinkfield == null || customLinkfield.isEmpty()) {
+								return child;
+							}
+							String prefix = parentNode instanceof EmbeddedEntity emb ? emb.fieldPrefix() : "";
+							return join.withJoin(join.join().withFkColumnName(prefix + customLinkfield));
+						}
+						return child;
 					});
 		}
 
@@ -358,8 +381,13 @@ public class AQTTransformer {
 						column.field().hasAnnotation(FieldName.class) &&
 						column.columnName() == null,
 					(TableNode parentNode, Column column) -> {
+						String prefix = "";
+						if (parentNode instanceof EmbeddedEntity emb) {
+							// If the parent is an embedded entity, we need to prefix the column name with the embedding's prefix
+							prefix = emb.fieldPrefix() != null ? emb.fieldPrefix() : "";
+						}
 						String columnName = column.field().getAnnotationAttributeValue(FieldName.class, "value", String.class);
-						return column.withColumnName(columnName);
+						return column.withColumnName(prefix + columnName);
 					});
 		}
 
@@ -498,6 +526,10 @@ public class AQTTransformer {
 					(TableNode parentNode, EntityCollection scalar) -> scalar.withValueMapper(
 							DefaultValueMappers.createMapper(scalar.type()))))
 			.map(n -> transformChildren(n,
+					child -> child instanceof JoinTableEntityCollection jtec && jtec.valueMapper() == null,
+					(TableNode parentNode, JoinTableEntityCollection jtec) -> jtec.withValueMapper(
+							DefaultValueMappers.createMapper(jtec.type()))))
+			.map(n -> transformChildren(n,
 					child -> child instanceof ValueCollection scalar && scalar.valueMapper() == null,
 					(TableNode parentNode, ValueCollection scalar) -> scalar.withValueMapper(
 							DefaultValueMappers.createMapper(scalar.componentType()))))
@@ -575,6 +607,7 @@ public class AQTTransformer {
 		do {
 			oldTree = newTree;
 			newTree = Optional.<QueryNode>ofNullable(oldTree)
+					.map(Transformers::checkForCycles)
 					.map(transformNodesRecursively(Transformers::addDeclaredFieldsToEmbeddings))
 					.map(transformNodesRecursively(Transformers::addDeclaredFields))
 					.map(transformNodesRecursively(Transformers::addIdFieldToSubClassTableNodes))
@@ -636,5 +669,28 @@ public class AQTTransformer {
 						.toList())
 				: node;
 	}
+
+	private static void checkForCyclesRecursively(TableNode node, List<TypeModel> ancestorTypes) {
+		List<TypeModel> newPath = Stream.concat(ancestorTypes.stream(), Stream.of(node.type())).toList();
+		if (ancestorTypes.contains(node.type())) {
+			throw new MappingException(buildCycleDetectedMessage(newPath));
+		}
+		if (node.children() != null) {
+			for (QueryNode child : node.children()) {
+				if (child instanceof TableNode tableChild) {
+					checkForCyclesRecursively(tableChild, newPath);
+				}
+			}
+		}
+    }
+    
+    private static String buildCycleDetectedMessage(List<TypeModel> cyclePath) {
+        String pathStr = cyclePath.stream()
+            .map(TypeModel::getSimpleName)
+            .collect(Collectors.joining(" → "));
+        
+        return "Cycle detected in entity hierarchy: " + pathStr + 
+            ". PojoQuery requires cycle-free type hierarchies to prevent infinite query expansion.";
+    }
 
 }

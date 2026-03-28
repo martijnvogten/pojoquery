@@ -13,6 +13,7 @@ import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
 import org.pojoquery.annotations.Lob;
+import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumnMetadata;
 import org.pojoquery.pipeline.SimpleFieldMapping;
 import org.pojoquery.typemodel.FieldModel;
 
@@ -55,7 +56,7 @@ public class PostgresDbContext implements DbContext {
     }
 
     @Override
-    public String mapJavaTypeToSql(FieldModel field) {
+    public String mapJavaTypeToSql(FieldModel field, DDLColumnMetadata columnMetadata) {
         String type = field.getType().getQualifiedName();
 
         if (type.equals(Long.class.getName()) || type.equals(long.class.getName())) {

@@ -2,6 +2,8 @@ package org.pojoquery;
 
 import java.sql.Connection;
 import java.sql.Statement;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -33,6 +35,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
 import org.pojoquery.typemodel.ReflectionTypeModel;
+import org.pojoquery.util.CurlyMarkers;
 import org.pojoquery.util.RecordIndenter;
 
 @UseDialect(Dialect.HSQLDB)
@@ -71,6 +74,48 @@ public class TestAlternativeStructureForQueryTree {
 		List<Category> categories;
 	}
 
+	/** Create a DatabaseOperations implementation backed by a Connection */
+	private AQTCascadingUpdater.DatabaseOperations createDbOps(Connection conn) {
+		DbContext context = DbContext.getDefault();
+		return new AQTCascadingUpdater.DatabaseOperations() {
+			@Override
+			public <PK> PK insert(String table, String schema, Map<String, Object> values) {
+				return DB.insert(context, conn, schema, table, values);
+			}
+
+			@Override
+			public int update(String table, String schema, Map<String, Object> values, Map<String, Object> where) {
+				return DB.update(context, conn, schema, table, values, where);
+			}
+
+			@Override
+			public int delete(String table, String schema, Map<String, Object> where) {
+				return DB.delete(context, conn, schema, table, where);
+			}
+
+			@Override
+			public int deleteWhere(String table, String schema, SqlExpression condition) {
+				String resolvedSql = CurlyMarkers.processMarkers(condition.getSql(), 
+					id -> context.quoteObjectNames(id));
+				return DB.deleteWhere(context, conn, schema, table, 
+					new SqlExpression(resolvedSql, condition.getParameters()));
+			}
+
+			@Override
+			public void syncLinkTable(String table, String schema, String ownerFkColumn, Object ownerId,
+					String targetFkColumn, List<Object> targetIds) {
+				Map<String, Object> deleteCondition = new HashMap<>();
+				deleteCondition.put(ownerFkColumn, ownerId);
+				DB.delete(context, conn, schema, table, deleteCondition);
+				for (Object targetId : targetIds) {
+					Map<String, Object> values = new LinkedHashMap<>();
+					values.put(ownerFkColumn, ownerId);
+					values.put(targetFkColumn, targetId);
+					DB.insert(context, conn, schema, table, values);
+				}
+			}
+		};
+	}
 
 	@Test
 	public void testSql() {
@@ -100,14 +145,18 @@ public class TestAlternativeStructureForQueryTree {
 		DataSource db = initDatabase();
 		
 		DB.withConnection(db, conn -> {
+			AQTCascadingUpdater.DatabaseOperations dbOps = createDbOps(conn);
+			
 			Person albert = new Person();
 			albert.name = "Albert Einstein";
-			AQTCascadingUpdater.insert(conn, albert);
+			RootNode personTree = AQTTransformer.buildQueryTreeForType(Person.class);
+			AQTCascadingUpdater.insert(personTree, albert, dbOps);
 
 			ArticleDetail article = new ArticleDetail();
 			article.title = "Relativity";
 			article.author = albert;
-			AQTCascadingUpdater.insert(conn, article);
+			RootNode articleTree = AQTTransformer.buildQueryTreeForType(ArticleDetail.class);
+			AQTCascadingUpdater.insert(articleTree, article, dbOps);
 
 			queryRows(conn, ArticleDetail.class, row -> {
 				AQTTransformer.buildQueryTreeForType(ArticleDetail.class).children().forEach(child -> {

@@ -14,6 +14,7 @@ import org.pojoquery.annotations.Lob;
 import org.pojoquery.dialects.HsqldbDbContext;
 import org.pojoquery.dialects.MysqlDbContext;
 import org.pojoquery.dialects.PostgresDbContext;
+import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumnMetadata;
 import org.pojoquery.typemodel.FieldModel;
 
 /**
@@ -227,9 +228,10 @@ public interface DbContext {
 	 * 
 	 * @param field the field to map (may be null for non-field contexts like FK
 	 *              columns)
+	 * @param colMeta TODO
 	 * @return the SQL type string
 	 */
-	default String mapJavaTypeToSql(FieldModel field) {
+	default String mapJavaTypeToSql(FieldModel field, DDLColumnMetadata colMeta) {
 		Class<?> type = field.getType().getClass();
 
 		if (type == Long.class || type == long.class) {
@@ -254,9 +256,8 @@ public interface DbContext {
 			return "TINYINT(1)";
 		}
 		if (type == BigDecimal.class) {
-			AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);
-			int precision = (colMeta != null) ? colMeta.precision : 19;
-			int scale = (colMeta != null) ? colMeta.scale : 4;
+			int precision = (colMeta != null) ? colMeta.precision() : 19;
+			int scale = (colMeta != null) ? colMeta.scale() : 4;
 			return "DECIMAL(" + precision + "," + scale + ")";
 		}
 		if (type == BigInteger.class) {
@@ -268,8 +269,7 @@ public interface DbContext {
 			if (field.hasAnnotation(Lob.class)) {
 				return "CLOB";
 			}
-			AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);
-			int length = (colMeta != null) ? colMeta.length : getDefaultVarcharLength();
+			int length = (colMeta != null) ? colMeta.length() : getDefaultVarcharLength();
 			return "VARCHAR(" + length + ")";
 		}
 

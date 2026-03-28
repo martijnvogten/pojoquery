@@ -22,6 +22,7 @@ import javax.sql.DataSource;
 
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.AQTCascadingUpdater;
 import org.pojoquery.pipeline.AQTRowProcessor;
 import org.pojoquery.pipeline.AQTTransformer;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
@@ -487,7 +488,7 @@ public class PojoQuery<T> {
 		return insertCascading(context, connection, o);
 	}
 
-	private static class DatabaseOperationsImpl implements CascadingUpdater.DatabaseOperations {
+	private static class DatabaseOperationsImpl implements AQTCascadingUpdater.DatabaseOperations {
 		private final DbContext context;
 		private final Connection connection;
 
@@ -540,8 +541,8 @@ public class PojoQuery<T> {
 
 	private static <PK> PK insertCascading(DbContext context, Connection connection, Object o) {
 		Objects.requireNonNull(o, "entity must not be null");
-		QueryTree tree = QueryTreeBuilder.from(o.getClass());
-		return CascadingUpdater.insert(tree, o, new DatabaseOperationsImpl(context, connection));
+		RootNode tree = AQTTransformer.buildQueryTreeForType(o.getClass());
+		return AQTCascadingUpdater.insert(tree, o, new DatabaseOperationsImpl(context, connection));
 	}
 
 	public static int update(Connection connection, Object object) {
@@ -555,8 +556,8 @@ public class PojoQuery<T> {
 
 	static int updateCascading(DbContext context, Connection connection, Object object) {
 		Objects.requireNonNull(object, "entity must not be null");
-		QueryTree tree = QueryTreeBuilder.from(object.getClass());
-		return CascadingUpdater.update(tree, object, new DatabaseOperationsImpl(context, connection));
+		RootNode tree = AQTTransformer.buildQueryTreeForType(object.getClass());
+		return AQTCascadingUpdater.update(tree, object, new DatabaseOperationsImpl(context, connection));
 	}
 
 
@@ -665,8 +666,8 @@ public class PojoQuery<T> {
 	
 	public static void deleteCascading(DbContext context, Connection conn, Object entity) {
 		Objects.requireNonNull(entity, "entity must not be null");
-		QueryTree tree = QueryTreeBuilder.from(entity.getClass());
-		CascadingUpdater.delete(tree, entity, new DatabaseOperationsImpl(context, conn));
+		RootNode tree = AQTTransformer.buildQueryTreeForType(entity.getClass());
+		AQTCascadingUpdater.delete(tree, entity, new DatabaseOperationsImpl(context, conn));
 	}
 	
 	public static void delete(DbContext context, Connection conn, Object entity) {

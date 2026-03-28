@@ -5,8 +5,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.pojoquery.DbContext;
+import org.pojoquery.annotations.Column;
+import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
 import org.pojoquery.pipeline.AbstractQueryTree.ForeignKeyInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.Join;
 import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
@@ -17,6 +20,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.querytree.TableInfo;
+import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 
@@ -34,9 +38,12 @@ public class AQTSchemaGenerator {
 	public record DDLForeignKey(DDLColumnKey referringColumn, DDLColumnKey referencedIdColumn) {
 	}
 
+	public record DDLColumnMetadata(int length, int precision, int scale, boolean nullable, boolean unique) {
+	}
+
 	interface DDLCollector {
 		void registerTable(TableInfo tableKey, List<DDLColumn> primaryKeyColumns);
-		void registerColumn(TableInfo table, String columnName, FieldModel field);
+		DDLColumn registerColumn(TableInfo table, String columnName, FieldModel field);
 		void registerForeignKey(ForeignKeyInfo foreignKeyInfo);
 	}
 
@@ -52,15 +59,17 @@ public class AQTSchemaGenerator {
 		}
 		
 		@Override
-		public void registerColumn(TableInfo table, String columnName, FieldModel field) {
+		public DDLColumn registerColumn(TableInfo table, String columnName, FieldModel field) {
 			// System.out.println("COLUMN: " + table.tableName() + "." + columnName + " Field: " + (field != null ? field.getName() : "[implicit foreign key]"));
 			DDLColumnKey key = new DDLColumnKey(table, columnName);
-			columns.put(key, new DDLColumn(key, field));
+			DDLColumn column = new DDLColumn(key, field);
+			columns.put(key, column);
 			if (field != null) {
 				definingFields.computeIfAbsent(key, k -> new ArrayList<>()).add(field);
 			} else {
 				implicitForeignKeyColumns.add(key);
 			}
+			return column;
 		}
 
 		@Override
@@ -77,6 +86,12 @@ public class AQTSchemaGenerator {
 		DDLCollectorImpl collector = new DDLCollectorImpl();
 		for (RootNode entity : entities) {
 			collectDDLForEntity(entity, collector);
+		}
+
+		Map<DDLColumnKey, DDLColumnMetadata> columnMetadata = new HashMap<>();
+		for (DDLColumnKey columnKey : collector.definingFields.keySet()) {
+			List<FieldModel> fields = collector.definingFields.get(columnKey);
+			columnMetadata.put(columnKey, buildColumnMetadataFromAnnotations(fields));
 		}
 		
 		List<String> statements = new ArrayList<>();
@@ -100,6 +115,8 @@ public class AQTSchemaGenerator {
 				colDef.append(dbContext.getQuoteStyle().quote(col.columnKey().columnName()));
 				colDef.append(" ");
 				
+				DDLColumnMetadata metadata = columnMetadata.get(col.columnKey());
+
 				// Determine SQL type
 				if (col.field() != null) {
 					boolean isAutoIncrement = table.primaryKeyColumns().contains(col) &&
@@ -113,12 +130,25 @@ public class AQTSchemaGenerator {
 					} else if (collector.foreignKeys.containsKey(col.columnKey())) {
 						colDef.append(dbContext.getForeignKeyColumnType());
 					} else {
-						colDef.append(dbContext.mapJavaTypeToSql(col.field()));
+						colDef.append(dbContext.mapJavaTypeToSql(col.field(), metadata));
 					}
 				} else {
-					// Implicit foreign key column (from join table) - use BIGINT by default
+					// Implicit foreign key column (from join table)
 					colDef.append(dbContext.getForeignKeyColumnType());
 				}
+
+				if (metadata != null) {
+					// if (metadata.length() != 255) {
+					// 	colDef.append("(").append(metadata.length()).append(")");
+					// }
+					if (!metadata.nullable()) {
+						colDef.append(" NOT NULL");
+					}
+					if (metadata.unique()) {
+						colDef.append(" UNIQUE");
+					}
+				}
+
 				columnDefs.add(colDef.toString());
 			}
 			
@@ -174,14 +204,70 @@ public class AQTSchemaGenerator {
 				collectDDLForEntity((TableNode)ref, collector);
 				ForeignKeyInfo joinInfo = ref.join();
 				collector.registerForeignKey(joinInfo);
+			} else if (child instanceof EmbeddedEntity emb) {
+				collectDDLForEntity((TableNode)emb, collector);
 			} else if (child instanceof JoinTableEntityCollection jte) {
 				collectDDLForEntity(jte, collector);
-				collector.registerTable(jte.join().joinTableInfo().tableInfo(), List.of());
-				collector.registerColumn(jte.join().joinTableInfo().tableInfo(), jte.join().parentKey().fkColumnName(), null);
-				collector.registerColumn(jte.join().joinTableInfo().tableInfo(), jte.join().childKey().fkColumnName(), null);
+				DDLColumn parentKeyColumn = collector.registerColumn(jte.join().joinTableInfo().tableInfo(), jte.join().parentKey().fkColumnName(), null);
+				DDLColumn childKeyColumn = collector.registerColumn(jte.join().joinTableInfo().tableInfo(), jte.join().childKey().fkColumnName(), null);
+				collector.registerTable(jte.join().joinTableInfo().tableInfo(), List.of(parentKeyColumn, childKeyColumn));
 				collector.registerForeignKey(jte.join().parentKey());
 				collector.registerForeignKey(jte.join().childKey());
 			}
 		}
 	}
+
+	/**
+	 * Builds column metadata by merging @Column annotation values from multiple fields.
+	 * When multiple fields define the same column, the most
+	 * restrictive constraints are used: non-nullable wins, unique wins.
+	 */
+	private static DDLColumnMetadata buildColumnMetadataFromAnnotations(List<FieldModel> fields) {
+		// Start with default values from @Column annotation
+		final int DEFAULT_LENGTH = 255;
+		final int DEFAULT_PRECISION = 19;
+		final int DEFAULT_SCALE = 4;
+		int length = DEFAULT_LENGTH;
+		int precision = DEFAULT_PRECISION;
+		int scale = DEFAULT_SCALE;
+		boolean nullable = true;
+		boolean unique = false;
+
+		for (FieldModel field : fields) {
+			if (field.hasAnnotation(Column.class)) {
+				AnnotationModel annotation = field.getAnnotation(Column.class).orElseThrow();
+
+				
+				// Get numeric values - only apply non-defaults
+				Number lengthValue = annotation.getNumberAttribute("length");
+				if (lengthValue.intValue() != DEFAULT_LENGTH) {
+					length = lengthValue.intValue();
+				}
+
+				Number precisionValue = annotation.getNumberAttribute("precision");
+				if (precisionValue.intValue() != DEFAULT_PRECISION) {
+					precision = precisionValue.intValue();
+				}
+
+				Number scaleValue = annotation.getNumberAttribute("scale");
+				if (scaleValue.intValue() != DEFAULT_SCALE) {
+					scale = scaleValue.intValue();
+				}
+
+				// For boolean constraints, use most restrictive value
+				List<Boolean> nullableValues = annotation.getBooleanValues("nullable");
+				if (!nullableValues.isEmpty() && !nullableValues.get(0)) {
+					nullable = false; // non-nullable wins
+				}
+
+				List<Boolean> uniqueValues = annotation.getBooleanValues("unique");
+				if (!uniqueValues.isEmpty() && uniqueValues.get(0)) {
+					unique = true; // unique wins
+				}
+			}
+		}
+
+		return new DDLColumnMetadata(length, precision, scale, nullable, unique);
+	}
+
 }

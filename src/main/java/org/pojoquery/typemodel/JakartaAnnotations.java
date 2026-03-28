@@ -155,17 +155,9 @@ public final class JakartaAnnotations {
             .filter(name -> !name.isEmpty())
             .ifPresent(name -> attrs.put("name", name));
 
-        columnAnnotation.getNumberAttribute("length")
-            .filter(length -> length.intValue() != 255) // 255 is default
-            .ifPresent(length -> attrs.put("length", length.intValue()));
-
-        columnAnnotation.getNumberAttribute("precision")
-            .filter(precision -> precision.intValue() != 0)
-            .ifPresent(precision -> attrs.put("precision", precision.intValue()));
-
-        columnAnnotation.getNumberAttribute("scale")
-            .filter(scale -> scale.intValue() != 0)
-            .ifPresent(scale -> attrs.put("scale", scale.intValue()));
+        attrs.put("length", columnAnnotation.getNumberAttribute("length").intValue());
+        attrs.put("precision", columnAnnotation.getNumberAttribute("precision").intValue());
+        attrs.put("scale", columnAnnotation.getNumberAttribute("scale").intValue());
 
         columnAnnotation.getBooleanAttribute("nullable")
             .filter(nullable -> !nullable) // true is default

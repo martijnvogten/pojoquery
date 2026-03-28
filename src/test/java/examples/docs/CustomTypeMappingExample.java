@@ -13,6 +13,7 @@ import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.dialects.HsqldbDbContext;
+import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumnMetadata;
 import org.pojoquery.schema.SchemaGenerator;
 import org.pojoquery.typemodel.FieldModel;
 
@@ -35,7 +36,7 @@ public class CustomTypeMappingExample {
     public static class HsqldbWithUuidContext extends HsqldbDbContext {
 
         @Override
-        public String mapJavaTypeToSql(FieldModel field) {
+        public String mapJavaTypeToSql(FieldModel field, DDLColumnMetadata columnMetadata) {
             String type = field.getType().getQualifiedName();
             
             // Add support for UUID type
@@ -44,7 +45,7 @@ public class CustomTypeMappingExample {
             }
             
             // Fall back to parent implementation for all other types
-            return super.mapJavaTypeToSql(field);
+            return super.mapJavaTypeToSql(field, columnMetadata);
         }
     }
     // end::custom-dbcontext[]

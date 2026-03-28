@@ -9,11 +9,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import org.pojoquery.JdbcValueMapper;
 import org.pojoquery.pipeline.AbstractQueryTree.Column;
 import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityNode;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityReference;
+import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
@@ -87,28 +89,12 @@ public class AQTRowProcessor<R> {
 				if (referencedEntity != null) {
 					setFieldValue(entity, ref.field(), referencedEntity);
 				}
-			} else if (child instanceof EntityCollection entityCollection) {
-				Object value = entitiesOnThisRow.get(entityCollection.alias());
-				if (value != null) {
-					Field targetField = getField(entityCollection.field());
-					Object mappedValue = entityCollection.valueMapper().mapValue(value);
-					setFieldValue(entity, entityCollection.field(), DefaultValueMappers.addValueToCollection(
-						targetField.getType(), 
-						getFieldValue(entity, entityCollection.field()), 
-						getClass(entityCollection.type()),
-						mappedValue));
-				}
-			} else if (child instanceof ValueCollection valueCollection) {
-				Object value = row.get(valueCollection.alias() + ".value");
-				if (value != null) {
-					Field targetField = getField(valueCollection.field());
-					Object mappedValue = valueCollection.valueMapper().mapValue(value);
-					setFieldValue(entity, valueCollection.field(), DefaultValueMappers.addValueToCollection(
-						targetField.getType(), 
-						getFieldValue(entity, valueCollection.field()), 
-						getClass(valueCollection.componentType()),
-						mappedValue));
-				}
+			} else if (child instanceof EntityCollection ec) {
+				addToCollection(entity, ec.field(), entitiesOnThisRow.get(ec.alias()), ec.valueMapper(), ec.type());
+			} else if (child instanceof JoinTableEntityCollection jtec) {
+				addToCollection(entity, jtec.field(), entitiesOnThisRow.get(jtec.alias()), jtec.valueMapper(), jtec.type());
+			} else if (child instanceof ValueCollection vc) {
+				addToCollection(entity, vc.field(), row.get(vc.alias() + ".value"), vc.valueMapper(), vc.componentType());
 			} else if (child instanceof Column scalar) {
 				Object value = row.get(tableNode.alias() + "." + scalar.field().getName());
 				setFieldValue(entity, scalar.field(), scalar.valueMapper().mapValue(value));
@@ -148,6 +134,18 @@ public class AQTRowProcessor<R> {
 			field.set(entity, value);
 		} catch (IllegalAccessException e) {
 			throw new RuntimeException("Failed to set field value for field " + fieldModel.getName(), e);
+		}
+	}
+
+	private void addToCollection(Object entity, FieldModel field, Object value, JdbcValueMapper valueMapper, TypeModel componentType) throws SQLException {
+		if (value != null) {
+			Field targetField = getField(field);
+			Object mappedValue = valueMapper.mapValue(value);
+			setFieldValue(entity, field, DefaultValueMappers.addValueToCollection(
+				targetField.getType(), 
+				getFieldValue(entity, field), 
+				getClass(componentType),
+				mappedValue));
 		}
 	}
 

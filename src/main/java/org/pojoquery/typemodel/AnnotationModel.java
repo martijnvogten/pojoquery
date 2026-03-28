@@ -105,8 +105,8 @@ public interface AnnotationModel {
         return getNestedAnnotations("value");
     }
 
-    default Optional<Number> getNumberAttribute(String attr) {
-        return getNumberAttributes(attr).stream().findFirst();
+    default Number getNumberAttribute(String attr) {
+        return getNumberAttributes(attr).stream().findFirst().orElseThrow();
     }
 
     default Optional<Boolean> getBooleanAttribute(String attr) {
