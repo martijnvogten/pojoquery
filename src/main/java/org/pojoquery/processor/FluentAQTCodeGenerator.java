@@ -1,5 +1,240 @@
 package org.pojoquery.processor;
 
+import java.io.IOException;
+import java.io.Writer;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
+import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
+import org.pojoquery.pipeline.AbstractQueryTree.EntityReference;
+import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
+import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKeyField;
+import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
+import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
+import org.pojoquery.pipeline.AbstractQueryTree.ScalarNode;
+import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
+
 public class FluentAQTCodeGenerator {
 
+	public String example() {
+		return """
+			package org.pojoquery.fluent;
+
+			import org.pojoquery.fluent.FluentConditionChainWithInterfaces.Book;
+			import org.pojoquery.fluent.internal.ConditionChainOperators;
+
+			public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where> {
+
+				public final ConditionChainOperators<Terminator<BookQuery>> id;
+				public final ConditionChainOperators<Terminator<BookQuery>> title;
+				public final StaticAuthor author;
+
+				public class StaticAuthor {
+					public final ConditionChainOperators<Terminator<BookQuery>> id = staticOp("author", "id");
+					public final ConditionChainOperators<Terminator<BookQuery>> name = staticOp("author", "name");
+				}
+
+				public class Where {
+					public final ConditionChainOperators<ConditionTerminator<Book, Where, ?>> id = chainOp("book", "id");
+					public final ConditionChainOperators<ConditionTerminator<Book, Where, ?>> title = chainOp("book", "title");
+					public final WhereAuthor author = new WhereAuthor();
+
+					public class WhereAuthor {
+						public final ConditionChainOperators<ConditionTerminator<Book, Where, ?>> id = chainOp("author", "id");
+						public final ConditionChainOperators<ConditionTerminator<Book, Where, ?>> name = chainOp("author", "name");
+					}
+				}
+
+				public BookQuery() {
+					super(Book.class, q -> ((BookQuery) q).new Where());
+					// Initialize static operators after super() completes
+					this.id = staticOp("book", "id");
+					this.title = staticOp("book", "title");
+					this.author = new StaticAuthor();
+				}
+			}				
+			""";
+	}
+
+	/**
+     * Generates the complete query class source code.
+     * 
+     * @param tree The QueryTree describing the entity structure
+     * @param packageName The package name for the generated class
+     * @param entityName The simple name of the entity class
+     * @param queryClassName The name for the generated query class
+     * @param out The writer to output the generated code
+     */
+    public void generate(RootNode tree, String packageName, String entityName, 
+            String queryClassName, Writer out) throws IOException {
+		
+		// Collect scalar fields and entity references from the tree
+		List<ScalarField> scalarFields = new ArrayList<>();
+		List<EntityField> entityFields = new ArrayList<>();
+		collectFields(tree, scalarFields, entityFields);
+		
+		StringBuilder sb = new StringBuilder();
+		
+		// Package and imports
+		sb.append("""
+			package %s;
+			
+			import org.pojoquery.fluent.ConditionTerminator;
+			import org.pojoquery.fluent.FluentQuery;
+			import org.pojoquery.fluent.Terminator;
+			import org.pojoquery.fluent.internal.ConditionChainOperators;
+			
+			""".formatted(packageName));
+		
+		// Class declaration
+		sb.append("public class %s extends FluentQuery<%s, %s, %s.Where> {\n\n"
+			.formatted(queryClassName, entityName, queryClassName, queryClassName));
+		
+		// Static operator field declarations
+		for (ScalarField field : scalarFields) {
+			sb.append("\tpublic final ConditionChainOperators<Terminator<%s>> %s;\n"
+				.formatted(queryClassName, field.fieldName));
+		}
+		for (EntityField entity : entityFields) {
+			sb.append("\tpublic final Static%s %s;\n"
+				.formatted(capitalize(entity.fieldName), entity.fieldName));
+		}
+		sb.append("\n");
+		
+		// Static nested classes for entity references
+		for (EntityField entity : entityFields) {
+			generateStaticEntityClass(sb, queryClassName, entity, "\t");
+		}
+		
+		// Where class
+		sb.append("\tpublic class Where {\n");
+		for (ScalarField field : scalarFields) {
+			sb.append("\t\tpublic final ConditionChainOperators<ConditionTerminator<%s, Where, ?>> %s = chainOp(\"%s\", \"%s\");\n"
+				.formatted(entityName, field.fieldName, field.tableAlias, field.fieldName));
+		}
+		for (EntityField entity : entityFields) {
+			String cap = capitalize(entity.fieldName);
+			sb.append("\t\tpublic final Where%s %s = new Where%s();\n"
+				.formatted(cap, entity.fieldName, cap));
+		}
+		sb.append("\n");
+		
+		// Nested Where classes for entity references
+		for (EntityField entity : entityFields) {
+			generateWhereEntityClass(sb, entityName, entity, "\t\t");
+		}
+		sb.append("\t}\n\n");
+		
+		// Constructor
+		sb.append("\tpublic %s() {\n".formatted(queryClassName));
+		sb.append("\t\tsuper(%s.class, q -> ((%s) q).new Where());\n"
+			.formatted(entityName, queryClassName));
+		for (ScalarField field : scalarFields) {
+			sb.append("\t\tthis.%s = staticOp(\"%s\", \"%s\");\n"
+				.formatted(field.fieldName, field.tableAlias, field.fieldName));
+		}
+		for (EntityField entity : entityFields) {
+			sb.append("\t\tthis.%s = new Static%s();\n"
+				.formatted(entity.fieldName, capitalize(entity.fieldName)));
+		}
+		sb.append("\t}\n}\n");
+		
+		out.write(sb.toString());
+	}
+	
+	private void generateStaticEntityClass(StringBuilder sb, String queryClassName, 
+			EntityField entity, String indent) {
+		sb.append("%spublic class Static%s {\n".formatted(indent, capitalize(entity.fieldName)));
+		for (ScalarField field : entity.scalarFields) {
+			sb.append("%s\tpublic final ConditionChainOperators<Terminator<%s>> %s = staticOp(\"%s\", \"%s\");\n"
+				.formatted(indent, queryClassName, field.fieldName, field.tableAlias, field.fieldName));
+		}
+		for (EntityField nested : entity.entityFields) {
+			String cap = capitalize(nested.fieldName);
+			sb.append("%s\tpublic final Static%s %s = new Static%s();\n"
+				.formatted(indent, cap, nested.fieldName, cap));
+		}
+		sb.append("%s}\n\n".formatted(indent));
+		
+		// Recursively generate nested static classes
+		for (EntityField nested : entity.entityFields) {
+			generateStaticEntityClass(sb, queryClassName, nested, indent);
+		}
+	}
+	
+	private void generateWhereEntityClass(StringBuilder sb, String entityName, 
+			EntityField entity, String indent) {
+		sb.append("%spublic class Where%s {\n".formatted(indent, capitalize(entity.fieldName)));
+		for (ScalarField field : entity.scalarFields) {
+			sb.append("%s\tpublic final ConditionChainOperators<ConditionTerminator<%s, Where, ?>> %s = chainOp(\"%s\", \"%s\");\n"
+				.formatted(indent, entityName, field.fieldName, field.tableAlias, field.fieldName));
+		}
+		for (EntityField nested : entity.entityFields) {
+			String cap = capitalize(nested.fieldName);
+			sb.append("%s\tpublic final Where%s %s = new Where%s();\n"
+				.formatted(indent, cap, nested.fieldName, cap));
+		}
+		sb.append("%s}\n\n".formatted(indent));
+		
+		// Recursively generate nested where classes
+		for (EntityField nested : entity.entityFields) {
+			generateWhereEntityClass(sb, entityName, nested, indent);
+		}
+	}
+	
+	private void collectFields(TableNode table, List<ScalarField> scalarFields, 
+			List<EntityField> entityFields) {
+		String alias = table.alias();
+		
+		for (QueryNode child : table.children()) {
+			if (child instanceof ScalarNode scalar && scalar instanceof PrimaryKeyField pk) {
+				scalarFields.add(new ScalarField(pk.field().getName(), alias));
+			} else if (child instanceof ScalarNode scalar) {
+				scalarFields.add(new ScalarField(scalar.field().getName(), alias));
+			} else if (child instanceof EntityReference ref) {
+				entityFields.add(collectEntityField(ref));
+			} else if (child instanceof EntityCollection coll) {
+				entityFields.add(collectEntityField(coll));
+			} else if (child instanceof JoinTableEntityCollection joinColl) {
+				entityFields.add(collectEntityField(joinColl));
+			} else if (child instanceof EmbeddedEntity embedded) {
+				// For embedded entities, collect fields with embedded's alias
+				collectFields(embedded, scalarFields, entityFields);
+			}
+		}
+	}
+	
+	private EntityField collectEntityField(TableNode entityNode) {
+		List<ScalarField> scalarFields = new ArrayList<>();
+		List<EntityField> nestedEntities = new ArrayList<>();
+		
+		String fieldName;
+		if (entityNode instanceof EntityReference ref) {
+			fieldName = ref.field().getName();
+		} else if (entityNode instanceof EntityCollection coll) {
+			fieldName = coll.field().getName();
+		} else if (entityNode instanceof JoinTableEntityCollection joinColl) {
+			fieldName = joinColl.field().getName();
+		} else {
+			throw new IllegalArgumentException("Unexpected node type: " + entityNode.getClass());
+		}
+		
+		if (entityNode.children() != null) {
+			collectFields(entityNode, scalarFields, nestedEntities);
+		}
+		
+		return new EntityField(fieldName, entityNode.alias(), scalarFields, nestedEntities);
+	}
+	
+	private String capitalize(String s) {
+		if (s == null || s.isEmpty()) return s;
+		return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+	}
+	
+	// Helper records for collecting field information
+	private record ScalarField(String fieldName, String tableAlias) {}
+	
+	private record EntityField(String fieldName, String alias, 
+			List<ScalarField> scalarFields, List<EntityField> entityFields) {}
 }
