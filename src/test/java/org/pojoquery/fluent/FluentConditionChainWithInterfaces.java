@@ -56,16 +56,18 @@ public class FluentConditionChainWithInterfaces {
 	}
 
 	abstract static class ConditionChainOperators<T> implements Operators<T> {
+		private final String tableAlias;
 		private final String fieldName;
 		private final T terminator;
 
-		public ConditionChainOperators(String fieldName, T terminator) {
+		public ConditionChainOperators(String tableAlias, String fieldName, T terminator) {
+			this.tableAlias = tableAlias;
 			this.fieldName = fieldName;
 			this.terminator = terminator;
 		}
 
 		public T eq(Object value) {
-			appendExpression("{" + fieldName + "} = ?", value);
+			appendExpression("{" + tableAlias + "." + fieldName + "} = ?", value);
 			return terminator;
 		}
 
@@ -76,21 +78,18 @@ public class FluentConditionChainWithInterfaces {
 		DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
 		List<SqlExpression> staticConditionSql = new ArrayList<>();
 		List<SqlExpression> whereConditionSql = new ArrayList<>();
-		private final RootNode queryTree;
 
-		FluentQuery(RootNode aqt) {
-			this.queryTree = aqt;
+		FluentQuery(Class<R> type) {
+			RootNode aqt = AQTTransformer.buildQueryTreeForType(type);
 			AQTTransformer.toSql(aqt, query);
 		}
 
 		protected void appendExpression(String sql, Object... parameters) {
 			whereConditionSql.add(SqlExpression.sql(sql, parameters));
-			System.out.println("APPEND EXPRESSION: " + sql + " with parameters " + List.of(parameters));
 		}
 		
 		protected void appendStaticExpression(String sql, Object... parameters) {
 			staticConditionSql.add(SqlExpression.sql(sql, parameters));
-			System.out.println("APPEND STATIC EXPRESSION: " + sql + " with parameters " + List.of(parameters));
 		}
 
 		public void addOrderBy(String orderBy) {
@@ -124,8 +123,6 @@ public class FluentConditionChainWithInterfaces {
 
 	class BookQuery extends FluentQuery<Book> {
 
-		static RootNode aqt = AQTTransformer.buildQueryTreeForType(Book.class);
-		
 		private final ConditionTerminator<Book, BookQueryConditionStarter, BookQueryConditionTerminator> conditionTerminator;
 		private final Terminator<BookQuery> staticTerminator;
 		private final BookQueryConditionStarter starter;
@@ -137,21 +134,21 @@ public class FluentConditionChainWithInterfaces {
 			((BookQueryConditionTerminator)conditionTerminator).setStarter(starter);
 		}
 		
-		public StaticBookQueryConditionOperators id = new StaticBookQueryConditionOperators("id");
-		public StaticBookQueryConditionOperators title = new StaticBookQueryConditionOperators("title");
+		public StaticBookQueryConditionOperators id = new StaticBookQueryConditionOperators("book", "id");
+		public StaticBookQueryConditionOperators title = new StaticBookQueryConditionOperators("book", "title");
 
 		public class BookQueryConditionStarter {
-			public BookQueryConditionOperators id = new BookQueryConditionOperators("id", conditionTerminator);
-			public BookQueryConditionOperators title = new BookQueryConditionOperators("title", conditionTerminator);
+			public BookQueryConditionOperators id = new BookQueryConditionOperators("book", "id");
+			public BookQueryConditionOperators title = new BookQueryConditionOperators("book", "title");
 		}
 
 		BookQuery() {
-			super(aqt);
+			super(Book.class);
 		}
 
 		class StaticBookQueryConditionOperators extends ConditionChainOperators<Terminator<BookQuery>> {
-			public StaticBookQueryConditionOperators(String fieldName) {
-				super(fieldName, staticTerminator);
+			public StaticBookQueryConditionOperators(String tableAlias, String fieldName) {
+				super(tableAlias, fieldName, staticTerminator);
 			}
 
 			@Override
@@ -162,9 +159,8 @@ public class FluentConditionChainWithInterfaces {
 
 		class BookQueryConditionOperators extends
 				ConditionChainOperators<ConditionTerminator<Book, BookQueryConditionStarter, BookQueryConditionTerminator>> {
-			public BookQueryConditionOperators(String fieldName,
-					ConditionTerminator<Book, BookQueryConditionStarter, BookQueryConditionTerminator> terminator) {
-				super(fieldName, terminator);
+			public BookQueryConditionOperators(String tableAlias, String fieldName) {
+				super(tableAlias, fieldName, conditionTerminator);
 			}
 
 			@Override
