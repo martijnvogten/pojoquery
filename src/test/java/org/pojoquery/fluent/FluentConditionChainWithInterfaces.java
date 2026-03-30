@@ -1,5 +1,7 @@
 package org.pojoquery.fluent;
 
+import java.sql.SQLException;
+
 import org.junit.Test;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Id;
@@ -33,5 +35,13 @@ public class FluentConditionChainWithInterfaces {
 		// Test nested author access
 		SqlExpression authorQuery = new BookQuery().where().author.name.eq("Tolkien").toSql();
 		System.out.println("AUTHOR SQL: " + authorQuery.getSql());
+	}
+
+	@Test
+	public void testOrderBy() throws SQLException {
+		BookQuery q = new BookQuery();
+		q.orderBy().title.asc()
+		.orderBy().author.name.desc()
+		.groupBy().id.orderBy().title.asc();
 	}
 }

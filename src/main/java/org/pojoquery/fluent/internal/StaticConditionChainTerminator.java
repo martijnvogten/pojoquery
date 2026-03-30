@@ -1,5 +1,6 @@
 package org.pojoquery.fluent.internal;
 
+import java.util.List;
 import java.util.function.Supplier;
 
 import org.pojoquery.SqlExpression;
@@ -18,24 +19,26 @@ public class StaticConditionChainTerminator<S> implements Terminator<S> {
 	}
 
 	public S and() {
-		target.append(" AND ", new Object[0]);
+		target.append("AND", List.of());
 		return starter;
 	}
 
 	@Override
 	public Terminator<S> and(Terminator<?> other) {
-		target.append(" AND (" + other.toSql().getSql() + ")", other.toSql().getParameters());
+		SqlExpression otherSql = other.toSql();
+		target.append("AND (" + otherSql.getSql() + ")", otherSql.getParameters());
 		return this;
 	}
 
 	public S or() {
-		target.append(" OR ", new Object[0]);
+		target.append("OR", List.of());
 		return starter;
 	}
 	
 	@Override
 	public Terminator<S> or(Terminator<?> other) {
-		target.append(" OR (" + other.toSql().getSql() + ")", other.toSql().getParameters());
+		SqlExpression otherSql = other.toSql();
+		target.append("OR (" + otherSql.getSql() + ")", otherSql.getParameters());
 		return this;
 	}
 

@@ -61,7 +61,7 @@ public class TestFluentAQTCodeGenerator {
         String code = output.toString();
         System.out.println(code);
         
-        assertTrue(code.contains("public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where>"),
+        assertTrue(code.contains("public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, BookQuery.OrderBy, BookQuery.GroupBy> "),
             "Should generate correct class declaration");
     }
 
@@ -149,7 +149,7 @@ public class TestFluentAQTCodeGenerator {
         
         assertTrue(code.contains("public BookQuery() {"),
             "Should generate constructor");
-        assertTrue(code.contains("super(Book.class, q -> ((BookQuery) q).new Where());"),
+        assertTrue(code.contains("super(Book.class);"),
             "Should call super with correct arguments");
         assertTrue(code.contains("this.id = staticOp(\"book\", \"id\");"),
             "Should initialize id in constructor");

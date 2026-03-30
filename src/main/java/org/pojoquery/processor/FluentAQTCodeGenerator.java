@@ -24,7 +24,7 @@ public class FluentAQTCodeGenerator {
 			import org.pojoquery.fluent.FluentConditionChainWithInterfaces.Book;
 			import org.pojoquery.fluent.internal.ConditionChainOperators;
 
-			public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where> {
+			public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, BookQuery.OrderBy, BookQuery.GroupBy> {
 
 				public final ConditionChainOperators<Terminator<BookQuery>> id;
 				public final ConditionChainOperators<Terminator<BookQuery>> title;
@@ -36,25 +36,62 @@ public class FluentAQTCodeGenerator {
 				}
 
 				public class Where {
-					public final ConditionChainOperators<ConditionTerminator<Book, Where, ?>> id = chainOp("book", "id");
-					public final ConditionChainOperators<ConditionTerminator<Book, Where, ?>> title = chainOp("book", "title");
+					public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> id = chainOp("book", "id");
+					public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> title = chainOp("book", "title");
 					public final WhereAuthor author = new WhereAuthor();
 
 					public class WhereAuthor {
-						public final ConditionChainOperators<ConditionTerminator<Book, Where, ?>> id = chainOp("author", "id");
-						public final ConditionChainOperators<ConditionTerminator<Book, Where, ?>> name = chainOp("author", "name");
+						public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> id = chainOp("author", "id");
+						public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> name = chainOp("author", "name");
+					}
+				}
+
+				public class OrderBy {
+					public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> id = orderByOp("book", "id");
+					public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> title = orderByOp("book", "title");
+					public final OrderByAuthor author = new OrderByAuthor();
+
+					public class OrderByAuthor {
+						public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> id = orderByOp("author", "id");
+						public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> name = orderByOp("author", "name");
+					}
+				}
+
+				public class GroupBy {
+					public final QueryTerminator<Book, OrderBy, GroupBy> id = groupByOp("book", "id");
+					public final QueryTerminator<Book, OrderBy, GroupBy> title = groupByOp("book", "title");
+					public final GroupByAuthor author = new GroupByAuthor();
+
+					public class GroupByAuthor {
+						public final QueryTerminator<Book, OrderBy, GroupBy> id = groupByOp("author", "id");
+						public final QueryTerminator<Book, OrderBy, GroupBy> name = groupByOp("author", "name");
 					}
 				}
 
 				public BookQuery() {
-					super(Book.class, q -> ((BookQuery) q).new Where());
+					super(Book.class);
 					// Initialize static operators after super() completes
 					this.id = staticOp("book", "id");
 					this.title = staticOp("book", "title");
 					this.author = new StaticAuthor();
 				}
-			}				
-			""";
+
+				@Override
+				protected BookQuery.Where createWhereConditionStarter() {
+					return new Where();
+				}
+
+				@Override
+				protected BookQuery.OrderBy createOrderByStarter() {
+					return new OrderBy();
+				}
+
+				@Override
+				protected BookQuery.GroupBy createGroupByStarter() {
+					return new GroupBy();
+				}
+			}
+		""";
 	}
 
 	/**
@@ -82,14 +119,16 @@ public class FluentAQTCodeGenerator {
 			
 			import org.pojoquery.fluent.ConditionTerminator;
 			import org.pojoquery.fluent.FluentQuery;
+			import org.pojoquery.fluent.QueryTerminator;
 			import org.pojoquery.fluent.Terminator;
 			import org.pojoquery.fluent.internal.ConditionChainOperators;
+			import org.pojoquery.fluent.internal.OrderByChain;
 			
 			""".formatted(packageName));
 		
 		// Class declaration
-		sb.append("public class %s extends FluentQuery<%s, %s, %s.Where> {\n\n"
-			.formatted(queryClassName, entityName, queryClassName, queryClassName));
+		sb.append("public class %s extends FluentQuery<%s, %s, %s.Where, %s.OrderBy, %s.GroupBy> {\n\n"
+			.formatted(queryClassName, entityName, queryClassName, queryClassName, queryClassName, queryClassName));
 		
 		// Static operator field declarations
 		for (ScalarField field : scalarFields) {
@@ -110,7 +149,7 @@ public class FluentAQTCodeGenerator {
 		// Where class
 		sb.append("\tpublic class Where {\n");
 		for (ScalarField field : scalarFields) {
-			sb.append("\t\tpublic final ConditionChainOperators<ConditionTerminator<%s, Where, ?>> %s = chainOp(\"%s\", \"%s\");\n"
+			sb.append("\t\tpublic final ConditionChainOperators<ConditionTerminator<%s, Where, ?, OrderBy, GroupBy>> %s = chainOp(\"%s\", \"%s\");\n"
 				.formatted(entityName, field.fieldName, field.tableAlias, field.fieldName));
 		}
 		for (EntityField entity : entityFields) {
@@ -126,9 +165,47 @@ public class FluentAQTCodeGenerator {
 		}
 		sb.append("\t}\n\n");
 		
+		// OrderBy class
+		sb.append("\tpublic class OrderBy {\n");
+		for (ScalarField field : scalarFields) {
+			sb.append("\t\tpublic final OrderByChain<QueryTerminator<%s, OrderBy, GroupBy>> %s = orderByOp(\"%s\", \"%s\");\n"
+				.formatted(entityName, field.fieldName, field.tableAlias, field.fieldName));
+		}
+		for (EntityField entity : entityFields) {
+			String cap = capitalize(entity.fieldName);
+			sb.append("\t\tpublic final OrderBy%s %s = new OrderBy%s();\n"
+				.formatted(cap, entity.fieldName, cap));
+		}
+		sb.append("\n");
+		
+		// Nested OrderBy classes for entity references
+		for (EntityField entity : entityFields) {
+			generateOrderByEntityClass(sb, entityName, entity, "\t\t");
+		}
+		sb.append("\t}\n\n");
+		
+		// GroupBy class
+		sb.append("\tpublic class GroupBy {\n");
+		for (ScalarField field : scalarFields) {
+			sb.append("\t\tpublic final QueryTerminator<%s, OrderBy, GroupBy> %s = groupByOp(\"%s\", \"%s\");\n"
+				.formatted(entityName, field.fieldName, field.tableAlias, field.fieldName));
+		}
+		for (EntityField entity : entityFields) {
+			String cap = capitalize(entity.fieldName);
+			sb.append("\t\tpublic final GroupBy%s %s = new GroupBy%s();\n"
+				.formatted(cap, entity.fieldName, cap));
+		}
+		sb.append("\n");
+		
+		// Nested GroupBy classes for entity references
+		for (EntityField entity : entityFields) {
+			generateGroupByEntityClass(sb, entityName, entity, "\t\t");
+		}
+		sb.append("\t}\n\n");
+		
 		// Constructor
 		sb.append("\tpublic %s() {\n".formatted(queryClassName));
-		sb.append("\t\tsuper(%s.class, q -> ((%s) q).new Where());\n"
+		sb.append("\t\tsuper(%s.class);\n"
 			.formatted(entityName, queryClassName));
 		for (ScalarField field : scalarFields) {
 			sb.append("\t\tthis.%s = staticOp(\"%s\", \"%s\");\n"
@@ -138,7 +215,23 @@ public class FluentAQTCodeGenerator {
 			sb.append("\t\tthis.%s = new Static%s();\n"
 				.formatted(entity.fieldName, capitalize(entity.fieldName)));
 		}
-		sb.append("\t}\n}\n");
+		sb.append("\t}\n");
+		sb.append("\n");
+		sb.append("\t@Override\n");
+		sb.append("\tprotected %s.Where createWhereConditionStarter() {\n".formatted(queryClassName));
+		sb.append("\t\treturn new Where();\n");
+		sb.append("\t}\n\n");
+		
+		sb.append("\t@Override\n");
+		sb.append("\tprotected %s.OrderBy createOrderByStarter() {\n".formatted(queryClassName));
+		sb.append("\t\treturn new OrderBy();\n");
+		sb.append("\t}\n\n");
+		
+		sb.append("\t@Override\n");
+		sb.append("\tprotected %s.GroupBy createGroupByStarter() {\n".formatted(queryClassName));
+		sb.append("\t\treturn new GroupBy();\n");
+		sb.append("\t}\n");
+		sb.append("}\n");
 		
 		out.write(sb.toString());
 	}
@@ -167,7 +260,7 @@ public class FluentAQTCodeGenerator {
 			EntityField entity, String indent) {
 		sb.append("%spublic class Where%s {\n".formatted(indent, capitalize(entity.fieldName)));
 		for (ScalarField field : entity.scalarFields) {
-			sb.append("%s\tpublic final ConditionChainOperators<ConditionTerminator<%s, Where, ?>> %s = chainOp(\"%s\", \"%s\");\n"
+			sb.append("%s\tpublic final ConditionChainOperators<ConditionTerminator<%s, Where, ?, OrderBy, GroupBy>> %s = chainOp(\"%s\", \"%s\");\n"
 				.formatted(indent, entityName, field.fieldName, field.tableAlias, field.fieldName));
 		}
 		for (EntityField nested : entity.entityFields) {
@@ -180,6 +273,46 @@ public class FluentAQTCodeGenerator {
 		// Recursively generate nested where classes
 		for (EntityField nested : entity.entityFields) {
 			generateWhereEntityClass(sb, entityName, nested, indent);
+		}
+	}
+	
+	private void generateOrderByEntityClass(StringBuilder sb, String entityName, 
+			EntityField entity, String indent) {
+		sb.append("%spublic class OrderBy%s {\n".formatted(indent, capitalize(entity.fieldName)));
+		for (ScalarField field : entity.scalarFields) {
+			sb.append("%s\tpublic final OrderByChain<QueryTerminator<%s, OrderBy, GroupBy>> %s = orderByOp(\"%s\", \"%s\");\n"
+				.formatted(indent, entityName, field.fieldName, field.tableAlias, field.fieldName));
+		}
+		for (EntityField nested : entity.entityFields) {
+			String cap = capitalize(nested.fieldName);
+			sb.append("%s\tpublic final OrderBy%s %s = new OrderBy%s();\n"
+				.formatted(indent, cap, nested.fieldName, cap));
+		}
+		sb.append("%s}\n\n".formatted(indent));
+		
+		// Recursively generate nested orderby classes
+		for (EntityField nested : entity.entityFields) {
+			generateOrderByEntityClass(sb, entityName, nested, indent);
+		}
+	}
+	
+	private void generateGroupByEntityClass(StringBuilder sb, String entityName, 
+			EntityField entity, String indent) {
+		sb.append("%spublic class GroupBy%s {\n".formatted(indent, capitalize(entity.fieldName)));
+		for (ScalarField field : entity.scalarFields) {
+			sb.append("%s\tpublic final QueryTerminator<%s, OrderBy, GroupBy> %s = groupByOp(\"%s\", \"%s\");\n"
+				.formatted(indent, entityName, field.fieldName, field.tableAlias, field.fieldName));
+		}
+		for (EntityField nested : entity.entityFields) {
+			String cap = capitalize(nested.fieldName);
+			sb.append("%s\tpublic final GroupBy%s %s = new GroupBy%s();\n"
+				.formatted(indent, cap, nested.fieldName, cap));
+		}
+		sb.append("%s}\n\n".formatted(indent));
+		
+		// Recursively generate nested groupby classes
+		for (EntityField nested : entity.entityFields) {
+			generateGroupByEntityClass(sb, entityName, nested, indent);
 		}
 	}
 	

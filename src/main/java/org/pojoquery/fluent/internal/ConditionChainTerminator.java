@@ -11,13 +11,13 @@ import org.pojoquery.fluent.FluentQuery.Appender;
 import org.pojoquery.fluent.QueryTerminator;
 import org.pojoquery.fluent.Terminator;
 
-public class ConditionChainTerminator<R, S, T extends ConditionChainTerminator<R, S, T>>
-		implements ConditionTerminator<R, S, T> {
+public class ConditionChainTerminator<R, S, T extends ConditionChainTerminator<R, S, T, O, G>, O, G>
+		implements ConditionTerminator<R, S, T, O, G> {
 	private S starter;
-	private final FluentQuery<R, ?, ?> query;
+	private final FluentQuery<R, ?, ?, O, G> query;
 	private final Appender expressionCallback;
 
-	public ConditionChainTerminator(FluentQuery<R, ?, ?> query, Appender builder) {
+	public ConditionChainTerminator(FluentQuery<R, ?, ?, O, G> query, Appender builder) {
 		this.query = query;
 		this.expressionCallback = builder;
 	}
@@ -28,26 +28,28 @@ public class ConditionChainTerminator<R, S, T extends ConditionChainTerminator<R
 
 	@Override
 	public S and() {
-		expressionCallback.append(" AND ");
+		expressionCallback.append("AND", List.of());
 		return starter;
 	}
 
 	@Override
 	public Terminator<S> and(Terminator<?> other) {
-		expressionCallback.append(" AND (" + other.toSql().getSql() + ")", other.toSql().getParameters());
-		return this;
+		SqlExpression otherSql = other.toSql();
+		expressionCallback.append("AND (" + otherSql.getSql() + ")", otherSql.getParameters());
+		return (Terminator<S>) this;
 	}
 	
 	@Override
 	public S or() {
-		expressionCallback.append(" OR ");
+		expressionCallback.append("OR", List.of());
 		return starter;
 	}
 
 	@Override
 	public Terminator<S> or(Terminator<?> other) {
-		expressionCallback.append(" OR (" + other.toSql().getSql() + ")", other.toSql().getParameters());
-		return this;
+		SqlExpression otherSql = other.toSql();
+		expressionCallback.append("OR (" + otherSql.getSql() + ")", otherSql.getParameters());
+		return (Terminator<S>) this;
 	}
 
 	public List<R> list(Connection c) throws SQLException {
@@ -55,26 +57,36 @@ public class ConditionChainTerminator<R, S, T extends ConditionChainTerminator<R
 	}
 
 	@Override
-	public QueryTerminator<R> addOrderBy(String orderBy) {
+	public QueryTerminator<R,O,G> addOrderBy(String orderBy) {
 		query.addOrderBy(orderBy);
-		return (QueryTerminator<R>) this;
+		return (QueryTerminator<R,O,G>) this;
 	}
 
 	@Override
-	public QueryTerminator<R> addGroupBy(String groupBy) {
+	public O orderBy() {
+		return query.orderBy();
+	}
+
+	@Override
+	public QueryTerminator<R,O,G> addGroupBy(String groupBy) {
 		query.addGroupBy(groupBy);
-		return (QueryTerminator<R>) this;
+		return (QueryTerminator<R,O,G>) this;
 	}
 
 	@Override
-	public QueryTerminator<R> setLimit(int limit) {
+	public QueryTerminator<R,O,G> setLimit(int limit) {
 		query.setLimit(limit);
-		return (QueryTerminator<R>) this;
+		return (QueryTerminator<R,O,G>) this;
 	}
 
 	@Override
 	public SqlExpression toSql() {
 		return query.getSql();
+	}
+
+	@Override
+	public G groupBy() {
+		return query.groupBy();
 	}
 
 }
