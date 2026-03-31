@@ -75,9 +75,9 @@ public class TestFluentAQTCodeGenerator {
         
         String code = output.toString();
         
-        assertTrue(code.contains("public final ConditionChainOperators<Terminator<BookQuery>> id;"),
+        assertTrue(code.contains("public final ConditionChainOperators<Terminator<BookQuery>, Long> id;"),
             "Should generate static operator field for id");
-        assertTrue(code.contains("public final ConditionChainOperators<Terminator<BookQuery>> title;"),
+        assertTrue(code.contains("public final ConditionChainOperators<Terminator<BookQuery>, String> title;"),
             "Should generate static operator field for title");
     }
 
@@ -95,9 +95,9 @@ public class TestFluentAQTCodeGenerator {
             "Should generate static field for author entity");
         assertTrue(code.contains("public class StaticAuthor {"),
             "Should generate nested StaticAuthor class");
-        assertTrue(code.contains("staticOp(\"author\", \"id\")"),
+        assertTrue(code.contains("staticOp(\"author\", \"id\", Long.class)"),
             "Should generate staticOp for author.id");
-        assertTrue(code.contains("staticOp(\"author\", \"name\")"),
+        assertTrue(code.contains("staticOp(\"author\", \"name\", String.class)"),
             "Should generate staticOp for author.name");
     }
 
@@ -113,9 +113,9 @@ public class TestFluentAQTCodeGenerator {
         
         assertTrue(code.contains("public class Where {"),
             "Should generate Where class");
-        assertTrue(code.contains("chainOp(\"book\", \"id\")"),
+        assertTrue(code.contains("chainOp(\"book\", \"id\", Long.class)"),
             "Should generate chainOp for id");
-        assertTrue(code.contains("chainOp(\"book\", \"title\")"),
+        assertTrue(code.contains("chainOp(\"book\", \"title\", String.class)"),
             "Should generate chainOp for title");
     }
 
@@ -131,9 +131,9 @@ public class TestFluentAQTCodeGenerator {
         
         assertTrue(code.contains("public class WhereAuthor {"),
             "Should generate nested WhereAuthor class");
-        assertTrue(code.contains("chainOp(\"author\", \"id\")"),
+        assertTrue(code.contains("chainOp(\"author\", \"id\", Long.class)"),
             "Should generate chainOp for author.id");
-        assertTrue(code.contains("chainOp(\"author\", \"name\")"),
+        assertTrue(code.contains("chainOp(\"author\", \"name\", String.class)"),
             "Should generate chainOp for author.name");
     }
 
@@ -151,7 +151,7 @@ public class TestFluentAQTCodeGenerator {
             "Should generate constructor");
         assertTrue(code.contains("super(Book.class);"),
             "Should call super with correct arguments");
-        assertTrue(code.contains("this.id = staticOp(\"book\", \"id\");"),
+        assertTrue(code.contains("this.id = staticOp(\"book\", \"id\", Long.class);"),
             "Should initialize id in constructor");
         assertTrue(code.contains("this.author = new StaticAuthor();"),
             "Should initialize author in constructor");
@@ -173,17 +173,17 @@ public class TestFluentAQTCodeGenerator {
             "Should generate static field for reviews collection");
         assertTrue(code.contains("public class StaticReviews {"),
             "Should generate nested StaticReviews class");
-        assertTrue(code.contains("staticOp(\"reviews\", \"id\")"),
+        assertTrue(code.contains("staticOp(\"reviews\", \"id\", Long.class)"),
             "Should generate staticOp for reviews.id");
-        assertTrue(code.contains("staticOp(\"reviews\", \"content\")"),
+        assertTrue(code.contains("staticOp(\"reviews\", \"content\", String.class)"),
             "Should generate staticOp for reviews.content");
-        assertTrue(code.contains("staticOp(\"reviews\", \"rating\")"),
+        assertTrue(code.contains("staticOp(\"reviews\", \"rating\", Integer.class)"),
             "Should generate staticOp for reviews.rating");
         
         // Where class for reviews
         assertTrue(code.contains("public class WhereReviews {"),
             "Should generate nested WhereReviews class");
-        assertTrue(code.contains("chainOp(\"reviews\", \"id\")"),
+        assertTrue(code.contains("chainOp(\"reviews\", \"id\", Long.class)"),
             "Should generate chainOp for reviews.id");
     }
 
@@ -202,15 +202,15 @@ public class TestFluentAQTCodeGenerator {
             "Should generate static field for categories collection");
         assertTrue(code.contains("public class StaticCategories {"),
             "Should generate nested StaticCategories class");
-        assertTrue(code.contains("staticOp(\"categories\", \"id\")"),
+        assertTrue(code.contains("staticOp(\"categories\", \"id\", Long.class)"),
             "Should generate staticOp for categories.id");
-        assertTrue(code.contains("staticOp(\"categories\", \"name\")"),
+        assertTrue(code.contains("staticOp(\"categories\", \"name\", String.class)"),
             "Should generate staticOp for categories.name");
         
         // Where class for categories
         assertTrue(code.contains("public class WhereCategories {"),
             "Should generate nested WhereCategories class");
-        assertTrue(code.contains("chainOp(\"categories\", \"id\")"),
+        assertTrue(code.contains("chainOp(\"categories\", \"id\", Long.class)"),
             "Should generate chainOp for categories.id");
     }
 }

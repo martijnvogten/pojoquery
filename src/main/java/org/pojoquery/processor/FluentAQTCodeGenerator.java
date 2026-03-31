@@ -26,23 +26,23 @@ public class FluentAQTCodeGenerator {
 
 			public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, BookQuery.OrderBy, BookQuery.GroupBy> {
 
-				public final ConditionChainOperators<Terminator<BookQuery>> id;
-				public final ConditionChainOperators<Terminator<BookQuery>> title;
+				public final ConditionChainOperators<Terminator<BookQuery>, Long> id;
+				public final ConditionChainOperators<Terminator<BookQuery>, String> title;
 				public final StaticAuthor author;
 
 				public class StaticAuthor {
-					public final ConditionChainOperators<Terminator<BookQuery>> id = staticOp("author", "id");
-					public final ConditionChainOperators<Terminator<BookQuery>> name = staticOp("author", "name");
+					public final ConditionChainOperators<Terminator<BookQuery>, Long> id = staticOp("author", "id", Long.class);
+					public final ConditionChainOperators<Terminator<BookQuery>, String> name = staticOp("author", "name", String.class);
 				}
 
 				public class Where {
-					public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> id = chainOp("book", "id");
-					public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> title = chainOp("book", "title");
+					public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, Long> id = chainOp("book", "id", Long.class);
+					public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, String> title = chainOp("book", "title", String.class);
 					public final WhereAuthor author = new WhereAuthor();
 
 					public class WhereAuthor {
-						public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> id = chainOp("author", "id");
-						public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> name = chainOp("author", "name");
+						public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, Long> id = chainOp("author", "id", Long.class);
+						public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, String> name = chainOp("author", "name", String.class);
 					}
 				}
 
@@ -71,8 +71,8 @@ public class FluentAQTCodeGenerator {
 				public BookQuery() {
 					super(Book.class);
 					// Initialize static operators after super() completes
-					this.id = staticOp("book", "id");
-					this.title = staticOp("book", "title");
+					this.id = staticOp("book", "id", Long.class);
+					this.title = staticOp("book", "title", String.class);
 					this.author = new StaticAuthor();
 				}
 
@@ -119,10 +119,11 @@ public class FluentAQTCodeGenerator {
 			
 			import org.pojoquery.fluent.ConditionTerminator;
 			import org.pojoquery.fluent.FluentQuery;
+			import org.pojoquery.fluent.OrderByChain;
 			import org.pojoquery.fluent.QueryTerminator;
 			import org.pojoquery.fluent.Terminator;
 			import org.pojoquery.fluent.internal.ConditionChainOperators;
-			import org.pojoquery.fluent.internal.OrderByChain;
+			import org.pojoquery.fluent.internal.StaticConditionChainTerminator;
 			
 			""".formatted(packageName));
 		
@@ -132,8 +133,8 @@ public class FluentAQTCodeGenerator {
 		
 		// Static operator field declarations
 		for (ScalarField field : scalarFields) {
-			sb.append("\tpublic final ConditionChainOperators<Terminator<%s>> %s;\n"
-				.formatted(queryClassName, field.fieldName));
+			sb.append("\tpublic final ConditionChainOperators<Terminator<%s,StaticConditionChainTerminator<%s>>, %s> %s;\n"
+				.formatted(queryClassName, queryClassName, field.typeName, field.fieldName));
 		}
 		for (EntityField entity : entityFields) {
 			sb.append("\tpublic final Static%s %s;\n"
@@ -149,8 +150,8 @@ public class FluentAQTCodeGenerator {
 		// Where class
 		sb.append("\tpublic class Where {\n");
 		for (ScalarField field : scalarFields) {
-			sb.append("\t\tpublic final ConditionChainOperators<ConditionTerminator<%s, Where, ?, OrderBy, GroupBy>> %s = chainOp(\"%s\", \"%s\");\n"
-				.formatted(entityName, field.fieldName, field.tableAlias, field.fieldName));
+			sb.append("\t\tpublic final ConditionChainOperators<ConditionTerminator<%s, Where, ?, OrderBy, GroupBy>, %s> %s = chainOp(\"%s\", \"%s\", %s.class);\n"
+				.formatted(entityName, field.typeName, field.fieldName, field.tableAlias, field.fieldName, field.typeName));
 		}
 		for (EntityField entity : entityFields) {
 			String cap = capitalize(entity.fieldName);
@@ -208,8 +209,8 @@ public class FluentAQTCodeGenerator {
 		sb.append("\t\tsuper(%s.class);\n"
 			.formatted(entityName, queryClassName));
 		for (ScalarField field : scalarFields) {
-			sb.append("\t\tthis.%s = staticOp(\"%s\", \"%s\");\n"
-				.formatted(field.fieldName, field.tableAlias, field.fieldName));
+			sb.append("\t\tthis.%s = staticOp(\"%s\", \"%s\", %s.class);\n"
+				.formatted(field.fieldName, field.tableAlias, field.fieldName, field.typeName));
 		}
 		for (EntityField entity : entityFields) {
 			sb.append("\t\tthis.%s = new Static%s();\n"
@@ -240,8 +241,8 @@ public class FluentAQTCodeGenerator {
 			EntityField entity, String indent) {
 		sb.append("%spublic class Static%s {\n".formatted(indent, capitalize(entity.fieldName)));
 		for (ScalarField field : entity.scalarFields) {
-			sb.append("%s\tpublic final ConditionChainOperators<Terminator<%s>> %s = staticOp(\"%s\", \"%s\");\n"
-				.formatted(indent, queryClassName, field.fieldName, field.tableAlias, field.fieldName));
+			sb.append("%s\tpublic final ConditionChainOperators<Terminator<%s, StaticConditionChainTerminator<%s>>, %s> %s = staticOp(\"%s\", \"%s\", %s.class);\n"
+				.formatted(indent, queryClassName, queryClassName, field.typeName, field.fieldName, field.tableAlias, field.fieldName, field.typeName));
 		}
 		for (EntityField nested : entity.entityFields) {
 			String cap = capitalize(nested.fieldName);
@@ -260,8 +261,8 @@ public class FluentAQTCodeGenerator {
 			EntityField entity, String indent) {
 		sb.append("%spublic class Where%s {\n".formatted(indent, capitalize(entity.fieldName)));
 		for (ScalarField field : entity.scalarFields) {
-			sb.append("%s\tpublic final ConditionChainOperators<ConditionTerminator<%s, Where, ?, OrderBy, GroupBy>> %s = chainOp(\"%s\", \"%s\");\n"
-				.formatted(indent, entityName, field.fieldName, field.tableAlias, field.fieldName));
+			sb.append("%s\tpublic final ConditionChainOperators<ConditionTerminator<%s, Where, ?, OrderBy, GroupBy>, %s> %s = chainOp(\"%s\", \"%s\", %s.class);\n"
+				.formatted(indent, entityName, field.typeName, field.fieldName, field.tableAlias, field.fieldName, field.typeName));
 		}
 		for (EntityField nested : entity.entityFields) {
 			String cap = capitalize(nested.fieldName);
@@ -322,9 +323,9 @@ public class FluentAQTCodeGenerator {
 		
 		for (QueryNode child : table.children()) {
 			if (child instanceof ScalarNode scalar && scalar instanceof PrimaryKeyField pk) {
-				scalarFields.add(new ScalarField(pk.field().getName(), alias));
+				scalarFields.add(new ScalarField(pk.field().getName(), alias, getBoxedTypeName(pk.field().getType())));
 			} else if (child instanceof ScalarNode scalar) {
-				scalarFields.add(new ScalarField(scalar.field().getName(), alias));
+				scalarFields.add(new ScalarField(scalar.field().getName(), alias, getBoxedTypeName(scalar.field().getType())));
 			} else if (child instanceof EntityReference ref) {
 				entityFields.add(collectEntityField(ref));
 			} else if (child instanceof EntityCollection coll) {
@@ -365,8 +366,23 @@ public class FluentAQTCodeGenerator {
 		return Character.toUpperCase(s.charAt(0)) + s.substring(1);
 	}
 	
+	private String getBoxedTypeName(org.pojoquery.typemodel.TypeModel type) {
+		String name = type.getQualifiedName();
+		return switch (name) {
+			case "int" -> "Integer";
+			case "long" -> "Long";
+			case "double" -> "Double";
+			case "float" -> "Float";
+			case "boolean" -> "Boolean";
+			case "byte" -> "Byte";
+			case "short" -> "Short";
+			case "char" -> "Character";
+			default -> name;
+		};
+	}
+	
 	// Helper records for collecting field information
-	private record ScalarField(String fieldName, String tableAlias) {}
+	private record ScalarField(String fieldName, String tableAlias, String typeName) {}
 	
 	private record EntityField(String fieldName, String alias, 
 			List<ScalarField> scalarFields, List<EntityField> entityFields) {}

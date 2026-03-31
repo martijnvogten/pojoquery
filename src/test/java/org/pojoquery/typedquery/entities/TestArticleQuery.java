@@ -1,11 +1,8 @@
 package org.pojoquery.typedquery.entities;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.util.List;
@@ -13,12 +10,14 @@ import java.util.List;
 import javax.sql.DataSource;
 
 import org.hsqldb.jdbc.JDBCDataSource;
+import org.junit.Assert;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.schema.SchemaGenerator;
+import org.pojoquery.util.Iterables;
 
 /**
  * Integration test for ArticleQuery.
@@ -333,9 +332,9 @@ public class TestArticleQuery {
             // lt (less than)
             assertEquals(2, new ArticleQuery().where().title.lt("C").list(c).size());
             // ge (greater or equal)
-            assertEquals(3, new ArticleQuery().where().title.ge("A").list(c).size());
+            assertEquals(3, new ArticleQuery().where().title.gte("A").list(c).size());
             // le (less or equal)
-            assertEquals(3, new ArticleQuery().where().title.le("C").list(c).size());
+            assertEquals(3, new ArticleQuery().where().title.lte("C").list(c).size());
             // ne (not equal)
             assertEquals(2, new ArticleQuery().where().title.ne("B").list(c).size());
         });
@@ -369,14 +368,14 @@ public class TestArticleQuery {
             ArticleQuery q = new ArticleQuery();
 
             // lower
-            assertEquals(1, q.where(q.lower(q.title).eq("hello")).list(c).size());
+            assertEquals(1, q.where(q.fn.lower(q.title).eq("hello")).list(c).size());
             // upper
-            assertEquals(1, new ArticleQuery().where(new ArticleQuery().upper(new ArticleQuery().title).eq("HELLO")).list(c).size());
+            assertEquals(1, new ArticleQuery().where(new ArticleQuery().fn.upper(new ArticleQuery().title).eq("HELLO")).list(c).size());
             // length
-            assertEquals(1, new ArticleQuery().where(new ArticleQuery().length(new ArticleQuery().title).eq(5)).list(c).size());
+            assertEquals(1, new ArticleQuery().where(new ArticleQuery().fn.length(new ArticleQuery().title).eq(5)).list(c).size());
             // concat
             ArticleQuery q2 = new ArticleQuery();
-            assertEquals(1, q2.where(q2.concat(q2.title, q2.content).eq("HelloWorld")).list(c).size());
+            assertEquals(1, q2.where(q2.fn.concat(q2.title, q2.content).eq("HelloWorld")).list(c).size());
         });
     }
 
@@ -388,15 +387,15 @@ public class TestArticleQuery {
 
             // trim (test that it works, value has no spaces)
             ArticleQuery q1 = new ArticleQuery();
-            assertEquals(1, q1.where(q1.trim(q1.title).eq("Test")).list(c).size());
+            assertEquals(1, q1.where(q1.fn.trim(q1.title).eq("Test")).list(c).size());
 
             // substring
             ArticleQuery q2 = new ArticleQuery();
-            assertEquals(1, q2.where(q2.substring(q2.title, 1, 2).eq("Te")).list(c).size());
+            assertEquals(1, q2.where(q2.fn.substring(q2.title, 1, 2).eq("Te")).list(c).size());
 
             // coalesce
             ArticleQuery q3 = new ArticleQuery();
-            assertEquals(1, q3.where(q3.coalesce(q3.title, "default").eq("Test")).list(c).size());
+            assertEquals(1, q3.where(q3.fn.coalesce(q3.title, q3.fn.literal("default")).eq("Test")).list(c).size());
         });
     }
 
@@ -444,7 +443,7 @@ public class TestArticleQuery {
 
             ArticleQuery q = new ArticleQuery();
             // (title LIKE 'A%') AND (content = 'X')
-            List<Article> results = q.where(q.title.like("A%")).and(q.content.eq("X")).list(c);
+            List<Article> results = q.where().title.like("A%").and(q.content.eq("X")).list(c);
             assertEquals(1, results.size());
             assertEquals("A1", results.get(0).title);
 
@@ -466,11 +465,11 @@ public class TestArticleQuery {
 
             // LOWER(title) = 'hello'
             ArticleQuery q1 = new ArticleQuery();
-            assertEquals(1, q1.where(q1.lower(q1.title).eq("hello")).list(c).size());
+            assertEquals(1, q1.where(q1.fn.lower(q1.title).eq("hello")).list(c).size());
 
             // LOWER(title) <> 'hello'
             ArticleQuery q2 = new ArticleQuery();
-            assertEquals(1, q2.where(q2.lower(q2.title).ne("hello")).list(c).size());
+            assertEquals(1, q2.where(q2.fn.lower(q2.title).ne("hello")).list(c).size());
         });
     }
 
@@ -483,7 +482,7 @@ public class TestArticleQuery {
 
             // Compare two expressions: LOWER(title) = LOWER(content)
             ArticleQuery q = new ArticleQuery();
-            assertEquals(1, q.where(q.lower(q.title).eq(q.lower(q.content))).list(c).size());
+            assertEquals(1, q.where(q.fn.lower(q.title).eq(q.fn.lower(q.content))).list(c).size());
         });
     }
 
@@ -496,10 +495,10 @@ public class TestArticleQuery {
 
             // author.name isNull/isNotNull using expression wrapper
             ArticleQuery q1 = new ArticleQuery();
-            assertEquals(1, q1.where(q1.coalesce(q1.author.name, "").eq("")).list(c).size());
+            assertEquals(1, q1.where(q1.fn.coalesce(q1.author.name, q1.fn.literal("")).eq("")).list(c).size());
 
             ArticleQuery q2 = new ArticleQuery();
-            assertEquals(1, q2.where(q2.coalesce(q2.author.name, "").ne("")).list(c).size());
+            assertEquals(1, q2.where(q2.fn.coalesce(q2.author.name, q2.fn.literal("")).ne("")).list(c).size());
         });
     }
 
@@ -512,11 +511,11 @@ public class TestArticleQuery {
 
             // LOWER(title) LIKE 'hello%'
             ArticleQuery q1 = new ArticleQuery();
-            assertEquals(1, q1.where(q1.lower(q1.title).like("hello%")).list(c).size());
+            assertEquals(1, q1.where(q1.fn.lower(q1.title).like("hello%")).list(c).size());
 
             // LOWER(title) NOT LIKE 'hello%'
             ArticleQuery q2 = new ArticleQuery();
-            assertEquals(1, q2.where(q2.lower(q2.title).notLike("hello%")).list(c).size());
+            assertEquals(1, q2.where(q2.fn.lower(q2.title).notLike("hello%")).list(c).size());
         });
     }
 
@@ -530,11 +529,19 @@ public class TestArticleQuery {
 
             // LOWER(title) IN ('alpha', 'gamma')
             ArticleQuery q1 = new ArticleQuery();
-            assertEquals(2, q1.where(q1.lower(q1.title).in("alpha", "gamma")).list(c).size());
+
+            System.out.println("Condition SQL: " + q1.fn.lower(q1.title).in("alpha", "gamma").toSql().getSql());
+            Iterable<Object> params = q1.fn.lower(q1.title).in("alpha", "gamma").toSql().getParameters();
+            Assert.assertEquals(2, Iterables.size(params));
+
+            System.out.println("Generated SQL: " + q1.getSql().getSql() + " with parameters " + q1.getSql().getParameters());
+            assertEquals(2, q1.where(q1.fn.lower(q1.title).in("alpha", "gamma")).list(c).size());
+
+
 
             // LOWER(title) NOT IN ('alpha', 'gamma')
             ArticleQuery q2 = new ArticleQuery();
-            assertEquals(1, q2.where(q2.lower(q2.title).notIn("alpha", "gamma")).list(c).size());
+            assertEquals(1, q2.where(q2.fn.lower(q2.title).notIn("alpha", "gamma")).list(c).size());
         });
     }
 
@@ -548,7 +555,7 @@ public class TestArticleQuery {
 
             // LOWER(title) = author.name (comparing expression to field)
             ArticleQuery q = new ArticleQuery();
-            assertEquals(1, q.where(q.lower(q.title).eq(q.author.name)).list(c).size());
+            assertEquals(1, q.where(q.fn.lower(q.title).eq(q.author.name)).list(c).size());
         });
     }
 

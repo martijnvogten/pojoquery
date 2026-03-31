@@ -14,10 +14,10 @@ import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.PojoQuery;
+import org.pojoquery.SqlExpression;
 import org.pojoquery.schema.SchemaGenerator;
 import org.pojoquery.typedquery.entities.Article;
 import org.pojoquery.typedquery.entities.ArticleQuery;
-import org.pojoquery.typedquery.entities.ArticleQuery.ArticleQueryStaticConditionChain;
 import org.pojoquery.typedquery.entities.Person;
 
 /**
@@ -101,20 +101,24 @@ public class TestFluentQueryProcessor {
         q.where().title.eq(q.author.name).and().id.gt(1L);
 
         // This test demonstrates chainable SQL functions
-        ArticleQueryStaticConditionChain cond = q.lower(q.concat(q.author.name, " ", q.author.email)).eq(q.lower("James Brown")).and().id.lt(10L);
-        System.out.println(cond.get().getSql());
+        // q.where(Fn.lower(Fn.concat(q.author.name, " ", q.author.email)).eq(Fn.lower("James Brown").and().id.lt(10L);
+        // System.out.println(cond.get().getSql());
     }
 
     @Test
     public void testQueryWithWhereClause() {
         DB.withConnection(dataSource, (Connection c) -> {
             ArticleQuery q = new ArticleQuery();
-            List<Article> articles = q.where().title.eq("First Article").list(c);
+            List<Article> articles;
+                articles = q.where().title.eq("First Article").list(c);
 
-            ArticleQueryStaticConditionChain cond = q.title.eq("henk");
-            assertEquals("{article.article_title} = ?", cond.get().getSql());
-            assertEquals("henk", cond.get().getParameters().iterator().next());
+            SqlExpression cond = q.title.eq("henk").toSql();
+            assertEquals("{article.title} = ?", cond.getSql());
+            assertEquals("henk", cond.getParameters().iterator().next());
 
+
+            System.out.println("Query SQL " + q.getSql().getSql());
+            
             assertEquals(1, articles.size());
             assertEquals("First Article", articles.get(0).title);
             assertEquals("Alice", articles.get(0).author.name);

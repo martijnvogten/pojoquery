@@ -600,7 +600,10 @@ public class AQTTransformer {
 	}
 
 	public static RootNode buildQueryTreeForType(Class<?> clz) {
-		ReflectionTypeModel rootType = new ReflectionTypeModel(clz);
+		return buildQueryTreeForType(new ReflectionTypeModel(clz));
+	}
+
+	public static RootNode buildQueryTreeForType(TypeModel rootType) {
 		TableInfo tableInfo = determinTableInfo(rootType);
 		QueryNode newTree = new RootNode(tableInfo.tableName(), rootType, tableInfo, null);
 		QueryNode oldTree = null;
@@ -633,7 +636,7 @@ public class AQTTransformer {
 					.map(transformNodesRecursively(Transformers::applyDefaultPrimaryKeyExpressions))
 					.map(transformNodesRecursively(Transformers::applyDefaultScalarExpressions))
 					.map(transformNodesRecursively(Transformers::makeSingleIdFieldsAutoIncrement))
-					.map(transformNodesRecursively(Transformers::addDefaultValueTransformers))
+					.map(rootType instanceof ReflectionTypeModel ? transformNodesRecursively(Transformers::addDefaultValueTransformers) : Function.identity())
 					.orElse(null);
 		} while (!oldTree.equals(newTree));
 

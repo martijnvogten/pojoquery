@@ -24,9 +24,9 @@ import javax.tools.JavaFileObject;
 
 import org.pojoquery.annotations.GenerateQuery;
 import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.PojoMetadata;
-import org.pojoquery.pipeline.querytree.QueryTree;
-import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
 import org.pojoquery.typemodel.ElementTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
@@ -105,28 +105,28 @@ public class QueryProcessor extends AbstractProcessor {
             return;
         }
 
-        // Build QueryTree from the entity type
-        QueryTree tree = QueryTreeBuilder.from(entityType);
+        // Build RootNode from the entity type
+        RootNode tree = AQTTransformer.buildQueryTreeForType(entityType);
 
         messager.printMessage(Diagnostic.Kind.NOTE,
-            "Generating query classes for " + qualifiedName + " using QueryTree", typeElement);
+            "Generating query classes for " + qualifiedName + " using FluentAQTCodeGenerator", typeElement);
 
-        // Generate the query class using the new QueryClassCodeGenerator
+        // Generate the query class using FluentAQTCodeGenerator
         generateQueryClassFromTree(packageName, entityName, queryClassName, tree);
     }
 
     /**
-     * Generates the query class using the new QueryClassCodeGenerator.
-     * This approach uses QueryTree instead of Aliases.
+     * Generates the query class using FluentAQTCodeGenerator.
+     * This approach uses RootNode from AbstractQueryTree.
      */
     private void generateQueryClassFromTree(String packageName, String entityName,
-            String queryClassName, QueryTree tree) throws IOException {
+            String queryClassName, RootNode tree) throws IOException {
 
         String qualifiedName = packageName.isEmpty() ? queryClassName : packageName + "." + queryClassName;
         JavaFileObject fileObject = filer.createSourceFile(qualifiedName);
 
         try (PrintWriter out = new PrintWriter(fileObject.openWriter())) {
-            QueryClassCodeGenerator generator = new QueryClassCodeGenerator();
+            FluentAQTCodeGenerator generator = new FluentAQTCodeGenerator();
             generator.generate(tree, packageName, entityName, queryClassName, out);
         }
     }

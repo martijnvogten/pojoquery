@@ -3,6 +3,9 @@ package org.pojoquery.typedquery;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.pojoquery.SqlExpression;
+import org.pojoquery.util.Iterables;
+
 /**
  * Factory class for creating SQL function expressions.
  * Use with field comparisons to build complex conditions.
@@ -150,6 +153,10 @@ public class Fn {
         } else if (part instanceof FieldExpression<?> expr) {
             sql.append(expr.getSql());
             parameters.addAll(expr.getParameters());
+        } else if (part instanceof org.pojoquery.fluent.Terminator<?, ?> expr) {
+            SqlExpression sqlExpr = expr.toSql();
+            sql.append(sqlExpr.getSql());
+            Iterables.addAll(parameters, sqlExpr.getParameters());
         } else {
             sql.append("?");
             parameters.add(part);

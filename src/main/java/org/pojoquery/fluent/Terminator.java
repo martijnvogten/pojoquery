@@ -5,14 +5,14 @@ import org.pojoquery.SqlExpression;
 /**
  * S: conditionStarter (not an interface, contains the fields)
  */
-public interface Terminator<S> {
+public interface Terminator<S, T extends Terminator<S, T>> {
 	public S and();
 	
-	public Terminator<S> and(Terminator<?> other);
+	public T and(Terminator<?, ?> other);
 
 	public S or();
 
-	public Terminator<S> or(Terminator<?> other);
+	public T or(Terminator<?, ?> other);
 
 	public SqlExpression toSql();
 }

@@ -7,7 +7,7 @@ import org.pojoquery.SqlExpression;
 import org.pojoquery.fluent.FluentQuery.Appender;
 import org.pojoquery.fluent.Terminator;
 
-public class StaticConditionChainTerminator<S> implements Terminator<S> {
+public class StaticConditionChainTerminator<S> implements Terminator<S, StaticConditionChainTerminator<S>> {
 	private final S starter;
 	private final Appender target;
 	private final Supplier<SqlExpression> toSql;
@@ -24,7 +24,7 @@ public class StaticConditionChainTerminator<S> implements Terminator<S> {
 	}
 
 	@Override
-	public Terminator<S> and(Terminator<?> other) {
+	public StaticConditionChainTerminator<S> and(Terminator<?, ?> other) {
 		SqlExpression otherSql = other.toSql();
 		target.append("AND (" + otherSql.getSql() + ")", otherSql.getParameters());
 		return this;
@@ -36,7 +36,7 @@ public class StaticConditionChainTerminator<S> implements Terminator<S> {
 	}
 	
 	@Override
-	public Terminator<S> or(Terminator<?> other) {
+	public StaticConditionChainTerminator<S> or(Terminator<?, ?> other) {
 		SqlExpression otherSql = other.toSql();
 		target.append("OR (" + otherSql.getSql() + ")", otherSql.getParameters());
 		return this;

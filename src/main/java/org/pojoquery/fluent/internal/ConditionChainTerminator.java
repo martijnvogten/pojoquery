@@ -1,8 +1,8 @@
 package org.pojoquery.fluent.internal;
 
 import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.List;
+import java.util.Optional;
 
 import org.pojoquery.SqlExpression;
 import org.pojoquery.fluent.ConditionTerminator;
@@ -33,10 +33,11 @@ public class ConditionChainTerminator<R, S, T extends ConditionChainTerminator<R
 	}
 
 	@Override
-	public Terminator<S> and(Terminator<?> other) {
+	@SuppressWarnings("unchecked")
+	public T and(Terminator<?, ?> other) {
 		SqlExpression otherSql = other.toSql();
 		expressionCallback.append("AND (" + otherSql.getSql() + ")", otherSql.getParameters());
-		return (Terminator<S>) this;
+		return (T) this;
 	}
 	
 	@Override
@@ -44,16 +45,22 @@ public class ConditionChainTerminator<R, S, T extends ConditionChainTerminator<R
 		expressionCallback.append("OR", List.of());
 		return starter;
 	}
-
+	
 	@Override
-	public Terminator<S> or(Terminator<?> other) {
+	@SuppressWarnings("unchecked")
+	public T or(Terminator<?, ?> other) {
 		SqlExpression otherSql = other.toSql();
 		expressionCallback.append("OR (" + otherSql.getSql() + ")", otherSql.getParameters());
-		return (Terminator<S>) this;
+		return (T) this;
 	}
 
-	public List<R> list(Connection c) throws SQLException {
+	public List<R> list(Connection c) {
 		return query.list(c);
+	}
+
+	@Override
+	public Optional<R> first(Connection c) {
+		return query.first(c);
 	}
 
 	@Override

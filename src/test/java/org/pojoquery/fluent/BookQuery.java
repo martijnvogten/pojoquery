@@ -2,26 +2,27 @@ package org.pojoquery.fluent;
 
 import org.pojoquery.fluent.FluentConditionChainWithInterfaces.Book;
 import org.pojoquery.fluent.internal.ConditionChainOperators;
+import org.pojoquery.fluent.internal.StaticConditionChainTerminator;
 
 public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, BookQuery.OrderBy, BookQuery.GroupBy> {
 
-	public final ConditionChainOperators<Terminator<BookQuery>> id;
-	public final ConditionChainOperators<Terminator<BookQuery>> title;
+	public final ConditionChainOperators<Terminator<BookQuery,StaticConditionChainTerminator<BookQuery>>, Long> id;
+	public final ConditionChainOperators<Terminator<BookQuery,StaticConditionChainTerminator<BookQuery>>, String> title;
 	public final StaticAuthor author;
 
 	public class StaticAuthor {
-		public final ConditionChainOperators<Terminator<BookQuery>> id = staticOp("author", "id");
-		public final ConditionChainOperators<Terminator<BookQuery>> name = staticOp("author", "name");
+		public final ConditionChainOperators<Terminator<BookQuery,StaticConditionChainTerminator<BookQuery>>, Long> id = staticOp("author", "id", Long.class);
+		public final ConditionChainOperators<Terminator<BookQuery,StaticConditionChainTerminator<BookQuery>>, String> name = staticOp("author", "name", String.class);
 	}
 
 	public class Where {
-		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> id = chainOp("book", "id");
-		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> title = chainOp("book", "title");
+		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, Long> id = chainOp("book", "id", Long.class);
+		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, String> title = chainOp("book", "title", String.class);
 		public final WhereAuthor author = new WhereAuthor();
 
 		public class WhereAuthor {
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> id = chainOp("author", "id");
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> name = chainOp("author", "name");
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, Long> id = chainOp("author", "id", Long.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, String> name = chainOp("author", "name", String.class);
 		}
 	}
 
@@ -50,8 +51,8 @@ public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, Boo
 	public BookQuery() {
 		super(Book.class);
 		// Initialize static operators after super() completes
-		this.id = staticOp("book", "id");
-		this.title = staticOp("book", "title");
+		this.id = staticOp("book", "id", Long.class);
+		this.title = staticOp("book", "title", String.class);
 		this.author = new StaticAuthor();
 	}
 

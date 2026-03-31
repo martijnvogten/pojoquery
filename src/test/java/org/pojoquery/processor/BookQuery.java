@@ -1,59 +1,59 @@
 package org.pojoquery.processor;
 
-
 import org.pojoquery.fluent.ConditionTerminator;
 import org.pojoquery.fluent.FluentQuery;
+import org.pojoquery.fluent.OrderByChain;
 import org.pojoquery.fluent.QueryTerminator;
 import org.pojoquery.fluent.Terminator;
 import org.pojoquery.fluent.internal.ConditionChainOperators;
-import org.pojoquery.fluent.OrderByChain;
+import org.pojoquery.fluent.internal.StaticConditionChainTerminator;
 import org.pojoquery.processor.TestFluentAQTCodeGenerator.Book;
 
 public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, BookQuery.OrderBy, BookQuery.GroupBy> {
 
-	public final ConditionChainOperators<Terminator<BookQuery>> id;
-	public final ConditionChainOperators<Terminator<BookQuery>> title;
+	public final ConditionChainOperators<Terminator<BookQuery,StaticConditionChainTerminator<BookQuery>>, java.lang.Long> id;
+	public final ConditionChainOperators<Terminator<BookQuery,StaticConditionChainTerminator<BookQuery>>, java.lang.String> title;
 	public final StaticAuthor author;
 	public final StaticReviews reviews;
 	public final StaticCategories categories;
 
 	public class StaticAuthor {
-		public final ConditionChainOperators<Terminator<BookQuery>> id = staticOp("author", "id");
-		public final ConditionChainOperators<Terminator<BookQuery>> name = staticOp("author", "name");
+		public final ConditionChainOperators<Terminator<BookQuery, StaticConditionChainTerminator<BookQuery>>, java.lang.Long> id = staticOp("author", "id", java.lang.Long.class);
+		public final ConditionChainOperators<Terminator<BookQuery, StaticConditionChainTerminator<BookQuery>>, java.lang.String> name = staticOp("author", "name", java.lang.String.class);
 	}
 
 	public class StaticReviews {
-		public final ConditionChainOperators<Terminator<BookQuery>> id = staticOp("reviews", "id");
-		public final ConditionChainOperators<Terminator<BookQuery>> content = staticOp("reviews", "content");
-		public final ConditionChainOperators<Terminator<BookQuery>> rating = staticOp("reviews", "rating");
+		public final ConditionChainOperators<Terminator<BookQuery, StaticConditionChainTerminator<BookQuery>>, java.lang.Long> id = staticOp("reviews", "id", java.lang.Long.class);
+		public final ConditionChainOperators<Terminator<BookQuery, StaticConditionChainTerminator<BookQuery>>, java.lang.String> content = staticOp("reviews", "content", java.lang.String.class);
+		public final ConditionChainOperators<Terminator<BookQuery, StaticConditionChainTerminator<BookQuery>>, java.lang.Integer> rating = staticOp("reviews", "rating", java.lang.Integer.class);
 	}
 
 	public class StaticCategories {
-		public final ConditionChainOperators<Terminator<BookQuery>> id = staticOp("categories", "id");
-		public final ConditionChainOperators<Terminator<BookQuery>> name = staticOp("categories", "name");
+		public final ConditionChainOperators<Terminator<BookQuery, StaticConditionChainTerminator<BookQuery>>, java.lang.Long> id = staticOp("categories", "id", java.lang.Long.class);
+		public final ConditionChainOperators<Terminator<BookQuery, StaticConditionChainTerminator<BookQuery>>, java.lang.String> name = staticOp("categories", "name", java.lang.String.class);
 	}
 
 	public class Where {
-		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> id = chainOp("book", "id");
-		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> title = chainOp("book", "title");
+		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.Long> id = chainOp("book", "id", java.lang.Long.class);
+		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.String> title = chainOp("book", "title", java.lang.String.class);
 		public final WhereAuthor author = new WhereAuthor();
 		public final WhereReviews reviews = new WhereReviews();
 		public final WhereCategories categories = new WhereCategories();
 
 		public class WhereAuthor {
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> id = chainOp("author", "id");
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> name = chainOp("author", "name");
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.Long> id = chainOp("author", "id", java.lang.Long.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.String> name = chainOp("author", "name", java.lang.String.class);
 		}
 
 		public class WhereReviews {
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> id = chainOp("reviews", "id");
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> content = chainOp("reviews", "content");
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> rating = chainOp("reviews", "rating");
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.Long> id = chainOp("reviews", "id", java.lang.Long.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.String> content = chainOp("reviews", "content", java.lang.String.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.Integer> rating = chainOp("reviews", "rating", java.lang.Integer.class);
 		}
 
 		public class WhereCategories {
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> id = chainOp("categories", "id");
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>> name = chainOp("categories", "name");
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.Long> id = chainOp("categories", "id", java.lang.Long.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.String> name = chainOp("categories", "name", java.lang.String.class);
 		}
 
 	}
@@ -110,8 +110,8 @@ public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, Boo
 
 	public BookQuery() {
 		super(Book.class);
-		this.id = staticOp("book", "id");
-		this.title = staticOp("book", "title");
+		this.id = staticOp("book", "id", java.lang.Long.class);
+		this.title = staticOp("book", "title", java.lang.String.class);
 		this.author = new StaticAuthor();
 		this.reviews = new StaticReviews();
 		this.categories = new StaticCategories();

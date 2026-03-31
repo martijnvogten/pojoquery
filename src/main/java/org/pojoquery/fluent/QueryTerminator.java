@@ -1,11 +1,12 @@
 package org.pojoquery.fluent;
 
 import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.List;
+import java.util.Optional;
 
 public interface QueryTerminator<R,O,G> {
-	public List<R> list(Connection c) throws SQLException;
+	public List<R> list(Connection c);
+	public Optional<R> first(Connection c);
 
 	public QueryTerminator<R,O,G> addOrderBy(String orderBy);
 	public O orderBy();
