@@ -7,7 +7,7 @@ import org.pojoquery.fluent.QueryTerminator;
 import org.pojoquery.fluent.Terminator;
 import org.pojoquery.fluent.internal.ConditionChainOperators;
 import org.pojoquery.fluent.internal.StaticConditionChainTerminator;
-import org.pojoquery.processor.TestFluentAQTCodeGenerator.Book;
+import org.pojoquery.processor.TestBookQueryCopy.Book;
 
 public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, BookQuery.OrderBy, BookQuery.GroupBy> {
 

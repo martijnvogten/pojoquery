@@ -112,7 +112,9 @@ public class QueryProcessor extends AbstractProcessor {
             "Generating query classes for " + qualifiedName + " using FluentAQTCodeGenerator", typeElement);
 
         // Generate the query class using FluentAQTCodeGenerator
-        generateQueryClassFromTree(packageName, entityName, queryClassName, tree);
+        // Use local qualified name for inner classes (e.g., "TestInnerClasses.InnerBook")
+        String localQualifiedEntityName = getLocalQualifiedName(typeElement);
+        generateQueryClassFromTree(packageName, localQualifiedEntityName, queryClassName, tree);
     }
 
     /**
@@ -153,6 +155,21 @@ public class QueryProcessor extends AbstractProcessor {
             enclosing = enclosing.getEnclosingElement();
         }
         return prefix.toString();
+    }
+
+    /**
+     * Returns the local qualified name for a type element, using dots as separators.
+     * For inner classes like TestInnerClasses.InnerBook, returns "TestInnerClasses.InnerBook".
+     * For top-level classes, returns just the simple name.
+     */
+    private String getLocalQualifiedName(TypeElement typeElement) {
+        StringBuilder name = new StringBuilder(typeElement.getSimpleName().toString());
+        Element enclosing = typeElement.getEnclosingElement();
+        while (enclosing != null && enclosing.getKind() == ElementKind.CLASS) {
+            name.insert(0, enclosing.getSimpleName().toString() + ".");
+            enclosing = enclosing.getEnclosingElement();
+        }
+        return name.toString();
     }
 }
 
