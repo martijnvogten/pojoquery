@@ -79,10 +79,9 @@ public class AQTTransformer {
 
 		public static QueryNode addDeclaredFields(QueryNode node) {
 			return (node instanceof TableNode tableNode && tableNode.children() == null)
-					? tableNode.withChildren(PojoMetadata.determineTableMapping(tableNode.type()).stream()
-							.reduce((first, second) -> second) // get the last mapping
-							.map(mapping -> mapping.getFields().stream().map(f -> new EmptyFieldNodeImpl(f)).toList())
-							.orElse(List.of()))
+					? tableNode.withChildren(PojoMetadata.collectFieldsOfClass(tableNode.type()).stream()
+							.map(fieldModel -> new EmptyFieldNodeImpl(fieldModel))
+							.toList())
 					: node;
 		}
 
