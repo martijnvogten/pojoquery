@@ -124,9 +124,7 @@ public class AQTSchemaGenerator {
 
 				// Determine SQL type
 				if (col.field() != null) {
-					boolean isAutoIncrement = table.primaryKeyColumns().contains(col) &&
-						(col.field().getType().isSameType(new ReflectionTypeModel(Long.class)) || 
-						col.field().getType().isSameType(new ReflectionTypeModel(long.class)));
+					boolean isAutoIncrement = table.primaryKeyColumns().size() == 1 && table.primaryKeyColumns().contains(col);
 					
 					if (isAutoIncrement) {
 						colDef.append(dbContext.getAutoIncrementKeyColumnType());

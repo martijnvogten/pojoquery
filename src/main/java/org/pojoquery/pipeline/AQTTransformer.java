@@ -78,11 +78,14 @@ public class AQTTransformer {
 		}
 
 		public static QueryNode addDeclaredFields(QueryNode node) {
-			return (node instanceof TableNode tableNode && tableNode.children() == null)
-					? tableNode.withChildren(PojoMetadata.collectFieldsOfClass(tableNode.type()).stream()
-							.map(fieldModel -> new EmptyFieldNodeImpl(fieldModel))
-							.toList())
-					: node;
+			if (node instanceof TableNode tableNode && tableNode.children() == null) {
+				List<TableMapping> mappings = PojoMetadata.determineTableMapping(tableNode.type());
+				TypeModel superClass = mappings.size() > 1 ? mappings.get(mappings.size() - 2).type : null;
+				return tableNode.withChildren(PojoMetadata.collectFieldsOfClass(tableNode.type(), superClass).stream()
+						.map(fieldModel -> new EmptyFieldNodeImpl(fieldModel))
+						.toList());
+			}
+			return node;
 		}
 
 		public static QueryNode addIdFieldToSubClassTableNodes(QueryNode node) {
