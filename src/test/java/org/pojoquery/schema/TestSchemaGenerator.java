@@ -308,23 +308,23 @@ public class TestSchemaGenerator {
 
     @SafeVarargs
     private final List<String> createSchemaDDLFromClasses(DbContext dbContext, Class<? extends Object>... entityClasses) {
-        return AQTSchemaGenerator.generateCreateSchemaDDL(dbContext, List.of(entityClasses).stream().map(AQTTransformer::buildQueryTreeForType).toArray(RootNode[]::new));
+        return AQTSchemaGenerator.generateSchemaDDL(dbContext, List.of(entityClasses).stream().map(AQTTransformer::buildQueryTreeForType).toArray(RootNode[]::new));
     }
     
     @Test
     public void testGenerateCreateTableMatchesManual() {
         // Test against the examples.events classes
-        List<String> eventSqlList = AQTSchemaGenerator.generateCreateSchemaDDL(DbContext.getDefault(), AQTTransformer.buildQueryTreeForType(examples.events.Event.class));
+        List<String> eventSqlList = AQTSchemaGenerator.generateSchemaDDL(DbContext.getDefault(), AQTTransformer.buildQueryTreeForType(examples.events.Event.class));
         String eventSql = String.join("\n", eventSqlList);
         System.out.println("Event:");
         System.out.println(eventSql);
         
-        List<String> personSqlList = AQTSchemaGenerator.generateCreateSchemaDDL(DbContext.getDefault(), AQTTransformer.buildQueryTreeForType(examples.events.PersonRecord.class));
+        List<String> personSqlList = AQTSchemaGenerator.generateSchemaDDL(DbContext.getDefault(), AQTTransformer.buildQueryTreeForType(examples.events.PersonRecord.class));
         String personSql = String.join("\n", personSqlList);
         System.out.println("\nPersonRecord:");
         System.out.println(personSql);
         
-        List<String> emailSqlList = AQTSchemaGenerator.generateCreateSchemaDDL(DbContext.getDefault(), AQTTransformer.buildQueryTreeForType(examples.events.EmailAddress.class));
+        List<String> emailSqlList = AQTSchemaGenerator.generateSchemaDDL(DbContext.getDefault(), AQTTransformer.buildQueryTreeForType(examples.events.EmailAddress.class));
         String emailSql = String.join("\n", emailSqlList);
         System.out.println("\nEmailAddress:");
         System.out.println(emailSql);

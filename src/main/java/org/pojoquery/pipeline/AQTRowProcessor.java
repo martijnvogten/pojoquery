@@ -106,7 +106,7 @@ public class AQTRowProcessor<R> {
 		}
 
 		if (tableNode instanceof RootNode) {
-			if (rootEntity == null || !pkValue.equals(rootEntityPrimaryKeyValue)) {
+			if (rootEntity == null || pkValue == null || !pkValue.equals(rootEntityPrimaryKeyValue)) {
 				if (rootEntity != null) {
 					entityCallback.accept(rootEntity);
 				}

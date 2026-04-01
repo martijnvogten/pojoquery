@@ -20,7 +20,10 @@ import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
+import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.schema.SchemaGenerator;
+import org.pojoquery.util.RecordIndenter;
 
 @UseDialect(Dialect.HSQLDB)
 public class JoinConditionsIT {
@@ -119,8 +122,13 @@ public class JoinConditionsIT {
 	@Test
 	public void testBasic() {
 		DataSource db = initDatabase();
+
+		RootNode rootNode = AQTTransformer.buildQueryTreeForType(EventWithVisitorsAndOrganizers.class);
+		System.out.println("Generated query tree:\n" + RecordIndenter.indent(rootNode.toString()));
 		
 		PojoQuery<EventWithVisitorsAndOrganizers> q = PojoQuery.build(EventWithVisitorsAndOrganizers.class);
+
+
 		List<EventWithVisitorsAndOrganizers> events = q.execute(db);
 		Assertions.assertEquals(0, events.size());
 		

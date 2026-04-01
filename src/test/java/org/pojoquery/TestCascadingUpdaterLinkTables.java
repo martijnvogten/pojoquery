@@ -277,13 +277,8 @@ public class TestCascadingUpdaterLinkTables {
 
     @Test
     public void testLinkTableWithFetchColumnForValueCollection() {
-        // fetchColumn for enum/value collection
-        // SchemaGenerator doesn't create link tables for value collections (no entity class),
-        // so we create the link table manually
         SchemaGenerator.createTables(dataSource, Resource.class);
         DB.withConnection(dataSource, (Connection c) -> {
-            // Create the link table for value collection manually (SchemaGenerator doesn't handle fetchColumn)
-            DB.update(c, new SqlExpression("CREATE TABLE \"resource_access\" (\"resource_id\" BIGINT, \"access_level\" VARCHAR(50), PRIMARY KEY (\"resource_id\", \"access_level\"))"));
             
             Resource resource = new Resource("document.pdf");
             resource.accessLevels.add(AccessLevel.READ);
@@ -295,7 +290,6 @@ public class TestCascadingUpdaterLinkTables {
             assertTrue(loaded.accessLevels.contains(AccessLevel.READ));
             assertTrue(loaded.accessLevels.contains(AccessLevel.WRITE));
             
-            // Update: add ADMIN, remove WRITE
             loaded.accessLevels.add(AccessLevel.ADMIN);
             loaded.accessLevels.remove(AccessLevel.WRITE);
             PojoQuery.update(c, loaded);

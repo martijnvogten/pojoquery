@@ -98,8 +98,12 @@ public class TestCascadingUpdaterOrders {
             order.lineItems.add(new LineItem("Widget", 5));
             order.lineItems.add(new LineItem("Gadget", 3));
             
+            
             // Insert with cascade
             PojoQuery.insert(c, order);
+            
+            List<LineItem> allLineItems = PojoQuery.build(LineItem.class).execute(c);
+            System.out.println("All items after insert: " + allLineItems.size()); // Should be 0
             
             // Verify order was inserted
             assertNotNull(order.id);
@@ -155,22 +159,17 @@ public class TestCascadingUpdaterOrders {
             Long orderId = order.id;
             
             // Reload order
-            Order baseOrder = PojoQuery.build(Order.class).findById(c, orderId).orElseThrow();
-            order = new OrderWithLineItems();
-            order.id = baseOrder.id;
-            order.orderNumber = baseOrder.orderNumber;
-            order.lineItems = new ArrayList<>(PojoQuery.build(LineItem.class)
-                    .addWhere("{order.id} = ?", orderId)
-                    .execute(c));
+            OrderWithLineItems check = PojoQuery.build(OrderWithLineItems.class)
+            .findById(c, orderId).orElseThrow();
             
-            assertEquals(2, order.lineItems.size());
+            assertEquals(2, check.lineItems.size());
             
             // Remove the "Remove" item
-            order.lineItems.removeIf(i -> "Remove".equals(i.productName));
-            assertEquals(1, order.lineItems.size());
+            check.lineItems.removeIf(i -> "Remove".equals(i.productName));
+            assertEquals(1, check.lineItems.size());
             
             // Update with cascade
-            PojoQuery.update(c, order);
+            PojoQuery.update(c, check);
             
             // Verify only "Keep" item remains (orphan removal)
             List<LineItem> items = PojoQuery.build(LineItem.class)

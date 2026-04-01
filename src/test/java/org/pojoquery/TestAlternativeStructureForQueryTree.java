@@ -265,7 +265,7 @@ public class TestAlternativeStructureForQueryTree {
 
 		RootNode articleNode = AQTTransformer.buildQueryTreeForType(ArticleDetail.class);
 
-		List<String> ddlStatements = AQTSchemaGenerator.generateCreateSchemaDDL(DbContext.getDefault(), articleNode);
+		List<String> ddlStatements = AQTSchemaGenerator.generateSchemaDDL(DbContext.getDefault(), articleNode);
 		
 		// Create an hsql in-memory database and execute the DDL statements to verify they are correct
 		try (Connection conn = ds.getConnection()) {

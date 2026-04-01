@@ -19,6 +19,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
+import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
@@ -82,10 +83,14 @@ public class AQTSchemaGenerator {
 		}
 	}
 
-	public static List<String> generateCreateSchemaDDL(DbContext dbContext, RootNode... entities) {
+    public static List<String> generateSchemaDDLFromClasses(DbContext dbContext, Class<?>... entityClasses) {
+        return AQTSchemaGenerator.generateSchemaDDL(dbContext, List.of(entityClasses).stream().map(AQTTransformer::buildQueryTreeForType).toArray(RootNode[]::new));
+    }
+
+	public static List<String> generateSchemaDDL(DbContext dbContext, RootNode... queryTrees) {
 		DDLCollectorImpl collector = new DDLCollectorImpl();
-		for (RootNode entity : entities) {
-			collectDDLForEntity(entity, collector);
+		for (RootNode queryTree : queryTrees) {
+			collectDDLForEntity(queryTree, collector);
 		}
 
 		Map<DDLColumnKey, DDLColumnMetadata> columnMetadata = new HashMap<>();
@@ -200,6 +205,14 @@ public class AQTSchemaGenerator {
 				collector.registerColumn(tableKey, scalar.columnName(), scalar.field());
 			} else if (child instanceof PrimaryKeyField pkField) {
 				collector.registerColumn(tableKey, pkField.columnName(), pkField.field());
+			} else if (child instanceof ValueCollection valueCollection) {
+				String fetchColumn = valueCollection.fetchColumn();
+				ForeignKeyInfo joinInfo = valueCollection.join();
+				collector.registerTable(joinInfo.referringTable(), List.of(fetchColumn, joinInfo.fkColumnName()).stream()
+					.map(colName -> new DDLColumn(new DDLColumnKey(joinInfo.referringTable(), colName), null)) // placeholder type
+					.toList());
+				collector.registerColumn(joinInfo.referringTable(), fetchColumn, valueCollection.field());
+				collector.registerForeignKey(joinInfo);
 			} else if (child instanceof Join ref) {
 				collectDDLForEntity((TableNode)ref, collector);
 				ForeignKeyInfo joinInfo = ref.join();

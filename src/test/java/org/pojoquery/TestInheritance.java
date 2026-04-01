@@ -15,9 +15,11 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.AQTTransformer;
 import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
+import org.pojoquery.util.RecordIndenter;
 
 public class TestInheritance {
 
@@ -86,20 +88,22 @@ public class TestInheritance {
 	@Test
 	public void testSubClasses() {
 		PojoQuery<Room> b = PojoQuery.build(Room.class);
+		System.out.println("Tree: " + RecordIndenter.indent(AQTTransformer.buildQueryTreeForType(Room.class).toString()));
+
 		String sql = b.toSql();
 		
 		assertEquals(
 				norm("""
 					SELECT
-					 `room`.`id` AS `room.id`,
-					 `room`.`area` AS `room.area`,
-					 `room.bedroom`.`id` AS `room.bedroom.id`,
-					 `room.bedroom`.`numberOfBeds` AS `room.bedroom.numberOfBeds`,
-					 `room.kitchen`.`id` AS `room.kitchen.id`,
-					 `room.kitchen`.`hasDishWasher` AS `room.kitchen.hasDishWasher`
+					`room`.`id` AS `room.id`,
+					`room`.`area` AS `room.area`,
+					`room.bedroom`.`id` AS `room.bedroom.id`,
+					`room.bedroom`.`numberOfBeds` AS `room.bedroom.numberOfBeds`,
+					`room.kitchen`.`id` AS `room.kitchen.id`,
+					`room.kitchen`.`hasDishWasher` AS `room.kitchen.hasDishWasher`
 					FROM `room` AS `room`
-					 LEFT JOIN `bedroom` AS `room.bedroom` ON `room`.`id` = `room.bedroom`.`id`
-					 LEFT JOIN `kitchen` AS `room.kitchen` ON `room`.`id` = `room.kitchen`.`id`
+					LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.`id` = `room`.`id`
+					LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.`id` = `room`.`id`
 					"""),
 				norm(sql));
 		
@@ -177,8 +181,8 @@ public class TestInheritance {
 					`rooms.kitchen`.`hasDishWasher` AS `rooms.kitchen.hasDishWasher`
 					FROM `apartment` AS `apartment`
 					LEFT JOIN `room` AS `rooms` ON `rooms`.`apartment_id` = `apartment`.`id`
-					LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms`.`id` = `rooms.bedroom`.`id`
-					LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms`.`id` = `rooms.kitchen`.`id`
+					LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.`id` = `rooms`.`id`
+					LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.`id` = `rooms`.`id`
 					"""),
 				norm(sql));
 		

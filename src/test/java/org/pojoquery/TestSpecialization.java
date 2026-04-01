@@ -96,17 +96,17 @@ public class TestSpecialization {
 			SELECT
 			`employee`.`id` AS `employee.id`,
 			`employee`.`name` AS `employee.name`,
+			`manager`.`id` AS `manager.id`,
+			`manager`.`name` AS `manager.name`,
 			`employee`.`salary` AS `employee.salary`,
+			`department`.`id` AS `department.id`,
+			`department`.`name` AS `department.name`,
 			`employee`.`hireDate` AS `employee.hireDate`,
 			`manager`.`id` AS `manager.id`,
 			`manager`.`name` AS `manager.name`,
-			`department`.`id` AS `department.id`,
-			`department`.`name` AS `department.name`,
-			`manager`.`id` AS `manager.id`,
-			`manager`.`name` AS `manager.name`,
-			`manager`.`salary` AS `manager.salary`,
 			`manager.manager`.`id` AS `manager.manager.id`,
 			`manager.manager`.`name` AS `manager.manager.name`,
+			`manager`.`salary` AS `manager.salary`,
 			`manager.department`.`id` AS `manager.department.id`,
 			`manager.department`.`name` AS `manager.department.name`
 			FROM `employee` AS `employee`

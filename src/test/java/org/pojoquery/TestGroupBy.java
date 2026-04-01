@@ -10,6 +10,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.pojoquery.annotations.GroupBy;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.util.RecordIndenter;
 
 @ExtendWith(org.pojoquery.integrationtest.DbContextExtension.class)
 public class TestGroupBy {
@@ -31,6 +33,7 @@ public class TestGroupBy {
 	@Test
 	public void testSql() {
 		PojoQuery<WordCount> q = PojoQuery.build(WordCount.class);
+		System.out.println(RecordIndenter.indent(AQTTransformer.buildQueryTreeForType(WordCount.class).toString()));
 		Assertions.assertEquals(TestUtils.norm("""
 			SELECT
 			 `wordindex`.`word` AS `wordindex.word`,

@@ -145,14 +145,26 @@ public class AbstractQueryTree {
 	public record EmptyTableNode(String alias, TypeModel type, TableInfo tableInfo) implements QueryNode {
 	}
 
-	public record RootNode(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children)
+	public record RootNode(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children, List<String> groupBy, List<String> orderBy)
 			implements TableNode {
 		public TableNode withChildren(List<? extends QueryNode> newChildren) {
-			return new RootNode(alias, type, tableInfo, List.copyOf(newChildren));
+			return new RootNode(alias, type, tableInfo, List.copyOf(newChildren), groupBy, orderBy);
 		}
 
 		public RootNode fromEmptyTableNode(EmptyTableNode empty, List<QueryNode> children) {
-			return new RootNode(empty.alias, empty.type, empty.tableInfo, List.copyOf(children));
+			return new RootNode(empty.alias, empty.type, empty.tableInfo, List.copyOf(children), groupBy, orderBy);
+		}
+
+		public QueryNode withGroupByClauses(List<String> groupBy) {
+			return new RootNode(alias, type, tableInfo, children, List.copyOf(groupBy), orderBy);
+		}
+
+		public QueryNode withOrderByClauses(List<String> orderBy) {
+			return new RootNode(alias, type, tableInfo, children, groupBy, List.copyOf(orderBy));
+		}
+
+		public static QueryNode createEmptyRootNode(String tableName, TypeModel rootType, TableInfo tableInfo2) {
+			return new RootNode(tableName, rootType, tableInfo2, null, null, null);
 		}
 	}
 

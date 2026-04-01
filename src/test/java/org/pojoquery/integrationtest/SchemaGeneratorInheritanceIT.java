@@ -10,7 +10,7 @@ import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.schema.SchemaGenerator;
+import org.pojoquery.pipeline.AQTSchemaGenerator;
 
 /**
  * Integration test for SchemaGenerator with multiple entity classes mapping to the same table.
@@ -87,8 +87,7 @@ public class SchemaGeneratorInheritanceIT {
 
         // UserRef is listed FIRST (has no unique constraint on username)
         // User is listed SECOND (has unique=true on username)
-        List<String> sqlStatements = SchemaGenerator.generateCreateTableStatements(
-            dbContext, UserRef.class, User.class);
+        List<String> sqlStatements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, UserRef.class, User.class);
         String sql = String.join("\n", sqlStatements);
         System.out.println("UserRef + User CREATE TABLE:\n" + sql);
 

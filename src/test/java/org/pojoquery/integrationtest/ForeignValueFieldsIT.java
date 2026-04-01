@@ -15,7 +15,9 @@ import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
+import org.pojoquery.pipeline.AQTTransformer;
 import org.pojoquery.schema.SchemaGenerator;
+import org.pojoquery.util.RecordIndenter;
 
 public class ForeignValueFieldsIT {
 	
@@ -72,7 +74,8 @@ public class ForeignValueFieldsIT {
 		
 		DB.withConnection(db, (Connection c) -> {
 			insertTestData(c);
-			
+			System.out.println(RecordIndenter.indent(AQTTransformer.buildQueryTreeForType(PouleWithHeavyWeights.class).toString()));
+
 			PojoQuery<PouleWithHeavyWeights> query = PojoQuery.build(PouleWithHeavyWeights.class)
 					.addWhere("{id} = ? ", 1);
 			

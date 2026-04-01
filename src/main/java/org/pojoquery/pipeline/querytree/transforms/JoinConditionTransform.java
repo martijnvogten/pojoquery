@@ -63,6 +63,7 @@ public class JoinConditionTransform implements QueryTreeTransform {
                 condAnnOpt.get().getStringValue().orElseThrow(),
                 parent.alias(),
                 child.alias(),
+                null,
                 null
             );
             newCondition = new JoinCondition.Custom(new SqlExpression(resolved));

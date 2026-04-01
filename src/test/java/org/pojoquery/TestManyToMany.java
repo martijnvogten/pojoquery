@@ -96,8 +96,8 @@ public class TestManyToMany {
 				`persons.emailAddresses`.`email` AS `persons.emailAddresses.email`,
 				`persons.emailAddresses`.`name` AS `persons.emailAddresses.name`
 				FROM `event` AS `event`
-				LEFT JOIN `event_person` AS `persons.event_person` ON `persons.event_person`.`event_id` = `event`.`eventID`
-				LEFT JOIN `person` AS `persons` ON `persons.event_person`.`person_id` = `persons`.`personID`
+				LEFT JOIN `event_person` AS `persons.event_person` ON `persons.event_person`.`events_id` = `event`.`eventID`
+				LEFT JOIN `person` AS `persons` ON `persons.event_person`.`persons_id` = `persons`.`personID`
 				LEFT JOIN `emailaddress` AS `persons.emailAddresses` ON `persons.emailAddresses`.`person_id` = `persons`.`personID`
 				WHERE `persons`.`firstname`=?
 				"""), 

@@ -88,16 +88,16 @@ public class AQTCascadingUpdater {
 		Map<String, Object> values = new LinkedHashMap<>(fields.values());
 		values.putAll(fields.idValues()); // non-null IDs go into INSERT
 
-		// Add FK to parent if this is a child in a one-to-many
-		if (parentId != null && parentFkColumn != null) {
-			values.put(parentFkColumn, parentId);
-		}
-
 		// Collect values from embedded children
 		collectEmbeddedValues(node, entity, values);
 		
 		// Collect FK values from EntityReference children (FK in parent)
 		collectEntityReferenceValues(node, entity, values);
+
+		// Add FK to parent if this is a child in a one-to-many
+		if (parentId != null && parentFkColumn != null) {
+			values.put(parentFkColumn, parentId);
+		}
 
 		// Insert this row
 		PK generatedId = db.insert(node.tableInfo().tableName(), node.tableInfo().schemaName(), values);

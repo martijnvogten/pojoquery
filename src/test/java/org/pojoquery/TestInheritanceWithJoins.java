@@ -118,8 +118,8 @@ public class TestInheritanceWithJoins {
 					`room.kitchen`.`hasDishWasher` AS `room.kitchen.hasDishWasher`
 					FROM `room` AS `room`
 					LEFT JOIN `house` AS `house` ON `room`.`house_id` = `house`.`id`
-					LEFT JOIN `bedroom` AS `room.bedroom` ON `room`.`id` = `room.bedroom`.`id`
-					LEFT JOIN `kitchen` AS `room.kitchen` ON `room`.`id` = `room.kitchen`.`id`
+					LEFT JOIN `bedroom` AS `room.bedroom` ON `room.bedroom`.`id` = `room`.`id`
+					LEFT JOIN `kitchen` AS `room.kitchen` ON `room.kitchen`.`id` = `room`.`id`
 					"""),
 				norm(sql));
 		
@@ -225,8 +225,8 @@ public class TestInheritanceWithJoins {
 					FROM `apartment` AS `apartment`
 					LEFT JOIN `room` AS `rooms` ON `rooms`.`apartment_id` = `apartment`.`id`
 					LEFT JOIN `house` AS `rooms.house` ON `rooms`.`house_id` = `rooms.house`.`id`
-					LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms`.`id` = `rooms.bedroom`.`id`
-					LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms`.`id` = `rooms.kitchen`.`id`
+					LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.`id` = `rooms`.`id`
+					LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.`id` = `rooms`.`id`
 					"""),
 				norm(sql));
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {

@@ -112,9 +112,9 @@ public class TestInheritanceWithMoreJoins {
 					LEFT JOIN `room` AS `rooms` ON `rooms`.`apartment_id` = `apartment`.`id`
 					LEFT JOIN `house` AS `rooms.house` ON `rooms`.`house_id` = `rooms.house`.`id`
 					LEFT JOIN `window` AS `rooms.windows` ON `rooms`.`id` = `rooms.windows`.`room_id`
-					LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms`.`id` = `rooms.bedroom`.`id`
+					LEFT JOIN `bedroom` AS `rooms.bedroom` ON `rooms.bedroom`.`id` = `rooms`.`id`
 					LEFT JOIN `bed` AS `rooms.bedroom.beds` ON `rooms.bedroom.beds`.`bedroom_id` = `rooms.bedroom`.`id`
-					LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms`.`id` = `rooms.kitchen`.`id`
+					LEFT JOIN `kitchen` AS `rooms.kitchen` ON `rooms.kitchen`.`id` = `rooms`.`id`
 					"""),
 				norm(sql));
 	}

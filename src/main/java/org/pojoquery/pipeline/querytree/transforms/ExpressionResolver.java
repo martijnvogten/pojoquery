@@ -23,11 +23,11 @@ public final class ExpressionResolver {
      * @return The resolved expression
      */
     public static String resolve(String expression, String thisAlias) {
-        return resolve(expression, thisAlias, null, null);
+        return resolve(expression, thisAlias, null, null, null);
     }
     
     public static String resolveAndPrefix(String expression, String thisAlias) {
-        return resolve(expression, thisAlias, null, thisAlias + ".");
+        return resolve(expression, thisAlias, null, null, thisAlias + ".");
     }
     
     /**
@@ -41,7 +41,7 @@ public final class ExpressionResolver {
      * @return The resolved expression
      */
     public static String resolve(String expression, String thisAlias, 
-                                  String linkAlias, String prefix) {
+                                  String linkAlias, String linkTableAlias, String prefix) {
         if (expression == null) return null;
 
         return CurlyMarkers.processMarkers(expression, marker -> {
@@ -51,6 +51,13 @@ public final class ExpressionResolver {
             if (marker.startsWith("this.")) {
                 String rest = marker.substring(5);
                 return "{" + thisAlias + "." + rest + "}";
+            }
+            if ("linktable".equals(marker) && linkTableAlias != null) {
+                return "{" + linkTableAlias + "}";
+            }
+            if (marker.startsWith("linktable.") && linkTableAlias != null) {
+                String rest = marker.substring(10);
+                return "{" + linkTableAlias + "." + rest + "}";
             }
             if (marker.contains(".") && linkAlias != null) {
                 int dot = marker.indexOf('.');

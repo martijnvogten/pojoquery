@@ -9,6 +9,7 @@ import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Link;
+import org.pojoquery.pipeline.AQTSchemaGenerator;
 import org.pojoquery.pipeline.querytree.EmbeddedNode;
 import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.pipeline.querytree.FieldSelectionBase;
@@ -99,7 +100,7 @@ public class SchemaGenerator {
      */
     public static void createTables(javax.sql.DataSource db, Class<?>... classes) {
         DB.runInTransaction(db, c -> {
-            for (String ddl : generateCreateTableStatements(classes)) {
+            for (String ddl : AQTSchemaGenerator.generateSchemaDDLFromClasses(DbContext.getDefault(), classes)) {
                 DB.executeDDL(c, ddl);
             }
         });
