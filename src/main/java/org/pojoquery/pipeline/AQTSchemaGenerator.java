@@ -72,12 +72,10 @@ public class AQTSchemaGenerator {
 			DDLInferredColumn column = new DDLInferredColumn(key, scalarType);
 			columns.put(key, column); // placeholder column with null field
 			return column;
-			// Note: inferred columns don't have defining fields, since they're not based on any specific
 		}
 
 		@Override
 		public DDLColumn registerColumn(TableInfo table, String columnName, FieldModel field) {
-			// System.out.println("COLUMN: " + table.tableName() + "." + columnName + " Field: " + (field != null ? field.getName() : "[implicit foreign key]"));
 			DDLColumnKey key = new DDLColumnKey(table, columnName);
 			DDLColumn column = new DDLFieldColumn(key, field);
 			columns.put(key, column);
@@ -160,9 +158,6 @@ public class AQTSchemaGenerator {
 				}
 
 				if (metadata != null) {
-					// if (metadata.length() != 255) {
-					// 	colDef.append("(").append(metadata.length()).append(")");
-					// }
 					if (!metadata.nullable()) {
 						colDef.append(" NOT NULL");
 					}

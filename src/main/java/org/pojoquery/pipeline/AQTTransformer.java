@@ -178,13 +178,13 @@ public class AQTTransformer {
 								PojoMetadata.determineIdField(subClass), null, null);
 						newChildren.add(new TPSSubClassNode(subAlias, subClass, determinTableInfo(subClass), null, join, tableNode.alias()));
 					} else {
+						// Same table as superclass
 						String discriminatorColumn = subClass.hasAnnotation(org.pojoquery.annotations.DiscriminatorColumn.class) ?
 								subClass.getAnnotationAttributeValue(org.pojoquery.annotations.DiscriminatorColumn.class, "name", String.class) :
 								null;
 						String discriminatorValue = subClass.hasAnnotation(org.pojoquery.annotations.DiscriminatorValue.class) ?
 								subClass.getAnnotationAttributeValue(org.pojoquery.annotations.DiscriminatorValue.class, "value", String.class) :
 								subClass.getSimpleName();
-						// Same table as superclass
 						newChildren.add(new STISubClassNode(
 							AliasNaming.subclassAlias(tableNode.alias(), subClass.getSimpleName().toLowerCase()),
 							subClass,
