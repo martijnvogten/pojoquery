@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.pojoquery.SqlExpression;
-import org.pojoquery.pipeline.AbstractQueryTree.Column;
+import org.pojoquery.pipeline.AbstractQueryTree.ColumnFieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityReference;
@@ -340,7 +340,7 @@ public class AQTCascadingUpdater {
 		String autoGenIdField = null;
 
 		for (QueryNode child : node.children()) {
-			if (child instanceof Column col && col.field() != null) {
+			if (child instanceof ColumnFieldNode col && col.field() != null) {
 				String fieldName = col.field().getName();
 				String columnName = col.columnName();
 				Object value = getFieldValue(entity, col.field());
@@ -369,7 +369,7 @@ public class AQTCascadingUpdater {
 				Object embeddedValue = getFieldValue(entity, emb.field());
 				if (embeddedValue != null) {
 					for (QueryNode embChild : emb.children()) {
-						if (embChild instanceof Column col) {
+						if (embChild instanceof ColumnFieldNode col) {
 							values.put(col.columnName(), getFieldValue(embeddedValue, col.field()));
 						}
 					}
@@ -417,7 +417,7 @@ public class AQTCascadingUpdater {
 
 	private static String findIdColumnName(TableNode node) {
 		PrimaryKeyField pk = findPrimaryKeyField(node);
-		return pk != null ? ((Column) pk).columnName() : "id";
+		return pk != null ? ((ColumnFieldNode) pk).columnName() : "id";
 	}
 
 	private static void clearIdField(TableNode node, Object entity) {

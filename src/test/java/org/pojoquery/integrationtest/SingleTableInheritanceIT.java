@@ -52,13 +52,11 @@ public class SingleTableInheritanceIT {
 		Map<String, Object> extras;
 	}
 	
-	@Table("vehicle")
 	public static class Car extends Vehicle {
 		Integer numberOfDoors;
 		Boolean hasAirConditioning;
 	}
 	
-	@Table("vehicle")
 	public static class Motorcycle extends Vehicle {
 		Integer engineCC;
 		Boolean hasSidecar;
@@ -271,6 +269,8 @@ public class SingleTableInheritanceIT {
 				"vehicle_type", "Motorcycle",
 				"engineCC", 1200
 			));
+
+			assertNotNull(carId);
 			
 			// findById should return the correct subclass type
 			Vehicle foundCar = PojoQuery.build(Vehicle.class).findById(c, carId).orElseThrow();

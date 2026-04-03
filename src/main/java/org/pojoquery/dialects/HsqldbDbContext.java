@@ -9,13 +9,10 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Date;
 
-import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
-import org.pojoquery.annotations.Lob;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumnMetadata;
 import org.pojoquery.pipeline.SimpleFieldMapping;
-import org.pojoquery.typemodel.FieldModel;
 
 /**
  * DbContext implementation for HSQLDB (HyperSQL Database).
@@ -62,70 +59,62 @@ public class HsqldbDbContext implements DbContext {
 	}
 
     @Override
-    public String mapJavaTypeToSql(FieldModel field, DDLColumnMetadata columnMetadata) {
-        String type = field.getType().getQualifiedName();
+    public String mapJavaTypeToSql(Class<?> type, DDLColumnMetadata colMeta) {
 
-        if (type.equals(Long.class.getName()) || type.equals(long.class.getName())) {
+        if (type.equals(Long.class) || type.equals(long.class)) {
             return "BIGINT";
         }
-        if (type.equals(Integer.class.getName()) || type.equals(int.class.getName())) {
+        if (type.equals(Integer.class) || type.equals(int.class)) {
             return "INT";
         }
-        if (type.equals(Short.class.getName()) || type.equals(short.class.getName())) {
+        if (type.equals(Short.class) || type.equals(short.class )) {
             return "SMALLINT";
         }
-        if (type.equals(Byte.class.getName()) || type.equals(byte.class.getName())) {
+        if (type.equals(Byte.class) || type.equals(byte.class)) {
             return "TINYINT";
         }
-        if (type.equals(Double.class.getName()) || type.equals(double.class.getName())) {
+        if (type.equals(Double.class) || type.equals(double.class)) {
             return "DOUBLE";
         }
-        if (type.equals(Float.class.getName()) || type.equals(float.class.getName())) {
+        if (type.equals(Float.class) || type.equals(float.class)) {
             return "FLOAT";
         }
-        if (type.equals(Boolean.class.getName()) || type.equals(boolean.class.getName())) {
+        if (type.equals(Boolean.class) || type.equals(boolean.class)) {
             return "BOOLEAN";
         }
-        if (type.equals(BigDecimal.class.getName())) {
-            AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);
-            int precision = (colMeta != null) ? colMeta.precision : 19;
-            int scale = (colMeta != null) ? colMeta.scale : 4;
+        if (type.equals(BigDecimal.class)) {
+            int precision = (colMeta != null) ? colMeta.precision() : 19;
+            int scale = (colMeta != null) ? colMeta.scale() : 4;
             return "DECIMAL(" + precision + "," + scale + ")";
         }
-        if (type.equals(BigInteger.class.getName())) {
+        if (type.equals(BigInteger.class)) {
             return "BIGINT";
         }
 
-        if (type.equals(String.class.getName())) {
-            if (field.hasAnnotation(Lob.class)) {
+        if (type.equals(String.class)) {
+            if (colMeta != null && colMeta.isLob()) {
                 return "CLOB";
             }
-            AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);
-            int length = (colMeta != null) ? colMeta.length : getDefaultVarcharLength();
+            int length = (colMeta != null) ? colMeta.length() : getDefaultVarcharLength();
             return "VARCHAR(" + length + ")";
         }
 
-        if (type.equals(Date.class.getName()) || type.equals(LocalDateTime.class.getName()) || type.equals(Instant.class.getName()) || type.equals(java.sql.Timestamp.class.getName())) {
+        if (type.equals(Date.class) || type.equals(LocalDateTime.class) || type.equals(Instant.class) || type.equals(java.sql.Timestamp.class)) {
             return "TIMESTAMP";
         }
-        if (type.equals(LocalDate.class.getName()) || type.equals(java.sql.Date.class.getName())) {
+        if (type.equals(LocalDate.class) || type.equals(java.sql.Date.class)) {
             return "DATE";
         }
-        if (type.equals(LocalTime.class.getName()) || type.equals(java.sql.Time.class.getName())) {
+        if (type.equals(LocalTime.class) || type.equals(java.sql.Time.class)) {
             return "TIME";
         }
 
-        if (type.equals(byte[].class.getName())) {
+        if (type.equals(byte[].class)) {
             return "BLOB";
         }
 
-        if (field.getType().isEnum()) {
+        if (type.isEnum()) {
             return "VARCHAR(" + getDefaultVarcharLength() + ")";
-        }
-
-        // HSQLDB doesn't have native JSON, use CLOB
-        if (field.getType().isMap()) {
-            return "CLOB";
         }
 
         return "VARCHAR(" + getDefaultVarcharLength() + ")";

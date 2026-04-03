@@ -10,12 +10,10 @@ import java.time.LocalTime;
 import java.util.Date;
 import java.util.Map;
 
-import org.pojoquery.annotations.Lob;
 import org.pojoquery.dialects.HsqldbDbContext;
 import org.pojoquery.dialects.MysqlDbContext;
 import org.pojoquery.dialects.PostgresDbContext;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumnMetadata;
-import org.pojoquery.typemodel.FieldModel;
 
 /**
  * Defines database-specific behavior for PojoQuery operations.
@@ -225,15 +223,8 @@ public interface DbContext {
 
 	/**
 	 * Maps a Java field to its SQL type, considering any annotations on the field.
-	 * 
-	 * @param field the field to map (may be null for non-field contexts like FK
-	 *              columns)
-	 * @param colMeta TODO
-	 * @return the SQL type string
 	 */
-	default String mapJavaTypeToSql(FieldModel field, DDLColumnMetadata colMeta) {
-		Class<?> type = field.getType().getClass();
-
+	default String mapJavaTypeToSql(Class<?> type, DDLColumnMetadata colMeta) {
 		if (type == Long.class || type == long.class) {
 			return "BIGINT";
 		}
@@ -266,7 +257,7 @@ public interface DbContext {
 
 		// Handle String
 		if (type == String.class) {
-			if (field.hasAnnotation(Lob.class)) {
+			if (colMeta != null && colMeta.isLob()) {
 				return "CLOB";
 			}
 			int length = (colMeta != null) ? colMeta.length() : getDefaultVarcharLength();

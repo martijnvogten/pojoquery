@@ -6,7 +6,6 @@ import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumnMetadata;
 import org.pojoquery.pipeline.SimpleFieldMapping;
-import org.pojoquery.typemodel.FieldModel;
 
 /**
  * A builder class that provides a fluent API for configuring a DbContext.
@@ -182,8 +181,8 @@ public class DbContextBuilder {
         }
 
         @Override
-        public String mapJavaTypeToSql(FieldModel field, DDLColumnMetadata columnMetadata) {
-            return base.mapJavaTypeToSql(field, null);
+        public String mapJavaTypeToSql(Class<?> type, DDLColumnMetadata columnMetadata) {
+            return base.mapJavaTypeToSql(type, null);
         }
 
         @Override

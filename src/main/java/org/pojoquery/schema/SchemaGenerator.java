@@ -439,7 +439,7 @@ public class SchemaGenerator {
                     return autoIncType; // e.g., BIGSERIAL for Postgres
                 }
             }
-            return field != null ? dbContext.mapJavaTypeToSql(field, null) : dbContext.getForeignKeyColumnType();
+            return field != null ? dbContext.mapJavaTypeToSql(((ReflectionTypeModel)field.getType()).getReflectionClass(), null) : dbContext.getForeignKeyColumnType();
         }
         
         private void collectLinkTable(JoinedNode parent, JoinedNode child, JoinTableInfo joinTableInfo) {
@@ -869,7 +869,7 @@ public class SchemaGenerator {
                     return autoIncType;
                 }
             }
-            return field != null ? dbContext.mapJavaTypeToSql(field, null) : dbContext.getForeignKeyColumnType();
+            return field != null ? dbContext.mapJavaTypeToSql(((ReflectionTypeModel)field.getType()).getReflectionClass(), null) : dbContext.getForeignKeyColumnType();
         }
         
         private void collectLinkTable(JoinedNode parent, JoinedNode child, JoinTableInfo joinTableInfo) {

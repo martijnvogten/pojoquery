@@ -8,14 +8,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Date;
+import java.util.Map;
 
-import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
-import org.pojoquery.annotations.Lob;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumnMetadata;
 import org.pojoquery.pipeline.SimpleFieldMapping;
-import org.pojoquery.typemodel.FieldModel;
 
 /**
  * DbContext implementation for PostgreSQL databases.
@@ -56,71 +54,67 @@ public class PostgresDbContext implements DbContext {
     }
 
     @Override
-    public String mapJavaTypeToSql(FieldModel field, DDLColumnMetadata columnMetadata) {
-        String type = field.getType().getQualifiedName();
-
-        if (type.equals(Long.class.getName()) || type.equals(long.class.getName())) {
+    public String mapJavaTypeToSql(Class<?> type, DDLColumnMetadata colMeta) {
+        if (type.equals(Long.class) || type.equals(long.class)) {
             return "BIGINT";
         }
-        if (type.equals(Integer.class.getName()) || type.equals(int.class.getName())) {
+        if (type.equals(Integer.class) || type.equals(int.class)) {
             return "INTEGER";
         }
-        if (type.equals(Short.class.getName()) || type.equals(short.class.getName())) {
+        if (type.equals(Short.class) || type.equals(short.class)) {
             return "SMALLINT";
         }
-        if (type.equals(Byte.class.getName()) || type.equals(byte.class.getName())) {
+        if (type.equals(Byte.class) || type.equals(byte.class)) {
             return "SMALLINT"; // PostgreSQL doesn't have TINYINT
         }
-        if (type.equals(Double.class.getName()) || type.equals(double.class.getName())) {
+        if (type.equals(Double.class) || type.equals(double.class)) {
             return "DOUBLE PRECISION";
         }
-        if (type.equals(Float.class.getName()) || type.equals(float.class.getName())) {
+        if (type.equals(Float.class) || type.equals(float.class)) {
             return "REAL";
         }
-        if (type.equals(Boolean.class.getName()) || type.equals(boolean.class.getName())) {
+        if (type.equals(Boolean.class) || type.equals(boolean.class)) {
             return "BOOLEAN";
         }
-        if (type.equals(BigDecimal.class.getName())) {
-            AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);
-            int precision = (colMeta != null) ? colMeta.precision : 19;
-            int scale = (colMeta != null) ? colMeta.scale : 4;
+        if (type.equals(BigDecimal.class)) {
+            int precision = (colMeta != null) ? colMeta.precision() : 19;
+            int scale = (colMeta != null) ? colMeta.scale() : 4;
             return "NUMERIC(" + precision + "," + scale + ")";
         }
-        if (type.equals(BigInteger.class.getName())) {
+        if (type.equals(BigInteger.class)) {
             return "BIGINT";
         }
 
-        if (type.equals(String.class.getName())) {
-            if (field.hasAnnotation(Lob.class)) {
+        if (type.equals(String.class)) {
+            if (colMeta != null && colMeta.isLob()) {
                 return "TEXT";
             }
-            AnnotationHelper.ColumnMetadata colMeta = AnnotationHelper.getColumnMetadata(field);
-            int length = (colMeta != null) ? colMeta.length : getDefaultVarcharLength();
+            int length = (colMeta != null) ? colMeta.length() : getDefaultVarcharLength();
             return "VARCHAR(" + length + ")";
         }
 
-        if (type.equals(LocalDateTime.class.getName())) {
+        if (type.equals(LocalDateTime.class) || type.equals(Instant.class) || type.equals(Date.class)) {
             return "TIMESTAMP";
         }
-        if (type.equals(Date.class.getName()) || type.equals(java.sql.Timestamp.class.getName()) || type.equals(Instant.class.getName())) {
+        if (type.equals(Date.class) || type.equals(java.sql.Timestamp.class) || type.equals(Instant.class)) {
             return "TIMESTAMPTZ";
         }
-        if (type.equals(java.sql.Date.class.getName()) || type.equals(LocalDate.class.getName())) {
+        if (type.equals(java.sql.Date.class) || type.equals(LocalDate.class)) {
             return "DATE";
         }
-        if (type.equals(java.sql.Time.class.getName()) || type.equals(LocalTime.class.getName())) {
+        if (type.equals(java.sql.Time.class) || type.equals(LocalTime.class)) {
             return "TIME";
         }
 
-        if (type.equals(byte[].class.getName())) {
+        if (type.equals(byte[].class)) {
             return "BYTEA";
         }
 
-        if (field.getType().isEnum()) {
+        if (type.isEnum()) {
             return "VARCHAR(50)";
         }
 
-        if (field.getType().isMap()) {
+        if (Map.class.isAssignableFrom(type)) {
             return "JSONB";
         }
 

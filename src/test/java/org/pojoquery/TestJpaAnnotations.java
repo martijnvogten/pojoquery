@@ -215,6 +215,7 @@ public class TestJpaAnnotations {
         String sql = String.join("\n", statements);
 
         // Should use CLOB type for @Lob String field
+
         assertTrue(sql.contains("biography CLOB"),
             "Should use CLOB type for JPA @Lob String field. Generated SQL:\n" + sql);
     }

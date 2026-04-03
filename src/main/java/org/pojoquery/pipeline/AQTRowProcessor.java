@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 import org.pojoquery.JdbcValueMapper;
-import org.pojoquery.pipeline.AbstractQueryTree.Column;
+import org.pojoquery.pipeline.AbstractQueryTree.ColumnFieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityNode;
@@ -19,9 +19,10 @@ import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
+import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarNode;
-import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
-import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.SubClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.SuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.typemodel.FieldModel;
@@ -54,7 +55,7 @@ public class AQTRowProcessor<R> {
 	@SuppressWarnings("unchecked")
 	private void processRowRecursive(TableNode tableNode, Map<String, Object> row, Map<String, Object> entitiesOnThisRow) throws SQLException {
 		for (AbstractQueryTree.QueryNode child : tableNode.children()) {
-			if (child instanceof TableNode childTableNode && !(child instanceof TPSSuperClassNode)) {
+			if (child instanceof TableNode childTableNode && !(child instanceof SuperClassNode)) {
 				processRowRecursive(childTableNode, row, entitiesOnThisRow);
 			}
 		}
@@ -69,6 +70,13 @@ public class AQTRowProcessor<R> {
 		}
 		Object entity = entitiesOnThisRow.get(tableNode.alias());
 		if (entity == null) {
+			if (tableNode instanceof STISubClassNode subClassNode) {
+				String discValue = (String) row.get(subClassNode.alias() + "._discriminator");
+				if (discValue == null || !discValue.equals(subClassNode.discriminatorValue())) {
+					// This row does not correspond to this subclass, so skip processing it
+					return;
+				}
+			}
 			entity = constructEntity(tableNode.type());
 			allEntitiesByPrimaryKey.put(new EntityKey(tableNode.alias(), pkValue), entity);
 			entitiesOnThisRow.put(tableNode.alias(), entity);
@@ -77,7 +85,7 @@ public class AQTRowProcessor<R> {
 		// At this point subclasses have been handled, so the concrete entity
 		// for this node has been constructed and is available in entitiesOnThisRow
 		for (QueryNode child : tableNode.children()) {
-			if (child instanceof TPSSuperClassNode superClass) {
+			if (child instanceof SuperClassNode superClass) {
 				entitiesOnThisRow.put(superClass.alias(), entity);
 				processRowRecursive(superClass, row, entitiesOnThisRow);
 			}
@@ -95,13 +103,13 @@ public class AQTRowProcessor<R> {
 				addToCollection(entity, jtec.field(), entitiesOnThisRow.get(jtec.alias()), jtec.valueMapper(), jtec.type());
 			} else if (child instanceof ValueCollection vc) {
 				addToCollection(entity, vc.field(), row.get(vc.alias() + ".value"), vc.valueMapper(), vc.componentType());
-			} else if (child instanceof Column scalar) {
+			} else if (child instanceof ColumnFieldNode scalar) {
 				Object value = row.get(tableNode.alias() + "." + scalar.field().getName());
 				setFieldValue(entity, scalar.field(), scalar.valueMapper().mapValue(value));
 			}
 		}
 
-		if (tableNode instanceof TPSSubClassNode subClass && pkValue != null) {
+		if (tableNode instanceof SubClassNode subClass) {
 			entitiesOnThisRow.put(subClass.parentAlias(), entity);
 		}
 

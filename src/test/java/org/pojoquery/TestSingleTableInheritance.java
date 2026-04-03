@@ -63,11 +63,12 @@ public class TestSingleTableInheritance {
 		assertEquals(
 				norm("""
 					SELECT
-					 `room`.`id` AS `room.id`,
-					 `room`.`area` AS `room.area`,
-					 `room`.`dtype` AS `room.dtype`,
-					 `room`.`numberOfBeds` AS `room.numberOfBeds`,
-					 `room`.`hasDishWasher` AS `room.hasDishWasher`
+					`room`.`id` AS `room.id`,
+					`room`.`area` AS `room.area`,
+					`room`.`dtype` AS `room.stibedroom._discriminator`,
+					`room`.`numberOfBeds` AS `room.stibedroom.numberOfBeds`,
+					`room`.`dtype` AS `room.stikitchen._discriminator`,
+					`room`.`hasDishWasher` AS `room.stikitchen.hasDishWasher`
 					FROM `room` AS `room`
 					"""),
 				norm(sql));
@@ -82,10 +83,10 @@ public class TestSingleTableInheritance {
 		assertEquals(
 				norm("""
 					SELECT
-					 `room`.`id` AS `room.id`,
-					 `room`.`area` AS `room.area`,
-					 `room`.`room_type` AS `room.room_type`,
-					 `room`.`numberOfBeds` AS `room.numberOfBeds`
+					`room`.`id` AS `room.id`,
+					`room`.`area` AS `room.area`,
+					`room`.`room_type` AS `room.customdiscbedroom._discriminator`,
+					`room`.`numberOfBeds` AS `room.customdiscbedroom.numberOfBeds`
 					FROM `room` AS `room`
 					"""),
 				norm(sql));
@@ -97,10 +98,10 @@ public class TestSingleTableInheritance {
 
 		// Simulate result set with discriminator values
 		List<Map<String, Object>> result = TestUtils.resultSet(new String[] {
-				"room.id", "room.area", "room.dtype", "room.numberOfBeds", "room.hasDishWasher" },
-				1L, 100.0, "STIBedRoom", 2, null,
-				2L, 40.0, "STIKitchen", null, true,
-				3L, 50.0, "STIRoom", null, null);
+				"room.id", "room.area", "room.stibedroom._discriminator", "room.stibedroom.numberOfBeds", "room.stikitchen._discriminator", "room.stikitchen.hasDishWasher" },
+				1L, 100.0, "STIBedRoom", 2, "STIBedRoom", null,
+				2L, 40.0, "STIKitchen", null, "STIKitchen", true,
+				3L, 50.0, "STIRoom", null, null, null);
 
 		List<STIRoom> rooms = b.processRows(result);
 

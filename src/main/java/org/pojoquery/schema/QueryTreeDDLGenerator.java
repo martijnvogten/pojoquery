@@ -8,6 +8,7 @@ import org.pojoquery.AnnotationHelper;
 import org.pojoquery.DbContext;
 import org.pojoquery.schema.QueryTreeFieldExtractor.FieldDef;
 import org.pojoquery.schema.QueryTreeFieldExtractor.TableDef;
+import org.pojoquery.typemodel.ReflectionTypeModel;
 
 /**
  * Generates CREATE TABLE DDL statements from extracted field definitions.
@@ -74,7 +75,7 @@ public class QueryTreeDDLGenerator {
         } else if (col.isAutoIncrement() && !dbContext.getAutoIncrementKeyColumnType().equals("BIGINT")) {
             sb.append(dbContext.getAutoIncrementKeyColumnType());
         } else if (col.field() != null) {
-            sb.append(dbContext.mapJavaTypeToSql(col.field(), null));
+            sb.append(dbContext.mapJavaTypeToSql(((ReflectionTypeModel)col.field().getType()).getReflectionClass(), null));
             
             // Add constraints from field annotations
             if (!col.isAutoIncrement()) {

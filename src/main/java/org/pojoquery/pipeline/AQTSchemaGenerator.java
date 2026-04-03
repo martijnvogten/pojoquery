@@ -9,6 +9,7 @@ import java.util.Map;
 
 import org.pojoquery.DbContext;
 import org.pojoquery.annotations.Column;
+import org.pojoquery.annotations.Lob;
 import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
 import org.pojoquery.pipeline.AbstractQueryTree.ForeignKeyInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.Join;
@@ -17,6 +18,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKeyField;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
+import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
@@ -24,28 +26,31 @@ import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
+import org.pojoquery.typemodel.TypeModel;
 
 public class AQTSchemaGenerator {
 
-	public record DDLTable(TableInfo tableKey, List<DDLColumn> primaryKeyColumns) {
+	public sealed interface DDLColumn permits DDLFieldColumn, DDLInferredColumn {
+		DDLColumnKey columnKey();
 	}
 
-	public record DDLColumn(DDLColumnKey columnKey, FieldModel field) {
-	}
+	public record DDLTable(TableInfo tableKey, List<DDLColumn> primaryKeyColumns) {}
 
-	public record DDLColumnKey(TableInfo tableKey, String columnName) {
-	}
+	public record DDLFieldColumn(DDLColumnKey columnKey, FieldModel field) implements DDLColumn {}
 
-	public record DDLForeignKey(DDLColumnKey referringColumn, DDLColumnKey referencedIdColumn) {
-	}
+	public record DDLInferredColumn(DDLColumnKey columnKey, TypeModel scalarType) implements DDLColumn {}
 
-	public record DDLColumnMetadata(int length, int precision, int scale, boolean nullable, boolean unique) {
-	}
+	public record DDLColumnKey(TableInfo tableKey, String columnName) {}
+
+	public record DDLForeignKey(DDLColumnKey referringColumn, DDLColumnKey referencedIdColumn) {}
+
+	public record DDLColumnMetadata(int length, int precision, int scale, boolean nullable, boolean unique, boolean isLob) {}
 
 	interface DDLCollector {
 		void registerTable(TableInfo tableKey, List<DDLColumn> primaryKeyColumns);
 		DDLColumn registerColumn(TableInfo table, String columnName, FieldModel field);
-		void registerForeignKey(ForeignKeyInfo foreignKeyInfo);
+		DDLColumn registerInferredColumn(TableInfo table, String columnName, TypeModel scalarType);
+		DDLColumn registerForeignKey(ForeignKeyInfo foreignKeyInfo);
 	}
 
 	private static class DDLCollectorImpl implements DDLCollector {
@@ -56,14 +61,25 @@ public class AQTSchemaGenerator {
 		private HashMap<DDLColumnKey, DDLForeignKey> foreignKeys = new LinkedHashMap<>();
 		@Override
 		public void registerTable(TableInfo tableKey, List<DDLColumn> primaryKeyColumns) {
-			tables.put(tableKey, new DDLTable(tableKey, primaryKeyColumns));
+			if (!tables.containsKey(tableKey)) {
+				tables.put(tableKey, new DDLTable(tableKey, primaryKeyColumns));
+			}
 		}
 		
+		@Override
+		public DDLColumn registerInferredColumn(TableInfo table, String columnName, TypeModel scalarType) {
+			DDLColumnKey key = new DDLColumnKey(table, columnName);
+			DDLInferredColumn column = new DDLInferredColumn(key, scalarType);
+			columns.put(key, column); // placeholder column with null field
+			return column;
+			// Note: inferred columns don't have defining fields, since they're not based on any specific
+		}
+
 		@Override
 		public DDLColumn registerColumn(TableInfo table, String columnName, FieldModel field) {
 			// System.out.println("COLUMN: " + table.tableName() + "." + columnName + " Field: " + (field != null ? field.getName() : "[implicit foreign key]"));
 			DDLColumnKey key = new DDLColumnKey(table, columnName);
-			DDLColumn column = new DDLColumn(key, field);
+			DDLColumn column = new DDLFieldColumn(key, field);
 			columns.put(key, column);
 			if (field != null) {
 				definingFields.computeIfAbsent(key, k -> new ArrayList<>()).add(field);
@@ -74,12 +90,13 @@ public class AQTSchemaGenerator {
 		}
 
 		@Override
-		public void registerForeignKey(ForeignKeyInfo foreignKeyInfo) {
+		public DDLColumn registerForeignKey(ForeignKeyInfo foreignKeyInfo) {
 			DDLColumnKey ddlColumnKey = new DDLColumnKey(foreignKeyInfo.referringTable(), foreignKeyInfo.fkColumnName());
-			registerColumn(foreignKeyInfo.referringTable(), foreignKeyInfo.fkColumnName(), foreignKeyInfo.foreignKeyField());
+			DDLColumn column = registerColumn(foreignKeyInfo.referringTable(), foreignKeyInfo.fkColumnName(), foreignKeyInfo.foreignKeyField());
 			foreignKeys.put(ddlColumnKey, 
 				new DDLForeignKey(ddlColumnKey, new DDLColumnKey(foreignKeyInfo.targetTable(), foreignKeyInfo.idColumnName()))
 			);
+			return column;
 		}
 	}
 
@@ -123,7 +140,7 @@ public class AQTSchemaGenerator {
 				DDLColumnMetadata metadata = columnMetadata.get(col.columnKey());
 
 				// Determine SQL type
-				if (col.field() != null) {
+				if (col instanceof DDLFieldColumn fieldColumn && fieldColumn.field() != null) {
 					boolean isAutoIncrement = table.primaryKeyColumns().size() == 1 && table.primaryKeyColumns().contains(col);
 					
 					if (isAutoIncrement) {
@@ -133,8 +150,10 @@ public class AQTSchemaGenerator {
 					} else if (collector.foreignKeys.containsKey(col.columnKey())) {
 						colDef.append(dbContext.getForeignKeyColumnType());
 					} else {
-						colDef.append(dbContext.mapJavaTypeToSql(col.field(), metadata));
+						colDef.append(dbContext.mapJavaTypeToSql(((ReflectionTypeModel)fieldColumn.field().getType()).getReflectionClass(), metadata));
 					}
+				} else if (col instanceof DDLInferredColumn inferredColumn) {
+					colDef.append(dbContext.mapJavaTypeToSql(((ReflectionTypeModel)inferredColumn.scalarType).getReflectionClass(), metadata));
 				} else {
 					// Implicit foreign key column (from join table)
 					colDef.append(dbContext.getForeignKeyColumnType());
@@ -192,9 +211,10 @@ public class AQTSchemaGenerator {
 	private static void collectDDLForEntity(TableNode entity, DDLCollector collector) {
 		TableInfo tableKey = new TableInfo(entity.tableInfo().schemaName(), entity.tableInfo().tableName());
 		List<DDLColumn> primaryKeyColumns = entity.children().stream()
-			.filter(child -> child instanceof PrimaryKey)
-			.map(child -> (PrimaryKey) child)
-			.map(pk -> new DDLColumn(new DDLColumnKey(tableKey, pk.columnName()), pk.field())) // placeholder type
+			.filter(PrimaryKey.class::isInstance)
+			.map(PrimaryKey.class::cast)
+			.map(pk -> new DDLFieldColumn(new DDLColumnKey(tableKey, pk.columnName()), pk.field()))
+			.map(DDLColumn.class::cast)
 			.toList();
 		collector.registerTable(tableKey, primaryKeyColumns);
 
@@ -206,17 +226,18 @@ public class AQTSchemaGenerator {
 			} else if (child instanceof ValueCollection valueCollection) {
 				String fetchColumn = valueCollection.fetchColumn();
 				ForeignKeyInfo joinInfo = valueCollection.join();
-				collector.registerTable(joinInfo.referringTable(), List.of(fetchColumn, joinInfo.fkColumnName()).stream()
-					.map(colName -> new DDLColumn(new DDLColumnKey(joinInfo.referringTable(), colName), null)) // placeholder type
-					.toList());
-				collector.registerColumn(joinInfo.referringTable(), fetchColumn, valueCollection.field());
-				collector.registerForeignKey(joinInfo);
+				DDLColumn valueColumn = collector.registerInferredColumn(joinInfo.referringTable(), fetchColumn, valueCollection.componentType());
+				DDLColumn fkColumn = collector.registerForeignKey(joinInfo);
+				collector.registerTable(joinInfo.referringTable(), List.of(valueColumn, fkColumn));
 			} else if (child instanceof Join ref) {
 				collectDDLForEntity((TableNode)ref, collector);
 				ForeignKeyInfo joinInfo = ref.join();
 				collector.registerForeignKey(joinInfo);
 			} else if (child instanceof EmbeddedEntity emb) {
 				collectDDLForEntity((TableNode)emb, collector);
+			} else if (child instanceof STISubClassNode stiSubClass) {
+				collector.registerInferredColumn(tableKey, stiSubClass.discriminatorColumn(), new ReflectionTypeModel(String.class));
+				collectDDLForEntity(stiSubClass, collector);
 			} else if (child instanceof JoinTableEntityCollection jte) {
 				collectDDLForEntity(jte, collector);
 				DDLColumn parentKeyColumn = collector.registerColumn(jte.join().joinTableInfo().tableInfo(), jte.join().parentKey().fkColumnName(), null);
@@ -243,11 +264,12 @@ public class AQTSchemaGenerator {
 		int scale = DEFAULT_SCALE;
 		boolean nullable = true;
 		boolean unique = false;
+		boolean isLob = false;
 
 		for (FieldModel field : fields) {
+			isLob = isLob || field.hasAnnotation(Lob.class);
 			if (field.hasAnnotation(Column.class)) {
 				AnnotationModel annotation = field.getAnnotation(Column.class).orElseThrow();
-
 				
 				// Get numeric values - only apply non-defaults
 				Number lengthValue = annotation.getNumberAttribute("length");
@@ -278,7 +300,7 @@ public class AQTSchemaGenerator {
 			}
 		}
 
-		return new DDLColumnMetadata(length, precision, scale, nullable, unique);
+		return new DDLColumnMetadata(length, precision, scale, nullable, unique, isLob);
 	}
 
 }

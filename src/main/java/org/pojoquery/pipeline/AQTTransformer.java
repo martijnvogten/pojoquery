@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.pojoquery.SqlExpression;
+import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.GroupBy;
@@ -23,7 +24,7 @@ import org.pojoquery.annotations.OrderBy;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
-import org.pojoquery.pipeline.AbstractQueryTree.Column;
+import org.pojoquery.pipeline.AbstractQueryTree.ColumnFieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
 import org.pojoquery.pipeline.AbstractQueryTree.Embedding;
 import org.pojoquery.pipeline.AbstractQueryTree.EmptyFieldNode;
@@ -42,7 +43,10 @@ import org.pojoquery.pipeline.AbstractQueryTree.JoinTableJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
+import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
+import org.pojoquery.pipeline.AbstractQueryTree.SubClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.SuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
@@ -69,18 +73,26 @@ public class AQTTransformer {
 		}
 
 
-		public static QueryNode addDeclaredFieldsToEmbeddings(QueryNode node) {
-			return (node instanceof Embedding tableNode && tableNode.children() == null)
-					? tableNode.withChildren(PojoMetadata.collectFieldsOfClass(tableNode.type()).stream()
-							.map(fieldModel -> new EmptyFieldNodeImpl(fieldModel))
-							.toList())
-					: node;
+
+		public static QueryNode setDiscriminatorColumn(QueryNode node) {
+			if (node instanceof STISubClassNode stiSubClassNode && stiSubClassNode.discriminatorColumn() == null
+					&& stiSubClassNode.type().hasAnnotation(org.pojoquery.annotations.SubClasses.class)
+					&& stiSubClassNode.type().hasAnnotation(org.pojoquery.annotations.DiscriminatorColumn.class)) {
+				String discriminatorColumn = stiSubClassNode.type().hasAnnotation(org.pojoquery.annotations.DiscriminatorColumn.class) ?
+						stiSubClassNode.type().getAnnotationAttributeValue(org.pojoquery.annotations.DiscriminatorColumn.class, "name", String.class) :
+						"dtype";
+				return stiSubClassNode.withDiscriminatorColumn(discriminatorColumn);
+			}
+			return node;
 		}
 
 		public static QueryNode addDeclaredFields(QueryNode node) {
 			if (node instanceof TableNode tableNode && tableNode.children() == null) {
 				List<TableMapping> mappings = PojoMetadata.determineTableMapping(tableNode.type());
-				TypeModel superClass = mappings.size() > 1 ? mappings.get(mappings.size() - 2).type : null;
+				TypeModel superClass = 
+					tableNode instanceof STISubClassNode subClassNode ? subClassNode.superClass() : 
+					mappings.size() > 1 ? mappings.get(mappings.size() - 2).type : null;
+
 				return tableNode.withChildren(PojoMetadata.collectFieldsOfClass(tableNode.type(), superClass).stream()
 						.map(fieldModel -> new EmptyFieldNodeImpl(fieldModel))
 						.toList());
@@ -127,20 +139,36 @@ public class AQTTransformer {
 			}
 		}
 
+		public static QueryNode applyDiscriminatorColumnFromParent(QueryNode node) {
+			return transformChildren(node, 
+				child -> child instanceof STISubClassNode stiSub && stiSub.discriminatorColumn() == null, 
+				(parentNode, child) -> {
+					if (parentNode.type().hasAnnotation(DiscriminatorColumn.class)) {
+						return ((STISubClassNode) child).withDiscriminatorColumn(parentNode.type().getAnnotationAttributeValue(DiscriminatorColumn.class, "name", String.class));
+					} else if (parentNode instanceof STISubClassNode parentStiSub && parentStiSub.discriminatorColumn() != null) {
+						return ((STISubClassNode) child).withDiscriminatorColumn(parentStiSub.discriminatorColumn());
+					} else {
+						return child;
+					}
+				});
+		}
+
 		public static QueryNode addSubClassTableNodes(QueryNode node) {
-			if (node instanceof TableNode tableNode && !(node instanceof TPSSuperClassNode) && (tableNode.children() != null && !tableNode.children().stream().anyMatch(child -> child instanceof TPSSubClassNode))
-					&& tableNode.type().hasAnnotation(org.pojoquery.annotations.SubClasses.class)) {
+			if (node instanceof TableNode tableNode && !(node instanceof SuperClassNode) && 
+					tableNode.type().hasAnnotation(org.pojoquery.annotations.SubClasses.class) &&
+					(tableNode.children() != null && !tableNode.children().stream().anyMatch(child -> child instanceof SubClassNode))
+					) {
 				AnnotationModel subClassesAnn = tableNode.type().getAnnotation(org.pojoquery.annotations.SubClasses.class).orElseThrow();
 				List<TypeModel> subClasses = tableNode.type().getTypeValuesFromAnnotation(subClassesAnn, "value");
 
+				List<TableMapping> superMapping = PojoMetadata.determineTableMapping(tableNode.type());
+
 				List<QueryNode> newChildren = tableNode.children() == null ? new ArrayList<>() : new ArrayList<>(tableNode.children());
 				for (TypeModel subClass : subClasses) {
-					if (subClass.hasAnnotation(org.pojoquery.annotations.DiscriminatorColumn.class)) {
-						continue; // Skip if subclass uses single-table inheritance - handled by SingleTableInheritanceTransform
-					}
-					
 					List<TableMapping> subMappings = PojoMetadata.determineTableMapping(subClass);
-					if (!subMappings.isEmpty()) {
+					if (subMappings.size() > superMapping.size()) {
+						// Table per subclass inheritance
+						// Any fields this subclass adds live in their own table
 						TableMapping subTableMapping = subMappings.get(subMappings.size() - 1);
 						String subAlias = AliasNaming.subclassAlias(tableNode.alias(), subTableMapping.tableName);
 						ForeignKeyInfo join = new ForeignKeyInfo(
@@ -149,6 +177,20 @@ public class AQTTransformer {
 								PojoMetadata.determineIdField(tableNode.type()), null,
 								PojoMetadata.determineIdField(subClass), null, null);
 						newChildren.add(new TPSSubClassNode(subAlias, subClass, determinTableInfo(subClass), null, join, tableNode.alias()));
+					} else {
+						String discriminatorColumn = subClass.hasAnnotation(org.pojoquery.annotations.DiscriminatorColumn.class) ?
+								subClass.getAnnotationAttributeValue(org.pojoquery.annotations.DiscriminatorColumn.class, "name", String.class) :
+								null;
+						String discriminatorValue = subClass.hasAnnotation(org.pojoquery.annotations.DiscriminatorValue.class) ?
+								subClass.getAnnotationAttributeValue(org.pojoquery.annotations.DiscriminatorValue.class, "value", String.class) :
+								subClass.getSimpleName();
+						// Same table as superclass
+						newChildren.add(new STISubClassNode(
+							AliasNaming.subclassAlias(tableNode.alias(), subClass.getSimpleName().toLowerCase()),
+							subClass,
+							tableNode.tableInfo(),
+							null, tableNode.alias(), tableNode.type(), discriminatorColumn, discriminatorValue, tableNode.alias())
+						);
 					}
 				}
 
@@ -265,23 +307,6 @@ public class AQTTransformer {
 					}
 				);
 		}
-
-		// public static QueryNode addJointableValueCollections(QueryNode node) {
-		// 	return transformChildren(node,
-		// 			child -> child instanceof EmptyFieldNode emptyFieldNode &&
-		// 					!Strings.isNullOrEmpty(emptyFieldNode.field().getAnnotationAttributeValue(Link.class, "linktable", String.class)) &&
-		// 					!isEntityCollection(emptyFieldNode.field().getType()),
-		// 			(TableNode parentNode, EmptyFieldNode emptyFieldNode) -> {
-		// 				FieldModel field = emptyFieldNode.field();
-		// 				TypeModel componentType = Types.getCollectionComponentType(field);
-		// 				String alias = AliasNaming.childAlias(node instanceof RootNode, parentNode.alias(), field.getName());
-						
-		// 				String joinTableName = field.getAnnotationAttributeValue(Link.class, "linktable", String.class);
-		// 				String joinTableSchema = field.getAnnotationAttributeValue(Link.class, "linkschema", String.class);
-
-		// 			}
-		// 		);
-		// }
 
 		public static QueryNode addJointableEntityCollections(QueryNode node) {
 			return transformChildren(node,
@@ -471,10 +496,10 @@ public class AQTTransformer {
 
 		public static QueryNode applyCustomColumnNames(QueryNode node) {
 			return transformChildren(node,
-					child -> child instanceof Column column && 
+					child -> child instanceof ColumnFieldNode column && 
 						column.field().hasAnnotation(FieldName.class) &&
 						column.columnName() == null,
-					(TableNode parentNode, Column column) -> {
+					(TableNode parentNode, ColumnFieldNode column) -> {
 						String prefix = "";
 						if (parentNode instanceof EmbeddedEntity emb) {
 							// If the parent is an embedded entity, we need to prefix the column name with the embedding's prefix
@@ -547,7 +572,7 @@ public class AQTTransformer {
 		public static QueryNode applyEmbeddedFieldsColumnPrefix(QueryNode node) {
 			return node instanceof EmbeddedEntity emb && emb.children() != null ? emb.withChildren(
 					emb.children().stream().map(child -> {
-						if (child instanceof Column column && column.columnName() == null) {
+						if (child instanceof ColumnFieldNode column && column.columnName() == null) {
 							String prefix = emb.fieldPrefix() != null ? emb.fieldPrefix() : "";
 							return column.withColumnName(prefix + column.field().getName());
 						} else {
@@ -559,8 +584,8 @@ public class AQTTransformer {
 
 		public static QueryNode applyDefaultColumnNames(QueryNode node) {
 			return transformChildren(node,
-					child -> child instanceof Column scalar && scalar.columnName() == null,
-					(TableNode parentNode, Column scalar) -> scalar.withColumnName(scalar.field().getName()));
+					child -> child instanceof ColumnFieldNode scalar && scalar.columnName() == null,
+					(TableNode parentNode, ColumnFieldNode scalar) -> scalar.withColumnName(scalar.field().getName()));
 		}
 
 		public static QueryNode applyDefaultScalarExpressions(QueryNode node) {
@@ -568,6 +593,14 @@ public class AQTTransformer {
 					child -> child instanceof ScalarValue scalar && scalar.expression() == null,
 					(TableNode parentNode, ScalarValue scalar) -> scalar.withExpression(
 							SqlExpression.sql("{" + (parentNode instanceof Embedding emb ? emb.sourceAlias() : parentNode.alias()) + "." + scalar.columnName() + "}")));
+		}
+
+		public static QueryNode applyDefaultDiscriminatorExpressions(QueryNode node) {
+			// return transformChildren(node,
+			// 		child -> child instanceof InferredDiscriminatorColumn col && col.expression() == null,
+			// 		(TableNode parentNode, InferredDiscriminatorColumn col) -> col.withExpression(
+			// 				SqlExpression.sql("{" + (parentNode instanceof Embedding emb ? emb.sourceAlias() : parentNode.alias()) + "." + col.columnName() + "}")));
+			return node;
 		}
 
 		public static QueryNode applyDefaultPrimaryKeyExpressions(QueryNode node) {
@@ -646,8 +679,8 @@ public class AQTTransformer {
 					(TableNode parentNode, ValueCollection scalar) -> scalar.withValueMapper(
 							DefaultValueMappers.createMapper(scalar.componentType()))))
 			.map(n -> transformChildren(n,
-					child -> child instanceof Column scalar && scalar.valueMapper() == null,
-					(TableNode parentNode, Column scalar) -> scalar.withValueMapper(
+					child -> child instanceof ColumnFieldNode scalar && scalar.valueMapper() == null,
+					(TableNode parentNode, ColumnFieldNode scalar) -> scalar.withValueMapper(
 							DefaultValueMappers.forField(scalar.field()))))
 			.orElse(node);
 		}
@@ -694,6 +727,9 @@ public class AQTTransformer {
 				sqlQuery.addField(scalar.expression(), node.alias() + "." + scalar.field().getName());
 			} else if (child instanceof PrimaryKey pk) {
 				sqlQuery.addField(pk.expression(), node.alias() + "." + pk.field().getName());
+			} else if (child instanceof STISubClassNode stiSubClass) {
+				sqlQuery.addField(SqlExpression.sql("{" + node.alias() + "." + stiSubClass.discriminatorColumn() + "}"), stiSubClass.alias() + "._discriminator");
+				toSql((TableNode) stiSubClass, sqlQuery);
 			} else if (child instanceof Embedding embedded) {
 				toSql((TableNode) embedded, sqlQuery);
 			} else if (child instanceof ValueCollection col) {
@@ -733,12 +769,10 @@ public class AQTTransformer {
 			oldTree = newTree;
 			newTree = Optional.<QueryNode>ofNullable(oldTree)
 					.map(Transformers::checkForCycles)
-					.map(transformNodesRecursively(Transformers::addDeclaredFieldsToEmbeddings))
 					.map(transformNodesRecursively(Transformers::addDeclaredFields))
 					.map(transformNodesRecursively(Transformers::addIdFieldToSubClassTableNodes))
 					.map(transformNodesRecursively(Transformers::addSuperClassTableNodes))
 					.map(transformNodesRecursively(Transformers::addEmbeddedEntities))
-					// .map(transformNodesRecursively(Transformers::addJointableValueCollections))
 					.map(transformNodesRecursively(Transformers::addValueCollections))
 					.map(transformNodesRecursively(Transformers::addJointableEntityCollections))
 					.map(transformNodesRecursively(Transformers::addEntityCollections))
@@ -753,6 +787,7 @@ public class AQTTransformer {
 					.map(transformNodesRecursively(Transformers::applyCustomJoinConditions))
 					.map(transformNodesRecursively(Transformers::applyCustomColumnNames))
 					.map(transformNodesRecursively(Transformers::applyCustomSelectExpressions))
+					.map(transformNodesRecursively(Transformers::applyDiscriminatorColumnFromParent))
 					.map(transformNodesRecursively(Transformers::applyDefaultIdFieldNames))
 					.map(transformNodesRecursively(Transformers::applyDefaultForeignKeyColumnNames))
 					.map(transformNodesRecursively(Transformers::applyDefaultJoinConditions))
@@ -760,6 +795,7 @@ public class AQTTransformer {
 					.map(transformNodesRecursively(Transformers::applyEmbeddedFieldsColumnPrefix))
 					.map(transformNodesRecursively(Transformers::applyDefaultColumnNames))
 					.map(transformNodesRecursively(Transformers::applyDefaultPrimaryKeyExpressions))
+					.map(transformNodesRecursively(Transformers::applyDefaultDiscriminatorExpressions))
 					.map(transformNodesRecursively(Transformers::applyDefaultScalarExpressions))
 					.map(transformNodesRecursively(Transformers::makeSingleIdFieldsAutoIncrement))
 					.map(Transformers::applyClassLevelGroupBy)
