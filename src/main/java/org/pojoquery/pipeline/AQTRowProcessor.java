@@ -11,11 +11,13 @@ import java.util.function.Consumer;
 
 import org.pojoquery.JdbcValueMapper;
 import org.pojoquery.pipeline.AbstractQueryTree.ColumnFieldNode;
+import org.pojoquery.pipeline.AbstractQueryTree.CustomQueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityNode;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityReference;
 import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
+import org.pojoquery.pipeline.AbstractQueryTree.MappedFieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
@@ -92,7 +94,9 @@ public class AQTRowProcessor<R> {
 		}
 
 		for (QueryNode child : tableNode.children()) {
-			if (child instanceof EntityNode ref && (child instanceof EmbeddedEntity || child instanceof EntityReference)) {
+			if (child instanceof CustomQueryNode customNode) {
+				customNode.applyRowResultToEntity(tableNode, entity, row);
+			} else if (child instanceof EntityNode ref && (child instanceof EmbeddedEntity || child instanceof EntityReference)) {
 				Object referencedEntity = entitiesOnThisRow.get(ref.alias());
 				if (referencedEntity != null) {
 					setFieldValue(entity, ref.field(), referencedEntity);
@@ -103,6 +107,13 @@ public class AQTRowProcessor<R> {
 				addToCollection(entity, jtec.field(), entitiesOnThisRow.get(jtec.alias()), jtec.valueMapper(), jtec.type());
 			} else if (child instanceof ValueCollection vc) {
 				addToCollection(entity, vc.field(), row.get(vc.alias() + ".value"), vc.valueMapper(), vc.componentType());
+			} else if (child instanceof MappedFieldNode mappedFieldNode) {
+				Object value = row.get(tableNode.alias() + "." + mappedFieldNode.field().getName());
+				JdbcValueMapper valueMapper = mappedFieldNode.valueMapper();
+				if (valueMapper != null) {
+					value = valueMapper.mapValue(value);
+				}
+				setFieldValue(entity, mappedFieldNode.field(), value);
 			} else if (child instanceof ColumnFieldNode scalar) {
 				Object value = row.get(tableNode.alias() + "." + scalar.field().getName());
 				setFieldValue(entity, scalar.field(), scalar.valueMapper().mapValue(value));
@@ -135,7 +146,7 @@ public class AQTRowProcessor<R> {
 		}
 	}
 
-	private void setFieldValue(Object entity, FieldModel fieldModel, Object value) {
+	public static void setFieldValue(Object entity, FieldModel fieldModel, Object value) {
 		try {
 			java.lang.reflect.Field field = ((ReflectionFieldModel)fieldModel).getReflectionField();
 			field.setAccessible(true);
@@ -145,7 +156,7 @@ public class AQTRowProcessor<R> {
 		}
 	}
 
-	private void addToCollection(Object entity, FieldModel field, Object value, JdbcValueMapper valueMapper, TypeModel componentType) throws SQLException {
+	public static void addToCollection(Object entity, FieldModel field, Object value, JdbcValueMapper valueMapper, TypeModel componentType) throws SQLException {
 		if (value != null) {
 			Field targetField = getField(field);
 			Object mappedValue = valueMapper.mapValue(value);
@@ -157,7 +168,7 @@ public class AQTRowProcessor<R> {
 		}
 	}
 
-	private Object getFieldValue(Object entity, FieldModel fieldModel) {
+	private static Object getFieldValue(Object entity, FieldModel fieldModel) {
 		try {
 			java.lang.reflect.Field field = ((ReflectionFieldModel)fieldModel).getReflectionField();
 			field.setAccessible(true);
@@ -200,11 +211,11 @@ public class AQTRowProcessor<R> {
 		}
 	}
 
-	public Class<?> getClass(TypeModel type) {
+	public static Class<?> getClass(TypeModel type) {
 		return ((ReflectionTypeModel)type).getReflectionClass();
 	}
 
-	public Field getField(FieldModel fieldModel) {
+	public static Field getField(FieldModel fieldModel) {
 		return ((ReflectionFieldModel)fieldModel).getReflectionField();
 	}
 

@@ -1,6 +1,7 @@
 package org.pojoquery.pipeline;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import org.pojoquery.JdbcValueMapper;
@@ -41,9 +42,13 @@ public class AbstractQueryTree {
 	 */
 
 	public sealed interface QueryNode
-			permits TableNode, EmptyTableNode, EmptyFieldNode, FieldNode {
+			permits TableNode, EmptyTableNode, EmptyFieldNode, FieldNode, CustomQueryNode {
 	}
 
+	public non-sealed interface CustomQueryNode extends QueryNode {
+		void applyToSqlQuery(TableNode parentNode, SqlQuery<?> sqlQuery);
+		void applyRowResultToEntity(TableNode parentNode, Object targetEntity, Map<String,Object> fullRow);
+	}
 	public sealed interface ScalarNode
 			extends FieldNode
 			permits PrimaryKeyField, ForeignKeyField, ScalarValue, JoinTableValueCollection {
@@ -170,9 +175,12 @@ public class AbstractQueryTree {
 	 * Represents a database column in the current/parent table.
 	 * Collections don't implement this because their FK is in the child table.
 	*/
-	public interface ColumnFieldNode extends FieldNode, Column {
+	public interface ColumnFieldNode extends MappedFieldNode, Column {
+	}
+	
+	public interface MappedFieldNode extends FieldNode {
 		JdbcValueMapper valueMapper();
-
+	
 		public FieldNode withValueMapper(JdbcValueMapper valueMapper);
 	}
 
@@ -181,6 +189,16 @@ public class AbstractQueryTree {
 	}
 
 	public record EmptyTableNode(String alias, TypeModel type, TableInfo tableInfo) implements QueryNode {
+	}
+
+	public record MappedField(String alias, TypeModel type, FieldModel field, JdbcValueMapper valueMapper) implements MappedFieldNode {
+		public FieldNode withValueMapper(JdbcValueMapper valueMapper) {
+			return new MappedField(alias, type, field, valueMapper);
+		}
+
+		public QueryNode withColumnName(String columnName) {
+			return new MappedField(alias, type, field, valueMapper);
+		}
 	}
 
 	public record RootNode(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children, List<String> groupBy, List<String> orderBy)
