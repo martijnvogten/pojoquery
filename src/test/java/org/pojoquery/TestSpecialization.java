@@ -15,7 +15,6 @@ import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.pipeline.AQTRowProcessor;
 import org.pojoquery.pipeline.AbstractQueryTree.FieldNode;
-import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.util.RecordIndenter;
 
 @UseDialect(Dialect.MYSQL)
@@ -140,11 +139,11 @@ public class TestSpecialization {
 
 	@Test
 	public void testSpecializationRowProcessing() throws SQLException {
-		RootNode tree = PojoQuery.buildAQT(PersonDetail.class);
+		PojoQuery<PersonDetail> b = PojoQuery.build(PersonDetail.class);
 
-		System.out.println("Tree: " + RecordIndenter.indent(tree.toString()));
+		System.out.println("Tree: " + RecordIndenter.indent(b.getTree().toString()));
 
-		tree.children().stream().filter(FieldNode.class::isInstance).forEach(f -> {
+		b.getTree().children().stream().filter(FieldNode.class::isInstance).forEach(f -> {
 			FieldNode fn = (FieldNode) f;
 			System.out.println("Field: " + fn.field().getType() + "." + fn.field().getName());
 		});
@@ -160,7 +159,7 @@ public class TestSpecialization {
 		);
 		
 		// This throws IllegalArgumentException: Can not set PersonRef field Person.friend to PersonRef
-		List<PersonDetail> result = AQTRowProcessor.processRows(tree, rows);
+		List<PersonDetail> result = AQTRowProcessor.processRows(b.getTree(), rows);
 		
 		assertEquals(1, result.size());
 		assertEquals("Alice", result.get(0).name);

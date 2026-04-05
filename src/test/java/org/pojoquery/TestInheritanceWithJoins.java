@@ -23,7 +23,6 @@ import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
-import org.pojoquery.pipeline.DefaultSqlQuery;
 import org.pojoquery.util.RecordIndenter;
 
 @UseDialect(Dialect.MYSQL)
@@ -102,8 +101,8 @@ public class TestInheritanceWithJoins {
 	
 	@Test
 	public void testSubClasses() throws SQLException {
-		RootNode b = PojoQuery.buildAQT(Room.class);
-		String sql = toSql(b);
+		PojoQuery<Room> b = PojoQuery.build(Room.class);
+		String sql = b.toSql();
 		
 		assertEquals(
 				norm("""
@@ -128,7 +127,7 @@ public class TestInheritanceWithJoins {
 				     1L,        100.0,       1L,        "Unity Street 1", 1L,                1,                           null,         null,
 				     2L,        40.0,        1L,        "Unity Street 1", null,              null,                        2L,           true);
 		
-		List<Room> rooms = AQTRowProcessor.processRows(b, result);
+		List<Room> rooms = AQTRowProcessor.processRows(b.getTree(), result);
 		System.out.println("tree: " + RecordIndenter.indent(b.toString()));
 		assertTrue(rooms.get(0) instanceof BedRoom);
 		assertEquals(2, rooms.size());
@@ -138,16 +137,10 @@ public class TestInheritanceWithJoins {
 		assertEquals("Unity Street 1", rooms.get(1).house.address);
 	}
 	
-	private String toSql(RootNode b) {
-		DefaultSqlQuery query = new DefaultSqlQuery(DbContext.getDefault());
-		AQTTransformer.toSql(b, query);
-		return query.toStatement().getSql();
-	}
-
 	@Test
 	public void testSuperclasses() throws SQLException {
-		RootNode t = PojoQuery.buildAQT(BedRoom.class);
-		String sql = toSql(t);
+		PojoQuery<BedRoom> b = PojoQuery.build(BedRoom.class);
+		String sql = b.toSql();
 		System.out.println(sql);
 		assertEquals(
 				norm("""
@@ -167,7 +160,7 @@ public class TestInheritanceWithJoins {
 				"bedroom.room.id", "bedroom.room.area", "bedroom.numberOfBeds", "bedroom.room.house.id", "bedroom.room.house.address" }, 
 			     1L,           100.0,          1                    ,  1L       , "Unity Street 1");
 		
-		List<BedRoom> list = AQTRowProcessor.processRows(t, result);
+		List<BedRoom> list = AQTRowProcessor.processRows(b.getTree(), result);
 		Assertions.assertEquals(1, list.size());
 		BedRoom bedroom = list.get(0);
 		Assertions.assertTrue(bedroom instanceof BedRoom);
@@ -178,15 +171,15 @@ public class TestInheritanceWithJoins {
 	
 	@Test
 	public void testSuperClassOfLinked() {
-		RootNode tree = PojoQuery.buildAQT(ApartmentWithSpecificProperties.class);
-		String sql = toSql(tree);
+		PojoQuery<ApartmentWithSpecificProperties> b = PojoQuery.build(ApartmentWithSpecificProperties.class);
+		String sql = b.toSql();
 
 		Assert.assertEquals(List.of("numberOfBeds"), 
-			getFieldNames(tree.children().stream()
+			getFieldNames(b.getTree().children().stream()
 				.filter(it -> it instanceof TableNode tableNode && tableNode.alias().equals("bedrooms"))
 				.map(TableNode.class::cast).findFirst().orElseThrow()));
 
-		System.out.println("tree:" + RecordIndenter.indent(tree.toString()));
+		System.out.println("tree:" + RecordIndenter.indent(b.getTree().toString()));
 		assertEquals(
 			norm("""
 				SELECT
@@ -206,7 +199,7 @@ public class TestInheritanceWithJoins {
 	
 	@Test
 	public void testDeeper() {
-		System.out.println(RecordIndenter.indent(AQTTransformer.buildQueryTreeForType(Apartment.class).toString()));
+		System.out.println(RecordIndenter.indent(PojoQuery.build(Apartment.class).getTree().toString()));
 
 		PojoQuery<Apartment> qb = PojoQuery.build(Apartment.class);
 		String sql = qb.toStatement().getSql();

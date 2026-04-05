@@ -74,9 +74,7 @@ public class AQTTransformer {
 	}
 
 	public static RootNode buildQueryTreeForType(TypeModel rootType) {
-		return buildQueryTreeForType(rootType, rootType instanceof ReflectionTypeModel 
-			? TransformPipeline.reflectionPipeline() 
-			: TransformPipeline.defaultPipeline());
+		return buildQueryTreeForType(rootType, TransformPipeline.defaultPipeline());
 	}
 	
 	public static RootNode buildQueryTreeForType(TypeModel rootType, TransformPipeline pipeline) {

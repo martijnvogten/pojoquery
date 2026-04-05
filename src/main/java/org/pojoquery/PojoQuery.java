@@ -32,6 +32,7 @@ import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.SqlQuery.SqlField;
 import org.pojoquery.pipeline.SqlQuery.SqlJoin;
+import org.pojoquery.pipeline.TransformPipeline;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionFieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
@@ -111,10 +112,14 @@ public class PojoQuery<T> {
 	private DbContext dbContext;
 
 	private PojoQuery(DbContext context, Class<T> clz) {
+		this(context, clz, TransformPipeline.defaultPipeline());
+	}
+
+	private PojoQuery(DbContext context, Class<T> clz, TransformPipeline pipeline) {
 		this.dbContext = context;
 		this.resultClass = clz;
 		this.query = new DefaultSqlQuery(context);
-		this.tree = AQTTransformer.buildQueryTreeForType(clz);
+		this.tree = AQTTransformer.buildQueryTreeForType(new ReflectionTypeModel(clz), pipeline);
 		AQTTransformer.toSql(this.tree, this.query);
 	}
 	
@@ -131,11 +136,6 @@ public class PojoQuery<T> {
 		return build(DbContext.getDefault(), clz);
 	}
 
-	public static RootNode buildAQT(Class<?> clz) {
-		Objects.requireNonNull(clz, "class must not be null");
-		return AQTTransformer.buildQueryTreeForType(clz);
-	}
-
 	/**
 	 * Builds a PojoQuery instance using the specified DbContext.
 	 *
@@ -145,7 +145,11 @@ public class PojoQuery<T> {
 	 * @return a new PojoQuery instance
 	 */
 	public static <T> PojoQuery<T> build(DbContext context, Class<T> clz) {
-		return new PojoQuery<T>(context, clz);
+		return new PojoQuery<T>(context, clz, TransformPipeline.defaultPipeline());
+	}
+
+	public static <T> PojoQuery<T> build(DbContext context, TransformPipeline pipeline, Class<T> clz) {
+		return new PojoQuery<T>(context, clz, pipeline);
 	}
 
 	/**

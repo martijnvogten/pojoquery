@@ -8,11 +8,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.sql.Connection;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
+import org.pojoquery.DbContext;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.DiscriminatorColumn;
@@ -21,7 +23,21 @@ import org.pojoquery.annotations.Other;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
+import org.pojoquery.pipeline.AQTRowProcessor;
+import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.pipeline.AbstractQueryTree.CustomQueryNode;
+import org.pojoquery.pipeline.AbstractQueryTree.EmptyFieldNode;
+import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
+import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
+import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
+import org.pojoquery.pipeline.DefaultSqlQuery;
+import org.pojoquery.pipeline.SqlQuery;
+import org.pojoquery.pipeline.TransformPipeline;
+import org.pojoquery.pipeline.TransformPipeline.RecursiveTransform;
+import org.pojoquery.pipeline.Transforms;
+import org.pojoquery.pipeline.Transforms.AddDeclaredFields;
 import org.pojoquery.schema.SchemaGenerator;
+import org.pojoquery.typemodel.ReflectionTypeModel;
 
 /**
  * Integration tests for Single Table Inheritance (STI) using @DiscriminatorColumn.
@@ -154,22 +170,33 @@ public class SingleTableInheritanceIT {
 			));
 			
 			// Query with the custom mileage column included
-			PojoQuery<Vehicle> query = PojoQuery.build(Vehicle.class);
-			query.addField(SqlExpression.sql("{vehicle.mileage}"), "vehicle.mileage");
+			TransformPipeline pipeline = TransformPipeline.defaultPipeline()
+				.insertAfter(AddDeclaredFields.class, MileageFields.class);
+			RootNode root = AQTTransformer.buildQueryTreeForType(new ReflectionTypeModel(Vehicle.class), pipeline);
+
+			SqlQuery<?> query = new DefaultSqlQuery(DbContext.getDefault());
+			AQTTransformer.toSql(root, query);
+
 			query.addOrderBy("{vehicle.id}");
-			List<Vehicle> vehicles = query.execute(c);
-			
-			assertEquals(2, vehicles.size());
-			
-			// Car should have mileage in @Other map
-			Car car = (Car) vehicles.get(0);
-			assertNotNull(car.extras, "Car should have extras map");
-			assertEquals(50000, car.extras.get("mileage"), "Car mileage should be in extras");
-			
-			// Motorcycle should have mileage in @Other map
-			Motorcycle moto = (Motorcycle) vehicles.get(1);
-			assertNotNull(moto.extras, "Motorcycle should have extras map");
-			assertEquals(25000, moto.extras.get("mileage"), "Motorcycle mileage should be in extras");
+			AQTTransformer.buildQueryTreeForType(new ReflectionTypeModel(Vehicle.class), pipeline);
+
+			try {
+				List<Vehicle> vehicles = AQTRowProcessor.processRows(root, DB.queryRows(c, query.toStatement()));
+				
+				assertEquals(2, vehicles.size());
+				
+				// Car should have mileage in @Other map
+				Car car = (Car) vehicles.get(0);
+				assertNotNull(car.extras, "Car should have extras map");
+				assertEquals(50000, car.extras.get("mileage"), "Car mileage should be in extras");
+				
+				// Motorcycle should have mileage in @Other map
+				Motorcycle moto = (Motorcycle) vehicles.get(1);
+				assertNotNull(moto.extras, "Motorcycle should have extras map");
+				assertEquals(25000, moto.extras.get("mileage"), "Motorcycle mileage should be in extras");
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
 		});
 	}
 	
@@ -193,8 +220,10 @@ public class SingleTableInheritanceIT {
 			));
 			
 			// Query with both the discriminator column and color column in results
-			PojoQuery<Vehicle> query = PojoQuery.build(Vehicle.class);
-			query.addField(SqlExpression.sql("{vehicle.color}"), "vehicle.color");
+			PojoQuery<Vehicle> query = PojoQuery.build(
+				DbContext.getDefault(), 
+				TransformPipeline.defaultPipeline().insertAfter(AddDeclaredFields.class, ColorFields.class),
+				Vehicle.class);
 			List<Vehicle> vehicles = query.execute(c);
 			
 			assertEquals(1, vehicles.size());
@@ -230,8 +259,7 @@ public class SingleTableInheritanceIT {
 			));
 			
 			// Query with notes column included
-			PojoQuery<Vehicle> query = PojoQuery.build(Vehicle.class);
-			query.addField(SqlExpression.sql("{vehicle.notes}"), "vehicle.notes");
+			PojoQuery<Vehicle> query = PojoQuery.build(DbContext.getDefault(), TransformPipeline.defaultPipeline().insertAfter(AddDeclaredFields.class, NotesFields.class), Vehicle.class);
 			List<Vehicle> vehicles = query.execute(c);
 			
 			assertEquals(1, vehicles.size());
@@ -290,4 +318,64 @@ public class SingleTableInheritanceIT {
 		SchemaGenerator.createTables(db, Vehicle.class);
 		return db;
 	}
+
+	public static class MileageFields extends MyCustomTransform {
+		public MileageFields() {
+			super(List.of("mileage"));
+		}
+	}
+
+	public static class ColorFields extends MyCustomTransform {
+		public ColorFields() {
+			super(List.of("color"));
+		}
+	}
+
+	public static class NotesFields extends MyCustomTransform {
+		public NotesFields() {
+			super(List.of("notes"));
+		}
+	}
+
+	public abstract static class MyCustomTransform extends RecursiveTransform {
+
+		private final List<String> extraFields;
+
+		public MyCustomTransform(List<String> extraFields) {
+			this.extraFields = extraFields;
+		}	
+
+		@Override
+		public QueryNode transform(QueryNode node) {
+			return Transforms.transformChildren(
+				node, 
+				child -> child instanceof EmptyFieldNode emptyFieldNode && emptyFieldNode.field().hasAnnotation(Other.class), 
+				(TableNode tableNode, EmptyFieldNode child) -> {
+					if (tableNode.type().isSameType(Vehicle.class)) {
+						CustomQueryNode customNode = new CustomQueryNode() {
+							@Override
+							public void applyToSqlQuery(TableNode parentNode, SqlQuery<?> sqlQuery) {
+								for (String extraField : extraFields) {
+									sqlQuery.addField(new SqlExpression("{" + parentNode.alias() + "." + extraField + "}"), parentNode.alias() + "." + extraField);
+								}
+							}
+
+							@Override
+							public void applyRowResultToEntity(TableNode parentNode, Object targetEntity, Map<String, Object> fullRow) {
+								Map<String, Object> extras = extraFields.stream()
+									.collect(Collectors.toMap(
+										field -> field,
+										field -> fullRow.get(parentNode.alias() + "." + field)
+									));
+								AQTRowProcessor.setFieldValue(targetEntity, child.field(), extras);
+							}
+						};
+						return customNode;
+					}
+					return child;
+				});
+			}
+	}
+	
+
 }

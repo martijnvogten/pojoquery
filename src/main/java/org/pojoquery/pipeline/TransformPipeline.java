@@ -72,15 +72,9 @@ public class TransformPipeline {
             Transforms.ApplyDefaultScalarExpressions.class,
             Transforms.MakeSingleIdFieldsAutoIncrement.class,
             Transforms.ApplyClassLevelGroupBy.class,
-            Transforms.ApplyClassLevelOrderBy.class
+            Transforms.ApplyClassLevelOrderBy.class,
+            Transforms.AddDefaultValueTransformers.class
         ));
-    }
-    
-    /**
-     * Returns a pipeline for use with ReflectionTypeModel that includes value mappers.
-     */
-    public static TransformPipeline reflectionPipeline() {
-        return defaultPipeline().append(Transforms.AddDefaultValueTransformers.class);
     }
     
     /**

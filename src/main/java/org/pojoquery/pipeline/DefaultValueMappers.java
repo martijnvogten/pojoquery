@@ -30,6 +30,9 @@ public class DefaultValueMappers {
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	public static JdbcValueMapper createMapper(TypeModel targetTypeModel) {
+		if (!(targetTypeModel instanceof ReflectionTypeModel)) {
+			return value -> value;
+		}
 		Class<?> targetType = ((ReflectionTypeModel) targetTypeModel).getReflectionClass();
 		if (targetType.isEnum() ) {
 			return o -> o instanceof String ? Enum.valueOf((Class<Enum>) targetType, (String)o) : o;
