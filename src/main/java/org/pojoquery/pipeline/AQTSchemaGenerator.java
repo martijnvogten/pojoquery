@@ -120,7 +120,7 @@ public class AQTSchemaGenerator {
 		for (DDLTable table : collector.tables.values()) {
 			StringBuilder sb = new StringBuilder();
 			sb.append("CREATE TABLE ");
-			sb.append(dbContext.getQuoteStyle().quote(table.tableKey().tableName()));
+			sb.append(quoteSchemaAndTable(dbContext, table.tableKey()));
 			sb.append(" (\n");
 			
 			// Get columns for this table
@@ -187,13 +187,13 @@ public class AQTSchemaGenerator {
 		for (DDLForeignKey fk : collector.foreignKeys.values()) {
 			StringBuilder sb = new StringBuilder();
 			sb.append("ALTER TABLE ");
-			sb.append(dbContext.quoteObjectNames(fk.referringColumn().tableKey().tableName()));
+			sb.append(quoteSchemaAndTable(dbContext, fk.referringColumn().tableKey()));
 			sb.append(" ADD CONSTRAINT ");
 			sb.append(dbContext.quoteObjectNames("fk_" + fk.referringColumn().tableKey().tableName() + "_" + fk.referringColumn().columnName()));
 			sb.append(" FOREIGN KEY (");
 			sb.append(dbContext.quoteObjectNames(fk.referringColumn().columnName()));
 			sb.append(") REFERENCES ");
-			sb.append(dbContext.quoteObjectNames(fk.referencedIdColumn().tableKey().tableName()));
+			sb.append(quoteSchemaAndTable(dbContext, fk.referencedIdColumn().tableKey()));
 			sb.append(" (");
 			sb.append(dbContext.quoteObjectNames(fk.referencedIdColumn().columnName()));
 			sb.append(")");
@@ -201,6 +201,14 @@ public class AQTSchemaGenerator {
 		}
 		
 		return statements;
+	}
+
+	private static String quoteSchemaAndTable(DbContext dbContext, TableInfo tableInfo) {
+		if (tableInfo.schemaName() != null) {
+			return dbContext.quoteObjectNames(tableInfo.schemaName(), tableInfo.tableName());
+		} else {
+			return dbContext.quoteObjectNames(tableInfo.tableName());
+		}
 	}
 
 	private static void collectDDLForEntity(TableNode entity, DDLCollector collector) {

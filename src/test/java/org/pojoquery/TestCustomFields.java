@@ -85,9 +85,6 @@ public class TestCustomFields {
 		
 		RootNode root = AQTTransformer.buildQueryTreeForType(new ReflectionTypeModel(User.class), pipeline);
 
-		// PojoQuery<User> q = PojoQuery.build(User.class);
-		// q.addField(new SqlExpression("{" + root.alias() + "}.custom_linkedInUrl"), root.alias() + ".linkedInUrl");
-
 		SqlQuery<?> query = new DefaultSqlQuery(DbContext.getDefault());
 		AQTTransformer.toSql(root, query);
 
