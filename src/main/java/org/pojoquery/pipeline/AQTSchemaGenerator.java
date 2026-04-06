@@ -34,7 +34,7 @@ public class AQTSchemaGenerator {
 		DDLColumnKey columnKey();
 	}
 
-	public record DDLTable(TableInfo tableKey, List<DDLColumn> primaryKeyColumns) {}
+	public record DDLTable(TableInfo tableKey, List<DDLColumnKey> primaryKeyColumns) {}
 
 	public record DDLFieldColumn(DDLColumnKey columnKey, FieldModel field) implements DDLColumn {}
 
@@ -47,7 +47,7 @@ public class AQTSchemaGenerator {
 	public record DDLColumnMetadata(int length, int precision, int scale, boolean nullable, boolean unique, boolean isLob) {}
 
 	interface DDLCollector {
-		void registerTable(TableInfo tableKey, List<DDLColumn> primaryKeyColumns);
+		void registerTable(TableInfo tableKey, List<DDLColumnKey> primaryKeyColumns);
 		DDLColumn registerColumn(TableInfo table, String columnName, FieldModel field);
 		DDLColumn registerInferredColumn(TableInfo table, String columnName, TypeModel scalarType);
 		DDLColumn registerForeignKey(ForeignKeyInfo foreignKeyInfo);
@@ -60,7 +60,7 @@ public class AQTSchemaGenerator {
 		private HashSet<DDLColumnKey> implicitForeignKeyColumns = new HashSet<>();
 		private HashMap<DDLColumnKey, DDLForeignKey> foreignKeys = new LinkedHashMap<>();
 		@Override
-		public void registerTable(TableInfo tableKey, List<DDLColumn> primaryKeyColumns) {
+		public void registerTable(TableInfo tableKey, List<DDLColumnKey> primaryKeyColumns) {
 			if (!tables.containsKey(tableKey)) {
 				tables.put(tableKey, new DDLTable(tableKey, primaryKeyColumns));
 			}
@@ -139,8 +139,8 @@ public class AQTSchemaGenerator {
 
 				// Determine SQL type
 				if (col instanceof DDLFieldColumn fieldColumn && fieldColumn.field() != null) {
-					boolean isAutoIncrement = table.primaryKeyColumns().size() == 1 && table.primaryKeyColumns().contains(col);
-					
+					boolean isAutoIncrement = table.primaryKeyColumns().size() == 1 && table.primaryKeyColumns().contains(col.columnKey());
+
 					if (isAutoIncrement) {
 						colDef.append(dbContext.getAutoIncrementKeyColumnType());
 						colDef.append(" ");
@@ -172,7 +172,7 @@ public class AQTSchemaGenerator {
 			// Add primary key constraint if there are primary key columns
 			if (!table.primaryKeyColumns().isEmpty()) {
 				String pkColumns = table.primaryKeyColumns().stream()
-					.map(pk -> dbContext.getQuoteStyle().quote(pk.columnKey().columnName()))
+					.map(pk -> dbContext.getQuoteStyle().quote(pk.columnName()))
 					.reduce((a, b) -> a + ", " + b)
 					.orElse("");
 				columnDefs.add("  PRIMARY KEY (" + pkColumns + ")");
@@ -213,11 +213,10 @@ public class AQTSchemaGenerator {
 
 	private static void collectDDLForEntity(TableNode entity, DDLCollector collector) {
 		TableInfo tableKey = new TableInfo(entity.tableInfo().schemaName(), entity.tableInfo().tableName());
-		List<DDLColumn> primaryKeyColumns = entity.children().stream()
+		List<DDLColumnKey> primaryKeyColumns = entity.children().stream()
 			.filter(PrimaryKey.class::isInstance)
 			.map(PrimaryKey.class::cast)
-			.map(pk -> new DDLFieldColumn(new DDLColumnKey(tableKey, pk.columnName()), pk.field()))
-			.map(DDLColumn.class::cast)
+			.map(pk -> new DDLColumnKey(tableKey, pk.columnName()))
 			.toList();
 		collector.registerTable(tableKey, primaryKeyColumns);
 
@@ -231,7 +230,7 @@ public class AQTSchemaGenerator {
 				ForeignKeyInfo joinInfo = valueCollection.join();
 				DDLColumn valueColumn = collector.registerInferredColumn(joinInfo.referringTable(), fetchColumn, valueCollection.componentType());
 				DDLColumn fkColumn = collector.registerForeignKey(joinInfo);
-				collector.registerTable(joinInfo.referringTable(), List.of(valueColumn, fkColumn));
+				collector.registerTable(joinInfo.referringTable(), List.of(valueColumn.columnKey(), fkColumn.columnKey()));
 			} else if (child instanceof Join ref) {
 				collectDDLForEntity((TableNode)ref, collector);
 				ForeignKeyInfo joinInfo = ref.join();
@@ -245,7 +244,7 @@ public class AQTSchemaGenerator {
 				collectDDLForEntity(jte, collector);
 				DDLColumn parentKeyColumn = collector.registerColumn(jte.join().joinTableInfo().tableInfo(), jte.join().parentKey().fkColumnName(), null);
 				DDLColumn childKeyColumn = collector.registerColumn(jte.join().joinTableInfo().tableInfo(), jte.join().childKey().fkColumnName(), null);
-				collector.registerTable(jte.join().joinTableInfo().tableInfo(), List.of(parentKeyColumn, childKeyColumn));
+				collector.registerTable(jte.join().joinTableInfo().tableInfo(), List.of(parentKeyColumn.columnKey(), childKeyColumn.columnKey()));
 				collector.registerForeignKey(jte.join().parentKey());
 				collector.registerForeignKey(jte.join().childKey());
 			}

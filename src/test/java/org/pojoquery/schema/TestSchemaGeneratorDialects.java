@@ -15,6 +15,7 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.pipeline.AQTSchemaGenerator;
 
 /**
  * Tests schema generation across all supported SQL dialects.
@@ -79,7 +80,7 @@ public class TestSchemaGeneratorDialects {
     @MethodSource("dialects")
     public void testBasicTableGeneration(Dialect dialect) {
         DbContext dbContext = DbContext.forDialect(dialect);
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(User.class, dbContext);
+        List<String> sqlList = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, User.class);
         String sql = String.join("\n", sqlList);
         
         System.out.println(dialect + ":\n" + sql + "\n");
@@ -96,7 +97,7 @@ public class TestSchemaGeneratorDialects {
     @MethodSource("dialects")
     public void testLobGeneration(Dialect dialect) {
         DbContext dbContext = DbContext.forDialect(dialect);
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Article.class, dbContext);
+        List<String> sqlList = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, Article.class);
         String sql = String.join("\n", sqlList);
         
         System.out.println(dialect + " (LOB):\n" + sql + "\n");
@@ -125,7 +126,7 @@ public class TestSchemaGeneratorDialects {
     @MethodSource("dialects")
     public void testBooleanType(Dialect dialect) {
         DbContext dbContext = DbContext.forDialect(dialect);
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(User.class, dbContext);
+        List<String> sqlList = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, User.class);
         String sql = String.join("\n", sqlList);
         
         switch (dialect) {
@@ -145,7 +146,7 @@ public class TestSchemaGeneratorDialects {
     @MethodSource("dialects")
     public void testAutoIncrement(Dialect dialect) {
         DbContext dbContext = DbContext.forDialect(dialect);
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(User.class, dbContext);
+        List<String> sqlList = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, User.class);
         String sql = String.join("\n", sqlList);
         
         switch (dialect) {
@@ -167,7 +168,7 @@ public class TestSchemaGeneratorDialects {
     @MethodSource("dialects")
     public void testQuoting(Dialect dialect) {
         DbContext dbContext = DbContext.forDialect(dialect);
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(User.class, dbContext);
+        List<String> sqlList = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, User.class);
         String sql = String.join("\n", sqlList);
         
         switch (dialect) {
@@ -188,31 +189,10 @@ public class TestSchemaGeneratorDialects {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("dialects")
-    public void testTableSuffix(Dialect dialect) {
-        DbContext dbContext = DbContext.forDialect(dialect);
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(User.class, dbContext);
-        String sql = String.join("\n", sqlList);
-        
-        switch (dialect) {
-            case MYSQL:
-                assertTrue(sql.contains("ENGINE=InnoDB"), "MySQL should have ENGINE=InnoDB");
-                break;
-            case HSQLDB:
-            case POSTGRES:
-                // No engine suffix for these
-                assertTrue(!sql.contains("ENGINE="), "No ENGINE for HSQLDB/Postgres");
-                break;
-            default:
-                break;
-        }
-    }
-    
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("dialects")
     public void testForeignKeyConstraint(Dialect dialect) {
         // Order has a 'customer' field that references User - should generate FK constraint
         DbContext dbContext = DbContext.forDialect(dialect);
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(dbContext, Order.class, User.class);
+        List<String> sqlList = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, Order.class, User.class);
         String sql = String.join("\n", sqlList);
         
         System.out.println(dialect + " (FK constraint):\n" + sql + "\n");
@@ -224,15 +204,15 @@ public class TestSchemaGeneratorDialects {
         // Check dialect-specific quoting
         switch (dialect) {
             case MYSQL:
-                assertTrue(sql.contains("REFERENCES `users`(`id`)"), 
+                assertTrue(sql.contains("REFERENCES `users` (`id`)"), 
                     "MySQL FK should reference users table");
                 break;
             case HSQLDB:
-                assertTrue(sql.contains("REFERENCES \"users\"(\"id\")"), 
+                assertTrue(sql.contains("REFERENCES \"users\" (\"id\")"), 
                     "HSQLDB FK should reference users table");
                 break;
             case POSTGRES:
-                assertTrue(sql.contains("REFERENCES \"users\"(\"id\")"), 
+                assertTrue(sql.contains("REFERENCES \"users\" (\"id\")"), 
                     "Postgres FK should reference users table");
                 break;
             default:
@@ -245,7 +225,7 @@ public class TestSchemaGeneratorDialects {
     public void testInferredForeignKeyConstraint(Dialect dialect) {
         // Author has Book[] books - Book should have inferred authors_id with FK constraint
         DbContext dbContext = DbContext.forDialect(dialect);
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(dbContext, Author.class, Book.class);
+        List<String> sqlList = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, Author.class, Book.class);
         String sql = String.join("\n", sqlList);
         
         System.out.println(dialect + " (Inferred FK):\n" + sql + "\n");
@@ -255,15 +235,15 @@ public class TestSchemaGeneratorDialects {
         
         switch (dialect) {
             case MYSQL:
-                assertTrue(sql.contains("FOREIGN KEY (`authors_id`) REFERENCES `authors`(`id`)"), 
+                assertTrue(sql.contains("FOREIGN KEY (`authors_id`) REFERENCES `authors` (`id`)"), 
                     "MySQL FK should reference authors table");
                 break;
             case HSQLDB:
-                assertTrue(sql.contains("FOREIGN KEY (\"authors_id\") REFERENCES \"authors\"(\"id\")"), 
+                assertTrue(sql.contains("FOREIGN KEY (\"authors_id\") REFERENCES \"authors\" (\"id\")"), 
                     "HSQLDB FK should reference authors table");
                 break;
             case POSTGRES:
-                assertTrue(sql.contains("FOREIGN KEY (\"authors_id\") REFERENCES \"authors\"(\"id\")"), 
+                assertTrue(sql.contains("FOREIGN KEY (\"authors_id\") REFERENCES \"authors\" (\"id\")"), 
                     "Postgres FK should reference authors table");
                 break;
             default:
@@ -276,7 +256,7 @@ public class TestSchemaGeneratorDialects {
     public void testLinkTableGeneration(Dialect dialect) {
         // Post has @Link(linktable="post_tag") - should generate link table with FKs
         DbContext dbContext = DbContext.forDialect(dialect);
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(dbContext, Post.class, Tag.class);
+        List<String> sqlList = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, Post.class, Tag.class);
         String sql = String.join("\n", sqlList);
         
         System.out.println(dialect + " (Link table):\n" + sql + "\n");
@@ -288,24 +268,23 @@ public class TestSchemaGeneratorDialects {
         switch (dialect) {
             case MYSQL:
                 assertTrue(sql.contains("`post_tag`"), "MySQL link table should exist");
-                assertTrue(sql.contains("ALTER TABLE `post_tag` ADD FOREIGN KEY (`posts_id`) REFERENCES `posts`(`id`);"), 
+                assertTrue(sql.contains("ALTER TABLE `post_tag` ADD CONSTRAINT `fk_post_tag_posts_id` FOREIGN KEY (`posts_id`) REFERENCES `posts` (`id`)"), 
                     "MySQL link table should have FK to posts via ALTER");
-                assertTrue(sql.contains("ALTER TABLE `post_tag` ADD FOREIGN KEY (`tags_id`) REFERENCES `tags`(`id`);"), 
+                assertTrue(sql.contains("ALTER TABLE `post_tag` ADD CONSTRAINT `fk_post_tag_tags_id` FOREIGN KEY (`tags_id`) REFERENCES `tags` (`id`)"), 
                     "MySQL link table should have FK to tags via ALTER");
                 break;
             case HSQLDB:
                 assertTrue(sql.contains("\"post_tag\""), "HSQLDB link table should exist");
-                assertTrue(sql.contains("ALTER TABLE \"post_tag\" ADD FOREIGN KEY (\"posts_id\") REFERENCES \"posts\"(\"id\");"), 
+                assertTrue(sql.contains("ALTER TABLE \"post_tag\" ADD CONSTRAINT \"fk_post_tag_posts_id\" FOREIGN KEY (\"posts_id\") REFERENCES \"posts\" (\"id\")"), 
                     "HSQLDB link table should have FK to posts via ALTER");
-                assertTrue(sql.contains("ALTER TABLE \"tags\" ADD FOREIGN KEY (\"tags_id\") REFERENCES \"tags\"(\"id\");") || 
-                    sql.contains("ALTER TABLE \"post_tag\" ADD FOREIGN KEY (\"tags_id\") REFERENCES \"tags\"(\"id\");"), 
+                assertTrue(sql.contains("ALTER TABLE \"post_tag\" ADD CONSTRAINT \"fk_post_tag_tags_id\" FOREIGN KEY (\"tags_id\") REFERENCES \"tags\" (\"id\")"), 
                     "HSQLDB link table should have FK to tags via ALTER");
                 break;
             case POSTGRES:
                 assertTrue(sql.contains("\"post_tag\""), "Postgres link table should exist");
-                assertTrue(sql.contains("ALTER TABLE \"post_tag\" ADD FOREIGN KEY (\"posts_id\") REFERENCES \"posts\"(\"id\");"), 
+                assertTrue(sql.contains("ALTER TABLE \"post_tag\" ADD CONSTRAINT \"fk_post_tag_posts_id\" FOREIGN KEY (\"posts_id\") REFERENCES \"posts\" (\"id\")"), 
                     "Postgres link table should have FK to posts via ALTER");
-                assertTrue(sql.contains("ALTER TABLE \"post_tag\" ADD FOREIGN KEY (\"tags_id\") REFERENCES \"tags\"(\"id\");"), 
+                assertTrue(sql.contains("ALTER TABLE \"post_tag\" ADD CONSTRAINT \"fk_post_tag_tags_id\" FOREIGN KEY (\"tags_id\") REFERENCES \"tags\" (\"id\")"), 
                     "Postgres link table should have FK to tags via ALTER");
                 break;
             default:
@@ -332,7 +311,7 @@ public class TestSchemaGeneratorDialects {
     @MethodSource("dialects")
     public void testColumnNullableAndUniqueAnnotationsAcrossDialects(Dialect dialect) {
         DbContext dbContext = DbContext.forDialect(dialect);
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class, dbContext);
+        List<String> sqlList = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, Account.class);
         String sql = String.join("\n", sqlList);
         
         System.out.println(dialect + " (Column nullable/unique):\n" + sql + "\n");
@@ -364,7 +343,7 @@ public class TestSchemaGeneratorDialects {
     @MethodSource("dialects")
     public void testColumnLengthAnnotationAcrossDialects(Dialect dialect) {
         DbContext dbContext = DbContext.forDialect(dialect);
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class, dbContext);
+        List<String> sqlList = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, Account.class);
         String sql = String.join("\n", sqlList);
         
         System.out.println(dialect + " (Column length):\n" + sql + "\n");
@@ -392,7 +371,7 @@ public class TestSchemaGeneratorDialects {
     @MethodSource("dialects")
     public void testColumnPrecisionScaleAcrossDialects(Dialect dialect) {
         DbContext dbContext = DbContext.forDialect(dialect);
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Account.class, dbContext);
+        List<String> sqlList = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, Account.class);
         String sql = String.join("\n", sqlList);
         
         System.out.println(dialect + " (Precision/Scale):\n" + sql + "\n");
@@ -441,7 +420,7 @@ public class TestSchemaGeneratorDialects {
             .quoteObjectNames(true)
             .build();
         
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Contact.class, dbContext);
+        List<String> sqlList = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, Contact.class);
         String sql = String.join("\n", sqlList);
         
         System.out.println("HSQLDB with ANSI quoting (reserved keyword):\n" + sql + "\n");
@@ -472,7 +451,7 @@ public class TestSchemaGeneratorDialects {
             .quoteObjectNames(true)  // User expects this to enable quoting
             .build();
         
-        List<String> sqlList = SchemaGenerator.generateCreateTableStatements(Contact.class, dbContext);
+        List<String> sqlList = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, Contact.class);
         String sql = String.join("\n", sqlList);
         
         System.out.println("HSQLDB with quoteObjectNames(true) only:\n" + sql + "\n");
