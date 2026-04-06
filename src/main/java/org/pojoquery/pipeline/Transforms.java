@@ -465,6 +465,25 @@ public final class Transforms {
         }
     }
     
+    public static class ApplyCustomIdColumnNames extends RecursiveTransform {
+        @Override
+        public QueryNode transform(QueryNode node) {
+            return transformChildren(node,
+                    child -> child instanceof Join join && join.join().idColumnName() == null && join.join().idField() != null,
+                    (TableNode parentNode, QueryNode child) -> {
+                        if (child instanceof Join join) {
+                            String customIdField = join.join().idField().hasAnnotation(FieldName.class) ?
+                                    join.join().idField().getAnnotationAttributeValue(FieldName.class, "value", String.class) :
+                                    null;
+                            return customIdField == null || customIdField.isEmpty() ?
+                                child :
+                                join.withJoin(join.join().withIdColumnName(customIdField));
+                        }
+                        return child;
+                    });
+        }
+    }
+    
     public static class ApplyCustomValueCollectionJoinConditions extends RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {

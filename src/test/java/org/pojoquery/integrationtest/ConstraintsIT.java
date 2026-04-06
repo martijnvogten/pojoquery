@@ -71,7 +71,8 @@ public class ConstraintsIT {
         @Id
         Long id;
         
-        @Link(linkfield = "product_id", nullable = false)
+        @Link(linkfield = "product_id")
+        @Column(nullable = false)  // Enforce NOT NULL on FK column
         Product product;  // Required FK
         
         int quantity;

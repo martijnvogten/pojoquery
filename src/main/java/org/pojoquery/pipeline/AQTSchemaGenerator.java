@@ -11,6 +11,7 @@ import org.pojoquery.DbContext;
 import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
+import org.pojoquery.pipeline.AbstractQueryTree.EntityNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ForeignKeyInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.Join;
 import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
@@ -235,6 +236,9 @@ public class AQTSchemaGenerator {
 				collectDDLForEntity((TableNode)ref, collector);
 				ForeignKeyInfo joinInfo = ref.join();
 				collector.registerForeignKey(joinInfo);
+				if (ref instanceof EntityNode entityReference) {
+					collector.registerColumn(joinInfo.referringTable(), joinInfo.fkColumnName(), entityReference.field());
+				}
 			} else if (child instanceof EmbeddedEntity emb) {
 				collectDDLForEntity((TableNode)emb, collector);
 			} else if (child instanceof STISubClassNode stiSubClass) {

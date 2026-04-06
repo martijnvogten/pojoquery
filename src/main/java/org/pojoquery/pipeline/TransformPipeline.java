@@ -56,6 +56,7 @@ public class TransformPipeline {
             Transforms.ApplyCustomJoinTableColumnNames.class,
             Transforms.ApplyCustomForeignKeyColumnNames.class,
             Transforms.ApplyCustomValueCollectionJoinConditions.class,
+            Transforms.ApplyCustomIdColumnNames.class,
             Transforms.ApplyCustomJoinTableJoinConditions.class,
             Transforms.ApplyCustomJoinConditions.class,
             Transforms.ApplyCustomColumnNames.class,
