@@ -124,7 +124,15 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O,
 		return new GroupByChainField<>(tableAlias, fieldName);
 	}
 
+	protected void consolidateWhereConditions() {
+		if (!whereConditionSql.isEmpty()) {
+			query.addWhere(SqlExpression.implode(" ", whereConditionSql));
+			whereConditionSql.clear();
+		}
+	}
+
 	public W where() {
+		consolidateWhereConditions();
 		return whereStarter;
 	}
 
@@ -176,10 +184,7 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O,
 	}
 
 	public List<R> list(Connection c) {
-		if (!whereConditionSql.isEmpty()) {
-			query.addWhere(SqlExpression.implode(" ", whereConditionSql));
-			whereConditionSql.clear();
-		}
+		consolidateWhereConditions();
 		SqlExpression stmt = query.toStatement();
 		try {
 			return AQTRowProcessor.processRows(tree, DB.queryRows(c, stmt));
@@ -204,10 +209,7 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O,
 	}
 
 	public SqlExpression getSql() {
-		if (!whereConditionSql.isEmpty()) {
-			query.addWhere(SqlExpression.implode(" ", whereConditionSql));
-			whereConditionSql.clear();
-		}
+		consolidateWhereConditions();
 		return query.toStatement();
 	}
 
