@@ -38,7 +38,7 @@ public class InheritanceExample {
 
 	public static void main(String[] args) {
 		DataSource db = TestDatabase.dropAndRecreate();
-		createTables(db);
+		SchemaGenerator.createTables(db, Room.class);
 		
 		DB.withConnection(db, (Connection c) -> {
 			BedRoom br = insertData(c);
@@ -72,12 +72,6 @@ public class InheritanceExample {
 		
 		PojoQuery.insert(c, br);
 		return br;
-	}
-	
-	private static void createTables(DataSource db) {
-		for (String ddl : SchemaGenerator.generateCreateTableStatements(Room.class)) {
-			DB.executeDDL(db, ddl);
-		}
 	}
 	
 }

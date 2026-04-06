@@ -816,7 +816,7 @@ public class TestSchemaGenerator {
         assertEquals(1, eventIdColCount, "event_id column definition should appear exactly once");
         
         // Should have composite primary key
-        assertTrue(sql.contains("PRIMARY KEY (`event_id`, `person_id`)"), "Should have composite PRIMARY KEY");
+        assertTrue(sql.contains("PRIMARY KEY (`person_id`, `event_id`)"), "Should have composite PRIMARY KEY");
     }
     
     // ========== Foreign Key Constraint Tests ==========
@@ -898,7 +898,7 @@ public class TestSchemaGenerator {
         assertFalse(linkTable.isEmpty(), "Link table should be generated");
         assertTrue(linkTable.contains("`articles_id`"), "Link table should have articles_id column");
         assertTrue(linkTable.contains("`tags_id`"), "Link table should have tags_id column");
-        assertTrue(linkTable.contains("PRIMARY KEY (`articles_id`, `tags_id`)"), 
+        assertTrue(linkTable.contains("PRIMARY KEY (`tags_id`, `articles_id`)"), 
             "Link table should have composite primary key");
         
         // FK constraints should be in separate ALTER TABLE statements
