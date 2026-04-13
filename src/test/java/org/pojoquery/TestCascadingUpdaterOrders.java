@@ -21,7 +21,6 @@ import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
 import org.pojoquery.schema.SchemaGenerator;
 
 /**
@@ -88,8 +87,6 @@ public class TestCascadingUpdaterOrders {
 
     @Test
     public void testInsertWithCascade() {
-
-        System.out.println("Tree: " + QueryTreeBuilder.from(OrderWithLineItems.class)); // Pre-build query tree to avoid test interference from first-time tree building
 
         DB.withConnection(dataSource, (Connection c) -> {
             // Create order with line items

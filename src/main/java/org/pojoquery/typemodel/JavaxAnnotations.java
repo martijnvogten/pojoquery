@@ -3,15 +3,15 @@ package org.pojoquery.typemodel;
 import java.lang.annotation.Annotation;
 import java.util.Collections;
 import java.util.Map;
+import java.util.function.Function;
 
 import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Embedded;
+import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.annotations.Transient;
-import org.pojoquery.pipeline.querytree.FieldSelection;
-import org.pojoquery.pipeline.querytree.transforms.JavaxAnnotationsTransform;
 
 /**
  * Utility class that maps javax.persistence annotations to PojoQuery canonical annotations.
@@ -32,12 +32,10 @@ import org.pojoquery.pipeline.querytree.transforms.JavaxAnnotationsTransform;
  * 
  * <p>Example usage:
  * <pre>
- * FieldSelection fs = ...;
- * FieldSelection transformed = JavaxAnnotations.transformFieldSelection(fs);
+ * FieldModel field = ...;
+ * FieldModel transformed = JavaxAnnotations.transformField(field);
  * // transformed now has @Id if original had @javax.persistence.Id
  * </pre>
- * 
- * @see JavaxAnnotationsTransform for pipeline integration
  */
 public final class JavaxAnnotations {
 
@@ -45,6 +43,7 @@ public final class JavaxAnnotations {
     private static final Class<? extends Annotation> JAVAX_TABLE;
     private static final Class<? extends Annotation> JAVAX_ID;
     private static final Class<? extends Annotation> JAVAX_COLUMN;
+    private static final Class<? extends Annotation> JAVAX_JOIN_COLUMN;
     private static final Class<? extends Annotation> JAVAX_TRANSIENT;
     private static final Class<? extends Annotation> JAVAX_EMBEDDED;
     private static final Class<? extends Annotation> JAVAX_LOB;
@@ -55,6 +54,7 @@ public final class JavaxAnnotations {
         JAVAX_TABLE = tryLoadAnnotationClass("javax.persistence.Table");
         JAVAX_ID = tryLoadAnnotationClass("javax.persistence.Id");
         JAVAX_COLUMN = tryLoadAnnotationClass("javax.persistence.Column");
+        JAVAX_JOIN_COLUMN = tryLoadAnnotationClass("javax.persistence.JoinColumn");
         JAVAX_TRANSIENT = tryLoadAnnotationClass("javax.persistence.Transient");
         JAVAX_EMBEDDED = tryLoadAnnotationClass("javax.persistence.Embedded");
         JAVAX_LOB = tryLoadAnnotationClass("javax.persistence.Lob");
@@ -95,13 +95,13 @@ public final class JavaxAnnotations {
     }
 
     /**
-     * Transforms a FieldSelection by adding PojoQuery annotations based on javax.persistence annotations.
+     * Transforms a FieldModel by adding PojoQuery annotations based on javax.persistence annotations.
      * 
-     * @param fieldSelection the field selection to transform
-     * @return a new FieldSelection with canonical annotations added, or the original if no javax annotations present
+     * @param fs the field model to transform
+     * @return a new FieldModel with canonical annotations added, or the original if no javax annotations present
      */
-    public static FieldSelection transformFieldSelection(FieldSelection fs) {
-        if (!JAVAX_AVAILABLE || fs == null || fs.field() == null) {
+    public static FieldModel transformField(FieldModel fs) {
+        if (!JAVAX_AVAILABLE || fs == null) {
             return fs;
         }
 
@@ -109,24 +109,44 @@ public final class JavaxAnnotations {
         fs = mapAnnotation(fs, JAVAX_TRANSIENT, Transient.class);
         fs = mapAnnotation(fs, JAVAX_EMBEDDED, Embedded.class);
         fs = mapAnnotation(fs, JAVAX_LOB, Lob.class);
+        if (fs.hasAnnotation(JAVAX_JOIN_COLUMN) && !fs.getAnnotationAttributeValue(JAVAX_JOIN_COLUMN, "name", String.class).isEmpty()) {
+            fs = mapAnnotation(fs, JAVAX_JOIN_COLUMN, FieldName.class, ann -> {
+                return Map.of("value", ann.getStringValue("name").orElse(""));
+            });
+        }
+        if (fs.hasAnnotation(JAVAX_COLUMN) && !fs.getAnnotationAttributeValue(JAVAX_COLUMN, "name", String.class).isEmpty()) {
+            fs = mapAnnotation(fs, JAVAX_COLUMN, FieldName.class, ann -> {
+                return Map.of("value", ann.getStringValue("name").orElse(""));
+            });
+        }
         fs = mapColumn(fs);
 
         return fs;
     }
 
-    private static FieldSelection mapAnnotation(FieldSelection fs, Class<? extends Annotation> source, Class<? extends Annotation> target) {
-        if (fs.field().hasAnnotation(source) && !fs.field().hasAnnotation(target)) {
-            return fs.withFieldAnnotation(target, Collections.emptyMap());
+    private static <T extends AnnotatedElementModel<T>> T mapAnnotation(T f, Class<? extends Annotation> source, Class<? extends Annotation> target) {
+        if (f.hasAnnotation(source) && !f.hasAnnotation(target)) {
+            return (T) f.withAddedAnnotation(target, Collections.emptyMap());
+        }
+        return f;
+    }
+
+    private static <T extends AnnotatedElementModel<T>> T mapAnnotation(T fs, Class<? extends Annotation> source, Class<? extends Annotation> target, Function<AnnotationModel, Map<String, Object>> attributeMapper) {
+        if (fs.hasAnnotation(source) && !fs.hasAnnotation(target)) {
+            Map<String, Object> attributes = fs.getAnnotation(source)
+                .map(attributeMapper)
+                .orElse(Collections.emptyMap());
+            return (T) fs.withAddedAnnotation(target, attributes);
         }
         return fs;
     }
 
-    private static FieldSelection mapColumn(FieldSelection fs) {
-        if (fs.field().hasAnnotation(Column.class)) {
+    private static FieldModel mapColumn(FieldModel fs) {
+        if (fs.hasAnnotation(Column.class)) {
             return fs;
         }
-        return fs.field().getAnnotation(JAVAX_COLUMN)
-            .map(col -> fs.withFieldAnnotation(Column.class, extractColumnAttributes(col)))
+        return fs.getAnnotation(JAVAX_COLUMN)
+            .map(col -> fs.withAddedAnnotation(Column.class, extractColumnAttributes(col)))
             .orElse(fs);
     }
 

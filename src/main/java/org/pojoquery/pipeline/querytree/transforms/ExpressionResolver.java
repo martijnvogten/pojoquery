@@ -1,11 +1,8 @@
 package org.pojoquery.pipeline.querytree.transforms;
 
-import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 import org.pojoquery.SqlExpression;
-import org.pojoquery.pipeline.querytree.FieldSelection;
 import org.pojoquery.util.CurlyMarkers;
 
 /**
@@ -91,14 +88,4 @@ public final class ExpressionResolver {
         return expr == null ? Set.of() : extractAliases(expr.getSql());
     }
     
-    /**
-     * Extracts all aliases referenced in field selections.
-     */
-    public static Set<String> extractAliasesFromFields(List<FieldSelection> fields) {
-        Set<String> aliases = new HashSet<>();
-        for (FieldSelection f : fields) {
-            aliases.addAll(extractAliases(f.expression()));
-        }
-        return aliases;
-    }
 }

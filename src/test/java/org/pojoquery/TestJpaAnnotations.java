@@ -19,8 +19,7 @@ import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.pipeline.AQTSchemaGenerator;
-import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
-import org.pojoquery.pipeline.querytree.TableNode;
+import org.pojoquery.pipeline.AQTTransformer;
 import org.pojoquery.schema.SchemaGenerator;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.JakartaAnnotations;
@@ -134,8 +133,8 @@ public class TestJpaAnnotations {
             .orElseThrow(() -> new AssertionError("Field 'id' should still have JPA @Id annotation"));
 
         
-        ((TableNode)QueryTreeBuilder.from(JpaUser.class).root()).resolvedFields().stream()
-            .filter(f -> f.columnName().equals("user_id"))
+        AQTTransformer.buildQueryTreeForType(JpaUser.class).children().stream()
+            .filter(f -> f instanceof org.pojoquery.pipeline.AbstractQueryTree.Column col && col.columnName().equals("user_id"))
             .findFirst()
             .orElseThrow(() -> new AssertionError("column name of id field should be 'user_id'"));
 

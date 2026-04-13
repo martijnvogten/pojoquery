@@ -12,7 +12,6 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.annotations.Transient;
-import org.pojoquery.pipeline.querytree.transforms.JakartaAnnotationsTransform;
 
 /**
  * Utility class that maps jakarta.persistence annotations to PojoQuery canonical annotations.
@@ -33,8 +32,8 @@ import org.pojoquery.pipeline.querytree.transforms.JakartaAnnotationsTransform;
  * 
  * <p>Example usage:
  * <pre>
- * FieldSelection fs = ...;
- * FieldSelection transformed = JakartaAnnotations.transformFieldSelection(fs);
+ * FieldModel field = ...;
+ * FieldModel transformed = JakartaAnnotations.transformField(field);
  * // transformed now has @Id if original had @jakarta.persistence.Id
  * </pre>
  * 
