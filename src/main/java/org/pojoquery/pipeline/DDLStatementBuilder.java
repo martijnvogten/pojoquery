@@ -104,34 +104,17 @@ public class DDLStatementBuilder {
 
         DDLColumnMetadata metadata = schemaInfo.buildColumnMetadata(col.columnKey());
 
-        if (col instanceof DDLPrimaryKeyColumn pkColumn) {
-            if (pkColumn.isAutoIncrement()) {
-                colDef.append(dbContext.getAutoIncrementKeyColumnType());
-                colDef.append(" ");
-                colDef.append(dbContext.getAutoIncrementSyntax());
-            } else {
-                if (pkColumn.field() == null) {
-                    colDef.append(dbContext.getForeignKeyColumnType());
-                } else {
-                    colDef.append(dbContext.mapJavaTypeToSql(
-                            ((ReflectionTypeModel) pkColumn.field().getType()).getReflectionClass(),
-                            metadata));
-                }
-            }
-        } else if (col instanceof DDLFieldColumn fieldColumn && fieldColumn.field() != null) {
-            if (schemaInfo.foreignKeys().containsKey(col.columnKey())) {
-                colDef.append(dbContext.getForeignKeyColumnType());
-            } else {
-                colDef.append(dbContext.mapJavaTypeToSql(
-                        ((ReflectionTypeModel) fieldColumn.field().getType()).getReflectionClass(),
-                        metadata));
-            }
-        } else if (col instanceof DDLInferredColumn inferredColumn) {
-            colDef.append(dbContext.mapJavaTypeToSql(
-                    ((ReflectionTypeModel) inferredColumn.scalarType()).getReflectionClass(),
-                    metadata));
+        if (col instanceof DDLPrimaryKeyColumn pkColumn && pkColumn.isAutoIncrement()) {
+            colDef.append(dbContext.getAutoIncrementKeyColumnType());
+            colDef.append(" ");
+            colDef.append(dbContext.getAutoIncrementSyntax());
         } else {
-            colDef.append(dbContext.getForeignKeyColumnType());
+            Class<?> javaType = resolveColumnJavaType(col);
+            if (javaType != null) {
+                colDef.append(dbContext.mapJavaTypeToSql(javaType, metadata));
+            } else {
+                colDef.append(dbContext.getForeignKeyColumnType());
+            }
         }
 
         if (metadata != null) {
@@ -144,6 +127,32 @@ public class DDLStatementBuilder {
         }
 
         return colDef.toString();
+    }
+
+    /**
+     * Resolves the Java type for a column, used for SQL type mapping.
+     * @return the Java class for type mapping, or null if foreign key type should be used
+     */
+    private Class<?> resolveColumnJavaType(DDLColumn col) {
+        if (col instanceof DDLPrimaryKeyColumn pkColumn) {
+            if (pkColumn.field() != null) {
+                return ((ReflectionTypeModel) pkColumn.field().getType()).getReflectionClass();
+            }
+            // Check if there's type info from an inferred column (e.g., ValueCollection fetch column)
+            DDLColumn inferredCol = schemaInfo.columns().get(col.columnKey());
+            if (inferredCol instanceof DDLInferredColumn ic) {
+                return ((ReflectionTypeModel) ic.scalarType()).getReflectionClass();
+            }
+            return null;
+        } else if (col instanceof DDLFieldColumn fieldColumn && fieldColumn.field() != null) {
+            if (schemaInfo.foreignKeys().containsKey(col.columnKey())) {
+                return null;
+            }
+            return ((ReflectionTypeModel) fieldColumn.field().getType()).getReflectionClass();
+        } else if (col instanceof DDLInferredColumn inferredColumn) {
+            return ((ReflectionTypeModel) inferredColumn.scalarType()).getReflectionClass();
+        }
+        return null;
     }
 
     /**
