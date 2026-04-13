@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.pojoquery.DbContext;
 import org.pojoquery.annotations.Column;
@@ -24,6 +25,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.pipeline.querytree.TableInfo;
+import org.pojoquery.schema.SchemaInfo;
 import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
@@ -54,7 +56,15 @@ public class AQTSchemaGenerator {
 		DDLColumn registerForeignKey(ForeignKeyInfo foreignKeyInfo);
 	}
 
-	private static class DDLCollectorImpl implements DDLCollector {
+	interface CollectedSchemaInfo {
+		Map<DDLColumnKey, DDLColumn> columns();
+		Map<DDLColumnKey, DDLPrimaryKeyColumn> primaryKeys();
+		Map<DDLColumnKey, DDLForeignKey> foreignKeys();
+		public DDLColumnMetadata buildColumnMetadata(DDLColumnKey columnKey);
+		Set<TableInfo> tables();
+	}
+
+	private static class DDLCollectorImpl implements DDLCollector, CollectedSchemaInfo {
 		private LinkedHashSet<TableInfo> tables = new LinkedHashSet<>();
 		private HashMap<DDLColumnKey, DDLColumn> columns = new LinkedHashMap<>();
 		private HashMap<DDLColumnKey, List<FieldModel>> definingFields = new HashMap<>();
@@ -106,13 +116,39 @@ public class AQTSchemaGenerator {
 			);
 			return column;
 		}
+
+		@Override
+		public Map<DDLColumnKey, DDLColumn> columns() {
+			return columns;
+		}
+
+		@Override
+		public Map<DDLColumnKey, DDLPrimaryKeyColumn> primaryKeys() {
+			return primaryKeys;
+		}
+
+		@Override
+		public Map<DDLColumnKey, DDLForeignKey> foreignKeys() {
+			return foreignKeys;
+		}	
+
+		@Override
+		public DDLColumnMetadata buildColumnMetadata(DDLColumnKey columnKey) {
+			return buildColumnMetadataFromAnnotations(definingFields.getOrDefault(columnKey, List.of()));
+		}
+
+		@Override
+		public Set<TableInfo> tables() {
+			return tables;
+		}
 	}
 
     public static List<String> generateSchemaDDLFromClasses(DbContext dbContext, Class<?>... entityClasses) {
-        return AQTSchemaGenerator.generateSchemaDDL(dbContext, List.of(entityClasses).stream().map(AQTTransformer::buildQueryTreeForType).toArray(RootNode[]::new));
+        return AQTSchemaGenerator.generateSchemaDDL(dbContext, collectSchemaInfoFromClasses(entityClasses));
     }
 
-	public static List<String> generateSchemaDDL(DbContext dbContext, RootNode... queryTrees) {
+	private static CollectedSchemaInfo collectSchemaInfoFromClasses(Class<?>... entityClasses) {
+		RootNode[] queryTrees = List.of(entityClasses).stream().map(AQTTransformer::buildQueryTreeForType).toArray(RootNode[]::new);
 		DDLCollectorImpl collector = new DDLCollectorImpl();
 		for (RootNode queryTree : queryTrees) {
 			collectDDLForEntity(queryTree, collector);
@@ -124,114 +160,30 @@ public class AQTSchemaGenerator {
 			columnMetadata.put(columnKey, buildColumnMetadataFromAnnotations(fields));
 		}
 		
-		List<String> statements = new ArrayList<>();
-		
-		HashMap<DDLColumnKey, DDLColumn> combinedColumns = new HashMap<>();
-		combinedColumns.putAll(collector.columns);
-		combinedColumns.putAll(collector.primaryKeys);
+		return collector;
+	}
 
+	public static List<String> generateMigrationStatementsDDL(DbContext dbContext, SchemaInfo currentSchema, Class<?>... entityClasses) {
+		CollectedSchemaInfo desiredSchema = collectSchemaInfoFromClasses(entityClasses);
+		SchemaDiff diff = SchemaDiff.diffSchemas(currentSchema, desiredSchema);
+		return diff.generateMigrationDDL(dbContext);
+	}
+
+	public static List<String> generateSchemaDDL(DbContext dbContext, CollectedSchemaInfo collector) {
+		DDLStatementBuilder builder = new DDLStatementBuilder(dbContext, collector);
+		List<String> statements = new ArrayList<>();
 
 		// Generate CREATE TABLE statements
-		for (TableInfo table : collector.tables) {
-			StringBuilder sb = new StringBuilder();
-			sb.append("CREATE TABLE ");
-			sb.append(quoteSchemaAndTable(dbContext, table));
-			sb.append(" (\n");
-			
-
-			List<DDLColumn> allColumns = combinedColumns.values().stream()
-				.filter(col -> col.columnKey().tableKey().equals(table))
-				.toList();
-			
-			List<String> columnDefs = new ArrayList<>();
-			for (DDLColumn col : allColumns) {
-				StringBuilder colDef = new StringBuilder();
-				colDef.append("  ");
-				colDef.append(dbContext.getQuoteStyle().quote(col.columnKey().columnName()));
-				colDef.append(" ");
-				
-				DDLColumnMetadata metadata = columnMetadata.get(col.columnKey());
-
-				// Determine SQL type
-				if (col instanceof DDLPrimaryKeyColumn pkColumn) {
-					if (pkColumn.isAutoIncrement()) {
-						colDef.append(dbContext.getAutoIncrementKeyColumnType());
-						colDef.append(" ");
-						colDef.append(dbContext.getAutoIncrementSyntax());
-					} else {
-						if (pkColumn.field() == null) {
-							// This can happen for primary key columns that are only defined via @JoinColumn in an embedded entity
-							colDef.append(dbContext.getForeignKeyColumnType());
-						} else {
-							colDef.append(dbContext.mapJavaTypeToSql(((ReflectionTypeModel)pkColumn.field().getType()).getReflectionClass(), metadata));
-						}
-					}
-				} else if (col instanceof DDLFieldColumn fieldColumn && fieldColumn.field() != null) {
-					if (collector.foreignKeys.containsKey(col.columnKey())) {
-						colDef.append(dbContext.getForeignKeyColumnType());
-					} else {
-						colDef.append(dbContext.mapJavaTypeToSql(((ReflectionTypeModel)fieldColumn.field().getType()).getReflectionClass(), metadata));
-					}
-				} else if (col instanceof DDLInferredColumn inferredColumn) {
-					colDef.append(dbContext.mapJavaTypeToSql(((ReflectionTypeModel)inferredColumn.scalarType).getReflectionClass(), metadata));
-				} else {
-					// Implicit foreign key column (from join table)
-					colDef.append(dbContext.getForeignKeyColumnType());
-				}
-
-				if (metadata != null) {
-					if (!metadata.nullable()) {
-						colDef.append(" NOT NULL");
-					}
-					if (metadata.unique()) {
-						colDef.append(" UNIQUE");
-					}
-				}
-
-				columnDefs.add(colDef.toString());
-			}
-			
-			// Add primary key constraint if there are primary key columns
-			List<DDLColumn> primaryKeys = allColumns.stream().filter(col -> col instanceof DDLPrimaryKeyColumn).toList();
-			if (!primaryKeys.isEmpty()) {
-				String pkColumns = primaryKeys.stream()
-					.map(pk -> dbContext.getQuoteStyle().quote(pk.columnKey().columnName()))
-					.reduce((a, b) -> a + ", " + b)
-					.orElse("");
-				columnDefs.add("  PRIMARY KEY (" + pkColumns + ")");
-			}
-			
-			sb.append(String.join(",\n", columnDefs));
-			sb.append("\n)");
-			statements.add(sb.toString());
+		for (TableInfo table : collector.tables()) {
+			statements.add(builder.generateCreateTableStatement(table));
 		}
 		
 		// Generate ALTER TABLE statements for foreign keys
-		for (DDLForeignKey fk : collector.foreignKeys.values()) {
-			StringBuilder sb = new StringBuilder();
-			sb.append("ALTER TABLE ");
-			sb.append(quoteSchemaAndTable(dbContext, fk.referringColumn().tableKey()));
-			sb.append(" ADD CONSTRAINT ");
-			sb.append(dbContext.quoteObjectNames("fk_" + fk.referringColumn().tableKey().tableName() + "_" + fk.referringColumn().columnName()));
-			sb.append(" FOREIGN KEY (");
-			sb.append(dbContext.quoteObjectNames(fk.referringColumn().columnName()));
-			sb.append(") REFERENCES ");
-			sb.append(quoteSchemaAndTable(dbContext, fk.referencedIdColumn().tableKey()));
-			sb.append(" (");
-			sb.append(dbContext.quoteObjectNames(fk.referencedIdColumn().columnName()));
-			sb.append(")");
-			statements.add(sb.toString());
+		for (DDLForeignKey fk : collector.foreignKeys().values()) {
+			statements.add(builder.generateAddForeignKeyStatement(fk));
 		}
 		
 		return statements;
-	}
-
-	private static String quoteSchemaAndTable(DbContext dbContext, TableInfo tableInfo) {
-		if (tableInfo.schemaName() != null) {
-			return dbContext.quoteObjectNames(tableInfo.schemaName(), tableInfo.tableName());
-		} else {
-			return dbContext.quoteObjectNames(tableInfo.tableName());
-		}
 	}
 
 	private static void collectDDLForEntity(TableNode entity, DDLCollector collector) {

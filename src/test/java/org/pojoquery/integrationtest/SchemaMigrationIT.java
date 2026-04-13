@@ -8,10 +8,12 @@ import javax.sql.DataSource;
 import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
+import org.pojoquery.DbContext;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
+import org.pojoquery.pipeline.AQTSchemaGenerator;
 import org.pojoquery.schema.SchemaGenerator;
 import org.pojoquery.schema.SchemaInfo;
 
@@ -119,7 +121,7 @@ public class SchemaMigrationIT {
         
         // Phase 2: Migrate to V2 (add description and price columns)
         SchemaInfo schemaInfo = SchemaInfo.fromDataSource(db);
-        List<String> migrationStatements = SchemaGenerator.generateMigrationStatements(
+        List<String> migrationStatements = AQTSchemaGenerator.generateMigrationStatementsDDL(DbContext.getDefault(),
             schemaInfo, ProductV2.class);
         
         // Verify that ALTER TABLE statements are generated
@@ -166,7 +168,7 @@ public class SchemaMigrationIT {
         
         // Phase 3: Migrate to V3 (add stockQuantity and category columns)
         SchemaInfo schemaInfo2 = SchemaInfo.fromDataSource(db);
-        List<String> migrationStatements2 = SchemaGenerator.generateMigrationStatements(
+        List<String> migrationStatements2 = AQTSchemaGenerator.generateMigrationStatementsDDL(DbContext.getDefault(),
             schemaInfo2, ProductV3.class);
         
         assertFalse(migrationStatements2.isEmpty(), "Should generate migration statements for V3 columns");
@@ -208,7 +210,7 @@ public class SchemaMigrationIT {
         
         // Phase 4: Add a completely new entity (OrderItem) that references Product
         SchemaInfo schemaInfo3 = SchemaInfo.fromDataSource(db);
-        List<String> migrationStatements3 = SchemaGenerator.generateMigrationStatements(
+        List<String> migrationStatements3 = AQTSchemaGenerator.generateMigrationStatementsDDL(DbContext.getDefault(),
             schemaInfo3, ProductV3.class, OrderItem.class);
         
         assertFalse(migrationStatements3.isEmpty(), "Should generate migration statements for OrderItem table");
@@ -275,7 +277,7 @@ public class SchemaMigrationIT {
         
         // Query schema and generate migration statements
         SchemaInfo schemaInfo = SchemaInfo.fromDataSource(db);
-        List<String> migrationStatements = SchemaGenerator.generateMigrationStatements(
+        List<String> migrationStatements = AQTSchemaGenerator.generateMigrationStatementsDDL(DbContext.getDefault(),
             schemaInfo, ProductV3.class);
         
         // Should be empty or contain no actual ALTER TABLE ADD COLUMN statements
@@ -309,7 +311,7 @@ public class SchemaMigrationIT {
         
         // Phase 2: Evolve both entities
         SchemaInfo schemaInfo = SchemaInfo.fromDataSource(db);
-        List<String> migrationStatements = SchemaGenerator.generateMigrationStatements(
+        List<String> migrationStatements = AQTSchemaGenerator.generateMigrationStatementsDDL(DbContext.getDefault(),
             schemaInfo, CategoryV2.class, ItemV2.class);
         
         System.out.println("Multi-entity Migration SQL:\n" + String.join("\n", migrationStatements));
