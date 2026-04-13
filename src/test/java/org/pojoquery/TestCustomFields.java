@@ -57,7 +57,7 @@ public class TestCustomFields {
 						CustomQueryNode customNode = new AbstractQueryTree.CustomQueryNode() {
 							@Override
 							public void applyToSqlQuery(TableNode parentNode, SqlQuery<?> sqlQuery) {
-								sqlQuery.addField(new SqlExpression("{" + parentNode.alias() + "}.custom_linkedInUrl"), parentNode.alias() + ".linkedInUrl");
+								sqlQuery.addField(new SqlExpression("{" + parentNode.alias() + ".custom_linkedInUrl}"), parentNode.alias() + ".linkedInUrl");
 							}
 
 							@Override
@@ -83,7 +83,7 @@ public class TestCustomFields {
 			SELECT
 			 `user`.`id` AS `user.id`,
 			 `user`.`email` AS `user.email`,
-			 `user`.custom_linkedInUrl AS `user.linkedInUrl` 
+			 `user`.`custom_linkedInUrl` AS `user.linkedInUrl` 
 			FROM `user` AS `user`
 			"""), norm(query.toStatement().getSql()));
 		

@@ -20,6 +20,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
+import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionFieldModel;
@@ -84,6 +85,14 @@ public class AQTCascadingUpdater {
 	private static <PK> PK insertNode(TableNode node, Object entity, Object parentId, String parentFkColumn, DatabaseOperations db) {
 		if (entity == null) return null;
 
+		// For TPS inheritance, insert superclass first to get the ID
+		TPSSuperClassNode superClass = findTPSSuperClass(node);
+		PK inheritedId = null;
+		if (superClass != null) {
+			// Recursively insert superclass (handles multi-level TPS)
+			inheritedId = insertNode(superClass, entity, null, null, db);
+		}
+
 		FieldValues fields = collectFieldValues(node, entity);
 		Map<String, Object> values = new LinkedHashMap<>(fields.values());
 		values.putAll(fields.idValues()); // non-null IDs go into INSERT
@@ -99,19 +108,30 @@ public class AQTCascadingUpdater {
 			values.put(parentFkColumn, parentId);
 		}
 
-		// Insert this row
-		PK generatedId = db.insert(node.tableInfo().tableName(), node.tableInfo().schemaName(), values);
-
-		// Set auto-generated ID back on entity
-		if (fields.autoGenIdField() != null && generatedId != null) {
-			setFieldValue(entity, findPrimaryKeyField(node, fields.autoGenIdField()).field(), generatedId);
+		// For TPS subclass, the ID comes from superclass insert
+		PK generatedId;
+		if (inheritedId != null) {
+			// Use inherited ID as PK for this table (FK to superclass)
+			String idColumn = superClass.join().fkColumnName();
+			values.put(idColumn, inheritedId);
+			db.insert(node.tableInfo().tableName(), node.tableInfo().schemaName(), values);
+			generatedId = inheritedId;
+		} else {
+			// Normal insert with auto-generated ID
+			generatedId = db.insert(node.tableInfo().tableName(), node.tableInfo().schemaName(), values);
+			// Set auto-generated ID back on entity
+			if (fields.autoGenIdField() != null && generatedId != null) {
+				setFieldValue(entity, findPrimaryKeyField(node, fields.autoGenIdField()).field(), generatedId);
+			}
 		}
 
 		PK entityId = generatedId != null ? generatedId : (PK) getIdValue(node, entity);
 
-		// Process children: one-to-many, many-to-many, value collections
+		// Process children: one-to-many, many-to-many, value collections (skip TPSSuperClassNode - already handled)
 		for (QueryNode child : node.children()) {
-			processChildForInsert(child, entity, entityId, db);
+			if (!(child instanceof TPSSuperClassNode)) {
+				processChildForInsert(child, entity, entityId, db);
+			}
 		}
 
 		return entityId;
@@ -170,6 +190,12 @@ public class AQTCascadingUpdater {
 	private static int updateNode(TableNode node, Object entity, Object parentId, String parentFkColumn, DatabaseOperations db) {
 		if (entity == null) return 0;
 
+		// For TPS inheritance, update superclass first
+		TPSSuperClassNode superClass = findTPSSuperClass(node);
+		if (superClass != null) {
+			updateNode(superClass, entity, null, null, db);
+		}
+
 		FieldValues fields = collectFieldValues(node, entity);
 		Map<String, Object> values = new LinkedHashMap<>(fields.values());
 
@@ -180,12 +206,24 @@ public class AQTCascadingUpdater {
 		collectEmbeddedValues(node, entity, values);
 		collectEntityReferenceValues(node, entity, values);
 
-		int affectedRows = db.update(node.tableInfo().tableName(), node.tableInfo().schemaName(), values, fields.idValues());
+		// For TPS subclass, use the superclass ID for the WHERE clause
+		Map<String, Object> whereClause = fields.idValues();
+		if (superClass != null && whereClause.isEmpty()) {
+			// ID is in superclass, get it from there
+			Object entityId = getIdValue(superClass, entity);
+			String idColumn = superClass.join().fkColumnName();
+			whereClause = Map.of(idColumn, entityId);
+		}
+
+		int affectedRows = db.update(node.tableInfo().tableName(), node.tableInfo().schemaName(), values, whereClause);
 
 		Object entityId = getIdValue(node, entity);
 
+		// Process children (skip TPSSuperClassNode - already handled)
 		for (QueryNode child : node.children()) {
-			processChildForUpdate(node, child, entity, entityId, db);
+			if (!(child instanceof TPSSuperClassNode)) {
+				processChildForUpdate(node, child, entity, entityId, db);
+			}
 		}
 
 		return affectedRows;
@@ -267,15 +305,33 @@ public class AQTCascadingUpdater {
 		Object entityId = getIdValue(node, entity);
 
 		// Delete children first (reverse order for FK constraints)
+		// Skip TPSSuperClassNode - will be deleted after this node
 		for (QueryNode child : node.children()) {
-			processChildForDelete(child, entity, entityId, db);
+			if (!(child instanceof TPSSuperClassNode)) {
+				processChildForDelete(child, entity, entityId, db);
+			}
+		}
+
+		// For TPS subclass, find the FK column name
+		TPSSuperClassNode superClass = findTPSSuperClass(node);
+		String idColumn;
+		if (superClass != null) {
+			idColumn = superClass.join().fkColumnName();
+		} else {
+			idColumn = findIdColumnName(node);
 		}
 
 		// Delete this entity
 		Map<String, Object> where = new LinkedHashMap<>();
-		String idColumn = findIdColumnName(node);
 		where.put(idColumn, entityId);
-		return db.delete(node.tableInfo().tableName(), node.tableInfo().schemaName(), where);
+		int result = db.delete(node.tableInfo().tableName(), node.tableInfo().schemaName(), where);
+
+		// For TPS inheritance, delete superclass after subclass (FK constraint order)
+		if (superClass != null) {
+			deleteNode(superClass, entity, db);
+		}
+
+		return result;
 	}
 
 	private static void processChildForDelete(QueryNode child, Object parentEntity, Object parentId, DatabaseOperations db) {
@@ -396,7 +452,24 @@ public class AQTCascadingUpdater {
 	private static Object getIdValue(TableNode node, Object entity) {
 		if (entity == null) return null;
 		PrimaryKeyField pk = findPrimaryKeyField(node);
-		return pk != null ? getFieldValue(entity, pk.field()) : null;
+		if (pk != null) {
+			return getFieldValue(entity, pk.field());
+		}
+		// For TPS subclass, ID is in the superclass
+		TPSSuperClassNode superClass = findTPSSuperClass(node);
+		if (superClass != null) {
+			return getIdValue(superClass, entity);
+		}
+		return null;
+	}
+
+	/** Find TPSSuperClassNode child if this is a TPS subclass */
+	private static TPSSuperClassNode findTPSSuperClass(TableNode node) {
+		return node.children().stream()
+			.filter(TPSSuperClassNode.class::isInstance)
+			.map(TPSSuperClassNode.class::cast)
+			.findFirst()
+			.orElse(null);
 	}
 
 	private static PrimaryKeyField findPrimaryKeyField(TableNode node) {
