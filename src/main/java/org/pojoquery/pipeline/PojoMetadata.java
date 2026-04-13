@@ -1,23 +1,17 @@
 package org.pojoquery.pipeline;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Logger;
 
 import org.pojoquery.AnnotationHelper.TableInfo;
-import org.pojoquery.annotations.Embedded;
-import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.Id;
-import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Transient;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.typemodel.FieldModel;
-import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
 
@@ -50,46 +44,7 @@ public final class PojoMetadata {
 		// Utility class
 	}
 
-	/**
-	 * Map extension used for passing row values during result processing.
-	 */
-	public static class Values extends HashMap<String, Object> {
-		public Values() {
-			super();
-		}
-
-		public Values(Values values) {
-			super(values);
-		}
-	}
-
 	// --- Field name determination ---
-
-	/**
-	 * Determines the SQL column name for a field.
-	 * Checks @FieldName first, then falls back to field name.
-	 */
-	public static String determineSqlFieldName(FieldModel f) {
-		Objects.requireNonNull(f, "field must not be null");
-		return f.getAnnotation(FieldName.class).flatMap(ann -> ann.getStringValue()).orElse(f.getName());
-	}
-
-	/**
-	 * Determines the SQL column name for a foreign key (link) field.
-	 * Checks @Link(linkfield) first, then falls back to @FieldName,
-	 * and finally defaults to fieldName_id.
-	 */
-	public static String determineLinkFieldName(FieldModel f) {
-		Objects.requireNonNull(f, "field must not be null");
-		// Check for @Link(linkfield) first
-		String joinColumnName = f.getAnnotation(Link.class).flatMap(ann -> ann.getStringValue("linkfield")).orElse(null);
-		if (joinColumnName != null) {
-			return joinColumnName;
-		}
-		// Fall back to @FieldName
-		return f.getAnnotation(FieldName.class).flatMap(ann -> ann.getStringValue())
-		.orElse(f.getName() + "_id");
-	}
 
 
 	// --- ID field determination ---
@@ -128,32 +83,6 @@ public final class PojoMetadata {
 	}
 
 	// --- Type checks ---
-
-	/**
-	 * Checks if a type is a list or array (collection type).
-	 */
-	public static boolean isListOrArray(TypeModel type) {
-		if (type.isArray() && !type.getArrayComponentType().isPrimitive()) {
-			return true;
-		}
-		if (type instanceof ReflectionTypeModel) {
-			Class<?> clz = ((ReflectionTypeModel) type).getReflectionClass();
-			return Iterable.class.isAssignableFrom(clz);
-		}
-		// For non-reflection types, check by name
-		String name = type.getQualifiedName();
-		return name.equals("java.util.List") ||
-				name.equals("java.util.Set") ||
-				name.equals("java.util.Collection") ||
-				name.equals("java.lang.Iterable");
-	}
-
-	/**
-	 * Checks if a type is a linked class (has @Table annotation).
-	 */
-	public static boolean isLinkedClass(TypeModel type) {
-		return !type.isPrimitive() && determineTableMapping(type).size() > 0;
-	}
 
 	public static boolean isTransient(FieldModel field) {
 		return field.hasAnnotation(Transient.class) || field.isTransient();
@@ -261,18 +190,6 @@ public final class PojoMetadata {
 		return collectFieldsOfClass(type, null);
 	}
 
-	// --- Embedded prefix ---
-
-	/**
-	 * Determines the prefix for an embedded field.
-	 */
-    public static String determinePrefix(FieldModel f) {
-        return f.getAnnotation(Embedded.class)
-        .flatMap(ann -> ann.getStringValue("prefix"))
-        .map(s -> s.equals(Embedded.DEFAULT) ? f.getName() + "_" : s)
-        .orElse("");
-    }
-	
 	/**
 	 * Builds a list of qualified field names (table.fieldName).
 	 */
