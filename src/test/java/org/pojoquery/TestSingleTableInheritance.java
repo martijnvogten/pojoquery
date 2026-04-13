@@ -14,7 +14,7 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
-import org.pojoquery.schema.SchemaGenerator;
+import org.pojoquery.pipeline.AQTSchemaGenerator;
 
 /**
  * Tests for single table inheritance support using @DiscriminatorColumn.
@@ -122,7 +122,7 @@ public class TestSingleTableInheritance {
 
 	@Test
 	public void testSchemaGeneratorSingleTableInheritance() {
-		List<String> statements = SchemaGenerator.generateCreateTableStatements(STIRoom.class);
+		List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(DbContext.getDefault(), STIRoom.class);
 
 		// Should generate only ONE table with discriminator column and all fields
 		assertEquals(1, statements.size());
@@ -145,7 +145,7 @@ public class TestSingleTableInheritance {
 
 	@Test
 	public void testSchemaGeneratorCustomDiscriminator() {
-		List<String> statements = SchemaGenerator.generateCreateTableStatements(CustomDiscRoom.class);
+		List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(DbContext.getDefault(), CustomDiscRoom.class);
 
 		assertEquals(1, statements.size());
 

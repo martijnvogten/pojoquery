@@ -24,7 +24,7 @@ import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Lob;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.schema.SchemaGenerator;
+import org.pojoquery.pipeline.AQTSchemaGenerator;
 import org.postgresql.ds.PGSimpleDataSource;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -175,7 +175,7 @@ public class MultiDialectIT {
     }
 
     private void createTables() {
-        for (String ddl : SchemaGenerator.generateCreateTableStatements(dbContext, User.class, Article.class)) {
+        for (String ddl : AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, User.class, Article.class)) {
             System.out.println(dialect + ": " + ddl);
             DB.executeDDL(dataSource, ddl);
         }

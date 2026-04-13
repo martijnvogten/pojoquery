@@ -18,6 +18,7 @@ import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.integrationtest.UseDialect;
+import org.pojoquery.pipeline.AQTSchemaGenerator;
 import org.pojoquery.pipeline.querytree.QueryTreeBuilder;
 import org.pojoquery.pipeline.querytree.TableNode;
 import org.pojoquery.schema.SchemaGenerator;
@@ -138,7 +139,7 @@ public class TestJpaAnnotations {
             .findFirst()
             .orElseThrow(() -> new AssertionError("column name of id field should be 'user_id'"));
 
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaUser.class);
+        List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaUser.class);
         String sql = String.join("\n", statements);
         System.out.println(sql);
 
@@ -158,7 +159,7 @@ public class TestJpaAnnotations {
             .orElseThrow(() -> new AssertionError("Type should have PojoQuery @Table annotation mapped"));
 
 
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaUser.class);
+        List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaUser.class);
         String sql = String.join("\n", statements);
 
         // Should use the JPA @Table name
@@ -188,7 +189,7 @@ public class TestJpaAnnotations {
             .getBooleanAttribute("nullable");
         assertTrue(nullable.isPresent() && !nullable.get());
 
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaUser.class);
+        List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaUser.class);
         String sql = String.join("\n", statements);
 
         // Should use the JPA @Column(name=...) for column name
@@ -211,7 +212,7 @@ public class TestJpaAnnotations {
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaUser.class);
+        List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaUser.class);
         String sql = String.join("\n", statements);
 
         // Should use CLOB type for @Lob String field
@@ -227,7 +228,7 @@ public class TestJpaAnnotations {
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaUser.class);
+        List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaUser.class);
         String sql = String.join("\n", statements);
 
         // @Transient fields should be excluded
@@ -242,7 +243,7 @@ public class TestJpaAnnotations {
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaOrder.class);
+        List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaOrder.class);
         String sql = String.join("\n", statements);
 
         // Should include schema from JPA @Table(schema=...)
@@ -257,7 +258,7 @@ public class TestJpaAnnotations {
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaOrder.class);
+        List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaOrder.class);
         String sql = String.join("\n", statements);
 
         // Should use precision and scale from JPA @Column
@@ -287,7 +288,7 @@ public class TestJpaAnnotations {
             .build();
 
         // Test SchemaGenerator with JPA @JoinColumn
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaOrder.class);
+        List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaOrder.class);
         String sql = String.join("\n", statements);
 
         // Should use the column name from JPA @JoinColumn(name="customer_id")
@@ -304,7 +305,7 @@ public class TestJpaAnnotations {
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaCompany.class);
+        List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaCompany.class);
         String sql = String.join("\n", statements);
 
         // JPA @Embedded uses NO prefix - fields use their original names (true JPA semantics)
@@ -358,7 +359,7 @@ public class TestJpaAnnotations {
 
         // For embedded, the fields are inlined - tested via SchemaGenerator
         // QueryBuilder treats @Embedded fields as part of the parent table
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaCompany.class);
+        List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaCompany.class);
         String sql = String.join("\n", statements);
 
         // JPA @Embedded fields should be in parent table with NO prefix
@@ -389,7 +390,7 @@ public class TestJpaAnnotations {
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
-        List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, JpaCompany.class);
+        List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaCompany.class);
         String sql = String.join("\n", statements);
 
         // JPA @Embedded should NOT add any prefix - true JPA semantics

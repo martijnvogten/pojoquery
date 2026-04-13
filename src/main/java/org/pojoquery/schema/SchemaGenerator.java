@@ -47,53 +47,53 @@ public class SchemaGenerator {
     /**
      * Generates a list of CREATE TABLE statements for the given entity class using default DbContext.
      */
-    public static List<String> generateCreateTableStatements(Class<?> entityClass) {
-        return generateCreateTableStatements(entityClass, DbContext.getDefault());
-    }
+    // public static List<String> generateCreateTableStatements(Class<?> entityClass) {
+    //     return generateCreateTableStatements(entityClass, DbContext.getDefault());
+    // }
     
     /**
      * Generates a list of CREATE TABLE statements for the given entity class with custom DbContext.
      */
-    public static List<String> generateCreateTableStatements(Class<?> entityClass, DbContext dbContext) {
-        return generateCreateTableStatements(new ReflectionTypeModel(entityClass), dbContext);
-    }
+    // public static List<String> generateCreateTableStatements(Class<?> entityClass, DbContext dbContext) {
+    //     return generateCreateTableStatements(new ReflectionTypeModel(entityClass), dbContext);
+    // }
     
     /**
      * Generates a list of CREATE TABLE statements for the given entity type with custom DbContext.
      */
-    public static List<String> generateCreateTableStatements(TypeModel entityType, DbContext dbContext) {
-        LOG.debug("Generating CREATE TABLE statements for {}", entityType.getSimpleName());
+    // public static List<String> generateCreateTableStatements(TypeModel entityType, DbContext dbContext) {
+    //     LOG.debug("Generating CREATE TABLE statements for {}", entityType.getSimpleName());
         
-        // Build the QueryTree
-        QueryTree tree = QueryTreeBuilder.from(entityType);
+    //     // Build the QueryTree
+    //     QueryTree tree = QueryTreeBuilder.from(entityType);
         
-        // Collect schema info from tree
-        SchemaCollector collector = new SchemaCollector(dbContext);
-        collector.collectFromTree(tree);
+    //     // Collect schema info from tree
+    //     SchemaCollector collector = new SchemaCollector(dbContext);
+    //     collector.collectFromTree(tree);
         
-        return collector.generateStatements();
-    }
+    //     return collector.generateStatements();
+    // }
     
-    /**
-     * Generates a list of CREATE TABLE statements for multiple entity classes.
-     */
-    public static List<String> generateCreateTableStatements(Class<?>... entityClasses) {
-        return generateCreateTableStatements(DbContext.getDefault(), entityClasses);
-    }
+    // /**
+    //  * Generates a list of CREATE TABLE statements for multiple entity classes.
+    //  */
+    // public static List<String> generateCreateTableStatements(Class<?>... entityClasses) {
+    //     return generateCreateTableStatements(DbContext.getDefault(), entityClasses);
+    // }
     
-    /**
-     * Generates a list of CREATE TABLE statements for multiple entity classes with custom DbContext.
-     */
-    public static List<String> generateCreateTableStatements(DbContext dbContext, Class<?>... entityClasses) {
-        SchemaCollector collector = new SchemaCollector(dbContext);
+    // /**
+    //  * Generates a list of CREATE TABLE statements for multiple entity classes with custom DbContext.
+    //  */
+    // public static List<String> generateCreateTableStatements(DbContext dbContext, Class<?>... entityClasses) {
+    //     SchemaCollector collector = new SchemaCollector(dbContext);
         
-        for (Class<?> entityClass : entityClasses) {
-            QueryTree tree = QueryTreeBuilder.from(entityClass);
-            collector.collectFromTree(tree);
-        }
+    //     for (Class<?> entityClass : entityClasses) {
+    //         QueryTree tree = QueryTreeBuilder.from(entityClass);
+    //         collector.collectFromTree(tree);
+    //     }
         
-        return collector.generateStatements();
-    }
+    //     return collector.generateStatements();
+    // }
     
     /**
      * Creates tables in the database for the given entity classes.

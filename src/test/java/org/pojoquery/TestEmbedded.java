@@ -14,11 +14,11 @@ import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
+import org.pojoquery.pipeline.AQTSchemaGenerator;
 import org.pojoquery.pipeline.AQTTransformer;
 import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
-import org.pojoquery.schema.SchemaGenerator;
 import org.pojoquery.util.RecordIndenter;
 
 @UseDialect(DbContext.Dialect.MYSQL)
@@ -177,7 +177,7 @@ public class TestEmbedded {
 			.withQuoteStyle(QuoteStyle.NONE)
 			.build();
 
-		List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, CompanyWithAddress.class);
+		List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, CompanyWithAddress.class);
 		String sql = String.join("\n", statements);
 
 		// @Embedded(prefix="address_") should add the prefix
@@ -195,7 +195,7 @@ public class TestEmbedded {
 			.withQuoteStyle(QuoteStyle.NONE)
 			.build();
 
-		List<String> statements = SchemaGenerator.generateCreateTableStatements(dbContext, CompanyMultiAddress.class);
+		List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, CompanyMultiAddress.class);
 		String sql = String.join("\n", statements);
 
 		// Multiple @Embedded fields with different prefixes should be distinct
