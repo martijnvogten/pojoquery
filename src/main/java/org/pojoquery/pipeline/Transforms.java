@@ -59,7 +59,6 @@ import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 import org.pojoquery.util.Strings;
-import org.pojoquery.util.Types;
 
 /**
  * Contains all standard transform step classes for the query tree pipeline.
@@ -218,7 +217,7 @@ public final class Transforms {
                     (TableNode parentNode, EmptyFieldNode emptyFieldNode) -> {
                         FieldModel field = emptyFieldNode.field();
 
-                        TypeModel componentType = Types.getCollectionComponentType(field);
+                        TypeModel componentType = getCollectionComponentType(field.getType());
                         
                         String childTableName = field.getAnnotationAttributeValue(Link.class, "linktable", String.class);
                         String childTableSchema = field.getAnnotationAttributeValue(Link.class, "linkschema", String.class);
