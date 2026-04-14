@@ -725,7 +725,14 @@ public final class Transforms {
     public static class ApplyDefaultDiscriminatorExpressions extends RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
-            return node;
+            // Set default discriminatorValue to the simple class name when it's null
+            return transformChildren(node,
+                    child -> child instanceof STISubClassNode stiSub && stiSub.discriminatorValue() == null,
+                    (TableNode parentNode, QueryNode child) -> {
+                        STISubClassNode stiSub = (STISubClassNode) child;
+                        // Default discriminator value is the simple class name
+                        return stiSub.withDiscriminatorValue(stiSub.type().getSimpleName());
+                    });
         }
     }
     

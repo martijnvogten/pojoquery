@@ -15,7 +15,6 @@ import org.pojoquery.pipeline.AQTSchemaGenerator.DDLForeignKey;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLInferredColumn;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLPrimaryKeyColumn;
 import org.pojoquery.pipeline.querytree.TableInfo;
-import org.pojoquery.typemodel.ReflectionTypeModel;
 
 /**
  * Builds DDL statements (CREATE TABLE, ALTER TABLE, etc.) from schema information.
@@ -136,21 +135,21 @@ public class DDLStatementBuilder {
     private Class<?> resolveColumnJavaType(DDLColumn col) {
         if (col instanceof DDLPrimaryKeyColumn pkColumn) {
             if (pkColumn.field() != null) {
-                return ((ReflectionTypeModel) pkColumn.field().getType()).getReflectionClass();
+                return pkColumn.field().getType().getReflectionClass();
             }
             // Check if there's type info from an inferred column (e.g., ValueCollection fetch column)
             DDLColumn inferredCol = schemaInfo.columns().get(col.columnKey());
             if (inferredCol instanceof DDLInferredColumn ic) {
-                return ((ReflectionTypeModel) ic.scalarType()).getReflectionClass();
+                return ic.scalarType().getReflectionClass();
             }
             return null;
         } else if (col instanceof DDLFieldColumn fieldColumn && fieldColumn.field() != null) {
             if (schemaInfo.foreignKeys().containsKey(col.columnKey())) {
                 return null;
             }
-            return ((ReflectionTypeModel) fieldColumn.field().getType()).getReflectionClass();
+            return fieldColumn.field().getType().getReflectionClass();
         } else if (col instanceof DDLInferredColumn inferredColumn) {
-            return ((ReflectionTypeModel) inferredColumn.scalarType()).getReflectionClass();
+            return inferredColumn.scalarType().getReflectionClass();
         }
         return null;
     }

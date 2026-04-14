@@ -82,4 +82,6 @@ public interface TypeModel extends AnnotatedElementModel<TypeModel> {
 
 	boolean isSameType(Class<?> other);
 
+    Class<?> getReflectionClass();
+
 }

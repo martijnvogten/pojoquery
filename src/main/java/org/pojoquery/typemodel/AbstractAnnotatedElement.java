@@ -85,9 +85,30 @@ public abstract class AbstractAnnotatedElement<T extends AnnotatedElementModel<T
         return getAnnotation(annotationType)
             .map(am -> am.getValuesMap().get(attributeName))
             .flatMap(value -> Optional.ofNullable(value)
+                .map(v -> convertIfNeeded(v, expectedType))
                 .filter(expectedType::isInstance)
                 .map(expectedType::cast))
             .orElse(null);
+    }
+
+    /**
+     * Converts annotation values to the expected type if possible.
+     * Specifically handles Class[] to TypeModel[] conversion.
+     */
+    private <R> Object convertIfNeeded(Object value, Class<R> expectedType) {
+        // Convert Class[] to TypeModel[] when requested
+        if (expectedType == TypeModel[].class && value instanceof Class<?>[] classes) {
+            TypeModel[] result = new TypeModel[classes.length];
+            for (int i = 0; i < classes.length; i++) {
+                result[i] = new ReflectionTypeModel(classes[i]);
+            }
+            return result;
+        }
+        // Convert single Class to TypeModel when requested
+        if (expectedType == TypeModel.class && value instanceof Class<?> clazz) {
+            return new ReflectionTypeModel(clazz);
+        }
+        return value;
     }
 
     // ========== Immutable transform methods ==========

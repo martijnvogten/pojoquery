@@ -182,7 +182,7 @@ public class DbContextBuilder {
 
         @Override
         public String mapJavaTypeToSql(Class<?> type, DDLColumnMetadata columnMetadata) {
-            return base.mapJavaTypeToSql(type, null);
+            return base.mapJavaTypeToSql(type, columnMetadata);
         }
 
         @Override

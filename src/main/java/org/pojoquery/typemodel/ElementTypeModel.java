@@ -246,4 +246,9 @@ public class ElementTypeModel extends AbstractAnnotatedElement<TypeModel> implem
     public int hashCode() {
         return Objects.hash(getQualifiedName(), getAddedAnnotations());
     }
+
+    @Override
+    public Class<?> getReflectionClass() {
+        throw new UnsupportedOperationException("Not supported at compile time");
+    }
 }

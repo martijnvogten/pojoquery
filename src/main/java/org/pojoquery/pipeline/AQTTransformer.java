@@ -1,5 +1,7 @@
 package org.pojoquery.pipeline;
 
+import java.util.List;
+
 import org.pojoquery.SqlExpression;
 import org.pojoquery.pipeline.AbstractQueryTree.CustomQueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.Embedding;
@@ -15,7 +17,10 @@ import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.pipeline.querytree.TableInfo;
+import org.pojoquery.typemodel.JakartaAnnotations;
+import org.pojoquery.typemodel.JavaxAnnotations;
 import org.pojoquery.typemodel.ReflectionTypeModel;
+import org.pojoquery.typemodel.TransformedTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
 public class AQTTransformer {
@@ -78,8 +83,10 @@ public class AQTTransformer {
 	}
 	
 	public static RootNode buildQueryTreeForType(TypeModel rootType, TransformPipeline pipeline) {
-		TableInfo tableInfo = determinTableInfo(rootType);
-		QueryNode initialTree = RootNode.createEmptyRootNode(tableInfo.tableName(), rootType, tableInfo);
+		// Wrap the root type with transformers so annotation queries are transparently transformed
+		TypeModel transformedType = new TransformedTypeModel(rootType, List.of(new JakartaAnnotations(), new JavaxAnnotations()));
+		TableInfo tableInfo = determinTableInfo(transformedType);
+		QueryNode initialTree = RootNode.createEmptyRootNode(tableInfo.tableName(), transformedType, tableInfo);
 		return pipeline.apply(initialTree);
 	}
 

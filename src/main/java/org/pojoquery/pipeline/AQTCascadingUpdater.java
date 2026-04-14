@@ -19,11 +19,10 @@ import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKeyField;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
-import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.typemodel.FieldModel;
-import org.pojoquery.typemodel.ReflectionFieldModel;
 
 /**
  * Cascading insert/update/delete for the AbstractQueryTree model.
@@ -507,7 +506,7 @@ public class AQTCascadingUpdater {
 
 	private static Object getFieldValue(Object entity, FieldModel fieldModel) {
 		try {
-			Field field = ((ReflectionFieldModel) fieldModel).getReflectionField();
+			Field field = fieldModel.getReflectionField();
 			field.setAccessible(true);
 			return field.get(entity);
 		} catch (IllegalAccessException e) {
@@ -517,7 +516,7 @@ public class AQTCascadingUpdater {
 
 	private static void setFieldValue(Object entity, FieldModel fieldModel, Object value) {
 		try {
-			Field field = ((ReflectionFieldModel) fieldModel).getReflectionField();
+			Field field = fieldModel.getReflectionField();
 			field.setAccessible(true);
 			field.set(entity, value);
 		} catch (IllegalAccessException e) {

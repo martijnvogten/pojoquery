@@ -19,7 +19,6 @@ import java.util.Set;
 
 import org.pojoquery.JdbcValueMapper;
 import org.pojoquery.typemodel.FieldModel;
-import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
 public class DefaultValueMappers {
@@ -30,10 +29,10 @@ public class DefaultValueMappers {
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	public static JdbcValueMapper createMapper(TypeModel targetTypeModel) {
-		if (!(targetTypeModel instanceof ReflectionTypeModel)) {
+		Class<?> targetType = targetTypeModel.getReflectionClass();
+		if (targetType == null) {
 			return value -> value;
 		}
-		Class<?> targetType = ((ReflectionTypeModel) targetTypeModel).getReflectionClass();
 		if (targetType.isEnum() ) {
 			return o -> o instanceof String ? Enum.valueOf((Class<Enum>) targetType, (String)o) : o;
 		}

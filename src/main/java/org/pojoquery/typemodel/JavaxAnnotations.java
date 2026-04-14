@@ -39,7 +39,7 @@ import org.pojoquery.annotations.Transient;
  * 
  * @see JavaxAnnotationsTransform for pipeline integration
  */
-public final class JavaxAnnotations {
+public final class JavaxAnnotations implements TypeTransformer {
 
     // Javax annotation classes (loaded via reflection to avoid hard dependency)
     private static final Class<? extends Annotation> JAVAX_TABLE;
@@ -64,10 +64,6 @@ public final class JavaxAnnotations {
         JAVAX_AVAILABLE = JAVAX_TABLE != null;
     }
 
-    private JavaxAnnotations() {
-        // Utility class
-    }
-
     /**
      * Returns true if javax.persistence annotations are available on the classpath.
      */
@@ -81,7 +77,8 @@ public final class JavaxAnnotations {
      * @param type the type model to transform
      * @return a new TypeModel with canonical annotations added, or the original if no javax annotations present
      */
-    public static TypeModel transformType(TypeModel type) {
+    @Override
+    public TypeModel transformType(TypeModel type) {
         if (!JAVAX_AVAILABLE || type == null) {
             return type;
         }
@@ -96,9 +93,10 @@ public final class JavaxAnnotations {
     private static Map<String, Object> extractTableAttributes(TypeModel type) {
         java.util.Map<String, Object> attrs = new java.util.HashMap<>();
         
+        // JPA uses "name", PojoQuery @Table uses "value"
         Optional.ofNullable(type.getAnnotationAttributeValue(JAVAX_TABLE, "name", String.class))
             .filter(name -> !name.isEmpty())
-            .ifPresent(name -> attrs.put("name", name));
+            .ifPresent(name -> attrs.put("value", name));
 
         Optional.ofNullable(type.getAnnotationAttributeValue(JAVAX_TABLE, "schema", String.class))
             .filter(schema -> !schema.isEmpty())
@@ -113,7 +111,8 @@ public final class JavaxAnnotations {
      * @param fs the field model to transform
      * @return a new FieldModel with canonical annotations added, or the original if no javax annotations present
      */
-    public static FieldModel transformField(FieldModel fs) {
+    @Override
+    public FieldModel transformField(FieldModel fs) {
         if (!JAVAX_AVAILABLE || fs == null) {
             return fs;
         }
@@ -172,9 +171,7 @@ public final class JavaxAnnotations {
     }
 
     private static <T> Optional<T> getColumnAttribute(FieldModel fieldModel, String attributeName, Class<T> expectedType) {
-        return Optional.ofNullable(fieldModel.getAnnotationAttributeValue(JAVAX_COLUMN, attributeName, expectedType))
-            .filter(value -> value != null && expectedType.isInstance(value))
-            .map(expectedType::cast);
+        return Optional.ofNullable(fieldModel.getAnnotationAttributeValue(JAVAX_COLUMN, attributeName, expectedType));
     }
 
     @SuppressWarnings("unchecked")

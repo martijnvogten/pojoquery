@@ -39,7 +39,7 @@ import org.pojoquery.annotations.Transient;
  * 
  * @see JakartaAnnotationsTransform for pipeline integration
  */
-public final class JakartaAnnotations {
+public final class JakartaAnnotations implements TypeTransformer {
 
     // Jakarta annotation classes (loaded via reflection to avoid hard dependency)
     private static final Class<? extends Annotation> JAKARTA_TABLE;
@@ -64,10 +64,6 @@ public final class JakartaAnnotations {
         JAKARTA_AVAILABLE = JAKARTA_TABLE != null;
     }
 
-    private JakartaAnnotations() {
-        // Utility class
-    }
-
     /**
      * Returns true if jakarta.persistence annotations are available on the classpath.
      */
@@ -75,13 +71,16 @@ public final class JakartaAnnotations {
         return JAKARTA_AVAILABLE;
     }
 
+    // ========== TypeTransformer implementation ==========
+
     /**
      * Transforms a TypeModel by adding PojoQuery annotations based on jakarta.persistence annotations.
      * 
      * @param type the type model to transform
      * @return a new TypeModel with canonical annotations added, or the original if no jakarta annotations present
      */
-    public static TypeModel transformType(TypeModel type) {
+    @Override
+    public TypeModel transformType(TypeModel type) {
         if (!JAKARTA_AVAILABLE || type == null) {
             return type;
         }
@@ -96,9 +95,10 @@ public final class JakartaAnnotations {
     private static Map<String, Object> extractTableAttributes(TypeModel type) {
         java.util.Map<String, Object> attrs = new java.util.HashMap<>();
         
+        // JPA uses "name", PojoQuery @Table uses "value"
         Optional.ofNullable(type.getAnnotationAttributeValue(JAKARTA_TABLE, "name", String.class))
             .filter(name -> !name.isEmpty())
-            .ifPresent(name -> attrs.put("name", name));
+            .ifPresent(name -> attrs.put("value", name));
 
         Optional.ofNullable(type.getAnnotationAttributeValue(JAKARTA_TABLE, "schema", String.class))
             .filter(schema -> !schema.isEmpty())
@@ -107,7 +107,8 @@ public final class JakartaAnnotations {
         return attrs;
     }
 
-    public static FieldModel transformField(FieldModel fs) {
+    @Override
+    public FieldModel transformField(FieldModel fs) {
         if (!JAKARTA_AVAILABLE || fs == null) {
             return fs;
         }
@@ -147,11 +148,11 @@ public final class JakartaAnnotations {
             .filter(name -> !name.isEmpty())
             .ifPresent(name -> attrs.put("name", name));
 
-        getColumnAttribute(fieldModel, "length", Number.class)
+        getColumnAttribute(fieldModel, "length", Integer.class)
             .ifPresent(length -> attrs.put("length", length.intValue()));
-        getColumnAttribute(fieldModel, "precision", Number.class)
+        getColumnAttribute(fieldModel, "precision", Integer.class)
             .ifPresent(precision -> attrs.put("precision", precision.intValue()));
-        getColumnAttribute(fieldModel, "scale", Number.class)
+        getColumnAttribute(fieldModel, "scale", Integer.class)
             .ifPresent(scale -> attrs.put("scale", scale.intValue()));
 
         getColumnAttribute(fieldModel, "nullable", Boolean.class)
@@ -166,9 +167,7 @@ public final class JakartaAnnotations {
     }
 
     private static <T> Optional<T> getColumnAttribute(FieldModel fieldModel, String attributeName, Class<T> expectedType) {
-        return Optional.ofNullable(fieldModel.getAnnotationAttributeValue(JAKARTA_COLUMN, attributeName, expectedType))
-            .filter(value -> value != null && expectedType.isInstance(value))
-            .map(expectedType::cast);
+        return Optional.ofNullable(fieldModel.getAnnotationAttributeValue(JAKARTA_COLUMN, attributeName, expectedType));
     }
 
     @SuppressWarnings("unchecked")

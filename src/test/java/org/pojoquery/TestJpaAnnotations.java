@@ -116,11 +116,12 @@ public class TestJpaAnnotations {
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
+        JakartaAnnotations jakarta = new JakartaAnnotations();
         FieldModel idField = new ReflectionTypeModel(JpaUser.class).getDeclaredFields().stream()
             .filter(f -> f.getName().equals("id"))
             .findFirst().orElseThrow();
 
-        FieldModel transformed = JakartaAnnotations.transformField(idField);
+        FieldModel transformed = jakarta.transformField(idField);
         assertTrue(transformed.hasAnnotation(org.pojoquery.annotations.Id.class),
             "Field 'id' should have PojoQuery @Id annotation mapped");
         
@@ -152,7 +153,7 @@ public class TestJpaAnnotations {
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
-        TypeModel transformed = JakartaAnnotations.transformType(new ReflectionTypeModel(JpaUser.class));
+        TypeModel transformed = new JakartaAnnotations().transformType(new ReflectionTypeModel(JpaUser.class));
         assertTrue(transformed.hasAnnotation(org.pojoquery.annotations.Table.class),
             "Type should have PojoQuery @Table annotation mapped");
 
@@ -171,16 +172,17 @@ public class TestJpaAnnotations {
             .withQuoteStyle(QuoteStyle.NONE)
             .build();
 
+        JakartaAnnotations jakarta = new JakartaAnnotations();
         FieldModel usernameField = new ReflectionTypeModel(JpaUser.class).getDeclaredFields().stream()
             .filter(f -> f.getName().equals("username"))
-            .map(JakartaAnnotations::transformField)
+            .map(jakarta::transformField)
             .findFirst().orElseThrow();
         assertTrue(usernameField.hasAnnotation(org.pojoquery.annotations.Column.class),
             "Field 'username' should have PojoQuery @Column annotation mapped");
 
         FieldModel emailField = new ReflectionTypeModel(JpaUser.class).getDeclaredFields().stream()
             .filter(f -> f.getName().equals("email"))
-            .map(JakartaAnnotations::transformField)
+            .map(jakarta::transformField)
             .findFirst().orElseThrow();
         Boolean nullable = emailField.getAnnotationAttributeValue(org.pojoquery.annotations.Column.class, "nullable", Boolean.class);
         assertTrue(emailField.hasAnnotation(org.pojoquery.annotations.Column.class),
@@ -189,6 +191,8 @@ public class TestJpaAnnotations {
 
         List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaUser.class);
         String sql = String.join("\n", statements);
+
+        System.out.println(sql);
 
         // Should use the JPA @Column(name=...) for column name
         assertTrue(sql.contains("user_name VARCHAR(100)"),

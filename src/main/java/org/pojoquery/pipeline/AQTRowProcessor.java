@@ -28,8 +28,6 @@ import org.pojoquery.pipeline.AbstractQueryTree.SuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.typemodel.FieldModel;
-import org.pojoquery.typemodel.ReflectionFieldModel;
-import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
 
@@ -136,7 +134,7 @@ public class AQTRowProcessor<R> {
 	}
 
 	private Object constructEntity(TypeModel type) {
-		Class<?> clz = ((ReflectionTypeModel)type).getReflectionClass();
+		Class<?> clz = type.getReflectionClass();
 		try {
 			Constructor<?> declaredConstructor = clz.getDeclaredConstructor();
 			declaredConstructor.setAccessible(true);
@@ -148,7 +146,7 @@ public class AQTRowProcessor<R> {
 
 	public static void setFieldValue(Object entity, FieldModel fieldModel, Object value) {
 		try {
-			java.lang.reflect.Field field = ((ReflectionFieldModel)fieldModel).getReflectionField();
+			Field field = fieldModel.getReflectionField();
 			field.setAccessible(true);
 			field.set(entity, value);
 		} catch (IllegalAccessException e) {
@@ -158,19 +156,19 @@ public class AQTRowProcessor<R> {
 
 	public static void addToCollection(Object entity, FieldModel field, Object value, JdbcValueMapper valueMapper, TypeModel componentType) throws SQLException {
 		if (value != null) {
-			Field targetField = getField(field);
+			Field targetField = field.getReflectionField();
 			Object mappedValue = valueMapper.mapValue(value);
 			setFieldValue(entity, field, DefaultValueMappers.addValueToCollection(
 				targetField.getType(), 
 				getFieldValue(entity, field), 
-				getClass(componentType),
+				componentType.getReflectionClass(),
 				mappedValue));
 		}
 	}
 
 	private static Object getFieldValue(Object entity, FieldModel fieldModel) {
 		try {
-			java.lang.reflect.Field field = ((ReflectionFieldModel)fieldModel).getReflectionField();
+			Field field = fieldModel.getReflectionField();
 			field.setAccessible(true);
 			return field.get(entity);
 		} catch (IllegalAccessException e) {
@@ -211,14 +209,7 @@ public class AQTRowProcessor<R> {
 		}
 	}
 
-	public static Class<?> getClass(TypeModel type) {
-		return ((ReflectionTypeModel)type).getReflectionClass();
-	}
-
-	public static Field getField(FieldModel fieldModel) {
-		return ((ReflectionFieldModel)fieldModel).getReflectionField();
-	}
-
+	
 	public static <R> List<R> processRows(RootNode tree, List<Map<String,Object>> rows) throws SQLException{
 		List<R> result = new ArrayList<>();
 		AQTRowProcessor<R> processor = new AQTRowProcessor<>(tree, result::add);

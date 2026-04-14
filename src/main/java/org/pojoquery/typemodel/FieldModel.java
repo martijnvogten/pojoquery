@@ -1,5 +1,7 @@
 package org.pojoquery.typemodel;
 
+import java.lang.reflect.Field;
+
 /**
  * Abstraction over field introspection that works with both runtime Fields
  * and compile-time VariableElements.
@@ -40,4 +42,10 @@ public interface FieldModel extends AnnotatedElementModel<FieldModel> {
      * Returns true if this field has the transient modifier.
      */
     boolean isTransient();
+
+    /**
+     * Returns the runtime Field if this is a ReflectionFieldModel, or null otherwise.
+     * Do not use this method compile time (e.g. from annotation processing).
+     */
+    Field getReflectionField();
 }
