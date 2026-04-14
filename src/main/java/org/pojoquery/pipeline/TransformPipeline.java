@@ -61,6 +61,7 @@ public class TransformPipeline {
             Transforms.ApplyCustomJoinConditions.class,
             Transforms.ApplyCustomColumnNames.class,
             Transforms.ApplyCustomSelectExpressions.class,
+            Transforms.ApplyAggregateExpressions.class,
             Transforms.ApplyDiscriminatorColumnFromParent.class,
             Transforms.ApplyDefaultIdFieldNames.class,
             Transforms.ApplyDefaultForeignKeyColumnNames.class,
@@ -74,6 +75,7 @@ public class TransformPipeline {
             Transforms.MakeSingleIdFieldsAutoIncrement.class,
             Transforms.ApplyClassLevelJoins.class,
             Transforms.ApplyClassLevelGroupBy.class,
+            Transforms.AutoGenerateGroupBy.class,
             Transforms.ApplyClassLevelOrderBy.class,
             Transforms.AddDefaultValueTransformers.class
         ));

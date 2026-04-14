@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.pojoquery.SqlExpression;
+import org.pojoquery.annotations.Aggregate;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.DiscriminatorValue;
 import org.pojoquery.annotations.Embedded;
@@ -26,6 +27,7 @@ import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
+import org.pojoquery.pipeline.AbstractQueryTree.AggregateScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.ColumnFieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.CustomJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
@@ -410,6 +412,22 @@ public final class Transforms {
                         expression = ExpressionResolver.resolve(expression, 
                             parentNode instanceof Embedding emb ? emb.sourceAlias() : parentNode.alias());
                         return scalar.withExpression(SqlExpression.sql(expression));
+                    });
+        }
+    }
+    
+    public static class ApplyAggregateExpressions extends RecursiveTransform {
+        @Override
+        public QueryNode transform(QueryNode node) {
+            return transformChildren(node,
+                    child -> child instanceof ScalarValue scalar && 
+                        scalar.field().hasAnnotation(Aggregate.class),
+                    (TableNode parentNode, ScalarValue scalar) -> {
+                        String expression = scalar.field().getAnnotationAttributeValue(Aggregate.class, "value", String.class);
+                        expression = ExpressionResolver.resolve(expression, 
+                            parentNode instanceof Embedding emb ? emb.sourceAlias() : parentNode.alias());
+                        return AggregateScalarValue.fromScalarValue(scalar)
+                                .withExpression(SqlExpression.sql(expression));
                     });
         }
     }
@@ -820,6 +838,47 @@ public final class Transforms {
                 return rootNode.withGroupByClauses(Arrays.asList(clauses));
             }
             return node;
+        }
+    }
+    
+    /**
+     * Auto-generates GROUP BY when AggregateScalarValue fields are present.
+     * Collects expressions from all non-aggregate scalar fields and primary keys.
+     * Only applies if no explicit GROUP BY is already set.
+     */
+    public static class AutoGenerateGroupBy extends TransformStep {
+        @Override
+        public QueryNode transform(QueryNode node) {
+            if (!(node instanceof RootNode rootNode) || rootNode.groupBy() != null) {
+                return node;
+            }
+            if (!hasAggregateFields(rootNode)) {
+                return node;
+            }
+            List<String> groupByExpressions = new ArrayList<>();
+            collectNonAggregateExpressions(rootNode, groupByExpressions);
+            return groupByExpressions.isEmpty() ? node : rootNode.withGroupByClauses(groupByExpressions);
+        }
+        
+        private boolean hasAggregateFields(QueryNode node) {
+            if (node instanceof AggregateScalarValue) {
+                return true;
+            }
+            if (node instanceof TableNode t && t.children() != null) {
+                return t.children().stream().anyMatch(this::hasAggregateFields);
+            }
+            return false;
+        }
+        
+        private void collectNonAggregateExpressions(QueryNode node, List<String> expressions) {
+            if (node instanceof ScalarValue sv && sv.expression() != null) {
+                expressions.add(sv.expression().getSql());
+            } else if (node instanceof PrimaryKey pk && pk.expression() != null) {
+                expressions.add(pk.expression().getSql());
+            }
+            if (node instanceof TableNode t && t.children() != null) {
+                t.children().forEach(c -> collectNonAggregateExpressions(c, expressions));
+            }
         }
     }
     

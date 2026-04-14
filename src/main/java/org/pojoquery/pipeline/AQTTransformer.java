@@ -3,6 +3,7 @@ package org.pojoquery.pipeline;
 import java.util.List;
 
 import org.pojoquery.SqlExpression;
+import org.pojoquery.pipeline.AbstractQueryTree.AggregateScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.CustomJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.CustomQueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.Embedding;
@@ -43,6 +44,8 @@ public class AQTTransformer {
 				customNode.applyToSqlQuery(node, sqlQuery);
 			} else if (child instanceof CustomJoin customJoin) {
 				sqlQuery.addJoin(customJoin.joinType(), customJoin.joinedTable().schemaName(), customJoin.joinedTable().tableName(), customJoin.alias(), customJoin.joinCondition());
+			} else if (child instanceof AggregateScalarValue agg) {
+				sqlQuery.addField(agg.expression(), node.alias() + "." + agg.field().getName());
 			} else if (child instanceof ScalarValue scalar) {
 				sqlQuery.addField(scalar.expression(), node.alias() + "." + scalar.field().getName());
 			} else if (child instanceof PrimaryKey pk) {

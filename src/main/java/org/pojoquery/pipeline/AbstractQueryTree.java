@@ -76,7 +76,7 @@ public class AbstractQueryTree {
 	 */
 	public sealed interface ScalarNode
 			extends FieldNode
-			permits PrimaryKeyField, ScalarValue, JoinTableValueCollection {
+			permits PrimaryKeyField, ScalarValue, AggregateScalarValue, JoinTableValueCollection {
 	}
 
 	/**
@@ -412,6 +412,35 @@ public class AbstractQueryTree {
 			return new ScalarValue(emptyFieldNode.field(), null, null, null);
 		}
 
+	}
+
+	/**
+	 * A scalar field with an aggregate SQL expression (COUNT, SUM, MAX, etc.).
+	 * 
+	 * <p>Aggregate fields trigger automatic GROUP BY generation for non-aggregate
+	 * scalar fields in the same query. The expression must contain an aggregate function.
+	 * 
+	 * @param columnName the output column name (usually derived from field name)
+	 * @param expression the aggregate SQL expression (e.g., "COUNT({alias.id})")
+	 * @see org.pojoquery.annotations.Aggregate
+	 */
+	public record AggregateScalarValue(FieldModel field, String columnName, SqlExpression expression, JdbcValueMapper valueMapper) implements ScalarNode, ColumnFieldNode {
+
+		public AggregateScalarValue withExpression(SqlExpression sql) {
+			return new AggregateScalarValue(field, columnName, sql, valueMapper);
+		}
+
+		public AggregateScalarValue withValueMapper(JdbcValueMapper valueMapper) {
+			return new AggregateScalarValue(field, columnName, expression, valueMapper);
+		}
+
+		public AggregateScalarValue withColumnName(String columnName) {
+			return new AggregateScalarValue(field, columnName, expression, valueMapper);
+		}
+
+		public static AggregateScalarValue fromScalarValue(ScalarValue scalar) {
+			return new AggregateScalarValue(scalar.field(), scalar.columnName(), scalar.expression(), scalar.valueMapper());
+		}
 	}
 
 	/**
