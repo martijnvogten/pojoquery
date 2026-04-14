@@ -74,8 +74,9 @@ public abstract class AbstractAnnotatedElement<T extends AnnotatedElementModel<T
     public final boolean hasAnnotation(Class<? extends Annotation> type) {
         return addedAnnotations.containsKey(type) || findSourceAnnotation(type) != null;
     }
-
-    private final Optional<AnnotationModel> getAnnotation(Class<? extends Annotation> type) {
+    
+    @Override
+    public final Optional<AnnotationModel> getAnnotation(Class<? extends Annotation> type) {
         AnnotationModel added = addedAnnotations.get(type);
         return added != null ? Optional.of(added) : Optional.ofNullable(findSourceAnnotation(type));
     }
@@ -96,7 +97,14 @@ public abstract class AbstractAnnotatedElement<T extends AnnotatedElementModel<T
      * Specifically handles Class[] to TypeModel[] conversion.
      */
     private <R> Object convertIfNeeded(Object value, Class<R> expectedType) {
-        // Convert Class[] to TypeModel[] when requested
+        // Convert Class[] to AnnotationModel[] when requested
+        if (expectedType == AnnotationModel[].class && value instanceof Annotation[] annotations) {
+            AnnotationModel[] result = new AnnotationModel[annotations.length];
+            for (int i = 0; i < annotations.length; i++) {
+                result[i] = new ReflectionAnnotationModel(annotations[i]);
+            }
+            return result;
+        }
         if (expectedType == TypeModel[].class && value instanceof Class<?>[] classes) {
             TypeModel[] result = new TypeModel[classes.length];
             for (int i = 0; i < classes.length; i++) {

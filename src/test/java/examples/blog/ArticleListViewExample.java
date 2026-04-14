@@ -18,7 +18,7 @@ public class ArticleListViewExample {
 	
 	@Join(type=JoinType.LEFT, tableName="comment", alias="comment", joinCondition="{comment.article_id} = {this.id}")
 	@Join(type=JoinType.LEFT, tableName="views", alias="views", joinCondition="{views.article_id} = {this.id}")
-	@GroupBy({"article.id", "article.title", "article.content", "article.author_id", "author.id", "author.firstName", "author.lastName", "author.email"})
+	@GroupBy({"{article.id}", "{article.title}", "{article.content}", "{article.author_id}", "{author.id}", "{author.firstName}", "{author.lastName}", "{author.email}"})
 	public static class ArticleListView extends Article {
 		public User author;
 		

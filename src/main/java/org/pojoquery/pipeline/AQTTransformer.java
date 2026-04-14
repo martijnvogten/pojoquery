@@ -3,6 +3,7 @@ package org.pojoquery.pipeline;
 import java.util.List;
 
 import org.pojoquery.SqlExpression;
+import org.pojoquery.pipeline.AbstractQueryTree.CustomJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.CustomQueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.Embedding;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
@@ -40,6 +41,8 @@ public class AQTTransformer {
 		for (QueryNode child : node.children()) {
 			if (child instanceof CustomQueryNode customNode) {
 				customNode.applyToSqlQuery(node, sqlQuery);
+			} else if (child instanceof CustomJoin customJoin) {
+				sqlQuery.addJoin(customJoin.joinType(), customJoin.joinedTable().schemaName(), customJoin.joinedTable().tableName(), customJoin.alias(), customJoin.joinCondition());
 			} else if (child instanceof ScalarValue scalar) {
 				sqlQuery.addField(scalar.expression(), node.alias() + "." + scalar.field().getName());
 			} else if (child instanceof PrimaryKey pk) {

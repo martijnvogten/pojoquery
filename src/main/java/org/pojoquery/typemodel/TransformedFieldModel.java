@@ -4,6 +4,7 @@ import java.lang.annotation.Annotation;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * A wrapper around FieldModel that transparently applies TypeTransformers.
@@ -157,5 +158,10 @@ public class TransformedFieldModel implements FieldModel {
         }
         throw new UnsupportedOperationException(
             "Cannot get reflection field from " + current.getClass().getSimpleName());
+    }
+
+    @Override
+    public Optional<AnnotationModel> getAnnotation(Class<? extends Annotation> annotationType) {
+        return resolved().getAnnotation(annotationType);
     }
 }

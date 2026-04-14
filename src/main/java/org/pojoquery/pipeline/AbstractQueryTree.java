@@ -51,7 +51,7 @@ public class AbstractQueryTree {
 	 * <p>The sealed hierarchy ensures exhaustive pattern matching in switch expressions.
 	 */
 	public sealed interface QueryNode
-			permits TableNode, EmptyTableNode, EmptyFieldNode, FieldNode, CustomQueryNode {
+			permits TableNode, EmptyTableNode, EmptyFieldNode, FieldNode, CustomQueryNode, CustomJoin {
 	}
 
 	/**
@@ -65,6 +65,8 @@ public class AbstractQueryTree {
 		
 		/** Extracts custom values from the result row and applies them to the entity. */
 		void applyRowResultToEntity(TableNode parentNode, Object targetEntity, Map<String,Object> fullRow);
+	}
+	public record CustomJoin(String alias, String parentAlias, TableInfo joinedTable, SqlQuery.JoinType joinType, SqlExpression joinCondition) implements QueryNode {
 	}
 	/**
 	 * A field node that maps to scalar (non-entity) values.

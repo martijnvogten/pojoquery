@@ -72,6 +72,7 @@ public class TransformPipeline {
             Transforms.ApplyDefaultDiscriminatorExpressions.class,
             Transforms.ApplyDefaultScalarExpressions.class,
             Transforms.MakeSingleIdFieldsAutoIncrement.class,
+            Transforms.ApplyClassLevelJoins.class,
             Transforms.ApplyClassLevelGroupBy.class,
             Transforms.ApplyClassLevelOrderBy.class,
             Transforms.AddDefaultValueTransformers.class

@@ -19,6 +19,7 @@ import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.GroupBy;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
+import org.pojoquery.annotations.Joins;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.OrderBy;
 import org.pojoquery.annotations.Select;
@@ -26,6 +27,7 @@ import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.AbstractQueryTree.ColumnFieldNode;
+import org.pojoquery.pipeline.AbstractQueryTree.CustomJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
 import org.pojoquery.pipeline.AbstractQueryTree.Embedding;
 import org.pojoquery.pipeline.AbstractQueryTree.EmptyFieldNode;
@@ -52,11 +54,13 @@ import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
+import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.TransformPipeline.RecursiveTransform;
 import org.pojoquery.pipeline.TransformPipeline.TransformStep;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.transforms.AliasNaming;
 import org.pojoquery.pipeline.querytree.transforms.ExpressionResolver;
+import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 import org.pojoquery.util.Strings;
@@ -758,6 +762,55 @@ public final class Transforms {
     }
     
     // ========== Class-Level Annotation Transforms ==========
+    
+    public static class ApplyClassLevelJoins extends RecursiveTransform {
+        @Override
+        public QueryNode transform(QueryNode node) {
+            if (node instanceof TableNode parent && parent.children() != null &&
+                (parent.type().hasAnnotation(org.pojoquery.annotations.Join.class) || parent.type().hasAnnotation(Joins.class)) &&
+                !parent.children().stream().anyMatch(child -> child instanceof AbstractQueryTree.CustomJoin)
+            ) {
+                List<AnnotationModel> joinAnnotations = collectJoinAnnotations(parent.type());
+                if (!joinAnnotations.isEmpty()) {
+                    List<QueryNode> newChildren = new ArrayList<>(parent.children());
+                    for (AnnotationModel joinAnn : joinAnnotations) {
+                        String joinCondition = joinAnn.getStringValues("joinCondition").get(0);
+                        String resolvedCondition = ExpressionResolver.resolve(joinCondition, parent.alias());
+                        String schemaName = joinAnn.getStringValues("schemaName").get(0);
+                        String tableName = joinAnn.getStringValues("tableName").get(0);
+                        JoinType type = JoinType.valueOf(joinAnn.getEnumValues("type").get(0));
+                        TableInfo joinedTable = new TableInfo(schemaName.isEmpty() ? null : schemaName, tableName);
+                        newChildren.add(new CustomJoin(
+                            AliasNaming.childAlias(parent instanceof RootNode, parent.alias(), joinAnn.getStringValues("alias").get(0)),
+                            parent.alias(),
+                            joinedTable,
+                            type,
+                            SqlExpression.sql(resolvedCondition))
+                         );
+                    }
+                    return parent.withChildren(newChildren);
+                }
+            }
+            return node;
+        }
+        
+        private List<AnnotationModel> collectJoinAnnotations(TypeModel type) {
+            List<AnnotationModel> result = new ArrayList<>();
+            // Check for @Joins container (multiple @Join via @Repeatable)
+            if (type.hasAnnotation(org.pojoquery.annotations.Joins.class)) {
+                AnnotationModel[] joins = type.getAnnotationAttributeValue(
+                    org.pojoquery.annotations.Joins.class, "value", AnnotationModel[].class);
+                if (joins != null) {
+                    result.addAll(Arrays.asList(joins));
+                }
+            }
+            // Check for single @Join (only if not already collected via @Joins)
+            else if (type.hasAnnotation(org.pojoquery.annotations.Join.class)) {
+                result.add(type.getAnnotation(org.pojoquery.annotations.Join.class).orElseThrow());
+            }
+            return result;
+        }
+    }
     
     public static class ApplyClassLevelGroupBy extends TransformStep {
         @Override

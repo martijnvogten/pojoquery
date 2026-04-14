@@ -8,9 +8,12 @@ import javax.sql.DataSource;
 import org.junit.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
+import org.pojoquery.DbContext.Dialect;
+import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
+@UseDialect(Dialect.HSQLDB)
 public class OrdersIntegrationTest {
 
 	@Test

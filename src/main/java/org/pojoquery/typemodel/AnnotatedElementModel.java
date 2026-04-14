@@ -2,6 +2,7 @@ package org.pojoquery.typemodel;
 
 import java.lang.annotation.Annotation;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Interface for elements that can have annotations.
@@ -27,6 +28,8 @@ public interface AnnotatedElementModel<T extends AnnotatedElementModel<T>> {
     boolean hasAnnotation(Class<? extends Annotation> annotationType);
 
     <R> R getAnnotationAttributeValue(Class<? extends Annotation> annotationType, String attributeName, Class<R> expectedType);
+
+    Optional<AnnotationModel> getAnnotation(Class<? extends Annotation> annotationType);
     
     // ========== Immutable transform methods ==========
 
