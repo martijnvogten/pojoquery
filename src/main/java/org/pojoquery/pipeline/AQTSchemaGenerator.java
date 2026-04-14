@@ -26,7 +26,6 @@ import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.schema.SchemaInfo;
-import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
@@ -244,32 +243,31 @@ public class AQTSchemaGenerator {
 		for (FieldModel field : fields) {
 			isLob = isLob || field.hasAnnotation(Lob.class);
 			if (field.hasAnnotation(Column.class)) {
-				AnnotationModel annotation = field.getAnnotation(Column.class).orElseThrow();
 				
 				// Get numeric values - only apply non-defaults
-				Number lengthValue = annotation.getNumberAttribute("length");
-				if (lengthValue.intValue() != DEFAULT_LENGTH) {
+				Number lengthValue = field.getAnnotationAttributeValue(Column.class, "length", Number.class);
+				if (lengthValue != null && lengthValue.intValue() != DEFAULT_LENGTH) {
 					length = lengthValue.intValue();
 				}
 
-				Number precisionValue = annotation.getNumberAttribute("precision");
-				if (precisionValue.intValue() != DEFAULT_PRECISION) {
+				Number precisionValue = field.getAnnotationAttributeValue(Column.class, "precision", Number.class);
+				if (precisionValue != null && precisionValue.intValue() != DEFAULT_PRECISION) {
 					precision = precisionValue.intValue();
 				}
 
-				Number scaleValue = annotation.getNumberAttribute("scale");
-				if (scaleValue.intValue() != DEFAULT_SCALE) {
+				Number scaleValue = field.getAnnotationAttributeValue(Column.class, "scale", Number.class);
+				if (scaleValue != null && scaleValue.intValue() != DEFAULT_SCALE) {
 					scale = scaleValue.intValue();
 				}
 
 				// For boolean constraints, use most restrictive value
-				List<Boolean> nullableValues = annotation.getBooleanValues("nullable");
-				if (!nullableValues.isEmpty() && !nullableValues.get(0)) {
+				Boolean nullableValue = field.getAnnotationAttributeValue(Column.class, "nullable", Boolean.class);
+				if (nullableValue != null && !nullableValue) {
 					nullable = false; // non-nullable wins
 				}
 
-				List<Boolean> uniqueValues = annotation.getBooleanValues("unique");
-				if (!uniqueValues.isEmpty() && uniqueValues.get(0)) {
+				Boolean uniqueValue = field.getAnnotationAttributeValue(Column.class, "unique", Boolean.class);
+				if (uniqueValue != null && uniqueValue) {
 					unique = true; // unique wins
 				}
 			}

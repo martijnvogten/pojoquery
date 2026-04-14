@@ -2,7 +2,6 @@ package org.pojoquery.typemodel;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * Abstraction over annotation introspection that works with both runtime Annotations
@@ -74,60 +73,6 @@ public interface AnnotationModel {
      * @return list of type models, empty if attribute not present
      */
     List<TypeModel> getClassValues(String attributeName);
-
-    // Convenience methods for "value" attribute
-
-    default Optional<String> getStringValue(String attributeName) {
-        return getStringValues(attributeName).stream().findFirst();
-    }
-
-    default Optional<String> getStringValue() {
-        return getStringValues().stream().findFirst();
-    }
-
-    default List<String> getStringValues() {
-        return getStringValues("value").stream().filter(s -> !s.isEmpty()).toList();
-    }
-
-	default <E extends Enum<E>> E getEnumValue(Class<E> enumType, String attributeName) {
-		String stringValue = getEnumValues(attributeName).stream().findFirst().orElse(null);
-		if (stringValue == null) {
-			return null;
-		}
-		return Enum.valueOf(enumType, stringValue);
-	}
-
-    default List<String> getEnumValues() {
-        return getEnumValues("value");
-    }
-
-    default List<AnnotationModel> getAnnotationValues() {
-        return getNestedAnnotations("value");
-    }
-
-    default Number getNumberAttribute(String attr) {
-        return getNumberAttributes(attr).stream().findFirst().orElseThrow();
-    }
-
-    default Optional<Boolean> getBooleanAttribute(String attr) {
-        return getBooleanValues(attr).stream().findFirst();
-    }
-
-    default List<Number> getNumberAttributes() {
-        return getNumberAttributes("value");
-    }
-
-    default List<Boolean> getBooleanAttributes() {
-        return getBooleanValues("value");
-    }
-
-    default List<TypeModel> getClassAttributes() {
-        return getClassValues("value");
-    }
-
-    default boolean hasAttribute(String attributeName) {
-        return getValuesMap().containsKey(attributeName);
-    }
 
 	Map<String,Object> getValuesMap();
 }

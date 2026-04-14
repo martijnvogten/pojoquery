@@ -206,11 +206,6 @@ public class ElementTypeModel extends AbstractAnnotatedElement<TypeModel> implem
         return getQualifiedName().equals(other.getName());
     }
 
-    @Override
-    public List<TypeModel> getTypeValuesFromAnnotation(AnnotationModel annotationModel, String attributeName) {
-        return annotationModel.getClassValues(attributeName);
-    }
-
     // ========== Factory method for annotation transforms ==========
 
     @Override

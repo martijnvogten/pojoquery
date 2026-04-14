@@ -3,7 +3,7 @@ package org.pojoquery.typemodel;
 import java.lang.annotation.Annotation;
 import java.util.Collections;
 import java.util.Map;
-import java.util.function.Function;
+import java.util.Optional;
 
 import org.pojoquery.annotations.Column;
 import org.pojoquery.annotations.Embedded;
@@ -36,6 +36,8 @@ import org.pojoquery.annotations.Transient;
  * FieldModel transformed = JavaxAnnotations.transformField(field);
  * // transformed now has @Id if original had @javax.persistence.Id
  * </pre>
+ * 
+ * @see JavaxAnnotationsTransform for pipeline integration
  */
 public final class JavaxAnnotations {
 
@@ -80,18 +82,29 @@ public final class JavaxAnnotations {
      * @return a new TypeModel with canonical annotations added, or the original if no javax annotations present
      */
     public static TypeModel transformType(TypeModel type) {
-        if (!JAVAX_AVAILABLE) {
+        if (!JAVAX_AVAILABLE || type == null) {
             return type;
         }
 
-		if (type.hasAnnotation(Table.class)) {
-			return type;
-		}
+        if (type.hasAnnotation(JAVAX_TABLE) && !type.hasAnnotation(Table.class)) {
+            type = type.withAddedAnnotation(Table.class, extractTableAttributes(type));
+        }
 
-        return type.getAnnotation(JAVAX_TABLE)
-            .flatMap(an -> an.getStringValue("name"))
-            .map(name -> type.withAddedAnnotation(Table.class, Map.of("value", name)))
-            .orElse(type);
+        return type;
+    }
+
+    private static Map<String, Object> extractTableAttributes(TypeModel type) {
+        java.util.Map<String, Object> attrs = new java.util.HashMap<>();
+        
+        Optional.ofNullable(type.getAnnotationAttributeValue(JAVAX_TABLE, "name", String.class))
+            .filter(name -> !name.isEmpty())
+            .ifPresent(name -> attrs.put("name", name));
+
+        Optional.ofNullable(type.getAnnotationAttributeValue(JAVAX_TABLE, "schema", String.class))
+            .filter(schema -> !schema.isEmpty())
+            .ifPresent(schema -> attrs.put("schema", schema));
+
+        return attrs;
     }
 
     /**
@@ -109,18 +122,17 @@ public final class JavaxAnnotations {
         fs = mapAnnotation(fs, JAVAX_TRANSIENT, Transient.class);
         fs = mapAnnotation(fs, JAVAX_EMBEDDED, Embedded.class);
         fs = mapAnnotation(fs, JAVAX_LOB, Lob.class);
-        if (fs.hasAnnotation(JAVAX_JOIN_COLUMN) && !fs.getAnnotationAttributeValue(JAVAX_JOIN_COLUMN, "name", String.class).isEmpty()) {
-            fs = mapAnnotation(fs, JAVAX_JOIN_COLUMN, FieldName.class, ann -> {
-                return Map.of("value", ann.getStringValue("name").orElse(""));
-            });
+        if (fs.hasAnnotation(JAVAX_JOIN_COLUMN) && !fs.hasAnnotation(FieldName.class) &&
+                !fs.getAnnotationAttributeValue(JAVAX_JOIN_COLUMN, "name", String.class).isEmpty()) {
+            fs = fs.withAddedAnnotation(FieldName.class, Map.of("value", fs.getAnnotationAttributeValue(JAVAX_JOIN_COLUMN, "name", String.class)));
         }
-        if (fs.hasAnnotation(JAVAX_COLUMN) && !fs.getAnnotationAttributeValue(JAVAX_COLUMN, "name", String.class).isEmpty()) {
-            fs = mapAnnotation(fs, JAVAX_COLUMN, FieldName.class, ann -> {
-                return Map.of("value", ann.getStringValue("name").orElse(""));
-            });
+        if (fs.hasAnnotation(JAVAX_COLUMN) && !fs.hasAnnotation(FieldName.class) &&
+                !fs.getAnnotationAttributeValue(JAVAX_COLUMN, "name", String.class).isEmpty()) {
+            fs = fs.withAddedAnnotation(FieldName.class, Map.of("value", fs.getAnnotationAttributeValue(JAVAX_COLUMN, "name", String.class)));
         }
-        fs = mapColumn(fs);
-
+        if (fs.hasAnnotation(JAVAX_COLUMN) && !fs.hasAnnotation(Column.class)) {
+            fs = fs.withAddedAnnotation(Column.class, extractColumnAttributes(fs));
+        }
         return fs;
     }
 
@@ -131,48 +143,38 @@ public final class JavaxAnnotations {
         return f;
     }
 
-    private static <T extends AnnotatedElementModel<T>> T mapAnnotation(T fs, Class<? extends Annotation> source, Class<? extends Annotation> target, Function<AnnotationModel, Map<String, Object>> attributeMapper) {
-        if (fs.hasAnnotation(source) && !fs.hasAnnotation(target)) {
-            Map<String, Object> attributes = fs.getAnnotation(source)
-                .map(attributeMapper)
-                .orElse(Collections.emptyMap());
-            return (T) fs.withAddedAnnotation(target, attributes);
-        }
-        return fs;
-    }
-
-    private static FieldModel mapColumn(FieldModel fs) {
-        if (fs.hasAnnotation(Column.class)) {
-            return fs;
-        }
-        return fs.getAnnotation(JAVAX_COLUMN)
-            .map(col -> fs.withAddedAnnotation(Column.class, extractColumnAttributes(col)))
-            .orElse(fs);
-    }
-
     /**
      * Extracts column attributes from a javax.persistence.Column annotation.
      */
-    private static Map<String, Object> extractColumnAttributes(AnnotationModel columnAnnotation) {
+    private static Map<String, Object> extractColumnAttributes(FieldModel fieldModel) {
         java.util.Map<String, Object> attrs = new java.util.HashMap<>();
         
-        columnAnnotation.getStringValue("name")
+        getColumnAttribute(fieldModel, "name", String.class)
             .filter(name -> !name.isEmpty())
             .ifPresent(name -> attrs.put("name", name));
 
-        attrs.put("length", columnAnnotation.getNumberAttribute("length").intValue());
-        attrs.put("precision", columnAnnotation.getNumberAttribute("precision").intValue());
-        attrs.put("scale", columnAnnotation.getNumberAttribute("scale").intValue());
-        
-        columnAnnotation.getBooleanAttribute("nullable")
+        getColumnAttribute(fieldModel, "length", Number.class)
+            .ifPresent(length -> attrs.put("length", length.intValue()));
+        getColumnAttribute(fieldModel, "precision", Number.class)
+            .ifPresent(precision -> attrs.put("precision", precision.intValue()));
+        getColumnAttribute(fieldModel, "scale", Number.class)
+            .ifPresent(scale -> attrs.put("scale", scale.intValue()));
+
+        getColumnAttribute(fieldModel, "nullable", Boolean.class)
             .filter(nullable -> !nullable) // true is default
             .ifPresent(nullable -> attrs.put("nullable", nullable));
 
-        columnAnnotation.getBooleanAttribute("unique")
+        getColumnAttribute(fieldModel, "unique", Boolean.class)
             .filter(unique -> unique) // false is default
             .ifPresent(unique -> attrs.put("unique", unique));
 
         return attrs;
+    }
+
+    private static <T> Optional<T> getColumnAttribute(FieldModel fieldModel, String attributeName, Class<T> expectedType) {
+        return Optional.ofNullable(fieldModel.getAnnotationAttributeValue(JAVAX_COLUMN, attributeName, expectedType))
+            .filter(value -> value != null && expectedType.isInstance(value))
+            .map(expectedType::cast);
     }
 
     @SuppressWarnings("unchecked")

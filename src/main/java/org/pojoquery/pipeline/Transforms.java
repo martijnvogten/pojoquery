@@ -13,6 +13,7 @@ import java.util.stream.Stream;
 
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.DiscriminatorColumn;
+import org.pojoquery.annotations.DiscriminatorValue;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.GroupBy;
@@ -21,6 +22,7 @@ import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.OrderBy;
 import org.pojoquery.annotations.Select;
+import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.AbstractQueryTree.ColumnFieldNode;
@@ -55,7 +57,6 @@ import org.pojoquery.pipeline.TransformPipeline.TransformStep;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.transforms.AliasNaming;
 import org.pojoquery.pipeline.querytree.transforms.ExpressionResolver;
-import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 import org.pojoquery.util.Strings;
@@ -328,12 +329,10 @@ public final class Transforms {
         @Override
         public QueryNode transform(QueryNode node) {
             if (node instanceof TableNode tableNode && !(node instanceof SuperClassNode) && 
-                    tableNode.type().hasAnnotation(org.pojoquery.annotations.SubClasses.class) &&
+                    tableNode.type().hasAnnotation(SubClasses.class) &&
                     (tableNode.children() != null && !tableNode.children().stream().anyMatch(child -> child instanceof SubClassNode))
                     ) {
-                AnnotationModel subClassesAnn = tableNode.type().getAnnotation(org.pojoquery.annotations.SubClasses.class).orElseThrow();
-                List<TypeModel> subClasses = tableNode.type().getTypeValuesFromAnnotation(subClassesAnn, "value");
-
+                TypeModel[] subClasses = tableNode.type().getAnnotationAttributeValue(SubClasses.class, "value", TypeModel[].class);
                 List<TableMapping> superMapping = PojoMetadata.determineTableMapping(tableNode.type());
 
                 List<QueryNode> newChildren = tableNode.children() == null ? new ArrayList<>() : new ArrayList<>(tableNode.children());
@@ -349,12 +348,9 @@ public final class Transforms {
                                 PojoMetadata.determineIdField(subClass), null, null);
                         newChildren.add(new TPSSubClassNode(subAlias, subClass, determineTableInfo(subClass), null, join, tableNode.alias()));
                     } else {
-                        String discriminatorColumn = subClass.hasAnnotation(org.pojoquery.annotations.DiscriminatorColumn.class) ?
-                                subClass.getAnnotationAttributeValue(org.pojoquery.annotations.DiscriminatorColumn.class, "name", String.class) :
-                                null;
-                        String discriminatorValue = subClass.hasAnnotation(org.pojoquery.annotations.DiscriminatorValue.class) ?
-                                subClass.getAnnotationAttributeValue(org.pojoquery.annotations.DiscriminatorValue.class, "value", String.class) :
-                                subClass.getSimpleName();
+                        String discriminatorColumn = subClass.getAnnotationAttributeValue(DiscriminatorColumn.class, "name", String.class);
+                        String discriminatorValue = subClass.getAnnotationAttributeValue(DiscriminatorValue.class, "value", String.class);
+
                         newChildren.add(new STISubClassNode(
                             AliasNaming.subclassAlias(tableNode.alias(), subClass.getSimpleName().toLowerCase()),
                             subClass,
@@ -375,7 +371,7 @@ public final class Transforms {
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
                     child -> child instanceof EmptyFieldNode emptyFieldNode
-                            && emptyFieldNode.field().getAnnotation(Id.class).isPresent(),
+                            && emptyFieldNode.field().hasAnnotation(Id.class),
                     (TableNode parentNode, EmptyFieldNode emptyFieldNode) -> {
                         FieldModel idField = emptyFieldNode.field();
                         return PrimaryKey.fromField(idField);

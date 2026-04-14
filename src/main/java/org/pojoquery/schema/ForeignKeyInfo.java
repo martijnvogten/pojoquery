@@ -1,7 +1,5 @@
 package org.pojoquery.schema;
 
-import org.pojoquery.AnnotationHelper;
-
 /**
  * Data classes for foreign key and relationship information used during schema generation.
  */
@@ -82,23 +80,4 @@ class ForeignKeyInfo {
         }
     }
     
-    /**
-     * Holds merged column annotations from multiple classes mapping to the same table.
-     */
-    static class MergedColumnAnnotations {
-        boolean unique = false;
-        boolean notNull = false;
-
-        void mergeWith(AnnotationHelper.ColumnMetadata columnMeta) {
-            if (columnMeta != null) {
-                // Most restrictive wins
-                if (columnMeta.unique) {
-                    unique = true;
-                }
-                if (!columnMeta.nullable) {
-                    notNull = true;
-                }
-            }
-        }
-    }
 }

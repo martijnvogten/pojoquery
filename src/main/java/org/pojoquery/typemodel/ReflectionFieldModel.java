@@ -5,7 +5,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -86,11 +85,6 @@ public class ReflectionFieldModel extends AbstractAnnotatedElement<FieldModel> i
     @Override
     public boolean isTransient() {
         return (field.getModifiers() & Modifier.TRANSIENT) != 0;
-    }
-
-    @Override
-    public List<TypeModel> getTypeValuesFromAnnotation(AnnotationModel annotationModel, String attributeName) {
-        return annotationModel.getClassValues(attributeName);
     }
 
     @Override

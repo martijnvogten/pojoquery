@@ -1,11 +1,7 @@
 package org.pojoquery.typemodel;
 
 import java.lang.annotation.Annotation;
-import java.lang.annotation.Repeatable;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -79,32 +75,9 @@ public abstract class AbstractAnnotatedElement<T extends AnnotatedElementModel<T
         return addedAnnotations.containsKey(type) || findSourceAnnotation(type) != null;
     }
 
-    @Override
-    public final Optional<AnnotationModel> getAnnotation(Class<? extends Annotation> type) {
+    private final Optional<AnnotationModel> getAnnotation(Class<? extends Annotation> type) {
         AnnotationModel added = addedAnnotations.get(type);
         return added != null ? Optional.of(added) : Optional.ofNullable(findSourceAnnotation(type));
-    }
-
-    @Override
-    public final AnnotationModel getAnnotationWithNull(Class<? extends Annotation> type) {
-        return getAnnotation(type).orElse(null);
-    }
-
-    @Override
-    public final AnnotationModel[] getAnnotations() {
-        Map<String, AnnotationModel> merged = new LinkedHashMap<>();
-        
-        // Add source annotations first
-        for (AnnotationModel src : getSourceAnnotations()) {
-            merged.put(src.getType().getQualifiedName(), src);
-        }
-        
-        // Added annotations override source annotations
-        for (Map.Entry<Class<?>, AnnotationModel> entry : addedAnnotations.entrySet()) {
-            merged.put(entry.getKey().getName(), entry.getValue());
-        }
-        
-        return merged.values().toArray(new AnnotationModel[0]);
     }
 
     @Override
@@ -117,47 +90,11 @@ public abstract class AbstractAnnotatedElement<T extends AnnotatedElementModel<T
             .orElse(null);
     }
 
-    @Override
-    public final List<AnnotationModel> getAnnotationsByType(Class<? extends Annotation> type) {
-        // If we have an added annotation of this type, it replaces all source annotations
-        AnnotationModel added = addedAnnotations.get(type);
-        if (added != null) {
-            return List.of(added);
-        }
-        
-        // Look for direct matches and container annotations
-        List<AnnotationModel> result = new ArrayList<>();
-        String targetTypeName = type.getName();
-        
-        // Check if this annotation type is repeatable
-        Repeatable repeatable = type.getAnnotation(Repeatable.class);
-        String containerTypeName = repeatable != null ? repeatable.value().getName() : null;
-        
-        for (AnnotationModel ann : getSourceAnnotations()) {
-            String annTypeName = ann.getType().getQualifiedName();
-            
-            if (annTypeName.equals(targetTypeName)) {
-                // Direct match
-                result.add(ann);
-            } else if (containerTypeName != null && annTypeName.equals(containerTypeName)) {
-                // Container annotation - unwrap value()
-                result.addAll(ann.getNestedAnnotations("value"));
-            }
-        }
-        
-        return result;
-    }
-
     // ========== Immutable transform methods ==========
 
     @Override
     public final T withAddedAnnotation(Class<? extends Annotation> type, Map<String, Object> values) {
         return withAnnotations(mergeAnnotation(type, values));
-    }
-
-    @Override
-    public final T withAnnotationAttribute(Class<? extends Annotation> type, String attributeName, Object value) {
-        return withAnnotations(mergeAnnotationAttribute(type, attributeName, value));
     }
 
     @Override
@@ -180,16 +117,6 @@ public abstract class AbstractAnnotatedElement<T extends AnnotatedElementModel<T
         Map<Class<?>, AnnotationModel> merged = new HashMap<>(addedAnnotations);
         merged.put(type, new SyntheticAnnotationModel(type, values));
         return merged;
-    }
-
-    private Map<Class<?>, AnnotationModel> mergeAnnotationAttribute(
-            Class<? extends Annotation> type,
-            String attributeName,
-            Object value) {
-        Map<String, Object> existingValues = getAnnotationValuesMap(type);
-        Map<String, Object> newValues = new HashMap<>(existingValues);
-        newValues.put(attributeName, value);
-        return mergeAnnotation(type, newValues);
     }
 
     private Map<Class<?>, AnnotationModel> mergeAnnotationAttributes(

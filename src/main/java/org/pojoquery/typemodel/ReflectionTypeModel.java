@@ -137,11 +137,6 @@ public class ReflectionTypeModel extends AbstractAnnotatedElement<TypeModel> imp
     }
 
     @Override
-    public List<TypeModel> getTypeValuesFromAnnotation(AnnotationModel annotationModel, String attributeName) {
-        return annotationModel.getClassValues(attributeName);
-    }
-
-    @Override
     protected TypeModel withAnnotations(Map<Class<?>, AnnotationModel> annotations) {
         return new ReflectionTypeModel(clazz, annotations);
     }

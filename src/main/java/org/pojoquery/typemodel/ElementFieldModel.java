@@ -1,6 +1,5 @@
 package org.pojoquery.typemodel;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -95,11 +94,6 @@ public class ElementFieldModel extends AbstractAnnotatedElement<FieldModel> impl
     public boolean isTransient() {
         // Check Java transient modifier
         return variableElement.getModifiers().contains(Modifier.TRANSIENT);
-    }
-
-    @Override
-    public List<TypeModel> getTypeValuesFromAnnotation(AnnotationModel annotationModel, String attributeName) {
-        return annotationModel.getClassValues(attributeName);
     }
 
     @Override

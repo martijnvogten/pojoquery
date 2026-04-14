@@ -6,8 +6,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.logging.Logger;
 
-import org.pojoquery.AnnotationHelper.TableInfo;
+import org.pojoquery.TableInfo;
 import org.pojoquery.annotations.Id;
+import org.pojoquery.annotations.Table;
 import org.pojoquery.annotations.Transient;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
@@ -130,12 +131,13 @@ public final class PojoMetadata {
 	// --- Field collection ---
 
 	private static TableInfo getTableInfo(TypeModel current) {
-		return current.getAnnotation(org.pojoquery.annotations.Table.class)
-			.map(ann -> new TableInfo(
-				ann.getStringValue().orElse(null),
-				ann.getStringValue("schema").orElse("")
-			))
-			.orElse(null);
+		if (current.hasAnnotation(Table.class)) {
+			return new TableInfo(
+				current.getAnnotationAttributeValue(Table.class, "value", String.class),
+				current.getAnnotationAttributeValue(Table.class, "schema", String.class)
+			);
+		}
+		return null;
 	}
 
 	/**

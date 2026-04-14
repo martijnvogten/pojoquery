@@ -8,7 +8,6 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import javax.sql.DataSource;
 
@@ -122,15 +121,15 @@ public class TestJpaAnnotations {
             .findFirst().orElseThrow();
 
         FieldModel transformed = JakartaAnnotations.transformField(idField);
-        transformed.getAnnotation(org.pojoquery.annotations.Id.class)
-            .orElseThrow(() -> new AssertionError("Field 'id' should have PojoQuery @Id annotation mapped"));
+        assertTrue(transformed.hasAnnotation(org.pojoquery.annotations.Id.class),
+            "Field 'id' should have PojoQuery @Id annotation mapped");
         
-        transformed.getAnnotation(FieldName.class).flatMap(map -> map.getStringValue())
-            .filter(it -> it.equals("user_id"))
-            .orElseThrow(() -> new AssertionError("Field 'id' should have PojoQuery @FieldName annotation with value 'user_id'"));
+        assertEquals("user_id",
+            transformed.getAnnotationAttributeValue(FieldName.class, "value", String.class),
+            "Field 'id' should have PojoQuery @FieldName annotation with value 'user_id'");
         
-        transformed.getAnnotation(Id.class)
-            .orElseThrow(() -> new AssertionError("Field 'id' should still have JPA @Id annotation"));
+        assertTrue(transformed.hasAnnotation(Id.class),
+            "Field 'id' should still have JPA @Id annotation");
 
         
         AQTTransformer.buildQueryTreeForType(JpaUser.class).children().stream()
@@ -154,8 +153,8 @@ public class TestJpaAnnotations {
             .build();
 
         TypeModel transformed = JakartaAnnotations.transformType(new ReflectionTypeModel(JpaUser.class));
-        transformed.getAnnotation(org.pojoquery.annotations.Table.class)
-            .orElseThrow(() -> new AssertionError("Type should have PojoQuery @Table annotation mapped"));
+        assertTrue(transformed.hasAnnotation(org.pojoquery.annotations.Table.class),
+            "Type should have PojoQuery @Table annotation mapped");
 
 
         List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaUser.class);
@@ -176,17 +175,17 @@ public class TestJpaAnnotations {
             .filter(f -> f.getName().equals("username"))
             .map(JakartaAnnotations::transformField)
             .findFirst().orElseThrow();
-        usernameField.getAnnotation(org.pojoquery.annotations.Column.class)
-            .orElseThrow(() -> new AssertionError("Field 'username' should have PojoQuery @Column annotation mapped"));
+        assertTrue(usernameField.hasAnnotation(org.pojoquery.annotations.Column.class),
+            "Field 'username' should have PojoQuery @Column annotation mapped");
 
         FieldModel emailField = new ReflectionTypeModel(JpaUser.class).getDeclaredFields().stream()
             .filter(f -> f.getName().equals("email"))
             .map(JakartaAnnotations::transformField)
             .findFirst().orElseThrow();
-        Optional<Boolean> nullable =emailField.getAnnotation(org.pojoquery.annotations.Column.class)
-            .orElseThrow(() -> new AssertionError("Field 'email' should have PojoQuery @Column annotation mapped"))
-            .getBooleanAttribute("nullable");
-        assertTrue(nullable.isPresent() && !nullable.get());
+        Boolean nullable = emailField.getAnnotationAttributeValue(org.pojoquery.annotations.Column.class, "nullable", Boolean.class);
+        assertTrue(emailField.hasAnnotation(org.pojoquery.annotations.Column.class),
+            "Field 'email' should have PojoQuery @Column annotation mapped");
+        assertTrue(nullable != null && !nullable);
 
         List<String> statements = AQTSchemaGenerator.generateSchemaDDLFromClasses(dbContext, JpaUser.class);
         String sql = String.join("\n", statements);
