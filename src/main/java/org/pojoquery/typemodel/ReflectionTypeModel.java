@@ -40,14 +40,6 @@ public class ReflectionTypeModel extends AbstractAnnotatedElement<TypeModel> imp
         this.clazz = Objects.requireNonNull(clazz, "clazz must not be null");
     }
 
-    /**
-     * Creates a TypeModel for the given class.
-     * Convenience factory method.
-     */
-    public static ReflectionTypeModel of(Class<?> clazz) {
-        return new ReflectionTypeModel(clazz);
-    }
-
     // ========== AbstractAnnotatedElement implementation ==========
 
     @Override

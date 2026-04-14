@@ -76,26 +76,6 @@ public class ElementAnnotationModel implements AnnotationModel {
         return extractValues(attributeName, VariableElement.class, ve -> ve.getSimpleName().toString());
     }
 
-    @Override
-    public List<AnnotationModel> getNestedAnnotations(String attributeName) {
-        return extractValues(attributeName, AnnotationMirror.class, am -> new ElementAnnotationModel(am, elements, types));
-    }
-
-    @Override
-    public List<Number> getNumberAttributes(String attributeName) {
-        return extractValues(attributeName, Number.class, Function.identity());
-    }
-
-    @Override
-    public List<Boolean> getBooleanValues(String attributeName) {
-        return extractValues(attributeName, Boolean.class, Function.identity());
-    }
-
-    @Override
-    public List<TypeModel> getClassValues(String attributeName) {
-        return extractValues(attributeName, TypeMirror.class, tm -> new ElementTypeModel(tm, elements, types));
-    }
-
     private <T, R> List<R> extractValues(String attributeName,
                                           Class<T> valueType,
                                           Function<T, R> mapper) {

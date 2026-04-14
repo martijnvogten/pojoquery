@@ -40,14 +40,6 @@ public class ReflectionFieldModel extends AbstractAnnotatedElement<FieldModel> i
         this.field = Objects.requireNonNull(field, "field must not be null");
     }
 
-    /**
-     * Creates a FieldModel for the given field.
-     * Convenience factory method.
-     */
-    public static ReflectionFieldModel of(Field field) {
-        return new ReflectionFieldModel(field);
-    }
-
     // ========== AbstractAnnotatedElement implementation ==========
 
     @Override

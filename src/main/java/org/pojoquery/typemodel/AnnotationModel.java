@@ -41,38 +41,5 @@ public interface AnnotationModel {
      */
     List<String> getEnumValues(String attributeName);
 
-    /**
-     * Returns nested annotation values for the specified attribute.
-     *
-     * @param attributeName the annotation attribute name
-     * @return list of annotation models, empty if attribute not present
-     */
-    List<AnnotationModel> getNestedAnnotations(String attributeName);
-
-    /**
-     * Returns numeric values for the specified attribute.
-     * Handles int, long, double, float, short, byte attributes.
-     *
-     * @param attributeName the annotation attribute name
-     * @return list of numbers, empty if attribute not present
-     */
-    List<Number> getNumberAttributes(String attributeName);
-
-    /**
-     * Returns boolean values for the specified attribute.
-     *
-     * @param attributeName the annotation attribute name
-     * @return list of boolean values, empty if attribute not present
-     */
-    List<Boolean> getBooleanValues(String attributeName);
-
-    /**
-     * Returns class/type values for the specified attribute.
-     *
-     * @param attributeName the annotation attribute name
-     * @return list of type models, empty if attribute not present
-     */
-    List<TypeModel> getClassValues(String attributeName);
-
 	Map<String,Object> getValuesMap();
 }

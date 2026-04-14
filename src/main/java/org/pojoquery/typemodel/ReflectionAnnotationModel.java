@@ -28,14 +28,6 @@ public class ReflectionAnnotationModel implements AnnotationModel {
         this.annotation = Objects.requireNonNull(annotation, "annotation must not be null");
     }
 
-    /**
-     * Creates an AnnotationModel for the given annotation.
-     * Convenience factory method.
-     */
-    public static ReflectionAnnotationModel of(Annotation annotation) {
-        return new ReflectionAnnotationModel(annotation);
-    }
-
     @Override
     public TypeModel getType() {
         return new ReflectionTypeModel(annotation.annotationType());
@@ -66,56 +58,6 @@ public class ReflectionAnnotationModel implements AnnotationModel {
     @Override
     public List<String> getEnumValues(String attributeName) {
         return extractValues(attributeName, Enum[].class, Enum.class, Enum::name);
-    }
-
-    @Override
-    public List<AnnotationModel> getNestedAnnotations(String attributeName) {
-        return extractValues(attributeName, Annotation[].class, Annotation.class, ReflectionAnnotationModel::new);
-    }
-
-    @Override
-    public List<Number> getNumberAttributes(String attributeName) {
-        Object value = getRawValue(attributeName);
-        if (value == null) return Collections.emptyList();
-        
-        List<Number> result = new ArrayList<>();
-        if (value instanceof int[] ints) {
-            for (int i : ints) result.add(i);
-        } else if (value instanceof long[] longs) {
-            for (long l : longs) result.add(l);
-        } else if (value instanceof double[] doubles) {
-            for (double d : doubles) result.add(d);
-        } else if (value instanceof float[] floats) {
-            for (float f : floats) result.add(f);
-        } else if (value instanceof short[] shorts) {
-            for (short s : shorts) result.add(s);
-        } else if (value instanceof byte[] bytes) {
-            for (byte b : bytes) result.add(b);
-        } else if (value instanceof Number n) {
-            result.add(n);
-        }
-        return result;
-    }
-
-    @Override
-    public List<Boolean> getBooleanValues(String attributeName) {
-        Object value = getRawValue(attributeName);
-        if (value == null) return Collections.emptyList();
-        
-        List<Boolean> result = new ArrayList<>();
-        if (value instanceof boolean[] bools) {
-            for (boolean b : bools) {
-                result.add(b);
-            }
-        } else if (value instanceof Boolean b) {
-            result.add(b);
-        }
-        return result;
-    }
-
-    @Override
-    public List<TypeModel> getClassValues(String attributeName) {
-        return extractValues(attributeName, Class[].class, Class.class, ReflectionTypeModel::new);
     }
 
     @SuppressWarnings("unchecked")
