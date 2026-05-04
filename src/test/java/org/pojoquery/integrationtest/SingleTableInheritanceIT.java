@@ -337,7 +337,7 @@ public class SingleTableInheritanceIT {
 		}
 	}
 
-	public abstract static class MyCustomTransform extends RecursiveTransform {
+	public abstract static class MyCustomTransform implements RecursiveTransform {
 
 		private final List<String> extraFields;
 

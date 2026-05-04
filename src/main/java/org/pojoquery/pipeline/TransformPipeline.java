@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
+import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.Transforms.AddDefaultValueTransformers;
 
@@ -23,11 +24,14 @@ import org.pojoquery.pipeline.Transforms.AddDefaultValueTransformers;
  */
 public class TransformPipeline {
 
-    public static abstract class TransformStep {
-        public abstract QueryNode transform(QueryNode node);
-    }
+    public sealed interface TransformStep permits TreeTransform, RecursiveTransform {}
 
-    public static abstract class RecursiveTransform extends TransformStep {
+    public non-sealed interface TreeTransform extends TransformStep {
+        public RootNode transform(RootNode node);
+    }
+    
+    public non-sealed interface RecursiveTransform extends TransformStep {
+        public QueryNode transform(QueryNode node);
     }
    
     private final List<Class<? extends TransformStep>> steps;
@@ -90,8 +94,8 @@ public class TransformPipeline {
      * @throws IllegalArgumentException if the existing step is not found
      */
     public TransformPipeline insertBefore(
-            Class<? extends TransformStep> existing, 
-            Class<? extends TransformStep> newStep) {
+            Class<? extends TreeTransform> existing, 
+            Class<? extends TreeTransform> newStep) {
         int idx = steps.indexOf(existing);
         if (idx < 0) {
             throw new IllegalArgumentException("Transform step not found: " + existing.getSimpleName());
@@ -200,9 +204,9 @@ public class TransformPipeline {
      * @param tree the initial query tree
      * @return the fully transformed tree
      */
-    public AbstractQueryTree.RootNode apply(QueryNode tree) {
-        QueryNode newTree = tree;
-        QueryNode oldTree = null;
+    public AbstractQueryTree.RootNode apply(RootNode tree) {
+        RootNode newTree = tree;
+        RootNode oldTree = null;
         
         do {
             oldTree = newTree;
@@ -215,14 +219,13 @@ public class TransformPipeline {
     /**
      * Apply each transform in the pipeline once.
      */
-    private QueryNode applyOnce(QueryNode tree) {
-        QueryNode result = tree;
+    private RootNode applyOnce(RootNode tree) {
+        RootNode result = tree;
         for (Class<? extends TransformStep> stepClass : steps) {
             TransformStep step = instantiate(stepClass);
-            Function<QueryNode, QueryNode> fn = step instanceof RecursiveTransform
-                ? transformNodesRecursively(step::transform)
-                : step::transform;
-            result = fn.apply(result);
+            result = step instanceof RecursiveTransform recursiveTransform
+                ? (RootNode)transformNodesRecursively(recursiveTransform::transform).apply(result)
+                : ((TreeTransform)step).transform(result);
         }
         return result;
     }

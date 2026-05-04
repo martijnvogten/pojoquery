@@ -58,7 +58,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.TransformPipeline.RecursiveTransform;
-import org.pojoquery.pipeline.TransformPipeline.TransformStep;
+import org.pojoquery.pipeline.TransformPipeline.TreeTransform;
 import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.transforms.AliasNaming;
 import org.pojoquery.pipeline.querytree.transforms.ExpressionResolver;
@@ -76,12 +76,10 @@ public final class Transforms {
     
     // ========== Validation Transforms ==========
     
-    public static class CheckForCycles extends TransformStep {
+    public static class CheckForCycles implements TreeTransform {
         @Override
-        public QueryNode transform(QueryNode tree) {
-            if (tree instanceof TableNode rootTableNode) {
-                checkForCyclesRecursively(rootTableNode, new ArrayList<>());
-            }
+        public RootNode transform(RootNode tree) {
+            checkForCyclesRecursively(tree, new ArrayList<>());
             return tree;
         }
         
@@ -110,7 +108,7 @@ public final class Transforms {
     
     // ========== Structure Building Transforms ==========
     
-    public static class AddDeclaredFields extends RecursiveTransform {
+    public static class AddDeclaredFields implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             if (node instanceof TableNode tableNode && tableNode.children() == null) {
@@ -127,14 +125,14 @@ public final class Transforms {
         }
     }
     
-    public static class AddOtherFields extends RecursiveTransform {
+    public static class AddOtherFields implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return node;
         }
     }
     
-    public static class AddIdFieldToSubClassTableNodes extends RecursiveTransform {
+    public static class AddIdFieldToSubClassTableNodes implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             if (node instanceof TPSSubClassNode subClassNode && 
@@ -148,7 +146,7 @@ public final class Transforms {
         }
     }
     
-    public static class AddSuperClassTableNodes extends RecursiveTransform {
+    public static class AddSuperClassTableNodes implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             if (node instanceof TableNode tableNode && 
@@ -177,7 +175,7 @@ public final class Transforms {
         }
     }
     
-    public static class AddEmbeddedEntities extends RecursiveTransform {
+    public static class AddEmbeddedEntities implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -211,7 +209,7 @@ public final class Transforms {
         }
     }
     
-    public static class AddValueCollections extends RecursiveTransform {
+    public static class AddValueCollections implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -242,7 +240,7 @@ public final class Transforms {
         }
     }
     
-    public static class AddJoinTableEntityCollections extends RecursiveTransform {
+    public static class AddJoinTableEntityCollections implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -281,7 +279,7 @@ public final class Transforms {
         }
     }
     
-    public static class AddEntityCollections extends RecursiveTransform {
+    public static class AddEntityCollections implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -302,7 +300,7 @@ public final class Transforms {
         }
     }
     
-    public static class AddEntityReferences extends RecursiveTransform {
+    public static class AddEntityReferences implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -331,7 +329,7 @@ public final class Transforms {
         }
     }
     
-    public static class AddSubClassTableNodes extends RecursiveTransform {
+    public static class AddSubClassTableNodes implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             if (node instanceof TableNode tableNode && !(node instanceof SuperClassNode) && 
@@ -372,7 +370,7 @@ public final class Transforms {
         }
     }
     
-    public static class AddIdFields extends RecursiveTransform {
+    public static class AddIdFields implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -385,7 +383,7 @@ public final class Transforms {
         }
     }
     
-    public static class AddScalarValues extends RecursiveTransform {
+    public static class AddScalarValues implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return node instanceof TableNode parentNode && parentNode.children() != null
@@ -400,7 +398,7 @@ public final class Transforms {
     
     // ========== Custom Configuration Transforms ==========
     
-    public static class ApplyCustomSelectExpressions extends RecursiveTransform {
+    public static class ApplyCustomSelectExpressions implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -416,7 +414,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyAggregateExpressions extends RecursiveTransform {
+    public static class ApplyAggregateExpressions implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -432,7 +430,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyCustomJoinTableColumnNames extends RecursiveTransform {
+    public static class ApplyCustomJoinTableColumnNames implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -456,7 +454,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyCustomForeignKeyColumnNames extends RecursiveTransform {
+    public static class ApplyCustomForeignKeyColumnNames implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -482,7 +480,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyCustomIdColumnNames extends RecursiveTransform {
+    public static class ApplyCustomIdColumnNames implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -501,7 +499,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyCustomValueCollectionJoinConditions extends RecursiveTransform {
+    public static class ApplyCustomValueCollectionJoinConditions implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -528,7 +526,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyCustomJoinTableJoinConditions extends RecursiveTransform {
+    public static class ApplyCustomJoinTableJoinConditions implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -555,7 +553,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyCustomJoinConditions extends RecursiveTransform {
+    public static class ApplyCustomJoinConditions implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -577,7 +575,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyCustomColumnNames extends RecursiveTransform {
+    public static class ApplyCustomColumnNames implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -595,7 +593,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyDiscriminatorColumnFromParent extends RecursiveTransform {
+    public static class ApplyDiscriminatorColumnFromParent implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node, 
@@ -613,7 +611,7 @@ public final class Transforms {
     
     // ========== Default Value Transforms ==========
     
-    public static class ApplyDefaultIdFieldNames extends RecursiveTransform {
+    public static class ApplyDefaultIdFieldNames implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             if (node instanceof HasJoinTableJoin jtj && (jtj.join().parentKey().idColumnName() == null
@@ -636,7 +634,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyDefaultForeignKeyColumnNames extends RecursiveTransform {
+    public static class ApplyDefaultForeignKeyColumnNames implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode n) {
             return transformChildren(n,
@@ -669,7 +667,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyDefaultJoinConditions extends RecursiveTransform {
+    public static class ApplyDefaultJoinConditions implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             if (node instanceof Join join && join.join().joinCondition() == null) {
@@ -700,7 +698,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyDefaultValueCollectionExpressions extends RecursiveTransform {
+    public static class ApplyDefaultValueCollectionExpressions implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -710,7 +708,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyEmbeddedFieldsColumnPrefix extends RecursiveTransform {
+    public static class ApplyEmbeddedFieldsColumnPrefix implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return node instanceof EmbeddedEntity emb && emb.children() != null ? emb.withChildren(
@@ -725,7 +723,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyDefaultColumnNames extends RecursiveTransform {
+    public static class ApplyDefaultColumnNames implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -734,7 +732,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyDefaultPrimaryKeyExpressions extends RecursiveTransform {
+    public static class ApplyDefaultPrimaryKeyExpressions implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -744,7 +742,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyDefaultDiscriminatorExpressions extends RecursiveTransform {
+    public static class ApplyDefaultDiscriminatorExpressions implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             // Set default discriminatorValue to the simple class name when it's null
@@ -758,7 +756,7 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyDefaultScalarExpressions extends RecursiveTransform {
+    public static class ApplyDefaultScalarExpressions implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -768,7 +766,7 @@ public final class Transforms {
         }
     }
     
-    public static class MakeSingleIdFieldsAutoIncrement extends RecursiveTransform {
+    public static class MakeSingleIdFieldsAutoIncrement implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
@@ -781,7 +779,7 @@ public final class Transforms {
     
     // ========== Class-Level Annotation Transforms ==========
     
-    public static class ApplyClassLevelJoins extends RecursiveTransform {
+    public static class ApplyClassLevelJoins implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             if (node instanceof TableNode parent && parent.children() != null &&
@@ -830,14 +828,14 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyClassLevelGroupBy extends TransformStep {
+    public static class ApplyClassLevelGroupBy implements TreeTransform {
         @Override
-        public QueryNode transform(QueryNode node) {
-            if (node instanceof RootNode rootNode && rootNode.type().hasAnnotation(GroupBy.class) && rootNode.groupBy() == null) {
+        public RootNode transform(RootNode rootNode) {
+            if (rootNode.type().hasAnnotation(GroupBy.class) && rootNode.groupBy() == null) {
                 String[] clauses = rootNode.type().getAnnotationAttributeValue(GroupBy.class, "value", String[].class);
-                return rootNode.withGroupByClauses(Arrays.asList(clauses));
+                return (RootNode)rootNode.withGroupByClauses(Arrays.asList(clauses));
             }
-            return node;
+            return rootNode;
         }
     }
     
@@ -846,18 +844,18 @@ public final class Transforms {
      * Collects expressions from all non-aggregate scalar fields and primary keys.
      * Only applies if no explicit GROUP BY is already set.
      */
-    public static class AutoGenerateGroupBy extends TransformStep {
+    public static class AutoGenerateGroupBy implements TreeTransform {
         @Override
-        public QueryNode transform(QueryNode node) {
-            if (!(node instanceof RootNode rootNode) || rootNode.groupBy() != null) {
-                return node;
+        public RootNode transform(RootNode rootNode) {
+            if (rootNode.groupBy() != null) {
+                return rootNode;
             }
             if (!hasAggregateFields(rootNode)) {
-                return node;
+                return rootNode;
             }
             List<String> groupByExpressions = new ArrayList<>();
             collectNonAggregateExpressions(rootNode, groupByExpressions);
-            return groupByExpressions.isEmpty() ? node : rootNode.withGroupByClauses(groupByExpressions);
+            return groupByExpressions.isEmpty() ? rootNode : (RootNode)rootNode.withGroupByClauses(groupByExpressions);
         }
         
         private boolean hasAggregateFields(QueryNode node) {
@@ -882,20 +880,20 @@ public final class Transforms {
         }
     }
     
-    public static class ApplyClassLevelOrderBy extends TransformStep {
+    public static class ApplyClassLevelOrderBy implements TreeTransform {
         @Override
-        public QueryNode transform(QueryNode node) {
-            if (node instanceof RootNode rootNode && rootNode.type().hasAnnotation(OrderBy.class) && rootNode.orderBy() == null) {
+        public RootNode transform(RootNode rootNode) {
+            if (rootNode.type().hasAnnotation(OrderBy.class) && rootNode.orderBy() == null) {
                 String[] clauses = rootNode.type().getAnnotationAttributeValue(OrderBy.class, "value", String[].class);
-                return rootNode.withOrderByClauses(Arrays.asList(clauses));
+                return (RootNode)rootNode.withOrderByClauses(Arrays.asList(clauses));
             }
-            return node;
+            return rootNode;
         }
     }
     
     // ========== Value Mapper Transforms (for reflection-based usage) ==========
     
-    public static class AddDefaultValueTransformers extends RecursiveTransform {
+    public static class AddDefaultValueTransformers implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
             return Optional.of(node)

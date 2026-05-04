@@ -92,7 +92,7 @@ public class AQTTransformer {
 		// Wrap the root type with transformers so annotation queries are transparently transformed
 		TypeModel transformedType = new TransformedTypeModel(rootType, List.of(new JakartaAnnotations(), new JavaxAnnotations()));
 		TableInfo tableInfo = determinTableInfo(transformedType);
-		QueryNode initialTree = RootNode.createEmptyRootNode(tableInfo.tableName(), transformedType, tableInfo);
+		RootNode initialTree = RootNode.createEmptyRootNode(tableInfo.tableName(), transformedType, tableInfo);
 		return pipeline.apply(initialTree);
 	}
 

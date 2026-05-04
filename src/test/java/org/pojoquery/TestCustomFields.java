@@ -44,7 +44,7 @@ public class TestCustomFields {
 		}
 	}
 
-	public static class MyCustomTransform extends RecursiveTransform {
+	public static class MyCustomTransform implements RecursiveTransform {
 
 		@Override
 		public QueryNode transform(QueryNode node) {

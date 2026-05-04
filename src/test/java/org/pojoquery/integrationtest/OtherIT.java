@@ -50,7 +50,7 @@ public class OtherIT {
 	/**
 	 * Custom transform that adds the 'area' column to Room queries and populates the @Other specs map.
 	 */
-	public static class AddAreaColumnTransform extends RecursiveTransform {
+	public static class AddAreaColumnTransform implements RecursiveTransform {
 		@Override
 		public QueryNode transform(QueryNode node) {
 			return Transforms.transformChildren(

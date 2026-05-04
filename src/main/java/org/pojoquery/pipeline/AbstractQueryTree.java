@@ -360,7 +360,7 @@ public class AbstractQueryTree {
 			return new RootNode(alias, type, tableInfo, children, groupBy, List.copyOf(orderBy));
 		}
 
-		public static QueryNode createEmptyRootNode(String tableName, TypeModel rootType, TableInfo tableInfo2) {
+		public static RootNode createEmptyRootNode(String tableName, TypeModel rootType, TableInfo tableInfo2) {
 			return new RootNode(tableName, rootType, tableInfo2, null, null, null);
 		}
 	}
