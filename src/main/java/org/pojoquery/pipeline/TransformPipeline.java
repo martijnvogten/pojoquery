@@ -6,6 +6,7 @@ import java.util.function.Function;
 
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
+import org.pojoquery.pipeline.Transforms.AddDefaultValueTransformers;
 
 /**
  * A configurable pipeline of transform steps for building query trees.
@@ -247,4 +248,11 @@ public class TransformPipeline {
             }
         };
     }
+
+	public static TransformPipeline defaultPipelineForCodeGeneration() {
+        // Code generation needs to run compile time so, we can only use TypeMirrors.
+        // Remove any transforms that require reflection on classes, like the value transformers.
+        // This transform is only needed for processing result sets, which is runtime only.
+        return defaultPipeline().remove(AddDefaultValueTransformers.class);
+	}
 }

@@ -27,6 +27,7 @@ import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.AQTTransformer;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.PojoMetadata;
+import org.pojoquery.pipeline.TransformPipeline;
 import org.pojoquery.typemodel.ElementTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 
@@ -106,7 +107,10 @@ public class QueryProcessor extends AbstractProcessor {
         }
 
         // Build RootNode from the entity type
-        RootNode tree = AQTTransformer.buildQueryTreeForType(entityType);
+        RootNode tree = AQTTransformer.buildQueryTreeForType(
+            entityType, 
+            TransformPipeline.defaultPipelineForCodeGeneration()
+        );
 
         messager.printMessage(Diagnostic.Kind.NOTE,
             "Generating query classes for " + qualifiedName + " using FluentAQTCodeGenerator", typeElement);
