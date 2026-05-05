@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.pojoquery.TestUtils.norm;
 
 import java.sql.Connection;
+import java.time.LocalDate;
 import java.util.List;
 
 import javax.sql.DataSource;
@@ -277,6 +278,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 			"audit",
 			SqlExpression.sql("{audit.entity_name} = {author.fullName}")
 		);
+		query.addWhere("{audit.date} < ?", LocalDate.of(2024, 1, 1));
 		
 		assertEquals(
 				norm("""
@@ -290,6 +292,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 					FROM "article" AS "article"
 					 LEFT JOIN "person" AS "author" ON "article"."author_id" = "author"."person_id"
 					 LEFT JOIN "audit_log" AS "audit" ON "audit"."entity_name" = CONCAT("author"."first_name", ' ', "author"."last_name")
+					WHERE "audit"."date" < ?
 					"""), 
 				norm(query.toStatement().getSql()));
 	}

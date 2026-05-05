@@ -4,7 +4,10 @@ import static org.pojoquery.util.Strings.implode;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
@@ -183,6 +186,7 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 	}
 
 	public SqlExpression toStatement() {
+		pruneUnusedJoins();
 		List<SqlExpression> fieldExpressions = new ArrayList<SqlExpression>();
 		for(SqlField field : fields) {
 			if (field.alias == null) {
@@ -320,7 +324,7 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 
 		String sql = implode(" ", Arrays.asList(
 					selectClause.getSql(), 
-					"\nFROM", DB.prefixAndQuoteTableName(dbContext, schema, from), "AS", dbContext.quoteAlias(from), 
+					"\nFROM", DB.prefixAndQuoteTableName(dbContext, schema, from), "AS", dbContext.quoteAlias(from), "\n",
 					joinsClause.getSql(), 
 					whereClause == null ? "" : whereClause.getSql(), 
 					groupByClause,
@@ -369,6 +373,57 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 			groupByClause = "\n" + preamble + " " + implode(", ", parts);
 		}
 		return groupByClause;
+	}
+
+	/**
+	 * Removes joins that are not referenced by any field expression, WHERE/GROUP BY/ORDER BY condition, or
+	 * transitively required join condition. The algorithm:
+	 * <ol>
+	 *   <li>Seed the used-alias set from field expressions and WHERE/GROUP BY/ORDER BY clauses.</li>
+	 *   <li>For every join whose alias is in the used set, add the aliases referenced in
+	 *       its join condition to the used set.</li>
+	 *   <li>Repeat step 2 until no new aliases are discovered (fixed-point).</li>
+	 *   <li>Retain only joins whose alias is in the final used set.</li>
+	 * </ol>
+	 */
+	private void pruneUnusedJoins() {
+		Set<String> used = new HashSet<>();
+
+		// Seed from field expressions
+		for (SqlField field : fields) {
+			used.addAll(CurlyMarkers.extractAliases(field.expression.getSql()));
+		}
+
+		// Seed from WHERE conditions
+		for (SqlExpression where : wheres) {
+			used.addAll(CurlyMarkers.extractAliases(where.getSql()));
+		}
+
+		// Seed from GROUP BY clauses
+		for (String group : groupBy) {
+			used.addAll(CurlyMarkers.extractAliases(group));
+		}
+
+		// Seed from ORDER BY clauses
+		for (String order : orderBy) {
+			used.addAll(CurlyMarkers.extractAliases(order));
+		}
+
+		// Transitively expand: joins needed by already-used joins
+		boolean changed = true;
+		while (changed) {
+			changed = false;
+			for (SqlJoin j : joins) {
+				if (used.contains(j.alias) && j.joinCondition != null) {
+					Set<String> conditionAliases = CurlyMarkers.extractAliases(j.joinCondition.getSql());
+					if (used.addAll(conditionAliases)) {
+						changed = true;
+					}
+				}
+			}
+		}
+
+		joins = joins.stream().filter(j -> used.contains(j.alias)).collect(Collectors.toList());
 	}
 
 	public void addJoin(JoinType type, String tableName, String alias, SqlExpression joinCondition) {

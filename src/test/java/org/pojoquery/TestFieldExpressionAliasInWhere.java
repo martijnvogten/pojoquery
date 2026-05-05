@@ -3,6 +3,8 @@ package org.pojoquery;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.pojoquery.TestUtils.norm;
 
+import java.time.LocalDate;
+
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
@@ -168,6 +170,7 @@ public class TestFieldExpressionAliasInWhere {
 			"audit",
 			SqlExpression.sql("{audit.entity_name} = {author.fullName}")
 		);
+		query.addWhere("{audit.date} < ?", LocalDate.of(2024, 1, 1));
 		
 		assertEquals(
 				norm("""
@@ -181,6 +184,7 @@ public class TestFieldExpressionAliasInWhere {
 					FROM `article` AS `article`
 					 LEFT JOIN `person` AS `author` ON `article`.`author_id` = `author`.`id`
 					 LEFT JOIN `audit_log` AS `audit` ON `audit`.`entity_name` = CONCAT(`author`.`firstName`, ' ', `author`.`lastName`)
+					WHERE `audit`.`date` < ?
 					"""), 
 				norm(query.toStatement().getSql()));
 	}
