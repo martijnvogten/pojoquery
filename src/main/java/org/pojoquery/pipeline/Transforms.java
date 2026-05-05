@@ -17,6 +17,7 @@ import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.DiscriminatorValue;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
+import org.pojoquery.annotations.From;
 import org.pojoquery.annotations.GroupBy;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
@@ -49,6 +50,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.ScalarNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.SubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.SuperClassNode;
@@ -64,6 +66,7 @@ import org.pojoquery.pipeline.querytree.transforms.AliasNaming;
 import org.pojoquery.pipeline.querytree.transforms.ExpressionResolver;
 import org.pojoquery.typemodel.AnnotationModel;
 import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.ReflectionTypeModel;
 import org.pojoquery.typemodel.TypeModel;
 import org.pojoquery.util.Strings;
 
@@ -107,7 +110,47 @@ public final class Transforms {
     }
     
     // ========== Structure Building Transforms ==========
-    
+
+	public static class ProcessFromAnnotation implements TransformPipeline.TreeTransform {
+		@Override
+		public RootNode transform(RootNode rootNode) {
+			if (rootNode.type().hasAnnotation(From.class) && rootNode.tableInfo() == null) {
+				Class<?> sourceClass = rootNode.type().getAnnotationAttributeValue(From.class, "value", Class.class);
+				TypeModel sourceType = new ReflectionTypeModel(sourceClass);
+				RootNode sourceTree = removeScalarNodesFromTree(AQTTransformer.buildQueryTreeForType(sourceType, TransformPipeline.defaultPipeline()));
+
+                List<QueryNode> children = new ArrayList<>(PojoMetadata.collectFieldsOfClass(rootNode.type(), null).stream()
+                        .<QueryNode>map(fieldModel -> new EmptyFieldNodeImpl(fieldModel))
+                        .toList()); // use the source's children (joins)
+
+                children.addAll(sourceTree.children());
+
+				// Merge sourceTree into rootNode, replacing rootNode's table info and children with sourceTree's
+				return new RootNode(
+					sourceTree.alias(),
+					rootNode.type(),
+					sourceTree.tableInfo(),
+                    children,
+					null,
+					null
+				);
+			}
+			return rootNode;
+		}
+	}
+
+    public static class DetermineSourceTable implements TreeTransform {
+        @Override
+        public RootNode transform(RootNode rootNode) {
+            if (rootNode.tableInfo() == null) {
+                TableInfo tableInfo = determineTableInfo(rootNode.type());
+                String alias = tableInfo.tableName();
+                return rootNode.withTableInfo(tableInfo).withAlias(alias);
+            }
+            return rootNode;
+        }
+    }
+
     public static class AddDeclaredFields implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
@@ -121,13 +164,6 @@ public final class Transforms {
                         .map(fieldModel -> new EmptyFieldNodeImpl(fieldModel))
                         .toList());
             }
-            return node;
-        }
-    }
-    
-    public static class AddOtherFields implements RecursiveTransform {
-        @Override
-        public QueryNode transform(QueryNode node) {
             return node;
         }
     }
@@ -892,7 +928,7 @@ public final class Transforms {
     }
     
     // ========== Value Mapper Transforms (for reflection-based usage) ==========
-    
+
     public static class AddDefaultValueTransformers implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
@@ -953,9 +989,25 @@ public final class Transforms {
         }
     }
     
+    private static RootNode removeScalarNodesFromTree(RootNode root) {
+        return (RootNode) removeScalarNodesRecursively(root);
+    }
+
+    private static TableNode removeScalarNodesRecursively(TableNode node) {
+        if (node.children() == null) {
+            return node;
+        }
+        List<QueryNode> filtered = node.children().stream()
+                .filter(child -> !(child instanceof ScalarNode))
+                .map(child -> child instanceof TableNode tableChild ? removeScalarNodesRecursively(tableChild) : child)
+                .toList();
+        return node.withChildren(filtered);
+    }
+
     private static TableInfo determineTableInfo(TypeModel type) {
         return PojoMetadata.determineTableMapping(type).stream().reduce((first, second) -> second)
                 .map(m -> new TableInfo(m.schemaName, m.tableName))
-                .orElseThrow(() -> new IllegalArgumentException("Type " + type.getQualifiedName() + " is not an entity"));
+                .orElseThrow(() -> new IllegalArgumentException("Missing @Table annotation on type " + type.getQualifiedName()));
     }
+
 }

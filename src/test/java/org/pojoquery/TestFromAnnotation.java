@@ -17,6 +17,7 @@ import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.schema.SchemaGenerator;
+import org.pojoquery.util.RecordIndenter;
 
 /**
  * Tests for @From annotation support.
@@ -69,7 +70,12 @@ public class TestFromAnnotation {
 	public void testFromAnnotationQueryTreeHasSourceJoins() {
 		// The query tree for TeamStats should have the LEFT JOIN to members
 		// even though TeamStats itself doesn't declare members
+		// TransformPipeline pipeline = TransformPipeline.defaultPipeline().prepend(ProcessFromAnnotationTransform.class);
+		// RootNode tree = AQTTransformer.buildQueryTreeForType(new ReflectionTypeModel(TeamStats.class), pipeline);
+
 		RootNode tree = PojoQuery.build(TeamStats.class).getTree();
+
+		System.out.println(RecordIndenter.indent(tree.toString()));
 		
 		// Should use "team" as the FROM table (from TeamWithMembers via @From)
 		assertEquals("team", tree.tableInfo().tableName());
@@ -77,10 +83,13 @@ public class TestFromAnnotation {
 		// Should have children including the aggregate fields AND the join
 		assertNotNull(tree.children());
 		assertTrue(tree.children().size() > 0, "Query tree should have children");
+		assertEquals(5, tree.children().size(), "Query tree should have 5 children");
 		
 		// The {members.*} references in @Aggregate should cause members join to be included
 		// Check that the tree structure recognizes TeamWithMembers as source
 		assertEquals("org.pojoquery.TestFromAnnotation$TeamStats", tree.type().getQualifiedName());
+
+		System.out.println(RecordIndenter.indent(tree.toString()));
 	}
 
 	@Test
@@ -109,7 +118,7 @@ public class TestFromAnnotation {
 			PojoQuery.insert(c, m2);
 			
 			// Query using @From projection
-			 List<TeamStats> stats = PojoQuery.build(TeamStats.class)
+			List<TeamStats> stats = PojoQuery.build(TeamStats.class)
 				.addWhere("{this.name} = ?", "Alpha")
 				.execute(c);
 			

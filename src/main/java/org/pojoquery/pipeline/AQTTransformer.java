@@ -18,7 +18,6 @@ import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
-import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.typemodel.JakartaAnnotations;
 import org.pojoquery.typemodel.JavaxAnnotations;
 import org.pojoquery.typemodel.ReflectionTypeModel;
@@ -91,15 +90,8 @@ public class AQTTransformer {
 	public static RootNode buildQueryTreeForType(TypeModel rootType, TransformPipeline pipeline) {
 		// Wrap the root type with transformers so annotation queries are transparently transformed
 		TypeModel transformedType = new TransformedTypeModel(rootType, List.of(new JakartaAnnotations(), new JavaxAnnotations()));
-		TableInfo tableInfo = determinTableInfo(transformedType);
-		RootNode initialTree = RootNode.createEmptyRootNode(tableInfo.tableName(), transformedType, tableInfo);
+		RootNode initialTree = RootNode.createEmptyRootNode(transformedType);
 		return pipeline.apply(initialTree);
-	}
-
-	private static TableInfo determinTableInfo(TypeModel type) {
-		return PojoMetadata.determineTableMapping(type).stream().reduce((first, second) -> second)
-				.map(m -> new TableInfo(m.schemaName, m.tableName))
-				.orElseThrow(() -> new IllegalArgumentException("Type " + type.getQualifiedName() + " is not an entity"));
 	}
 
 }

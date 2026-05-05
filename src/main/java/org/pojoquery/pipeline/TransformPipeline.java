@@ -46,8 +46,9 @@ public class TransformPipeline {
     public static TransformPipeline defaultPipeline() {
         return new TransformPipeline(List.of(
             Transforms.CheckForCycles.class,
+            Transforms.ProcessFromAnnotation.class,
+            Transforms.DetermineSourceTable.class,
             Transforms.AddDeclaredFields.class,
-            Transforms.AddOtherFields.class,
             Transforms.AddIdFieldToSubClassTableNodes.class,
             Transforms.AddSuperClassTableNodes.class,
             Transforms.AddEmbeddedEntities.class,
