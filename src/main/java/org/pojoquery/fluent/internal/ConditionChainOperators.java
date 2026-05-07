@@ -26,21 +26,17 @@ public class ConditionChainOperators<T,V> implements Operators<T>, FieldExpressi
 		return baseExpression;
 	}
 
-	private void appendBinaryExpression(String operator, FieldExpression<?> fieldExpr) {
-		SqlExpression result = SqlExpression.implode(" ", List.of(baseExpression, SqlExpression.sql(operator), fieldExpr.toSql()));
+	private void appendBinaryExpression(String operator, Object operand) {
+		SqlExpression result = SqlExpression.implode(
+			" ", 
+			List.of(baseExpression, SqlExpression.sql(operator), toOperandExpression(operand)));
 		appendExpression.append(result.getSql(), result.getParameters());
 	}
 
-	private void appendBinaryExpression(String operator, Object value) {
-		SqlExpression result = SqlExpression.implode(" ", List.of(baseExpression, SqlExpression.sql(operator + " ?", value)));
-		appendExpression.append(result.getSql(), result.getParameters());
+	private SqlExpression toOperandExpression(Object operand) {
+		return operand instanceof FieldExpression<?> fieldExpr ? fieldExpr.toSql() : SqlExpression.sql("?", operand);
 	}
 
-	public T eq(FieldExpression<?> fieldExpr) {
-		appendBinaryExpression("=", fieldExpr);
-		return terminator;
-	}
-	
 	public T eq(Object value) {
 		appendBinaryExpression("=", value);
 		return terminator;
@@ -78,18 +74,8 @@ public class ConditionChainOperators<T,V> implements Operators<T>, FieldExpressi
 		return terminator;
 	}
 
-	public T ne(FieldExpression<?> fieldExpr) {
-		appendBinaryExpression("<>", fieldExpr);
-		return terminator;
-	}
-
 	public T ne(Object value) {
 		appendBinaryExpression("<>", value);
-		return terminator;
-	}
-
-	public T like(FieldExpression<?> value) {
-		appendBinaryExpression("LIKE", value);
 		return terminator;
 	}
 
@@ -97,19 +83,13 @@ public class ConditionChainOperators<T,V> implements Operators<T>, FieldExpressi
 		appendBinaryExpression("LIKE", value);
 		return terminator;
 	}
-
-	public T notLike(FieldExpression<?> value) {
-		appendBinaryExpression("NOT LIKE", value);
-		return terminator;
-	}
-
 	public T notLike(Object value) {
 		appendBinaryExpression("NOT LIKE", value);
 		return terminator;
 	}
 
 	public T between(Object value, Object value2) {
-		SqlExpression result = SqlExpression.implode(" ", List.of(baseExpression, SqlExpression.sql("BETWEEN ? AND ?", value, value2)));
+		SqlExpression result = SqlExpression.implode(" ", List.of(baseExpression, SqlExpression.sql("BETWEEN"), toOperandExpression(value), SqlExpression.sql("AND"), toOperandExpression(value2)));
 		appendExpression.append(result.getSql(), result.getParameters());
 		return terminator;
 	}
