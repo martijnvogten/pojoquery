@@ -9,7 +9,7 @@ import org.pojoquery.fluent.internal.ConditionChainOperators;
 import org.pojoquery.fluent.internal.StaticConditionChainTerminator;
 import org.pojoquery.processor.TestBookQueryCopy.Book;
 
-public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, BookQuery.OrderBy, BookQuery.GroupBy> {
+public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, BookQuery.OrderBy, BookQuery.GroupBy, java.lang.Long> {
 
 	public final ConditionChainOperators<Terminator<BookQuery,StaticConditionChainTerminator<BookQuery>>, java.lang.Long> id;
 	public final ConditionChainOperators<Terminator<BookQuery,StaticConditionChainTerminator<BookQuery>>, java.lang.String> title;
@@ -34,76 +34,76 @@ public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, Boo
 	}
 
 	public class Where {
-		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.Long> id = chainOp("book", "id", java.lang.Long.class);
-		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.String> title = chainOp("book", "title", java.lang.String.class);
+		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy, java.lang.Long>, java.lang.Long> id = chainOp("book", "id", java.lang.Long.class);
+		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy, java.lang.Long>, java.lang.String> title = chainOp("book", "title", java.lang.String.class);
 		public final WhereAuthor author = new WhereAuthor();
 		public final WhereReviews reviews = new WhereReviews();
 		public final WhereCategories categories = new WhereCategories();
 
 		public class WhereAuthor {
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.Long> id = chainOp("author", "id", java.lang.Long.class);
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.String> name = chainOp("author", "name", java.lang.String.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy, java.lang.Long>, java.lang.Long> id = chainOp("author", "id", java.lang.Long.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy, java.lang.Long>, java.lang.String> name = chainOp("author", "name", java.lang.String.class);
 		}
 
 		public class WhereReviews {
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.Long> id = chainOp("reviews", "id", java.lang.Long.class);
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.String> content = chainOp("reviews", "content", java.lang.String.class);
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.Integer> rating = chainOp("reviews", "rating", java.lang.Integer.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy, java.lang.Long>, java.lang.Long> id = chainOp("reviews", "id", java.lang.Long.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy, java.lang.Long>, java.lang.String> content = chainOp("reviews", "content", java.lang.String.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy, java.lang.Long>, java.lang.Integer> rating = chainOp("reviews", "rating", java.lang.Integer.class);
 		}
 
 		public class WhereCategories {
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.Long> id = chainOp("categories", "id", java.lang.Long.class);
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, java.lang.String> name = chainOp("categories", "name", java.lang.String.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy, java.lang.Long>, java.lang.Long> id = chainOp("categories", "id", java.lang.Long.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy, java.lang.Long>, java.lang.String> name = chainOp("categories", "name", java.lang.String.class);
 		}
 
 	}
 
 	public class OrderBy {
-		public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> id = orderByOp("book", "id");
-		public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> title = orderByOp("book", "title");
+		public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long>> id = orderByOp("book", "id");
+		public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long>> title = orderByOp("book", "title");
 		public final OrderByAuthor author = new OrderByAuthor();
 		public final OrderByReviews reviews = new OrderByReviews();
 		public final OrderByCategories categories = new OrderByCategories();
 
 		public class OrderByAuthor {
-			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> id = orderByOp("author", "id");
-			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> name = orderByOp("author", "name");
+			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long>> id = orderByOp("author", "id");
+			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long>> name = orderByOp("author", "name");
 		}
 
 		public class OrderByReviews {
-			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> id = orderByOp("reviews", "id");
-			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> content = orderByOp("reviews", "content");
-			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> rating = orderByOp("reviews", "rating");
+			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long>> id = orderByOp("reviews", "id");
+			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long>> content = orderByOp("reviews", "content");
+			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long>> rating = orderByOp("reviews", "rating");
 		}
 
 		public class OrderByCategories {
-			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> id = orderByOp("categories", "id");
-			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> name = orderByOp("categories", "name");
+			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long>> id = orderByOp("categories", "id");
+			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long>> name = orderByOp("categories", "name");
 		}
 
 	}
 
 	public class GroupBy {
-		public final QueryTerminator<Book, OrderBy, GroupBy> id = groupByOp("book", "id");
-		public final QueryTerminator<Book, OrderBy, GroupBy> title = groupByOp("book", "title");
+		public final QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long> id = groupByOp("book", "id");
+		public final QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long> title = groupByOp("book", "title");
 		public final GroupByAuthor author = new GroupByAuthor();
 		public final GroupByReviews reviews = new GroupByReviews();
 		public final GroupByCategories categories = new GroupByCategories();
 
 		public class GroupByAuthor {
-			public final QueryTerminator<Book, OrderBy, GroupBy> id = groupByOp("author", "id");
-			public final QueryTerminator<Book, OrderBy, GroupBy> name = groupByOp("author", "name");
+			public final QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long> id = groupByOp("author", "id");
+			public final QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long> name = groupByOp("author", "name");
 		}
 
 		public class GroupByReviews {
-			public final QueryTerminator<Book, OrderBy, GroupBy> id = groupByOp("reviews", "id");
-			public final QueryTerminator<Book, OrderBy, GroupBy> content = groupByOp("reviews", "content");
-			public final QueryTerminator<Book, OrderBy, GroupBy> rating = groupByOp("reviews", "rating");
+			public final QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long> id = groupByOp("reviews", "id");
+			public final QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long> content = groupByOp("reviews", "content");
+			public final QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long> rating = groupByOp("reviews", "rating");
 		}
 
 		public class GroupByCategories {
-			public final QueryTerminator<Book, OrderBy, GroupBy> id = groupByOp("categories", "id");
-			public final QueryTerminator<Book, OrderBy, GroupBy> name = groupByOp("categories", "name");
+			public final QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long> id = groupByOp("categories", "id");
+			public final QueryTerminator<Book, OrderBy, GroupBy, java.lang.Long> name = groupByOp("categories", "name");
 		}
 
 	}

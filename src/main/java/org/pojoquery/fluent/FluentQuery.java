@@ -18,6 +18,7 @@ import org.pojoquery.fluent.internal.OrderByChainField;
 import org.pojoquery.fluent.internal.StaticConditionChainTerminator;
 import org.pojoquery.pipeline.AQTRowProcessor;
 import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKeyField;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
 
@@ -206,6 +207,18 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G, PK>, W
 		} else {
 			return Optional.of(results.get(0));
 		}
+	}
+
+	@Override
+	public Optional<R> findById(Connection c, PK id) {
+		String idColumnName = tree.children().stream()
+			.filter(PrimaryKeyField.class::isInstance)
+			.map(PrimaryKeyField.class::cast)
+			.map(pk -> pk.columnName())
+			.findFirst()
+			.orElseThrow(() -> new IllegalStateException("No primary key field found in query tree for type " + tree.type()));
+		whereConditionSql.add(SqlExpression.sql("{" + tree.alias() + "." + idColumnName + "} = ?", id));
+		return first(c);
 	}
 
 	private SqlExpression getStaticConditionSql() {

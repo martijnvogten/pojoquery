@@ -4,7 +4,7 @@ import org.pojoquery.fluent.FluentConditionChainWithInterfaces.Book;
 import org.pojoquery.fluent.internal.ConditionChainOperators;
 import org.pojoquery.fluent.internal.StaticConditionChainTerminator;
 
-public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, BookQuery.OrderBy, BookQuery.GroupBy> {
+public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, BookQuery.OrderBy, BookQuery.GroupBy, Long> {
 
 	public final ConditionChainOperators<Terminator<BookQuery,StaticConditionChainTerminator<BookQuery>>, Long> id;
 	public final ConditionChainOperators<Terminator<BookQuery,StaticConditionChainTerminator<BookQuery>>, String> title;
@@ -16,35 +16,35 @@ public class BookQuery extends FluentQuery<Book, BookQuery, BookQuery.Where, Boo
 	}
 
 	public class Where {
-		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, Long> id = chainOp("book", "id", Long.class);
-		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, String> title = chainOp("book", "title", String.class);
+		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy, Long>, Long> id = chainOp("book", "id", Long.class);
+		public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy, Long>, String> title = chainOp("book", "title", String.class);
 		public final WhereAuthor author = new WhereAuthor();
 
 		public class WhereAuthor {
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, Long> id = chainOp("author", "id", Long.class);
-			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy>, String> name = chainOp("author", "name", String.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy, Long>, Long> id = chainOp("author", "id", Long.class);
+			public final ConditionChainOperators<ConditionTerminator<Book, Where, ?, OrderBy, GroupBy, Long>, String> name = chainOp("author", "name", String.class);
 		}
 	}
 
 	public class OrderBy {
-		public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> id = orderByOp("book", "id");
-		public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> title = orderByOp("book", "title");
+		public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy, Long>> id = orderByOp("book", "id");
+		public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy, Long>> title = orderByOp("book", "title");
 		public final OrderByAuthor author = new OrderByAuthor();
 
 		public class OrderByAuthor {
-			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> id = orderByOp("author", "id");
-			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy>> name = orderByOp("author", "name");
+			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy, Long>> id = orderByOp("author", "id");
+			public final OrderByChain<QueryTerminator<Book, OrderBy, GroupBy, Long>> name = orderByOp("author", "name");
 		}
 	}
 
 	public class GroupBy {
-		public final QueryTerminator<Book, OrderBy, GroupBy> id = groupByOp("book", "id");
-		public final QueryTerminator<Book, OrderBy, GroupBy> title = groupByOp("book", "title");
+		public final QueryTerminator<Book, OrderBy, GroupBy, Long> id = groupByOp("book", "id");
+		public final QueryTerminator<Book, OrderBy, GroupBy, Long> title = groupByOp("book", "title");
 		public final GroupByAuthor author = new GroupByAuthor();
 
 		public class GroupByAuthor {
-			public final QueryTerminator<Book, OrderBy, GroupBy> id = groupByOp("author", "id");
-			public final QueryTerminator<Book, OrderBy, GroupBy> name = groupByOp("author", "name");
+			public final QueryTerminator<Book, OrderBy, GroupBy, Long> id = groupByOp("author", "id");
+			public final QueryTerminator<Book, OrderBy, GroupBy, Long> name = groupByOp("author", "name");
 		}
 	}
 
