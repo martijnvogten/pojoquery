@@ -14,7 +14,7 @@ import org.pojoquery.pipeline.AQTSchemaGenerator.DDLFieldColumn;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLForeignKey;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLInferredColumn;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLPrimaryKeyColumn;
-import org.pojoquery.pipeline.querytree.TableInfo;
+import org.pojoquery.pipeline.AbstractQueryTree.TableInfo;
 
 /**
  * Builds DDL statements (CREATE TABLE, ALTER TABLE, etc.) from schema information.

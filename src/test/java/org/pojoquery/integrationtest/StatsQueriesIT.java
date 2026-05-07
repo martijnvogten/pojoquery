@@ -21,6 +21,7 @@ import org.pojoquery.annotations.Aggregate;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.From;
 import org.pojoquery.annotations.Id;
+import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Subquery;
@@ -301,6 +302,7 @@ public class StatsQueriesIT {
 
 	@From(FilmDetail.class) 
 	static class FilmStatsWithCategoriesAndActors {
+		@Id
 		Long filmId;
 		String title;
 
@@ -329,10 +331,11 @@ public class StatsQueriesIT {
 
 	@From(Film.class)
 	static class CombinedFilmStats {
+		@Id
 		Long filmId;
 		String title;
 
-		@Subquery(joinOn = "filmId")
+		// @Subquery(joinOn = "filmId")
 		FilmStatsWithCategoriesAndActors categoryStats;
 		
 		@Subquery(joinOn = "filmId")
@@ -649,7 +652,7 @@ public class StatsQueriesIT {
 		Department department;
 	}
 
-	@From(DepartmentDetail.class) // just join, don't add fields to the query
+	@From(DepartmentDetail.class)
 	static class DepartmentStats {
 		@Id Long id;
 
@@ -664,7 +667,7 @@ public class StatsQueriesIT {
 	}
 
 	static class DepartmentList extends Department {
-		@Subquery(joinOn = "id")
+		@JoinCondition("{this.id} = {stats.id}")
 		DepartmentStats stats;
 	}
 
@@ -692,6 +695,7 @@ public class StatsQueriesIT {
 
 			List<DepartmentList> departments = PojoQuery.build(DepartmentList.class)
 				.addWhere("{this.name} = ?", "Engineering").execute(c);
+			
 			Assertions.assertEquals(1, departments.size());
 			Assertions.assertEquals(2L, departments.get(0).stats.employeeCount);
 			Assertions.assertEquals(0, new BigDecimal("110000").compareTo(departments.get(0).stats.averageSalary));

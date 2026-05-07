@@ -15,9 +15,11 @@ import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
+import org.pojoquery.pipeline.AbstractQueryTree.SubQueryJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
+import org.pojoquery.pipeline.SqlQuery.SqlField;
 import org.pojoquery.typemodel.JakartaAnnotations;
 import org.pojoquery.typemodel.JavaxAnnotations;
 import org.pojoquery.typemodel.ReflectionTypeModel;
@@ -27,6 +29,10 @@ import org.pojoquery.typemodel.TypeModel;
 public class AQTTransformer {
 
 	public static void toSql(TableNode node, SqlQuery<?> sqlQuery) {
+		toSql(node, sqlQuery, false);
+	}
+
+	public static void toSql(TableNode node, SqlQuery<?> sqlQuery, boolean useShortFieldAliases) {
 		if (node instanceof RootNode rootNode) {
 			sqlQuery.setTable(node.tableInfo().schemaName(), node.tableInfo().tableName());
 			if (rootNode.groupBy() != null) {
@@ -44,14 +50,19 @@ public class AQTTransformer {
 			} else if (child instanceof CustomJoin customJoin) {
 				sqlQuery.addJoin(customJoin.joinType(), customJoin.joinedTable().schemaName(), customJoin.joinedTable().tableName(), customJoin.alias(), customJoin.joinCondition());
 			} else if (child instanceof AggregateScalarValue agg) {
-				sqlQuery.addField(agg.expression(), node.alias() + "." + agg.field().getName());
+				sqlQuery.addField(agg.expression(), useShortFieldAliases ? agg.field().getName() : node.alias() + "." + agg.field().getName());
 			} else if (child instanceof ScalarValue scalar) {
-				sqlQuery.addField(scalar.expression(), node.alias() + "." + scalar.field().getName());
+				sqlQuery.addField(scalar.expression(), useShortFieldAliases ? scalar.field().getName() : node.alias() + "." + scalar.field().getName());
 			} else if (child instanceof PrimaryKey pk) {
-				sqlQuery.addField(pk.expression(), node.alias() + "." + pk.field().getName());
+				sqlQuery.addField(pk.expression(), useShortFieldAliases ? pk.field().getName() : node.alias() + "." + pk.field().getName());
 			} else if (child instanceof STISubClassNode stiSubClass) {
 				sqlQuery.addField(SqlExpression.sql("{" + node.alias() + "." + stiSubClass.discriminatorColumn() + "}"), stiSubClass.alias() + "._discriminator");
 				toSql((TableNode) stiSubClass, sqlQuery);
+			} else if (child instanceof SubQueryJoin subQuery) {
+				DefaultSqlQuery subSqlQuery = new DefaultSqlQuery(sqlQuery.getDbContext());
+				toSql(subQuery.subQueryTree(), subSqlQuery, true);
+				sqlQuery.addSubqueryJoin(subQuery.joinType(), subSqlQuery.toStatement(), subQuery.alias(), subQuery.joinCondition());
+				toSql((TableNode) subQuery, sqlQuery);
 			} else if (child instanceof Embedding embedded) {
 				toSql((TableNode) embedded, sqlQuery);
 			} else if (child instanceof ValueCollection col) {

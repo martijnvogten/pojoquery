@@ -6,38 +6,51 @@ import java.util.Objects;
 
 import org.pojoquery.JdbcValueMapper;
 import org.pojoquery.SqlExpression;
-import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 
 /**
- * Abstract Query Tree (AQT) - an intermediate representation of POJO structures as query trees.
+ * Abstract Query Tree (AQT) - an intermediate representation of POJO structures
+ * as query trees.
  * 
- * <p>The AQT transforms Java class hierarchies into a tree structure that can be converted to SQL.
- * Each node represents either a table/entity or a field/column mapping. The tree is immutable;
+ * <p>
+ * The AQT transforms Java class hierarchies into a tree structure that can be
+ * converted to SQL.
+ * Each node represents either a table/entity or a field/column mapping. The
+ * tree is immutable;
  * all modification methods return new instances.
  * 
  * <h2>Node Type Hierarchy</h2>
  * 
- * <p>Java properties are transformed into one of these node types:
+ * <p>
+ * Java properties are transformed into one of these node types:
  * <ul>
- *   <li>{@link ScalarValue} - primitive value or string mapped to a column or SQL expression</li>
- *   <li>{@link EntityReference} - many-to-one or one-to-one reference to another entity (LEFT JOIN)</li>
- *   <li>{@link EntityCollection} - one-to-many collection of entities (LEFT JOIN)</li>
- *   <li>{@link ValueCollection} - collection of scalar values from a one-to-many join</li>
- *   <li>{@link JoinTableEntityCollection} - many-to-many collection via junction table</li>
- *   <li>{@link JoinTableValueCollection} - scalar collection via junction table</li>
- *   <li>{@link EmbeddedEntity} - embedded object sharing the parent's table</li>
+ * <li>{@link ScalarValue} - primitive value or string mapped to a column or SQL
+ * expression</li>
+ * <li>{@link EntityReference} - many-to-one or one-to-one reference to another
+ * entity (LEFT JOIN)</li>
+ * <li>{@link EntityCollection} - one-to-many collection of entities (LEFT
+ * JOIN)</li>
+ * <li>{@link ValueCollection} - collection of scalar values from a one-to-many
+ * join</li>
+ * <li>{@link JoinTableEntityCollection} - many-to-many collection via junction
+ * table</li>
+ * <li>{@link JoinTableValueCollection} - scalar collection via junction
+ * table</li>
+ * <li>{@link EmbeddedEntity} - embedded object sharing the parent's table</li>
  * </ul>
  * 
  * <h2>Inheritance Support</h2>
  * 
- * <p>Two inheritance strategies are supported:
+ * <p>
+ * Two inheritance strategies are supported:
  * <ul>
- *   <li><b>Table-Per-Subclass (TPS)</b>: {@link TPSSuperClassNode}, {@link TPSSubClassNode} - 
- *       each class has its own table, joined by primary key</li>
- *   <li><b>Single Table Inheritance (STI)</b>: {@link STISuperClassNode}, {@link STISubClassNode} - 
- *       all classes share one table with a discriminator column</li>
+ * <li><b>Table-Per-Subclass (TPS)</b>: {@link TPSSuperClassNode},
+ * {@link TPSSubClassNode} -
+ * each class has its own table, joined by primary key</li>
+ * <li><b>Single Table Inheritance (STI)</b>: {@link STISuperClassNode},
+ * {@link STISubClassNode} -
+ * all classes share one table with a discriminator column</li>
  * </ul>
  * 
  * @see org.pojoquery.pipeline.QueryTreeBuilder
@@ -48,7 +61,9 @@ public class AbstractQueryTree {
 	/**
 	 * Base interface for all nodes in the query tree.
 	 * 
-	 * <p>The sealed hierarchy ensures exhaustive pattern matching in switch expressions.
+	 * <p>
+	 * The sealed hierarchy ensures exhaustive pattern matching in switch
+	 * expressions.
 	 */
 	public sealed interface QueryNode
 			permits TableNode, EmptyTableNode, EmptyFieldNode, FieldNode, CustomQueryNode, CustomJoin {
@@ -57,21 +72,28 @@ public class AbstractQueryTree {
 	/**
 	 * Extension point for custom query behavior not covered by standard node types.
 	 * 
-	 * <p>Implementations can inject custom SQL into the query and process result rows.
+	 * <p>
+	 * Implementations can inject custom SQL into the query and process result rows.
 	 */
 	public non-sealed interface CustomQueryNode extends QueryNode {
 		/** Adds custom SQL expressions, joins, or conditions to the query. */
 		void applyToSqlQuery(TableNode parentNode, SqlQuery<?> sqlQuery);
-		
-		/** Extracts custom values from the result row and applies them to the entity. */
-		void applyRowResultToEntity(TableNode parentNode, Object targetEntity, Map<String,Object> fullRow);
+
+		/**
+		 * Extracts custom values from the result row and applies them to the entity.
+		 */
+		void applyRowResultToEntity(TableNode parentNode, Object targetEntity, Map<String, Object> fullRow);
 	}
-	public record CustomJoin(String alias, String parentAlias, TableInfo joinedTable, SqlQuery.JoinType joinType, SqlExpression joinCondition) implements QueryNode {
+
+	public record CustomJoin(String alias, String parentAlias, TableInfo joinedTable, SqlQuery.JoinType joinType,
+			SqlExpression joinCondition) implements QueryNode {
 	}
+
 	/**
 	 * A field node that maps to scalar (non-entity) values.
 	 * 
-	 * <p>Scalar nodes represent columns containing primitive types, strings, enums, 
+	 * <p>
+	 * Scalar nodes represent columns containing primitive types, strings, enums,
 	 * or other non-entity values that don't require joins to load.
 	 */
 	public sealed interface ScalarNode
@@ -82,18 +104,23 @@ public class AbstractQueryTree {
 	/**
 	 * Marker interface for primary key fields.
 	 * 
-	 * <p>Primary keys are used for entity identity, join conditions, and determining
+	 * <p>
+	 * Primary keys are used for entity identity, join conditions, and determining
 	 * whether to INSERT or UPDATE during persistence.
 	 */
 	public non-sealed interface PrimaryKeyField extends ScalarNode, ColumnFieldNode {
-		/** Returns true if the database auto-generates this key (IDENTITY/SERIAL/AUTO_INCREMENT). */
+		/**
+		 * Returns true if the database auto-generates this key
+		 * (IDENTITY/SERIAL/AUTO_INCREMENT).
+		 */
 		Boolean isAutoGenerated();
 	}
 
 	/**
 	 * Node representing a superclass in an inheritance hierarchy.
 	 * 
-	 * <p>Superclass nodes contain fields inherited by subclasses. The join strategy
+	 * <p>
+	 * Superclass nodes contain fields inherited by subclasses. The join strategy
 	 * depends on the concrete implementation (TPS or STI).
 	 */
 	public sealed interface SuperClassNode extends TableNode permits STISuperClassNode, TPSSuperClassNode {
@@ -103,7 +130,8 @@ public class AbstractQueryTree {
 	/**
 	 * Node representing a subclass in an inheritance hierarchy.
 	 * 
-	 * <p>Subclass nodes contain additional fields specific to the subclass.
+	 * <p>
+	 * Subclass nodes contain additional fields specific to the subclass.
 	 */
 	public sealed interface SubClassNode extends TableNode permits STISubClassNode, TPSSubClassNode {
 		/** Alias of the parent class node in the tree. */
@@ -113,20 +141,22 @@ public class AbstractQueryTree {
 	/**
 	 * A node that represents a database table and contains child nodes.
 	 * 
-	 * <p>Table nodes form the backbone of the query tree. Each table node generates
+	 * <p>
+	 * Table nodes form the backbone of the query tree. Each table node generates
 	 * a table reference in the FROM or JOIN clause, with its children determining
 	 * the selected columns and nested joins.
 	 */
 	public sealed interface TableNode
 			extends QueryNode
-			permits Embedding, RootNode, EntityNode, EntityCollection, JoinTableEntityCollection, SuperClassNode, SubClassNode {
+			permits Embedding, RootNode, EntityNode, EntityCollection, JoinTableEntityCollection, SuperClassNode, SubQueryJoin,
+			SubClassNode {
 		/** SQL alias used to reference this table in the query. */
 		String alias();
 
 		/** The Java type this table maps to. */
 		TypeModel type();
 
-		/** Database table metadata (name, schema). */
+		/** source table or subquery (name, schema). */
 		TableInfo tableInfo();
 
 		/** Child nodes (fields and nested entities). */
@@ -139,7 +169,8 @@ public class AbstractQueryTree {
 	/**
 	 * A table node that shares columns with another table (no separate JOIN).
 	 * 
-	 * <p>Used for embedded objects and single-table inheritance where multiple
+	 * <p>
+	 * Used for embedded objects and single-table inheritance where multiple
 	 * Java types map to columns in the same database table.
 	 */
 	public sealed interface Embedding extends TableNode
@@ -151,7 +182,8 @@ public class AbstractQueryTree {
 	/**
 	 * Table-Per-Subclass subclass node - joins to parent table via primary key.
 	 * 
-	 * <p>In TPS inheritance, each subclass has its own table containing only its
+	 * <p>
+	 * In TPS inheritance, each subclass has its own table containing only its
 	 * declared fields. The subclass table joins to the parent table on the shared
 	 * primary key.
 	 */
@@ -169,9 +201,11 @@ public class AbstractQueryTree {
 	}
 
 	/**
-	 * Table-Per-Subclass superclass node - contains inherited fields in separate table.
+	 * Table-Per-Subclass superclass node - contains inherited fields in separate
+	 * table.
 	 * 
-	 * <p>When querying a subclass, this node represents the parent table that must
+	 * <p>
+	 * When querying a subclass, this node represents the parent table that must
 	 * be joined to retrieve inherited fields.
 	 */
 	public record TPSSuperClassNode(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children,
@@ -190,50 +224,58 @@ public class AbstractQueryTree {
 	/**
 	 * Single Table Inheritance superclass node - shares table with all subclasses.
 	 * 
-	 * <p>In STI, the discriminator column determines which Java type to instantiate.
+	 * <p>
+	 * In STI, the discriminator column determines which Java type to instantiate.
 	 * This node represents the superclass portion of the shared table.
 	 */
-	public record STISuperClassNode(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children, String sourceAlias,
-		String discriminatorColumn, Object discriminatorValue, String parentAlias
-	) implements STINode, SuperClassNode {
-		
+	public record STISuperClassNode(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children,
+			String sourceAlias,
+			String discriminatorColumn, Object discriminatorValue, String parentAlias)
+			implements STINode, SuperClassNode {
+
 		public TableNode withChildren(List<? extends QueryNode> newChildren) {
-			return new STISuperClassNode(alias, type, tableInfo, List.copyOf(newChildren), 
-				sourceAlias, discriminatorColumn, discriminatorValue, parentAlias);
+			return new STISuperClassNode(alias, type, tableInfo, List.copyOf(newChildren),
+					sourceAlias, discriminatorColumn, discriminatorValue, parentAlias);
 		}
 	}
 
 	/**
 	 * Single Table Inheritance subclass node - shares table with parent (no join).
 	 * 
-	 * <p>STI subclasses read from the same table as their parent. The discriminator
+	 * <p>
+	 * STI subclasses read from the same table as their parent. The discriminator
 	 * value identifies rows belonging to this specific subclass. Columns for fields
 	 * not present in this subclass may contain NULL.
 	 * 
 	 * @param discriminatorColumn the column containing the type discriminator
-	 * @param discriminatorValue the value that identifies this subclass
+	 * @param discriminatorValue  the value that identifies this subclass
 	 */
-	public record STISubClassNode(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children, String sourceAlias, TypeModel superClass,
-		String discriminatorColumn, Object discriminatorValue, String parentAlias)
-		implements STINode, SubClassNode {
-		
+	public record STISubClassNode(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children,
+			String sourceAlias, TypeModel superClass,
+			String discriminatorColumn, Object discriminatorValue, String parentAlias)
+			implements STINode, SubClassNode {
+
 		public TableNode withChildren(List<? extends QueryNode> newChildren) {
-			return new STISubClassNode(alias, type, tableInfo, List.copyOf(newChildren), 
-				sourceAlias, superClass, discriminatorColumn, discriminatorValue, parentAlias);
+			return new STISubClassNode(alias, type, tableInfo, List.copyOf(newChildren),
+					sourceAlias, superClass, discriminatorColumn, discriminatorValue, parentAlias);
 		}
 
 		public QueryNode withDiscriminatorColumn(String discriminatorColumn) {
-			return new STISubClassNode(alias, type, tableInfo, children, sourceAlias, superClass, discriminatorColumn, discriminatorValue, parentAlias);
+			return new STISubClassNode(alias, type, tableInfo, children, sourceAlias, superClass, discriminatorColumn,
+					discriminatorValue, parentAlias);
 		}
 
 		public QueryNode withDiscriminatorValue(Object discriminatorValue) {
-			return new STISubClassNode(alias, type, tableInfo, children, sourceAlias, superClass, discriminatorColumn, discriminatorValue, parentAlias);
+			return new STISubClassNode(alias, type, tableInfo, children, sourceAlias, superClass, discriminatorColumn,
+					discriminatorValue, parentAlias);
 		}
 	}
+
 	/**
 	 * Single Table Inheritance node - a class in an STI hierarchy.
 	 * 
-	 * <p>STI nodes share a table with their parent/children. The discriminator column
+	 * <p>
+	 * STI nodes share a table with their parent/children. The discriminator column
 	 * contains a value that identifies which concrete type each row represents.
 	 * No JOIN is generated for STI relationships.
 	 */
@@ -249,7 +291,8 @@ public class AbstractQueryTree {
 	/**
 	 * A node that maps to a Java field or property.
 	 * 
-	 * <p>Field nodes represent the leaf level of property mappings, though
+	 * <p>
+	 * Field nodes represent the leaf level of property mappings, though
 	 * entity fields may themselves contain nested children.
 	 */
 	public non-sealed interface FieldNode extends QueryNode {
@@ -258,9 +301,11 @@ public class AbstractQueryTree {
 	}
 
 	/**
-	 * A field that references an entity type, combining field and table characteristics.
+	 * A field that references an entity type, combining field and table
+	 * characteristics.
 	 * 
-	 * <p>Entity nodes are both fields (they map to a Java property) and tables
+	 * <p>
+	 * Entity nodes are both fields (they map to a Java property) and tables
 	 * (they generate JOINs and have nested children). Examples include
 	 * {@link EntityReference} and {@link EmbeddedEntity}.
 	 */
@@ -273,29 +318,32 @@ public class AbstractQueryTree {
 	public interface Column {
 		/** The database column name. */
 		String columnName();
+
 		/** Returns a copy with the given column name. */
 		QueryNode withColumnName(String columnName);
 	}
-	
+
 	/**
 	 * A field that maps to a column in the current or parent table.
 	 * 
-	 * <p>This is distinguished from collection fields where the foreign key
+	 * <p>
+	 * This is distinguished from collection fields where the foreign key
 	 * resides in the child table rather than the current table.
 	 */
 	public interface ColumnFieldNode extends MappedFieldNode, Column {
 	}
-	
+
 	/**
 	 * A field node with JDBC value conversion support.
 	 * 
-	 * <p>The value mapper handles conversion between Java types and JDBC types,
+	 * <p>
+	 * The value mapper handles conversion between Java types and JDBC types,
 	 * including custom conversions for enums, JSON, and other complex types.
 	 */
 	public interface MappedFieldNode extends FieldNode {
 		/** The converter for JDBC value mapping, or null for default conversion. */
 		JdbcValueMapper valueMapper();
-	
+
 		/** Returns a copy with the given value mapper. */
 		public FieldNode withValueMapper(JdbcValueMapper valueMapper);
 	}
@@ -303,7 +351,8 @@ public class AbstractQueryTree {
 	/**
 	 * Placeholder for a field that has not yet been fully resolved.
 	 * 
-	 * <p>Used during tree construction before the field's mapping type is determined.
+	 * <p>
+	 * Used during tree construction before the field's mapping type is determined.
 	 */
 	public non-sealed interface EmptyFieldNode extends QueryNode {
 		FieldModel field();
@@ -312,7 +361,8 @@ public class AbstractQueryTree {
 	/**
 	 * Placeholder for a table that has not yet been populated with children.
 	 * 
-	 * <p>Used during tree construction as an intermediate state.
+	 * <p>
+	 * Used during tree construction as an intermediate state.
 	 */
 	public record EmptyTableNode(String alias, TypeModel type, TableInfo tableInfo) implements QueryNode {
 	}
@@ -320,7 +370,8 @@ public class AbstractQueryTree {
 	/**
 	 * A generic mapped field with value conversion support.
 	 */
-	public record MappedField(String alias, TypeModel type, FieldModel field, JdbcValueMapper valueMapper) implements MappedFieldNode {
+	public record MappedField(String alias, TypeModel type, FieldModel field, JdbcValueMapper valueMapper)
+			implements MappedFieldNode {
 		public FieldNode withValueMapper(JdbcValueMapper valueMapper) {
 			return new MappedField(alias, type, field, valueMapper);
 		}
@@ -333,16 +384,18 @@ public class AbstractQueryTree {
 	/**
 	 * The root of a query tree, representing the main FROM table.
 	 * 
-	 * <p>The root node also carries query-level clauses like GROUP BY and ORDER BY.
+	 * <p>
+	 * The root node also carries query-level clauses like GROUP BY and ORDER BY.
 	 * 
-	 * @param alias the table alias used in SQL
-	 * @param type the root entity type being queried
+	 * @param alias     the table alias used in SQL
+	 * @param type      the root entity type being queried
 	 * @param tableInfo database table metadata
-	 * @param children field and entity nodes to select
-	 * @param groupBy GROUP BY expressions (may contain {alias} placeholders)
-	 * @param orderBy ORDER BY expressions (may contain {alias} placeholders)
+	 * @param children  field and entity nodes to select
+	 * @param groupBy   GROUP BY expressions (may contain {alias} placeholders)
+	 * @param orderBy   ORDER BY expressions (may contain {alias} placeholders)
 	 */
-	public record RootNode(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children, List<String> groupBy, List<String> orderBy)
+	public record RootNode(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children,
+			List<String> groupBy, List<String> orderBy)
 			implements TableNode {
 		public RootNode withChildren(List<? extends QueryNode> newChildren) {
 			return new RootNode(alias, type, tableInfo, List.copyOf(newChildren), groupBy, orderBy);
@@ -367,39 +420,46 @@ public class AbstractQueryTree {
 		public static RootNode createEmptyRootNode(TypeModel rootType) {
 			return new RootNode(null, rootType, null, null, null, null);
 		}
-		
+
 	}
 
 	/**
 	 * An embedded entity whose fields are stored in the parent's table.
 	 * 
-	 * <p>Embedded entities don't generate JOINs. Their columns are prefixed to avoid
+	 * <p>
+	 * Embedded entities don't generate JOINs. Their columns are prefixed to avoid
 	 * name collisions with the parent's columns.
 	 * 
 	 * @param sourceAlias alias of the table containing the columns
 	 * @param fieldPrefix prefix applied to column names (e.g., "address_")
 	 */
-	public record EmbeddedEntity(String alias, TypeModel type, String sourceAlias, TableInfo tableInfo, List<QueryNode> children, FieldModel field, String fieldPrefix
-		) implements Embedding, EntityNode {
+	public record EmbeddedEntity(String alias, TypeModel type, String sourceAlias, TableInfo tableInfo,
+			List<QueryNode> children, FieldModel field, String fieldPrefix) implements Embedding, EntityNode {
 		public TableNode withChildren(List<? extends QueryNode> newChildren) {
-			return new EmbeddedEntity(alias, type, sourceAlias, tableInfo, List.copyOf(newChildren), field, fieldPrefix);
+			return new EmbeddedEntity(alias, type, sourceAlias, tableInfo, List.copyOf(newChildren), field,
+					fieldPrefix);
 		}
 
-		public static QueryNode fromEmptyFieldNode(EmptyFieldNode emptyFieldNode, String alias, TypeModel embeddedType, String sourceAlias, TableInfo tableInfo, String fieldPrefix) {
-			return new EmbeddedEntity(alias, embeddedType, sourceAlias, tableInfo, null, emptyFieldNode.field(), fieldPrefix);
+		public static QueryNode fromEmptyFieldNode(EmptyFieldNode emptyFieldNode, String alias, TypeModel embeddedType,
+				String sourceAlias, TableInfo tableInfo, String fieldPrefix) {
+			return new EmbeddedEntity(alias, embeddedType, sourceAlias, tableInfo, null, emptyFieldNode.field(),
+					fieldPrefix);
 		}
 	}
 
 	/**
 	 * A scalar (non-entity) field mapped to a database column or SQL expression.
 	 * 
-	 * <p>This is the most common field type, representing primitives, strings,
+	 * <p>
+	 * This is the most common field type, representing primitives, strings,
 	 * enums, dates, and other simple values.
 	 * 
 	 * @param columnName the database column name (may differ from field name)
-	 * @param expression custom SQL expression for computed columns (@Select annotation)
+	 * @param expression custom SQL expression for computed columns (@Select
+	 *                   annotation)
 	 */
-	public record ScalarValue(FieldModel field, String columnName, SqlExpression expression, JdbcValueMapper valueMapper) implements ScalarNode, ColumnFieldNode {
+	public record ScalarValue(FieldModel field, String columnName, SqlExpression expression,
+			JdbcValueMapper valueMapper) implements ScalarNode, ColumnFieldNode {
 
 		public ScalarValue withExpression(SqlExpression sql) {
 			return new ScalarValue(field, columnName, sql, valueMapper);
@@ -422,14 +482,17 @@ public class AbstractQueryTree {
 	/**
 	 * A scalar field with an aggregate SQL expression (COUNT, SUM, MAX, etc.).
 	 * 
-	 * <p>Aggregate fields trigger automatic GROUP BY generation for non-aggregate
-	 * scalar fields in the same query. The expression must contain an aggregate function.
+	 * <p>
+	 * Aggregate fields trigger automatic GROUP BY generation for non-aggregate
+	 * scalar fields in the same query. The expression must contain an aggregate
+	 * function.
 	 * 
 	 * @param columnName the output column name (usually derived from field name)
 	 * @param expression the aggregate SQL expression (e.g., "COUNT({alias.id})")
 	 * @see org.pojoquery.annotations.Aggregate
 	 */
-	public record AggregateScalarValue(FieldModel field, String columnName, SqlExpression expression, JdbcValueMapper valueMapper) implements ScalarNode, ColumnFieldNode {
+	public record AggregateScalarValue(FieldModel field, String columnName, SqlExpression expression,
+			JdbcValueMapper valueMapper) implements ScalarNode, ColumnFieldNode {
 
 		public AggregateScalarValue withExpression(SqlExpression sql) {
 			return new AggregateScalarValue(field, columnName, sql, valueMapper);
@@ -444,22 +507,25 @@ public class AbstractQueryTree {
 		}
 
 		public static AggregateScalarValue fromScalarValue(ScalarValue scalar) {
-			return new AggregateScalarValue(scalar.field(), scalar.columnName(), scalar.expression(), scalar.valueMapper());
+			return new AggregateScalarValue(scalar.field(), scalar.columnName(), scalar.expression(),
+					scalar.valueMapper());
 		}
 	}
 
 	/**
 	 * Primary key field implementation.
 	 * 
-	 * @param isAutoGenerated true if the database generates values (IDENTITY/SERIAL/AUTO_INCREMENT)
+	 * @param isAutoGenerated true if the database generates values
+	 *                        (IDENTITY/SERIAL/AUTO_INCREMENT)
 	 */
-	public record PrimaryKey(FieldModel field, String columnName, SqlExpression expression, Boolean isAutoGenerated, JdbcValueMapper valueMapper)
+	public record PrimaryKey(FieldModel field, String columnName, SqlExpression expression, Boolean isAutoGenerated,
+			JdbcValueMapper valueMapper)
 			implements PrimaryKeyField {
-		
+
 		public static PrimaryKey fromField(FieldModel field) {
 			return new PrimaryKey(field, null, null, null, null);
 		}
-		
+
 		public PrimaryKey withExpression(SqlExpression sql) {
 			return new PrimaryKey(field, columnName, sql, isAutoGenerated, valueMapper);
 		}
@@ -480,7 +546,8 @@ public class AbstractQueryTree {
 	/**
 	 * A node that generates a SQL JOIN clause.
 	 * 
-	 * <p>Join nodes connect tables via foreign key relationships. The join
+	 * <p>
+	 * Join nodes connect tables via foreign key relationships. The join
 	 * information specifies which columns form the relationship.
 	 */
 	public sealed interface Join permits JoinOne, JoinMany, TPSSuperClassNode, TPSSubClassNode {
@@ -499,9 +566,10 @@ public class AbstractQueryTree {
 	 */
 	public sealed interface JoinMany extends FieldNode, Join {
 	}
-	
+
 	/**
-	 * A many-to-one or one-to-one join where the foreign key is in the parent table.
+	 * A many-to-one or one-to-one join where the foreign key is in the parent
+	 * table.
 	 */
 	public sealed interface JoinOne extends ColumnFieldNode, Join {
 	}
@@ -509,36 +577,45 @@ public class AbstractQueryTree {
 	/**
 	 * A collection of scalar values from a one-to-many relationship.
 	 * 
-	 * <p>Unlike {@link EntityCollection}, this collects primitive/string values
+	 * <p>
+	 * Unlike {@link EntityCollection}, this collects primitive/string values
 	 * rather than entities. For example, a list of tags stored in a separate table.
 	 * 
 	 * @param componentType the type of elements in the collection (e.g., String)
-	 * @param fetchColumn the column containing the values to collect
+	 * @param fetchColumn   the column containing the values to collect
 	 */
-	public record ValueCollection(FieldModel field, String alias, TypeModel componentType, TableInfo joinTable, String fetchColumn, String parentAlias, ForeignKeyInfo join, SqlExpression expression, JdbcValueMapper valueMapper) 
-		implements JoinMany {
+	public record ValueCollection(FieldModel field, String alias, TypeModel componentType, TableInfo joinTable,
+			String fetchColumn, String parentAlias, ForeignKeyInfo join, SqlExpression expression,
+			JdbcValueMapper valueMapper)
+			implements JoinMany {
 
-		public static ValueCollection fromEmptyFieldNode(EmptyFieldNode emptyFieldNode, String alias, TypeModel componentType, TableInfo joinTable, String fetchColumn, String parentAlias, ForeignKeyInfo join) {
-			return new ValueCollection(emptyFieldNode.field(), alias, componentType, joinTable, fetchColumn, parentAlias, join, null, null);
+		public static ValueCollection fromEmptyFieldNode(EmptyFieldNode emptyFieldNode, String alias,
+				TypeModel componentType, TableInfo joinTable, String fetchColumn, String parentAlias,
+				ForeignKeyInfo join) {
+			return new ValueCollection(emptyFieldNode.field(), alias, componentType, joinTable, fetchColumn,
+					parentAlias, join, null, null);
 		}
 
 		public QueryNode withJoin(ForeignKeyInfo newJoin) {
-			return new ValueCollection(field, alias, componentType, joinTable, fetchColumn, parentAlias, newJoin, expression, valueMapper);
+			return new ValueCollection(field, alias, componentType, joinTable, fetchColumn, parentAlias, newJoin,
+					expression, valueMapper);
 		}
 
 		public QueryNode withExpression(SqlExpression sql) {
-			return new ValueCollection(field, alias, componentType, joinTable, fetchColumn, parentAlias, join, sql, valueMapper);
+			return new ValueCollection(field, alias, componentType, joinTable, fetchColumn, parentAlias, join, sql,
+					valueMapper);
 		}
 
 		public ValueCollection withValueMapper(JdbcValueMapper valueMapper) {
-			return new ValueCollection(field, alias, componentType, joinTable, fetchColumn, parentAlias, join, expression, valueMapper);
+			return new ValueCollection(field, alias, componentType, joinTable, fetchColumn, parentAlias, join,
+					expression, valueMapper);
 		}
 	}
 
 	/**
 	 * Metadata about a junction (join) table used in many-to-many relationships.
 	 * 
-	 * @param tableInfo the junction table's database metadata
+	 * @param tableInfo      the junction table's database metadata
 	 * @param joinTableAlias SQL alias for the junction table
 	 */
 	public record JoinTableInfo(TableInfo tableInfo, String joinTableAlias) {
@@ -547,19 +624,22 @@ public class AbstractQueryTree {
 	/**
 	 * Describes a foreign key relationship between two tables.
 	 * 
-	 * <p>This record captures all information needed to generate a JOIN ON clause.
-	 * The referring table contains the foreign key column; the target table contains
+	 * <p>
+	 * This record captures all information needed to generate a JOIN ON clause.
+	 * The referring table contains the foreign key column; the target table
+	 * contains
 	 * the referenced primary key.
 	 * 
-	 * @param referringTable table containing the FK column
-	 * @param referringAlias SQL alias for the referring table
-	 * @param targetTable table containing the referenced PK
-	 * @param targetAlias SQL alias for the target table
+	 * @param referringTable  table containing the FK column
+	 * @param referringAlias  SQL alias for the referring table
+	 * @param targetTable     table containing the referenced PK
+	 * @param targetAlias     SQL alias for the target table
 	 * @param foreignKeyField Java field for the FK (may be null for implicit FKs)
-	 * @param fkColumnName database column name for the FK
-	 * @param idField Java field for the PK
-	 * @param idColumnName database column name for the PK
-	 * @param joinCondition the join condition used in the ON clause of the query JOIN
+	 * @param fkColumnName    database column name for the FK
+	 * @param idField         Java field for the PK
+	 * @param idColumnName    database column name for the PK
+	 * @param joinCondition   the join condition used in the ON clause of the query
+	 *                        JOIN
 	 */
 	public record ForeignKeyInfo(TableInfo referringTable, String referringAlias, TableInfo targetTable,
 			String targetAlias, FieldModel foreignKeyField, String fkColumnName, FieldModel idField,
@@ -600,12 +680,13 @@ public class AbstractQueryTree {
 	/**
 	 * Complete join information for a many-to-many relationship via junction table.
 	 * 
-	 * <p>A many-to-many relationship requires two foreign keys: one from the parent
+	 * <p>
+	 * A many-to-many relationship requires two foreign keys: one from the parent
 	 * to the junction table, and one from the junction table to the child.
 	 * 
 	 * @param joinTableInfo the junction table metadata
-	 * @param parentKey FK from parent table to junction table
-	 * @param childKey FK from junction table to child table
+	 * @param parentKey     FK from parent table to junction table
+	 * @param childKey      FK from junction table to child table
 	 */
 	public record JoinTableJoin(JoinTableInfo joinTableInfo, ForeignKeyInfo parentKey, ForeignKeyInfo childKey) {
 
@@ -633,7 +714,8 @@ public class AbstractQueryTree {
 	/**
 	 * A collection of entities joined through a junction (many-to-many) table.
 	 * 
-	 * <p>This generates two JOINs: parent → junction table → child entity.
+	 * <p>
+	 * This generates two JOINs: parent → junction table → child entity.
 	 * The @Link annotation typically creates this node type.
 	 */
 	public record JoinTableEntityCollection(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children,
@@ -660,19 +742,23 @@ public class AbstractQueryTree {
 		}
 
 		public JoinTableEntityCollection withJoinTableJoin(JoinTableJoin joinTableJoin) {
-			return new JoinTableEntityCollection(alias, type, tableInfo, children, field, joinTableJoin, parentAlias, valueMapper);
+			return new JoinTableEntityCollection(alias, type, tableInfo, children, field, joinTableJoin, parentAlias,
+					valueMapper);
 		}
 
 		public JoinTableEntityCollection withValueMapper(JdbcValueMapper valueMapper) {
-			return new JoinTableEntityCollection(alias, type, tableInfo, children, field, join, parentAlias, valueMapper);
+			return new JoinTableEntityCollection(alias, type, tableInfo, children, field, join, parentAlias,
+					valueMapper);
 		}
 
 	}
 
 	/**
-	 * A collection of scalar values through a junction table (many-to-many of primitives).
+	 * A collection of scalar values through a junction table (many-to-many of
+	 * primitives).
 	 * 
-	 * <p>This is a specialized case for collecting non-entity values through a
+	 * <p>
+	 * This is a specialized case for collecting non-entity values through a
 	 * junction table, less common than {@link JoinTableEntityCollection}.
 	 */
 	public non-sealed interface JoinTableValueCollection extends ScalarNode, HasJoinTableJoin {
@@ -686,11 +772,18 @@ public class AbstractQueryTree {
 	/** Default implementation of {@link EmptyFieldNode}. */
 	public record EmptyFieldNodeImpl(FieldModel field) implements EmptyFieldNode {
 	}
+	public record SubQueryJoin(String alias, TableInfo tableInfo, TypeModel type, List<QueryNode> children, FieldModel field, String parentAlias, SqlQuery.JoinType joinType, RootNode subQueryTree, SqlExpression joinCondition) implements EntityNode {
+		public TableNode withChildren(List<? extends QueryNode> newChildren) {
+			return new SubQueryJoin(alias, tableInfo, type, List.copyOf(newChildren), field, parentAlias, joinType, subQueryTree,
+					joinCondition);
+		}
 
+	}
 	/**
 	 * A many-to-one or one-to-one entity reference (LEFT JOIN).
 	 * 
-	 * <p>The foreign key column resides in the parent table, referencing the
+	 * <p>
+	 * The foreign key column resides in the parent table, referencing the
 	 * primary key of the related entity.
 	 * 
 	 * @param columnName the FK column name in the parent table
@@ -705,7 +798,8 @@ public class AbstractQueryTree {
 
 		public static EntityReference fromEmptyFieldNode(EmptyFieldNode emptyFieldNode, String alias,
 				TableInfo determinTableInfo, FieldModel field, String parentAlias, ForeignKeyInfo join) {
-			return new EntityReference(alias, field.getType(), determinTableInfo, null, field, parentAlias, null, join, null);
+			return new EntityReference(alias, field.getType(), determinTableInfo, null, field, parentAlias, null, join,
+					null);
 		}
 
 		public QueryNode withJoin(ForeignKeyInfo newJoin) {
@@ -714,42 +808,78 @@ public class AbstractQueryTree {
 		}
 
 		public EntityReference withValueMapper(JdbcValueMapper valueMapper) {
-			return new EntityReference(alias, type, tableInfo, children, field, parentAlias, columnName, join, valueMapper);
+			return new EntityReference(alias, type, tableInfo, children, field, parentAlias, columnName, join,
+					valueMapper);
 		}
 
 		public EntityReference withColumnName(String columnName) {
-			return new EntityReference(alias, type, tableInfo, children, field, parentAlias, columnName, join, valueMapper);
+			return new EntityReference(alias, type, tableInfo, children, field, parentAlias, columnName, join,
+					valueMapper);
 		}
 	}
 
 	/**
 	 * A one-to-many entity collection (LEFT JOIN).
 	 * 
-	 * <p>The foreign key column resides in the child table, referencing the
+	 * <p>
+	 * The foreign key column resides in the child table, referencing the
 	 * primary key of the parent entity. Results are grouped by parent ID during
 	 * row processing to build the collection.
 	 */
 	public record EntityCollection(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children,
 			FieldModel field, String parentAlias, String columnName, ForeignKeyInfo join, JdbcValueMapper valueMapper)
 			implements TableNode, JoinMany {
-		
+
 		public static TableNode fromEmptyFieldNode(EmptyFieldNode emptyFieldNode, String alias,
-			TypeModel componentType, TableInfo tableInfo, String parentAlias, ForeignKeyInfo join) {
-				return new EntityCollection(alias, componentType, tableInfo, null, emptyFieldNode.field(), parentAlias,
-				null, join, null);
+				TypeModel componentType, TableInfo tableInfo, String parentAlias, ForeignKeyInfo join) {
+			return new EntityCollection(alias, componentType, tableInfo, null, emptyFieldNode.field(), parentAlias,
+					null, join, null);
 		}
-					
+
 		public TableNode withChildren(List<? extends QueryNode> newChildren) {
 			return new EntityCollection(alias, type, tableInfo, List.copyOf(newChildren), field, parentAlias,
 					columnName, join, valueMapper);
 		}
 
 		public QueryNode withJoin(ForeignKeyInfo newJoin) {
-			return new EntityCollection(alias, type, tableInfo, children, field, parentAlias, columnName, newJoin, valueMapper);
+			return new EntityCollection(alias, type, tableInfo, children, field, parentAlias, columnName, newJoin,
+					valueMapper);
 		}
 
 		public EntityCollection withValueMapper(JdbcValueMapper valueMapper) {
-			return new EntityCollection(alias, type, tableInfo, children, field, parentAlias, columnName, join, valueMapper);
+			return new EntityCollection(alias, type, tableInfo, children, field, parentAlias, columnName, join,
+					valueMapper);
+		}
+	}
+
+	public sealed interface Source permits TableInfo, SubQuery {
+	}
+
+	public record SubQuery(SqlExpression sqlExpression) implements Source {
+	}
+
+	public record TableInfo(
+			String schemaName,
+			String tableName) implements Source {
+		public TableInfo {
+			Objects.requireNonNull(tableName, "tableName");
+		}
+
+		public static TableInfo of(String tableName) {
+			Objects.requireNonNull(tableName, "tableName");
+			return new TableInfo(null, tableName);
+		}
+
+		public static TableInfo of(String schemaName, String tableName) {
+			Objects.requireNonNull(tableName, "tableName");
+			return new TableInfo("".equals(schemaName) ? null : schemaName, tableName);
+		}
+
+		@Override
+		public final String toString() {
+			return "TableInfo[" +
+					(schemaName == null ? "" : "schemaName=" + schemaName + ", ") +
+					"tableName=" + tableName + "]";
 		}
 	}
 

@@ -94,7 +94,7 @@ public class AQTRowProcessor<R> {
 		for (QueryNode child : tableNode.children()) {
 			if (child instanceof CustomQueryNode customNode) {
 				customNode.applyRowResultToEntity(tableNode, entity, row);
-			} else if (child instanceof EntityNode ref && (child instanceof EmbeddedEntity || child instanceof EntityReference)) {
+			} else if (child instanceof EntityNode ref) {
 				Object referencedEntity = entitiesOnThisRow.get(ref.alias());
 				if (referencedEntity != null) {
 					setFieldValue(entity, ref.field(), referencedEntity);

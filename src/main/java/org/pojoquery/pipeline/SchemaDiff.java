@@ -12,7 +12,7 @@ import org.pojoquery.pipeline.AQTSchemaGenerator.CollectedSchemaInfo;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumn;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumnKey;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLForeignKey;
-import org.pojoquery.pipeline.querytree.TableInfo;
+import org.pojoquery.pipeline.AbstractQueryTree.TableInfo;
 import org.pojoquery.schema.SchemaInfo;
 
 /**

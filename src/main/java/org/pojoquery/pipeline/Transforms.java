@@ -53,15 +53,16 @@ import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.SubClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.SubQueryJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.SuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.TableInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.TransformPipeline.RecursiveTransform;
 import org.pojoquery.pipeline.TransformPipeline.TreeTransform;
-import org.pojoquery.pipeline.querytree.TableInfo;
 import org.pojoquery.pipeline.querytree.transforms.AliasNaming;
 import org.pojoquery.pipeline.querytree.transforms.ExpressionResolver;
 import org.pojoquery.typemodel.AnnotationModel;
@@ -336,6 +337,36 @@ public final class Transforms {
         }
     }
     
+    public static class AddSubQueryEntityReferences implements RecursiveTransform {
+        @Override
+        public QueryNode transform(QueryNode node) {
+            return transformChildren(node,
+                    child -> child instanceof EmptyFieldNode emptyFieldNode
+                            && emptyFieldNode.field().getType().hasAnnotation(From.class),
+                    (TableNode parentNode, EmptyFieldNode emptyFieldNode) -> {
+                        TypeModel referencedType = emptyFieldNode.field().getType();
+                        String alias = AliasNaming.childAlias(
+                                parentNode instanceof RootNode,
+                                parentNode.alias(),
+                                emptyFieldNode.field().getName());
+
+                        RootNode subQueryTree = AQTTransformer.buildQueryTreeForType(referencedType, TransformPipeline.defaultPipeline());
+
+                        PrimaryKey primaryKeyField = subQueryTree.children().stream()
+                            .filter(child -> child instanceof PrimaryKey).map(PrimaryKey.class::cast).findFirst()
+                            .orElseThrow(() -> new MappingException("Referenced type " + referencedType.getQualifiedName() + " must have an @Id field"));
+
+                        String idFieldName = PojoMetadata.determineIdField(parentNode.type()).getName();
+                        SqlExpression joinCondition = SqlExpression.sql("{" + parentNode.alias() + "." + idFieldName + "} = {" + alias + "." + primaryKeyField.field().getName() + "}");
+
+                        List<QueryNode> children = PojoMetadata.collectFieldsOfClass(referencedType).stream()
+                            .<QueryNode>map(fieldModel -> new ScalarValue(fieldModel, fieldModel.getName(), SqlExpression.sql("{" + alias + "." + fieldModel.getName() + "}"), null))
+                            .toList();
+                        return new SubQueryJoin(alias, null, referencedType, children, emptyFieldNode.field(), parentNode.alias(), SqlQuery.JoinType.LEFT, subQueryTree, joinCondition);
+                    });
+        }   
+    }
+
     public static class AddEntityReferences implements RecursiveTransform {
         @Override
         public QueryNode transform(QueryNode node) {
@@ -455,7 +486,8 @@ public final class Transforms {
         public QueryNode transform(QueryNode node) {
             return transformChildren(node,
                     child -> child instanceof ScalarValue scalar && 
-                        scalar.field().hasAnnotation(Aggregate.class),
+                        scalar.field().hasAnnotation(Aggregate.class) &&
+                        scalar.expression() == null,
                     (TableNode parentNode, ScalarValue scalar) -> {
                         String expression = scalar.field().getAnnotationAttributeValue(Aggregate.class, "value", String.class);
                         expression = ExpressionResolver.resolve(expression, 
