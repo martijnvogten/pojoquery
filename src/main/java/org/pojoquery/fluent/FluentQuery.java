@@ -22,7 +22,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
-public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O, G> implements QueryTerminator<R,O,G> {
+public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G, PK>, W, O, G, PK> implements QueryTerminator<R,O,G,PK> {
 
 	public interface Appender {
 		void append(String sql, Iterable<Object> parameters);
@@ -33,7 +33,7 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O,
 	private List<SqlExpression> whereConditionSql = new ArrayList<>();
 
 	private final Terminator<Q, StaticConditionChainTerminator<Q>> staticTerminator;
-	private final ConditionChainTerminator conditionTerminator;
+	private final ConditionChainTerminator<R, W, ?, O, G, PK> conditionTerminator;
 	private final W whereStarter;
 	private O orderByStarter;
 	private G groupByStarter;
@@ -61,15 +61,15 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O,
 	}
 
 	// Factory method for chained condition operators (q.where().title.eq(...))
-	protected <V> ConditionChainOperators<ConditionTerminator<R, W, ?, O, G>, V> chainOp(String tableAlias, String fieldName, Class<V> fieldType) {
-		return new ConditionChainOperators<>(SqlExpression.sql("{" + tableAlias + "." + fieldName + "}"), fieldType, (ConditionTerminator<R, W, ?, O, G>) conditionTerminator, (String sql, Iterable<Object> params) -> appendExpression(sql, params));
+	protected <V> ConditionChainOperators<ConditionTerminator<R, W, ?, O, G, PK>, V> chainOp(String tableAlias, String fieldName, Class<V> fieldType) {
+		return new ConditionChainOperators<>(SqlExpression.sql("{" + tableAlias + "." + fieldName + "}"), fieldType, (ConditionTerminator<R, W, ?, O, G, PK>) conditionTerminator, (String sql, Iterable<Object> params) -> appendExpression(sql, params));
 	}
 
-	protected OrderByChain<QueryTerminator<R,O,G>> orderByOp(String tableAlias, String fieldName) {
-		return new OrderByChainField<>(tableAlias, fieldName, (QueryTerminator<R, O, G>)this, (String orderBy) -> query.addOrderBy(orderBy));
+	protected OrderByChain<QueryTerminator<R,O,G,PK>> orderByOp(String tableAlias, String fieldName) {
+		return new OrderByChainField<>(tableAlias, fieldName, (QueryTerminator<R, O, G, PK>)this, (String orderBy) -> query.addOrderBy(orderBy));
 	}
 
-	class GroupByChainField<T> implements QueryTerminator<R,O,G> {
+	class GroupByChainField<T> implements QueryTerminator<R,O,G,PK> {
 		private final String tableAlias;
 		private final String fieldName;
 
@@ -79,13 +79,13 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O,
 		}
 
 		@Override
-		public QueryTerminator<R,O,G> addOrderBy(String orderBy) {
+		public QueryTerminator<R,O,G,PK> addOrderBy(String orderBy) {
 			query.addGroupBy("{" + tableAlias + "." + fieldName + "}");
 			return FluentQuery.this.addOrderBy(orderBy);
 		}
 
 		@Override
-		public QueryTerminator<R, O, G> addGroupBy(String groupBy) {
+		public QueryTerminator<R, O, G, PK> addGroupBy(String groupBy) {
 			query.addGroupBy("{" + tableAlias + "." + fieldName + "}");
 			return this;
 		}
@@ -100,6 +100,11 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O,
 		public Optional<R> first(Connection c) {
 			return FluentQuery.this.first(c);
 		}
+
+		@Override
+		public Optional<R> findById(Connection c, PK id) {
+			return FluentQuery.this.findById(c, id);
+		}
 		
 		@Override
 		public O orderBy() {
@@ -108,7 +113,7 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O,
 		}
 		
 		@Override
-		public QueryTerminator<R, O, G> setLimit(int limit) {
+		public QueryTerminator<R, O, G, PK> setLimit(int limit) {
 			query.addGroupBy("{" + tableAlias + "." + fieldName + "}");
 			return FluentQuery.this.setLimit(limit);
 		}
@@ -121,7 +126,7 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O,
 
 	}
 
-	protected QueryTerminator<R, O, G> groupByOp(String tableAlias, String fieldName) {
+	protected QueryTerminator<R, O, G, PK> groupByOp(String tableAlias, String fieldName) {
 		return new GroupByChainField<>(tableAlias, fieldName);
 	}
 
@@ -137,10 +142,10 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O,
 		return whereStarter;
 	}
 
-	public ConditionTerminator<R, W, ?, O, G> where(Terminator<Q, StaticConditionChainTerminator<Q>> condition) {
+	public ConditionTerminator<R, W, ?, O, G, PK> where(Terminator<Q, StaticConditionChainTerminator<Q>> condition) {
 		SqlExpression sql = condition.toSql();
 		appendExpression(sql.getSql(), sql.getParameters());
-		return (ConditionTerminator<R, W, ?, O, G>) conditionTerminator;
+		return (ConditionTerminator<R, W, ?, O, G, PK>) conditionTerminator;
 	}
 
 	protected abstract W createWhereConditionStarter();
@@ -155,14 +160,14 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O,
 		staticConditionSql.add(new SqlExpression(sql, parameters));
 	}
 
-	public QueryTerminator<R,O,G> addOrderBy(String orderBy) {
+	public QueryTerminator<R,O,G,PK> addOrderBy(String orderBy) {
 		query.addOrderBy(orderBy);
-		return (QueryTerminator<R,O,G>) this;
+		return (QueryTerminator<R,O,G,PK>) this;
 	}
 
-	public QueryTerminator<R,O,G> addGroupBy(String groupBy) {
+	public QueryTerminator<R,O,G,PK> addGroupBy(String groupBy) {
 		query.addGroupBy(groupBy);
-		return (QueryTerminator<R,O,G>) this;
+		return (QueryTerminator<R,O,G,PK>) this;
 	}
 
 	public O orderBy() {
@@ -179,9 +184,9 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O,
 		return groupByStarter;
 	}
 
-	public QueryTerminator<R,O,G> setLimit(int limit) {
+	public QueryTerminator<R,O,G,PK> setLimit(int limit) {
 		query.setLimit(limit);
-		return (QueryTerminator<R,O,G>) this;
+		return (QueryTerminator<R,O,G,PK>) this;
 	}
 
 	public List<R> list(Connection c) {

@@ -249,12 +249,16 @@ public class FluentAQTCodeGenerator {
 			sb.append("%s\tpublic final Static%s %s = new Static%s();\n"
 				.formatted(indent, cap, nested.fieldName, cap));
 		}
-		sb.append("%s}\n\n".formatted(indent));
-		
-		// Recursively generate nested static classes
-		for (EntityField nested : entity.entityFields) {
-			generateStaticEntityClass(sb, queryClassName, nested, indent);
+
+		if (!entity.entityFields.isEmpty()) {
+			sb.append("\n");
 		}
+
+		// Recursively generate nested static classes inside the parent class scope.
+		for (EntityField nested : entity.entityFields) {
+			generateStaticEntityClass(sb, queryClassName, nested, indent + "\t");
+		}
+		sb.append("%s}\n\n".formatted(indent));
 	}
 	
 	private void generateWhereEntityClass(StringBuilder sb, String entityName, 
@@ -269,12 +273,16 @@ public class FluentAQTCodeGenerator {
 			sb.append("%s\tpublic final Where%s %s = new Where%s();\n"
 				.formatted(indent, cap, nested.fieldName, cap));
 		}
-		sb.append("%s}\n\n".formatted(indent));
-		
-		// Recursively generate nested where classes
-		for (EntityField nested : entity.entityFields) {
-			generateWhereEntityClass(sb, entityName, nested, indent);
+
+		if (!entity.entityFields.isEmpty()) {
+			sb.append("\n");
 		}
+
+		// Recursively generate nested where classes inside the parent class scope.
+		for (EntityField nested : entity.entityFields) {
+			generateWhereEntityClass(sb, entityName, nested, indent + "\t");
+		}
+		sb.append("%s}\n\n".formatted(indent));
 	}
 	
 	private void generateOrderByEntityClass(StringBuilder sb, String entityName, 
@@ -289,12 +297,16 @@ public class FluentAQTCodeGenerator {
 			sb.append("%s\tpublic final OrderBy%s %s = new OrderBy%s();\n"
 				.formatted(indent, cap, nested.fieldName, cap));
 		}
-		sb.append("%s}\n\n".formatted(indent));
-		
-		// Recursively generate nested orderby classes
-		for (EntityField nested : entity.entityFields) {
-			generateOrderByEntityClass(sb, entityName, nested, indent);
+
+		if (!entity.entityFields.isEmpty()) {
+			sb.append("\n");
 		}
+
+		// Recursively generate nested order by classes inside the parent class scope.
+		for (EntityField nested : entity.entityFields) {
+			generateOrderByEntityClass(sb, entityName, nested, indent + "\t");
+		}
+		sb.append("%s}\n\n".formatted(indent));
 	}
 	
 	private void generateGroupByEntityClass(StringBuilder sb, String entityName, 
@@ -309,12 +321,16 @@ public class FluentAQTCodeGenerator {
 			sb.append("%s\tpublic final GroupBy%s %s = new GroupBy%s();\n"
 				.formatted(indent, cap, nested.fieldName, cap));
 		}
-		sb.append("%s}\n\n".formatted(indent));
-		
-		// Recursively generate nested groupby classes
-		for (EntityField nested : entity.entityFields) {
-			generateGroupByEntityClass(sb, entityName, nested, indent);
+
+		if (!entity.entityFields.isEmpty()) {
+			sb.append("\n");
 		}
+
+		// Recursively generate nested group by classes inside the parent class scope.
+		for (EntityField nested : entity.entityFields) {
+			generateGroupByEntityClass(sb, entityName, nested, indent + "\t");
+		}
+		sb.append("%s}\n\n".formatted(indent));
 	}
 	
 	private void collectFields(TableNode table, List<ScalarField> scalarFields, 

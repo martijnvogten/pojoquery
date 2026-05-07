@@ -66,6 +66,18 @@ public class ConditionChainOperators<T,V> implements Operators<T>, FieldExpressi
 		return terminator;
 	}
 
+	public T isNull() {
+		SqlExpression result = SqlExpression.implode(" ", List.of(baseExpression, SqlExpression.sql("IS NULL")));
+		appendExpression.append(result.getSql(), result.getParameters());
+		return terminator;
+	}
+
+	public T isNotNull() {
+		SqlExpression result = SqlExpression.implode(" ", List.of(baseExpression, SqlExpression.sql("IS NOT NULL")));
+		appendExpression.append(result.getSql(), result.getParameters());
+		return terminator;
+	}
+
 	public T ne(FieldExpression<?> fieldExpr) {
 		appendBinaryExpression("<>", fieldExpr);
 		return terminator;

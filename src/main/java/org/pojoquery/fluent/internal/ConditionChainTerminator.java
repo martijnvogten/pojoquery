@@ -11,13 +11,13 @@ import org.pojoquery.fluent.FluentQuery.Appender;
 import org.pojoquery.fluent.QueryTerminator;
 import org.pojoquery.fluent.Terminator;
 
-public class ConditionChainTerminator<R, S, T extends ConditionChainTerminator<R, S, T, O, G>, O, G>
-		implements ConditionTerminator<R, S, T, O, G> {
+public class ConditionChainTerminator<R, S, T extends ConditionChainTerminator<R, S, T, O, G, PK>, O, G, PK>
+		implements ConditionTerminator<R, S, T, O, G, PK> {
 	private S starter;
-	private final FluentQuery<R, ?, ?, O, G> query;
+	private final FluentQuery<R, ?, ?, O, G, PK> query;
 	private final Appender expressionCallback;
 
-	public ConditionChainTerminator(FluentQuery<R, ?, ?, O, G> query, Appender builder) {
+	public ConditionChainTerminator(FluentQuery<R, ?, ?, O, G, PK> query, Appender builder) {
 		this.query = query;
 		this.expressionCallback = builder;
 	}
@@ -64,9 +64,14 @@ public class ConditionChainTerminator<R, S, T extends ConditionChainTerminator<R
 	}
 
 	@Override
-	public QueryTerminator<R,O,G> addOrderBy(String orderBy) {
+	public Optional<R> findById(Connection c, PK id) {
+		return query.findById(c, id);
+	}
+
+	@Override
+	public QueryTerminator<R,O,G,PK> addOrderBy(String orderBy) {
 		query.addOrderBy(orderBy);
-		return (QueryTerminator<R,O,G>) this;
+		return (QueryTerminator<R,O,G,PK>) this;
 	}
 
 	@Override
@@ -75,15 +80,15 @@ public class ConditionChainTerminator<R, S, T extends ConditionChainTerminator<R
 	}
 
 	@Override
-	public QueryTerminator<R,O,G> addGroupBy(String groupBy) {
+	public QueryTerminator<R,O,G,PK> addGroupBy(String groupBy) {
 		query.addGroupBy(groupBy);
-		return (QueryTerminator<R,O,G>) this;
+		return (QueryTerminator<R,O,G,PK>) this;
 	}
 
 	@Override
-	public QueryTerminator<R,O,G> setLimit(int limit) {
+	public QueryTerminator<R,O,G,PK> setLimit(int limit) {
 		query.setLimit(limit);
-		return (QueryTerminator<R,O,G>) this;
+		return (QueryTerminator<R,O,G,PK>) this;
 	}
 
 	@Override
