@@ -8,11 +8,11 @@ import java.lang.annotation.Target;
 /**
  * Marks a collection field for cascading operations.
  * 
- * <p>When present on a collection field, the {@link org.pojoquery.CascadingUpdater}
+ * <p>When present on a collection field, the {@link org.pojoquery.pipeline.AQTCascadingUpdater}
  * will automatically cascade insert, update, and delete operations to the
  * target entities.</p>
  * 
- * <p>The {@code CascadingUpdater.update()} method will:</p>
+ * <p>The {@code AQTCascadingUpdater.update()} method will:</p>
  * <ul>
  *   <li>Insert new items (items with null or zero ID)</li>
  *   <li>Update existing items (items with non-null ID that exist in database)</li>
@@ -43,14 +43,14 @@ import java.lang.annotation.Target;
  * order.lineItems.add(newLineItem);
  * order.lineItems.remove(0);  // This item will be deleted
  * 
- * CascadingUpdater.update(connection, order);
+ * AQTCascadingUpdater.update(connection, order);
  * }</pre>
  * 
  * <h2>Orphan Removal</h2>
  * <p>Items that exist in the database but are not present in the collection
  * will be deleted. This is similar to JPA's {@code orphanRemoval = true} behavior.</p>
  * 
- * @see org.pojoquery.CascadingUpdater
+ * @see org.pojoquery.pipeline.AQTCascadingUpdater
  */
 @Target({ElementType.FIELD, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)

@@ -37,7 +37,7 @@ import org.pojoquery.annotations.Transient;
  * // transformed now has @Id if original had @javax.persistence.Id
  * </pre>
  * 
- * @see JavaxAnnotationsTransform for pipeline integration
+ * @see org.pojoquery.pipeline.TransformPipeline
  */
 public final class JavaxAnnotations implements TypeTransformer {
 

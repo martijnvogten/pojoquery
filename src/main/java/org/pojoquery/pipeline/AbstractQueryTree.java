@@ -53,7 +53,6 @@ import org.pojoquery.typemodel.TypeModel;
  * all classes share one table with a discriminator column</li>
  * </ul>
  * 
- * @see org.pojoquery.pipeline.QueryTreeBuilder
  * @see org.pojoquery.pipeline.Transforms
  */
 public class AbstractQueryTree {

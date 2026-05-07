@@ -22,6 +22,14 @@ public final class AliasNaming {
         : parentAlias + "." + fieldName;
     }
     
+    /**
+     * Determines the alias for a child node based on whether the parent is the root.
+     *
+     * @param parentIsRoot whether the parent node is the root node
+     * @param parentAlias the parent node's alias
+     * @param fieldName the field name creating the join
+     * @return the child alias
+     */
     public static String childAlias(boolean parentIsRoot, String parentAlias, String fieldName) {
         return parentIsRoot ? fieldName : parentAlias + "." + fieldName;
     }
@@ -52,7 +60,6 @@ public final class AliasNaming {
      * Determines the alias for a superclass table.
      * 
      * @param childAlias The child (most specific) table's alias
-     * @param rootAlias The root table alias
      * @param superTableName The superclass table name
      * @return The superclass alias
      */
@@ -62,6 +69,10 @@ public final class AliasNaming {
     
     /**
      * Checks if the given alias is the root alias.
+     *
+     * @param alias the alias to check
+     * @param rootAlias the root alias
+     * @return {@code true} if the alias equals the root alias
      */
     public static boolean isRoot(String alias, String rootAlias) {
         return alias.equals(rootAlias);

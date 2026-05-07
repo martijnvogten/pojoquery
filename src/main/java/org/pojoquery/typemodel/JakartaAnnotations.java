@@ -37,7 +37,7 @@ import org.pojoquery.annotations.Transient;
  * // transformed now has @Id if original had @jakarta.persistence.Id
  * </pre>
  * 
- * @see JakartaAnnotationsTransform for pipeline integration
+ * @see org.pojoquery.pipeline.TransformPipeline
  */
 public final class JakartaAnnotations implements TypeTransformer {
 
