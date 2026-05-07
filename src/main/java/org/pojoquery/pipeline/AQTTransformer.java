@@ -15,11 +15,11 @@ import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
+import org.pojoquery.pipeline.AbstractQueryTree.SubQueryCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.SubQueryJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
-import org.pojoquery.pipeline.SqlQuery.SqlField;
 import org.pojoquery.typemodel.JakartaAnnotations;
 import org.pojoquery.typemodel.JavaxAnnotations;
 import org.pojoquery.typemodel.ReflectionTypeModel;
@@ -65,6 +65,11 @@ public class AQTTransformer {
 				toSql((TableNode) subQuery, sqlQuery);
 			} else if (child instanceof Embedding embedded) {
 				toSql((TableNode) embedded, sqlQuery);
+			} else if (child instanceof SubQueryCollection col) {
+				DefaultSqlQuery subSqlQuery = new DefaultSqlQuery(sqlQuery.getDbContext());
+				toSql(col.subQueryTree(), subSqlQuery, true);
+				sqlQuery.addSubqueryJoin(col.joinType(), subSqlQuery.toStatement(), col.alias(), col.joinCondition());
+				toSql((TableNode) col, sqlQuery);
 			} else if (child instanceof ValueCollection col) {
 				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, col.joinTable().schemaName(), col.joinTable().tableName(), col.alias(), col.join().joinCondition());
 				sqlQuery.addField(col.expression(), col.alias() + ".value");

@@ -6,10 +6,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.Assertions;
@@ -24,10 +20,13 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Select;
-import org.pojoquery.annotations.Subquery;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class StatsQueriesIT {
 	// Posts with comments domain classes
@@ -335,13 +334,11 @@ public class StatsQueriesIT {
 		Long filmId;
 		String title;
 
-		// @Subquery(joinOn = "filmId")
 		FilmStatsWithCategoriesAndActors categoryStats;
 		
-		@Subquery(joinOn = "filmId")
 		FilmStatsWithInventory inventoryStats;
 		
-		@Subquery(joinOn = "filmId")
+		@JoinCondition("{this.filmId} = {customerStats.filmId}")
 		List<CustomerStats> customerStats;
 	}
 

@@ -148,8 +148,8 @@ public class AbstractQueryTree {
 	 */
 	public sealed interface TableNode
 			extends QueryNode
-			permits Embedding, RootNode, EntityNode, EntityCollection, JoinTableEntityCollection, SuperClassNode, SubQueryJoin,
-			SubClassNode {
+			permits Embedding, RootNode, EntityNode, EntityCollection, JoinTableEntityCollection, SubQueryCollection,
+			SuperClassNode, SubClassNode {
 		/** SQL alias used to reference this table in the query. */
 		String alias();
 
@@ -772,6 +772,7 @@ public class AbstractQueryTree {
 	/** Default implementation of {@link EmptyFieldNode}. */
 	public record EmptyFieldNodeImpl(FieldModel field) implements EmptyFieldNode {
 	}
+
 	public record SubQueryJoin(String alias, TableInfo tableInfo, TypeModel type, List<QueryNode> children, FieldModel field, String parentAlias, SqlQuery.JoinType joinType, RootNode subQueryTree, SqlExpression joinCondition) implements EntityNode {
 		public TableNode withChildren(List<? extends QueryNode> newChildren) {
 			return new SubQueryJoin(alias, tableInfo, type, List.copyOf(newChildren), field, parentAlias, joinType, subQueryTree,
@@ -818,6 +819,15 @@ public class AbstractQueryTree {
 		}
 	}
 
+	public record SubQueryCollection(String alias, TableInfo tableInfo, TypeModel type, List<QueryNode> children, FieldModel field, String parentAlias, SqlQuery.JoinType joinType, RootNode subQueryTree, SqlExpression joinCondition) implements TableNode {
+		public TableNode withChildren(List<? extends QueryNode> newChildren) {
+			return new SubQueryCollection(alias, tableInfo, type, List.copyOf(newChildren), field, parentAlias, joinType, subQueryTree,
+					joinCondition);
+		}
+
+	}
+
+
 	/**
 	 * A one-to-many entity collection (LEFT JOIN).
 	 * 
@@ -851,16 +861,9 @@ public class AbstractQueryTree {
 					valueMapper);
 		}
 	}
-
-	public sealed interface Source permits TableInfo, SubQuery {
-	}
-
-	public record SubQuery(SqlExpression sqlExpression) implements Source {
-	}
-
 	public record TableInfo(
 			String schemaName,
-			String tableName) implements Source {
+			String tableName) {
 		public TableInfo {
 			Objects.requireNonNull(tableName, "tableName");
 		}

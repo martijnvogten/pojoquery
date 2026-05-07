@@ -52,6 +52,7 @@ public class TransformPipeline {
             Transforms.AddIdFieldToSubClassTableNodes.class,
             Transforms.AddSuperClassTableNodes.class,
             Transforms.AddEmbeddedEntities.class,
+            Transforms.AddSubQueryEntityCollections.class,
             Transforms.AddValueCollections.class,
             Transforms.AddJoinTableEntityCollections.class,
             Transforms.AddEntityCollections.class,

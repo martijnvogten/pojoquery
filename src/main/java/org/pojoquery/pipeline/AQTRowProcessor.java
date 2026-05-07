@@ -12,10 +12,8 @@ import java.util.function.Consumer;
 import org.pojoquery.JdbcValueMapper;
 import org.pojoquery.pipeline.AbstractQueryTree.ColumnFieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.CustomQueryNode;
-import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityNode;
-import org.pojoquery.pipeline.AbstractQueryTree.EntityReference;
 import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.MappedFieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
@@ -24,6 +22,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarNode;
 import org.pojoquery.pipeline.AbstractQueryTree.SubClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.SubQueryCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.SuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
@@ -99,6 +98,8 @@ public class AQTRowProcessor<R> {
 				if (referencedEntity != null) {
 					setFieldValue(entity, ref.field(), referencedEntity);
 				}
+			} else if (child instanceof SubQueryCollection sqc) {
+				addToCollection(entity, sqc.field(), entitiesOnThisRow.get(sqc.alias()), value -> value, sqc.type());
 			} else if (child instanceof EntityCollection ec) {
 				addToCollection(entity, ec.field(), entitiesOnThisRow.get(ec.alias()), ec.valueMapper(), ec.type());
 			} else if (child instanceof JoinTableEntityCollection jtec) {

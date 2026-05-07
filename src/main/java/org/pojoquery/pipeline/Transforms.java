@@ -53,6 +53,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.SubClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.SubQueryCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.SubQueryJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.SuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
@@ -363,6 +364,36 @@ public final class Transforms {
                             .<QueryNode>map(fieldModel -> new ScalarValue(fieldModel, fieldModel.getName(), SqlExpression.sql("{" + alias + "." + fieldModel.getName() + "}"), null))
                             .toList();
                         return new SubQueryJoin(alias, null, referencedType, children, emptyFieldNode.field(), parentNode.alias(), SqlQuery.JoinType.LEFT, subQueryTree, joinCondition);
+                    });
+        }   
+    }
+
+    public static class AddSubQueryEntityCollections implements RecursiveTransform {
+        @Override
+        public QueryNode transform(QueryNode node) {
+            return transformChildren(node,
+                    child -> child instanceof EmptyFieldNode emptyFieldNode
+                            && isCollection(emptyFieldNode.field().getType())
+                            && getCollectionComponentType(emptyFieldNode.field().getType()).hasAnnotation(From.class),
+                    (TableNode parentNode, EmptyFieldNode emptyFieldNode) -> {
+                        TypeModel collectionType = emptyFieldNode.field().getType();
+                        TypeModel componentType = getCollectionComponentType(collectionType);
+                        String alias = AliasNaming.childAlias(node instanceof RootNode, parentNode.alias(),
+                                emptyFieldNode.field().getName());
+
+                        RootNode subQueryTree = AQTTransformer.buildQueryTreeForType(componentType, TransformPipeline.defaultPipeline());
+
+                        String joinConditionValue = emptyFieldNode.field().getAnnotationAttributeValue(JoinCondition.class, "value", String.class);
+                        if (joinConditionValue == null || joinConditionValue.isEmpty()) {
+                            String idFieldName = PojoMetadata.determineIdField(parentNode.type()).getName();
+                            joinConditionValue = "{" + parentNode.alias() + "." + idFieldName + "} = {" + alias + "." + idFieldName + "}";
+                        }
+                        SqlExpression joinCondition = SqlExpression.sql(joinConditionValue);
+
+                        List<QueryNode> children = PojoMetadata.collectFieldsOfClass(componentType).stream()
+                            .<QueryNode>map(fieldModel -> new ScalarValue(fieldModel, fieldModel.getName(), SqlExpression.sql("{" + alias + "." + fieldModel.getName() + "}"), null))
+                            .toList();
+                        return new SubQueryCollection(alias, null, componentType, children, emptyFieldNode.field(), parentNode.alias(), SqlQuery.JoinType.LEFT, subQueryTree, joinCondition);
                     });
         }   
     }
@@ -1004,6 +1035,10 @@ public final class Transforms {
     private static boolean isEntityCollection(TypeModel type) {
         return type.getArrayComponentType() != null && isEntity(type.getArrayComponentType()) ||
                 type.getTypeArgument() != null && isEntity(type.getTypeArgument());
+    }
+
+    private static boolean isCollection(TypeModel type) {
+        return type.getArrayComponentType() != null || type.getTypeArgument() != null;
     }
 
     private static boolean isValueCollection(TypeModel type) {

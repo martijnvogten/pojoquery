@@ -5,6 +5,8 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Stream;
 
 import org.pojoquery.DB;
@@ -36,12 +38,11 @@ public abstract class FluentQuery<R, Q extends FluentQuery<R, Q, W, O, G>, W, O,
 	private O orderByStarter;
 	private G groupByStarter;
 
-	private static RootNode tree;
+	private static final ConcurrentMap<Class<?>, RootNode> TREE_BY_TYPE = new ConcurrentHashMap<>();
+	private final RootNode tree;
 
 	protected FluentQuery(Class<R> type) {
-		if (tree == null) {
-			tree = AQTTransformer.buildQueryTreeForType(type);
-		}
+		tree = TREE_BY_TYPE.computeIfAbsent(type, AQTTransformer::buildQueryTreeForType);
 		AQTTransformer.toSql(tree, query);
 
 		this.staticTerminator = new StaticConditionChainTerminator<>((Q) this, (String sql, Iterable<Object> params) -> appendStaticExpression(sql, params), this::getStaticConditionSql);
