@@ -209,14 +209,29 @@ public class TestJsonMultisets {
 			} else if (child instanceof ScalarValue scalar) {
 				sqlQuery.addJsonField(scalar.field().getName(), scalar.expression());
 			} else if (child instanceof JoinTableEntityCollection ec) {
-				sqlQuery.addTableJoin(SqlQuery.JoinType.LEFT, ec.join().joinTableInfo().tableInfo(), ec.join().joinTableInfo().joinTableAlias(), ec.join().parentKey().joinCondition());
-				
-				// for collections, we need to transform the subtree into a JSON_ARRAYAGG expression
+				// Push the junction table into the subquery so the outer query stays at one
+				// row per parent. Otherwise the outer JSON_ARRAYAGG would emit one element
+				// per row in the parent x junction fan-out, duplicating the parent.
+				String junctionAlias = ec.join().joinTableInfo().joinTableAlias();
+				TableInfo junctionTable = ec.join().joinTableInfo().tableInfo();
+				String parentFkCol = ec.join().parentKey().fkColumnName();
+				String parentIdCol = ec.join().parentKey().idColumnName();
+				String parentAlias = node.alias();
+
 				JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), sqlQuery.getIndent() + "  ");
-				jsonQuery.setTable(ec.join().childKey().targetTable(), ec.alias());
-				jsonQuery.addField(SqlExpression.sql("{" + ec.alias() + "." + ec.join().childKey().idField().getName() + "}"), ec.join().childKey().idField().getName());
+				
+				jsonQuery.setTable(junctionTable, junctionAlias);
+				jsonQuery.addTableJoin(JoinType.LEFT, ec.join().childKey().targetTable(), ec.alias(),
+						ec.join().childKey().joinCondition());
+				jsonQuery.addField(SqlExpression.sql("{" + junctionAlias + "." + parentFkCol + "}"), parentFkCol);
 				toJsonQuery(ec, jsonQuery);
-				sqlQuery.addSubQueryJoin(JoinType.LEFT, jsonQuery.toStatement(), ec.alias(), ec.join().childKey().joinCondition());
+				// Set GROUP BY *after* the recursive call so the child PrimaryKey handler
+				// doesn't overwrite it; we must group by the junction FK, not the child PK.
+				jsonQuery.setGroupBy(List.of(SqlExpression.sql("{" + junctionAlias + "." + parentFkCol + "}")));
+
+				SqlExpression onCondition = SqlExpression.sql(
+						"{" + ec.alias() + "." + parentFkCol + "} = {" + parentAlias + "." + parentIdCol + "}");
+				sqlQuery.addSubQueryJoin(JoinType.LEFT, jsonQuery.toStatement(), ec.alias(), onCondition);
 				sqlQuery.addJsonField(ec.field().getName(), SqlExpression.sql("{" + ec.alias() + ".json} FORMAT JSON"));
 			}
 		}
