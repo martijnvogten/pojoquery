@@ -10,8 +10,10 @@ import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.SqlExpression;
+import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
+import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.pipeline.AbstractQueryTree.AggregateScalarValue;
@@ -19,7 +21,9 @@ import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
+import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
+import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
@@ -56,6 +60,7 @@ public class TestJsonMultisets {
 	static class JsonSqlQueryBuilder {
 		static record JsonSqlField(String jsonPropertyName, SqlExpression expression) {}
 		static record SelectField(SqlExpression expression, String alias) {}
+		static record SubClassVariant(SqlExpression whenCondition, String typeName, List<JsonSqlField> extraFields) {}
 
 		interface JsonJoin {
 			JoinType type();
@@ -75,6 +80,8 @@ public class TestJsonMultisets {
 		List<SelectField> selectFields = new ArrayList<>();
 		List<JsonSqlField> jsonFields = new ArrayList<>();
 		List<JsonJoin> joins = new ArrayList<>();
+		List<SubClassVariant> subClassVariants = new ArrayList<>();
+		String defaultTypeName; // emitted as '_type' in the ELSE branch when subClassVariants is non-empty
 
 		public JsonSqlQueryBuilder(DbContext dbContext, String indent) {
 			this.indent = indent;
@@ -108,6 +115,14 @@ public class TestJsonMultisets {
 			jsonFields.add(new JsonSqlField(jsonPropertyName, expression));
 		}
 
+		public void addSubClassVariant(SqlExpression whenCondition, String typeName, List<JsonSqlField> extraFields) {
+			subClassVariants.add(new SubClassVariant(whenCondition, typeName, extraFields));
+		}
+
+		public void setDefaultTypeName(String defaultTypeName) {
+			this.defaultTypeName = defaultTypeName;
+		}
+
 		public void addSubQueryJoin(JoinType type, SqlExpression subquery, String alias, SqlExpression joinCondition) {
 			joins.add(new JsonSubQueryJoin(type, subquery, alias, joinCondition));
 		}
@@ -123,18 +138,9 @@ public class TestJsonMultisets {
 				parts.add(SqlExpression.sql(indent + "  " + resolveAliasesInternal(dbContext, field.expression, null, null).getSql() + " AS " + dbContext.quoteAlias(field.alias) + ","));
 			});
 
-			parts.add(SqlExpression.sql(indent + "JSON_ARRAYAGG(\n" + indent + "  JSON_OBJECT(")); // start of JSON_OBJECT
-			List<SqlExpression> objectProperties = jsonFields.stream()
-					.map(field -> 
-						SqlExpression.implode(": ", 
-							List.of(SqlExpression.sql(indent + "    '" + field.jsonPropertyName + "'"), 
-							resolveAliasesInternal(dbContext, field.expression, null, null)))
-						)
-					.toList();
-
-			parts.add(SqlExpression.implode(",\n", objectProperties));
-
-			parts.add(SqlExpression.sql(indent + "  )\n" + indent + ") AS " + dbContext.quoteAlias("json")));
+			parts.add(SqlExpression.sql(indent + "JSON_ARRAYAGG("));
+			parts.add(buildJsonValueExpression());
+			parts.add(SqlExpression.sql(indent + ") AS " + dbContext.quoteAlias("json")));
 			parts.add(SqlExpression.sql(indent + "FROM " + fromClause));
 
 			List<SqlExpression> joinExpressions = joins.stream()
@@ -161,6 +167,48 @@ public class TestJsonMultisets {
 			if (orderBy != null && !orderBy.isEmpty()) {
 				parts.add(SqlExpression.sql(indent + "ORDER BY " + String.join(", ", orderBy.stream().map(expr -> resolveAliasesInternal(dbContext, expr, null, null).getSql()).toList())));
 			}
+			return SqlExpression.implode("\n", parts);
+		}
+
+		private SqlExpression buildJsonValueExpression() {
+			String innerIndent = indent + "  ";
+			if (subClassVariants.isEmpty()) {
+				return buildJsonObject(innerIndent, jsonFields);
+			}
+			// Emit a CASE expression with one JSON_OBJECT per subclass variant plus a default ELSE.
+			List<SqlExpression> caseParts = new ArrayList<>();
+			caseParts.add(SqlExpression.sql(innerIndent + "CASE"));
+			for (SubClassVariant variant : subClassVariants) {
+				List<JsonSqlField> branchFields = new ArrayList<>(jsonFields);
+				branchFields.add(new JsonSqlField("_type", SqlExpression.sql("'" + variant.typeName() + "'")));
+				branchFields.addAll(variant.extraFields());
+				caseParts.add(SqlExpression.implode("", List.of(
+						SqlExpression.sql(innerIndent + "  WHEN "),
+						resolveAliasesInternal(dbContext, variant.whenCondition(), null, null),
+						SqlExpression.sql(" THEN\n"),
+						buildJsonObject(innerIndent + "    ", branchFields))));
+			}
+			List<JsonSqlField> defaultFields = new ArrayList<>(jsonFields);
+			if (defaultTypeName != null) {
+				defaultFields.add(new JsonSqlField("_type", SqlExpression.sql("'" + defaultTypeName + "'")));
+			}
+			caseParts.add(SqlExpression.implode("", List.of(
+					SqlExpression.sql(innerIndent + "  ELSE\n"),
+					buildJsonObject(innerIndent + "    ", defaultFields))));
+			caseParts.add(SqlExpression.sql(innerIndent + "END"));
+			return SqlExpression.implode("\n", caseParts);
+		}
+
+		private SqlExpression buildJsonObject(String objectIndent, List<JsonSqlField> fields) {
+			List<SqlExpression> parts = new ArrayList<>();
+			parts.add(SqlExpression.sql(objectIndent + "JSON_OBJECT("));
+			List<SqlExpression> properties = fields.stream()
+					.map(field -> SqlExpression.implode(": ", List.of(
+							SqlExpression.sql(objectIndent + "  '" + field.jsonPropertyName + "'"),
+							resolveAliasesInternal(dbContext, field.expression, null, null))))
+					.toList();
+			parts.add(SqlExpression.implode(",\n", properties));
+			parts.add(SqlExpression.sql(objectIndent + ")"));
 			return SqlExpression.implode("\n", parts);
 		}
 
@@ -192,6 +240,7 @@ public class TestJsonMultisets {
 	public static void toJsonQuery(TableNode node, JsonSqlQueryBuilder sqlQuery) {
 		if (node instanceof RootNode rootNode) {
 			sqlQuery.setTable(node.tableInfo(), node.tableInfo().tableName());
+			sqlQuery.setDefaultTypeName(rootNode.type().getSimpleName());
 			if (rootNode.groupBy() != null) {
 				sqlQuery.setGroupBy(rootNode.groupBy().stream().map(expr -> SqlExpression.sql(expr)).toList());
 			}
@@ -208,6 +257,18 @@ public class TestJsonMultisets {
 				sqlQuery.addJsonField(agg.field().getName(), agg.expression());
 			} else if (child instanceof ScalarValue scalar) {
 				sqlQuery.addJsonField(scalar.field().getName(), scalar.expression());
+			} else if (child instanceof TPSSubClassNode tps) {
+				// Add the LEFT JOIN to the subclass table; collect its scalar fields as branch extras.
+				sqlQuery.addTableJoin(JoinType.LEFT, tps.tableInfo(), tps.alias(), tps.join().joinCondition());
+				List<JsonSqlQueryBuilder.JsonSqlField> extras = new ArrayList<>();
+				SqlExpression discriminatorExpr = collectSubclassScalars(tps, extras);
+				SqlExpression when = SqlExpression.implode("", List.of(discriminatorExpr, SqlExpression.sql(" IS NOT NULL")));
+				sqlQuery.addSubClassVariant(when, tps.type().getSimpleName(), extras);
+			} else if (child instanceof STISubClassNode sti) {
+				List<JsonSqlQueryBuilder.JsonSqlField> extras = new ArrayList<>();
+				collectSubclassScalars(sti, extras);
+				SqlExpression when = SqlExpression.sql("{" + sti.sourceAlias() + "." + sti.discriminatorColumn() + "} = '" + sti.discriminatorValue() + "'");
+				sqlQuery.addSubClassVariant(when, sti.type().getSimpleName(), extras);
 			} else if (child instanceof JoinTableEntityCollection ec) {
 				// Push the junction table into the subquery so the outer query stays at one
 				// row per parent. Otherwise the outer JSON_ARRAYAGG would emit one element
@@ -219,7 +280,7 @@ public class TestJsonMultisets {
 				String parentAlias = node.alias();
 
 				JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), sqlQuery.getIndent() + "  ");
-				
+
 				jsonQuery.setTable(junctionTable, junctionAlias);
 				jsonQuery.addTableJoin(JoinType.LEFT, ec.join().childKey().targetTable(), ec.alias(),
 						ec.join().childKey().joinCondition());
@@ -237,6 +298,26 @@ public class TestJsonMultisets {
 		}
 	}
 
+	/**
+	 * Walk a subclass node's scalar children and append them to {@code extras}.
+	 * Returns the subclass primary key expression for use as the TPS discriminator.
+	 */
+	private static SqlExpression collectSubclassScalars(TableNode subNode, List<JsonSqlQueryBuilder.JsonSqlField> extras) {
+		SqlExpression pkExpression = null;
+		if (subNode.children() != null) {
+			for (QueryNode child : subNode.children()) {
+				if (child instanceof PrimaryKey pk) {
+					pkExpression = pk.expression();
+				} else if (child instanceof ScalarValue scalar) {
+					extras.add(new JsonSqlQueryBuilder.JsonSqlField(scalar.field().getName(), scalar.expression()));
+				} else if (child instanceof AggregateScalarValue agg) {
+					extras.add(new JsonSqlQueryBuilder.JsonSqlField(agg.field().getName(), agg.expression()));
+				}
+			}
+		}
+		return pkExpression;
+	}
+
 	@Test
 	public void testManualQueryBuilder() {
 		DataSource db = TestDatabaseProvider.getDataSource();
@@ -251,6 +332,103 @@ public class TestJsonMultisets {
 		RootNode tree = userQuery.getTree();
 		JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), "");
 		toJsonQuery(tree, jsonQuery);
+		String sql = jsonQuery.toStatement().getSql();
+		System.out.println(sql);
+		DB.queryRows(db, sql).forEach(row -> System.out.println(row));
+	}
+
+	// --- Inheritance: table-per-subclass -----------------------------------
+
+	@Table("tps_room")
+	@SubClasses({TpsBedRoom.class, TpsKitchen.class})
+	static class TpsRoom {
+		@Id Long id;
+		Double area;
+	}
+
+	@Table("tps_bedroom")
+	static class TpsBedRoom extends TpsRoom {
+		Integer numberOfBeds;
+	}
+
+	@Table("tps_kitchen")
+	static class TpsKitchen extends TpsRoom {
+		Boolean hasDishWasher;
+	}
+
+	@Test
+	public void testTablePerSubclassJsonQuery() {
+		DataSource db = TestDatabaseProvider.getDataSource();
+		SchemaGenerator.createTables(db, TpsRoom.class, TpsBedRoom.class, TpsKitchen.class);
+		DB.runInTransaction(db, connection -> {
+			TpsBedRoom bedRoom = new TpsBedRoom();
+			bedRoom.area = 12.5;
+			bedRoom.numberOfBeds = 2;
+			PojoQuery.insert(connection, bedRoom);
+
+			TpsKitchen kitchen = new TpsKitchen();
+			kitchen.area = 8.0;
+			kitchen.hasDishWasher = true;
+			PojoQuery.insert(connection, kitchen);
+
+			TpsRoom plain = new TpsRoom();
+			plain.area = 5.0;
+			PojoQuery.insert(connection, plain);
+		});
+
+		PojoQuery<TpsRoom> roomQuery = PojoQuery.build(
+				DbContext.getDefault(),
+				TransformPipeline.defaultPipeline(),
+				TpsRoom.class);
+
+		JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), "");
+		toJsonQuery(roomQuery.getTree(), jsonQuery);
+		String sql = jsonQuery.toStatement().getSql();
+		System.out.println(sql);
+		DB.queryRows(db, sql).forEach(row -> System.out.println(row));
+	}
+
+	// --- Inheritance: single-table -----------------------------------------
+
+	@Table("sti_room")
+	@DiscriminatorColumn
+	@SubClasses({StiBedRoom.class, StiKitchen.class})
+	static class StiRoom {
+		@Id Long id;
+		Double area;
+	}
+
+	static class StiBedRoom extends StiRoom {
+		Integer numberOfBeds;
+	}
+
+	static class StiKitchen extends StiRoom {
+		Boolean hasDishWasher;
+	}
+
+	@Test
+	public void testSingleTableInheritanceJsonQuery() {
+		DataSource db = TestDatabaseProvider.getDataSource();
+		SchemaGenerator.createTables(db, StiRoom.class);
+		DB.runInTransaction(db, connection -> {
+			StiBedRoom bedRoom = new StiBedRoom();
+			bedRoom.area = 12.5;
+			bedRoom.numberOfBeds = 2;
+			PojoQuery.insert(connection, bedRoom);
+
+			StiKitchen kitchen = new StiKitchen();
+			kitchen.area = 8.0;
+			kitchen.hasDishWasher = true;
+			PojoQuery.insert(connection, kitchen);
+		});
+
+		PojoQuery<StiRoom> roomQuery = PojoQuery.build(
+				DbContext.getDefault(),
+				TransformPipeline.defaultPipeline(),
+				StiRoom.class);
+
+		JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), "");
+		toJsonQuery(roomQuery.getTree(), jsonQuery);
 		String sql = jsonQuery.toStatement().getSql();
 		System.out.println(sql);
 		DB.queryRows(db, sql).forEach(row -> System.out.println(row));
