@@ -17,6 +17,7 @@ import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.pipeline.AbstractQueryTree.AggregateScalarValue;
+import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
@@ -27,7 +28,6 @@ import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
-import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.TransformPipeline;
 import org.pojoquery.schema.SchemaGenerator;
@@ -173,33 +173,46 @@ public class TestJsonMultisets {
 		private SqlExpression buildJsonValueExpression() {
 			String innerIndent = indent + "  ";
 			if (subClassVariants.isEmpty()) {
-				return buildJsonObject(innerIndent, jsonFields);
+				return buildJsonObject(innerIndent, jsonFields, false);
 			}
-			// Emit a CASE expression with one JSON_OBJECT per subclass variant plus a default ELSE.
-			List<SqlExpression> caseParts = new ArrayList<>();
-			caseParts.add(SqlExpression.sql(innerIndent + "CASE"));
+			// HSQLDB's JSON_ARRAYAGG parser does not accept a CASE returning JSON_OBJECT
+			// (it collapses to VARCHAR and gets escaped) and does not allow FORMAT JSON
+			// on its argument. So we keep a single JSON_OBJECT and push the polymorphism
+			// into property values:
+			//   '_type': CASE WHEN <var1> THEN 'TypeA' ... ELSE '<default>' END
+			//   'subclassField': CASE WHEN <varN> THEN <expr> END   -- NULL otherwise
+			// The inner JSON_OBJECT uses ABSENT ON NULL so the irrelevant subclass
+			// properties are stripped from the output.
+			List<JsonSqlField> mergedFields = new ArrayList<>(jsonFields);
+			mergedFields.add(new JsonSqlField("_type", buildTypeCase()));
 			for (SubClassVariant variant : subClassVariants) {
-				List<JsonSqlField> branchFields = new ArrayList<>(jsonFields);
-				branchFields.add(new JsonSqlField("_type", SqlExpression.sql("'" + variant.typeName() + "'")));
-				branchFields.addAll(variant.extraFields());
-				caseParts.add(SqlExpression.implode("", List.of(
-						SqlExpression.sql(innerIndent + "  WHEN "),
-						resolveAliasesInternal(dbContext, variant.whenCondition(), null, null),
-						SqlExpression.sql(" THEN\n"),
-						buildJsonObject(innerIndent + "    ", branchFields))));
+				for (JsonSqlField extra : variant.extraFields()) {
+					SqlExpression guarded = SqlExpression.implode("", List.of(
+							SqlExpression.sql("CASE WHEN "),
+							variant.whenCondition(),
+							SqlExpression.sql(" THEN "),
+							extra.expression(),
+							SqlExpression.sql(" END")));
+					mergedFields.add(new JsonSqlField(extra.jsonPropertyName(), guarded));
+				}
 			}
-			List<JsonSqlField> defaultFields = new ArrayList<>(jsonFields);
-			if (defaultTypeName != null) {
-				defaultFields.add(new JsonSqlField("_type", SqlExpression.sql("'" + defaultTypeName + "'")));
-			}
-			caseParts.add(SqlExpression.implode("", List.of(
-					SqlExpression.sql(innerIndent + "  ELSE\n"),
-					buildJsonObject(innerIndent + "    ", defaultFields))));
-			caseParts.add(SqlExpression.sql(innerIndent + "END"));
-			return SqlExpression.implode("\n", caseParts);
+			return buildJsonObject(innerIndent, mergedFields, true);
 		}
 
-		private SqlExpression buildJsonObject(String objectIndent, List<JsonSqlField> fields) {
+		private SqlExpression buildTypeCase() {
+			List<SqlExpression> parts = new ArrayList<>();
+			parts.add(SqlExpression.sql("CASE"));
+			for (SubClassVariant variant : subClassVariants) {
+				parts.add(SqlExpression.implode("", List.of(
+						SqlExpression.sql(" WHEN "),
+						variant.whenCondition(),
+						SqlExpression.sql(" THEN '" + variant.typeName() + "'"))));
+			}
+			parts.add(SqlExpression.sql(" ELSE '" + (defaultTypeName != null ? defaultTypeName : "") + "' END"));
+			return SqlExpression.implode("", parts);
+		}
+
+		private SqlExpression buildJsonObject(String objectIndent, List<JsonSqlField> fields, boolean absentOnNull) {
 			List<SqlExpression> parts = new ArrayList<>();
 			parts.add(SqlExpression.sql(objectIndent + "JSON_OBJECT("));
 			List<SqlExpression> properties = fields.stream()
@@ -208,7 +221,7 @@ public class TestJsonMultisets {
 							resolveAliasesInternal(dbContext, field.expression, null, null))))
 					.toList();
 			parts.add(SqlExpression.implode(",\n", properties));
-			parts.add(SqlExpression.sql(objectIndent + ")"));
+			parts.add(SqlExpression.sql(objectIndent + (absentOnNull ? "  ABSENT ON NULL\n" + objectIndent : "") + ")"));
 			return SqlExpression.implode("\n", parts);
 		}
 
@@ -269,6 +282,25 @@ public class TestJsonMultisets {
 				collectSubclassScalars(sti, extras);
 				SqlExpression when = SqlExpression.sql("{" + sti.sourceAlias() + "." + sti.discriminatorColumn() + "} = '" + sti.discriminatorValue() + "'");
 				sqlQuery.addSubClassVariant(when, sti.type().getSimpleName(), extras);
+			} else if (child instanceof EntityCollection ec) {
+				// One-to-many: FK lives in the child table. Wrap the child in a subquery
+				// that groups by the FK so the outer query stays at one row per parent.
+				String childAlias = ec.alias();
+				String fkColumn = ec.join().fkColumnName();
+				String parentIdColumn = ec.join().idColumnName();
+				String parentAlias = node.alias();
+
+				JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), sqlQuery.getIndent() + "  ");
+				jsonQuery.setTable(ec.tableInfo(), childAlias);
+				jsonQuery.addField(SqlExpression.sql("{" + childAlias + "." + fkColumn + "}"), fkColumn);
+				toJsonQuery(ec, jsonQuery);
+				// Force GROUP BY on the FK after recursion (PrimaryKey handler would otherwise group by the child PK).
+				jsonQuery.setGroupBy(List.of(SqlExpression.sql("{" + childAlias + "." + fkColumn + "}")));
+
+				SqlExpression onCondition = SqlExpression.sql(
+						"{" + childAlias + "." + fkColumn + "} = {" + parentAlias + "." + parentIdColumn + "}");
+				sqlQuery.addSubQueryJoin(JoinType.LEFT, jsonQuery.toStatement(), childAlias, onCondition);
+				sqlQuery.addJsonField(ec.field().getName(), SqlExpression.sql("{" + childAlias + ".json} FORMAT JSON"));
 			} else if (child instanceof JoinTableEntityCollection ec) {
 				// Push the junction table into the subquery so the outer query stays at one
 				// row per parent. Otherwise the outer JSON_ARRAYAGG would emit one element
@@ -404,6 +436,75 @@ public class TestJsonMultisets {
 
 	static class StiKitchen extends StiRoom {
 		Boolean hasDishWasher;
+	}
+
+	// --- Apartment with a one-to-many collection of polymorphic rooms -----
+
+	@Table("apartment")
+	static class Apartment {
+		@Id Long id;
+		String name;
+	}
+	
+	static class ApartmentWithRooms extends Apartment {
+		List<AptRoom> rooms;
+	}
+
+	@Table("apt_room")
+	@SubClasses({AptBedRoom.class, AptKitchen.class})
+	static class AptRoom {
+		@Id Long id;
+		Double area;
+		Apartment apartment;
+	}
+
+	@Table("apt_bedroom")
+	static class AptBedRoom extends AptRoom {
+		Integer numberOfBeds;
+	}
+
+	@Table("apt_kitchen")
+	static class AptKitchen extends AptRoom {
+		Boolean hasDishWasher;
+	}
+
+	@Test
+	public void testApartmentWithRoomsJsonQuery() {
+		DataSource db = TestDatabaseProvider.getDataSource();
+		SchemaGenerator.createTables(db, Apartment.class, AptRoom.class, AptBedRoom.class, AptKitchen.class);
+		DB.runInTransaction(db, connection -> {
+			Apartment apt = new Apartment();
+			apt.name = "Penthouse";
+			PojoQuery.insert(connection, apt);
+
+			AptBedRoom bedRoom = new AptBedRoom();
+			bedRoom.area = 12.5;
+			bedRoom.numberOfBeds = 2;
+			bedRoom.apartment = apt;
+			PojoQuery.insert(connection, bedRoom);
+
+			AptKitchen kitchen = new AptKitchen();
+			kitchen.area = 8.0;
+			kitchen.hasDishWasher = true;
+			kitchen.apartment = apt;
+			PojoQuery.insert(connection, kitchen);
+
+			AptRoom plain = new AptRoom();
+			plain.area = 5.0;
+			plain.apartment = apt;
+			PojoQuery.insert(connection, plain);
+		});
+
+		PojoQuery<ApartmentWithRooms> aptQuery = PojoQuery.build(
+				DbContext.getDefault(),
+				TransformPipeline.defaultPipeline(),
+				ApartmentWithRooms.class);
+
+		JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), "");
+		toJsonQuery(aptQuery.getTree(), jsonQuery);
+		String sql = jsonQuery.toStatement().getSql();
+		System.out.println(sql);
+		DB.queryRows(db, sql).forEach(row -> System.out.println(row));
 	}
 
 	@Test
