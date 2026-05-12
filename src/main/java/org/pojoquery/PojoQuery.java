@@ -562,78 +562,6 @@ public class PojoQuery<T> {
 		return AQTCascadingUpdater.update(tree, object, new DatabaseOperationsImpl(context, connection));
 	}
 
-
-	// public static Map<String, Object> extractValues(Class<?> clz, Object o) {
-	// 	return extractValues(clz, o, null);
-	// }
-
-	// private static Map<String, Object> extractValues(Class<?> clz, Object o, Class<?> stopAtSuperclass) {
-	// 	TypeModel type = new ReflectionTypeModel(clz);
-	// 	TypeModel stopAtType = stopAtSuperclass != null ? new ReflectionTypeModel(stopAtSuperclass) : null;
-	// 	try {
-	// 		Map<String, Object> values = new HashMap<String, Object>();
-	// 		for (FieldModel fieldModel : PojoMetadata.collectFieldsOfClass(type, stopAtType)) {
-	// 			Field f = ((ReflectionFieldModel) fieldModel).getReflectionField();
-	// 			f.setAccessible(true);
-				
-	// 			Other otherAnn = f.getAnnotation(Other.class);
-	// 			if (otherAnn != null) {
-	// 				@SuppressWarnings("unchecked")
-	// 				Map<String,Object> otherMap = (Map<String, Object>) f.get(o);
-	// 				if (otherMap != null) {
-	// 					for(String fieldName : otherMap.keySet()) {
-	// 						values.put(otherAnn.prefix() + fieldName, otherMap.get(fieldName));
-	// 					}
-	// 				}
-	// 				continue;
-	// 			}
-
-	// 			Object val = f.get(o);
-	// 			if (f.getAnnotation(Embedded.class) != null) {
-	// 				if (val != null) {
-	// 					Map<String, Object> embeddedVals = extractValues(f.getType(), val);
-	// 					String prefix = PojoMetadata.determinePrefix(fieldModel);
-	// 					for (String embeddedField : embeddedVals.keySet()) {
-	// 						values.put(prefix + embeddedField, embeddedVals.get(embeddedField));
-	// 					}
-	// 				}
-	// 			} else if (f.getAnnotation(NoUpdate.class) != null) {
-	// 			} else if (f.getAnnotation(Link.class) != null && !f.getAnnotation(Link.class).linktable().isEmpty()) {
-	// 			} else if (f.getType().isArray()) {
-	// 				if (f.getType().getComponentType().isPrimitive()) {
-	// 					// Data like byte[] long[]
-	// 					values.put(PojoMetadata.determineSqlFieldName(fieldModel), val);
-	// 				}
-	// 			} else if (Collection.class.isAssignableFrom(f.getType())) {
-	// 			} else if (PojoMetadata.isLinkedClass(f.getType())) {
-	// 				// Linked entity.
-	// 				String linkfieldName = AnnotationHelper.getJoinColumnName(fieldModel);
-	// 				if (linkfieldName == null) {
-	// 					linkfieldName = f.getName() + "_id";
-	// 				}
-	// 				if (val == null) {
-	// 					values.put(linkfieldName, null);
-	// 				} else {
-	// 					FieldModel idFieldModel = PojoMetadata.determineIdField(fieldModel.getType());
-	// 					Field idField = ((ReflectionFieldModel) idFieldModel).getReflectionField();
-	// 					idField.setAccessible(true);
-	// 					Object idValue = idField.get(val);
-	// 					values.put(linkfieldName, idValue);
-	// 				}
-    //             } else if (AnnotationHelper.isId(fieldModel) && val == null) {
-    //             	// Skip auto-generated ID field when value is null (for INSERT)
-    //             } else {
-    //             	values.put(PojoMetadata.determineSqlFieldName(fieldModel), val);
-    //             }
-	// 		}
-	// 		return values;
-	// 	} catch (IllegalArgumentException e) {
-	// 		throw new MappingException(e);
-	// 	} catch (IllegalAccessException e) {
-	// 		throw new MappingException(e);
-	// 	}
-	// }
-
 	/**
 	 * Converts the query to a SQL string.
 	 *
@@ -737,7 +665,7 @@ public class PojoQuery<T> {
 	}
 
 	/**
-	 * Lists the IDs of the entities in the query result.
+	 * Builds and executes a query to retrieve only the IDs of the result entities.
 	 *
 	 * @param conn the database connection
 	 * @param <PK> the type of the primary key

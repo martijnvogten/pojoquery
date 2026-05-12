@@ -35,6 +35,7 @@ public final class ExpressionResolver {
      * @param thisAlias The alias to substitute for "this"
      * @param linkAlias The alias to substitute for simple alias references
      * @param linkTableAlias The alias to substitute for "linktable"
+     * @param prefix Optional prefix to add to unresolved markers (e.g. for defaulting to thisAlias)
      * @return The resolved expression
      */
     public static String resolve(String expression, String thisAlias, 
@@ -49,11 +50,11 @@ public final class ExpressionResolver {
                 String rest = marker.substring(5);
                 return "{" + thisAlias + "." + rest + "}";
             }
-            if ("linktable".equals(marker) && linkTableAlias != null) {
+            if (("jointable".equals(marker) || "linktable".equals(marker)) && linkTableAlias != null) {
                 return "{" + linkTableAlias + "}";
             }
-            if (marker.startsWith("linktable.") && linkTableAlias != null) {
-                String rest = marker.substring(10);
+            if ((marker.startsWith("linktable.") || marker.startsWith("jointable.")) && linkTableAlias != null) {
+                String rest = marker.substring(marker.indexOf(".") + 1);
                 return "{" + linkTableAlias + "." + rest + "}";
             }
             if (marker.contains(".") && linkAlias != null) {
@@ -79,13 +80,6 @@ public final class ExpressionResolver {
      */
     public static Set<String> extractAliases(String expression) {
         return CurlyMarkers.extractAliases(expression);
-    }
-    
-    /**
-     * Extracts aliases from a SqlExpression.
-     */
-    public static Set<String> extractAliases(SqlExpression expr) {
-        return expr == null ? Set.of() : extractAliases(expr.getSql());
     }
     
 }

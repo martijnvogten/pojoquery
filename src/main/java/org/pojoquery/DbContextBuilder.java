@@ -1,6 +1,7 @@
 package org.pojoquery;
 
 import java.lang.reflect.Field;
+import java.util.stream.Stream;
 
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.DbContext.QuoteStyle;
@@ -143,31 +144,11 @@ public class DbContextBuilder {
         @Override
         public String quoteObjectNames(String... names) {
             if (quoteObjects != null && !quoteObjects) {
-                // Don't quote object names
-                StringBuilder ret = new StringBuilder();
-                for (int i = 0; i < names.length; i++) {
-                    if (i > 0) {
-                        ret.append(".");
-                    }
-                    ret.append(names[i]);
-                }
-                return ret.toString();
+                // If quoteObjects is explicitly false, return unquoted names
+                return String.join(".", names);
             }
             // Use potentially overridden quote style
-            QuoteStyle style = getQuoteStyle();
-            // If quoteObjects is explicitly true but the style is NONE, use ANSI quoting
-            // This handles the case where HSQLDB dialect is used with quoteObjectNames(true)
-            if (quoteObjects != null && quoteObjects && style == QuoteStyle.NONE) {
-                style = QuoteStyle.ANSI;
-            }
-            StringBuilder ret = new StringBuilder();
-            for (int i = 0; i < names.length; i++) {
-                if (i > 0) {
-                    ret.append(".");
-                }
-                ret.append(style.quote(names[i]));
-            }
-            return ret.toString();
+            return Stream.of(names).map(name -> getQuoteStyle().quote(name)).reduce((a, b) -> a + "." + b).orElse("");
         }
 
         @Override

@@ -34,7 +34,7 @@ public class TestInheritanceWithMoreJoins {
 		Double area;
 		House house;
 		
-		@JoinCondition("{this.id} = {windows}.`room_id`")
+		@JoinCondition("{this.id} = {windows.room_id}")
 		Window[] windows;
 	}
 	
