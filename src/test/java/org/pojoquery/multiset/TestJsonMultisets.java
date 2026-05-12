@@ -73,6 +73,7 @@ public class TestJsonMultisets {
 
 		final String indent;
 		final DbContext dbContext;
+		final int nestLevel;
 
 		String fromClause;
 		List<SqlExpression> groupBy;
@@ -83,8 +84,13 @@ public class TestJsonMultisets {
 		List<SubClassVariant> subClassVariants = new ArrayList<>();
 		String defaultTypeName; // emitted as '_type' in the ELSE branch when subClassVariants is non-empty
 
-		public JsonSqlQueryBuilder(DbContext dbContext, String indent) {
-			this.indent = indent;
+		public JsonSqlQueryBuilder(DbContext dbContext) {
+			this(dbContext, 0);
+		}
+
+		public JsonSqlQueryBuilder(DbContext dbContext, int nestLevel) {
+			this.nestLevel = nestLevel;
+			this.indent = "  ".repeat(nestLevel);
 			this.dbContext = dbContext;
 		}
 
@@ -138,9 +144,17 @@ public class TestJsonMultisets {
 				parts.add(SqlExpression.sql(indent + "  " + resolveAliasesInternal(dbContext, field.expression, null, null).getSql() + " AS " + dbContext.quoteAlias(field.alias) + ","));
 			});
 
-			parts.add(SqlExpression.sql(indent + "JSON_ARRAYAGG("));
+			if (nestLevel > 0) {
+				parts.add(SqlExpression.sql(indent + "JSON_ARRAYAGG("));
+			}
+			
 			parts.add(buildJsonValueExpression());
-			parts.add(SqlExpression.sql(indent + ") AS " + dbContext.quoteAlias("json")));
+
+			if (nestLevel > 0) {
+				parts.add(SqlExpression.sql(indent + ")"));
+			}
+
+			parts.add(SqlExpression.sql(indent + " AS " + dbContext.quoteAlias("json")));
 			parts.add(SqlExpression.sql(indent + "FROM " + fromClause));
 
 			List<SqlExpression> joinExpressions = joins.stream()
@@ -248,6 +262,10 @@ public class TestJsonMultisets {
 				}
 			}));
 		}
+
+		public int getNestLevel() {
+			return nestLevel;
+		}
 	}
 
 	public static void toJsonQuery(TableNode node, JsonSqlQueryBuilder sqlQuery) {
@@ -262,10 +280,9 @@ public class TestJsonMultisets {
 			}
 		}
 		for (QueryNode child : node.children()) {
-			if (false) {
-			} else if (child instanceof PrimaryKey pk) {
+			if (child instanceof PrimaryKey pk) {
 				sqlQuery.addJsonField(pk.field().getName(), pk.expression());
-				sqlQuery.setGroupBy(List.of(pk.expression()));
+				// sqlQuery.setGroupBy(List.of(pk.expression()));
 			} else if (child instanceof AggregateScalarValue agg) {
 				sqlQuery.addJsonField(agg.field().getName(), agg.expression());
 			} else if (child instanceof ScalarValue scalar) {
@@ -285,47 +302,46 @@ public class TestJsonMultisets {
 			} else if (child instanceof EntityCollection ec) {
 				// One-to-many: FK lives in the child table. Wrap the child in a subquery
 				// that groups by the FK so the outer query stays at one row per parent.
-				String childAlias = ec.alias();
-				String fkColumn = ec.join().fkColumnName();
-				String parentIdColumn = ec.join().idColumnName();
-				String parentAlias = node.alias();
-
-				JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), sqlQuery.getIndent() + "  ");
-				jsonQuery.setTable(ec.tableInfo(), childAlias);
-				jsonQuery.addField(SqlExpression.sql("{" + childAlias + "." + fkColumn + "}"), fkColumn);
+				JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), sqlQuery.getNestLevel() + 1);
+				jsonQuery.setTable(ec.tableInfo(), ec.alias());
+				
+				String fkExpr = "{" + ec.alias() + "." + ec.join().fkColumnName() + "}";
+				jsonQuery.addField(SqlExpression.sql(fkExpr), ec.join().fkColumnName());
+				jsonQuery.setGroupBy(List.of(SqlExpression.sql(fkExpr)));
 				toJsonQuery(ec, jsonQuery);
-				// Force GROUP BY on the FK after recursion (PrimaryKey handler would otherwise group by the child PK).
-				jsonQuery.setGroupBy(List.of(SqlExpression.sql("{" + childAlias + "." + fkColumn + "}")));
+				
+				sqlQuery.addSubQueryJoin(JoinType.LEFT, jsonQuery.toStatement(), ec.alias(), ec.join().joinCondition());
+				sqlQuery.addJsonField(ec.field().getName(), SqlExpression.sql("{" + ec.alias() + ".json} FORMAT JSON"));
 
-				SqlExpression onCondition = SqlExpression.sql(
-						"{" + childAlias + "." + fkColumn + "} = {" + parentAlias + "." + parentIdColumn + "}");
-				sqlQuery.addSubQueryJoin(JoinType.LEFT, jsonQuery.toStatement(), childAlias, onCondition);
-				sqlQuery.addJsonField(ec.field().getName(), SqlExpression.sql("{" + childAlias + ".json} FORMAT JSON"));
-			} else if (child instanceof JoinTableEntityCollection ec) {
+			} else if (child instanceof JoinTableEntityCollection jtec) {
 				// Push the junction table into the subquery so the outer query stays at one
 				// row per parent. Otherwise the outer JSON_ARRAYAGG would emit one element
 				// per row in the parent x junction fan-out, duplicating the parent.
-				String junctionAlias = ec.join().joinTableInfo().joinTableAlias();
-				TableInfo junctionTable = ec.join().joinTableInfo().tableInfo();
-				String parentFkCol = ec.join().parentKey().fkColumnName();
-				String parentIdCol = ec.join().parentKey().idColumnName();
+				JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), sqlQuery.getNestLevel() + 1);
+				
+				String junctionAlias = jtec.join().joinTableInfo().joinTableAlias();
+				TableInfo junctionTable = jtec.join().joinTableInfo().tableInfo();
+				String parentFkCol = jtec.join().parentKey().fkColumnName();
+				String parentIdCol = jtec.join().parentKey().idColumnName();
 				String parentAlias = node.alias();
 
-				JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), sqlQuery.getIndent() + "  ");
-
 				jsonQuery.setTable(junctionTable, junctionAlias);
-				jsonQuery.addTableJoin(JoinType.LEFT, ec.join().childKey().targetTable(), ec.alias(),
-						ec.join().childKey().joinCondition());
+				jsonQuery.addTableJoin(JoinType.LEFT, jtec.join().childKey().targetTable(), jtec.alias(),
+						jtec.join().childKey().joinCondition());
 				jsonQuery.addField(SqlExpression.sql("{" + junctionAlias + "." + parentFkCol + "}"), parentFkCol);
-				toJsonQuery(ec, jsonQuery);
-				// Set GROUP BY *after* the recursive call so the child PrimaryKey handler
-				// doesn't overwrite it; we must group by the junction FK, not the child PK.
 				jsonQuery.setGroupBy(List.of(SqlExpression.sql("{" + junctionAlias + "." + parentFkCol + "}")));
 
+				toJsonQuery(jtec, jsonQuery);
+
 				SqlExpression onCondition = SqlExpression.sql(
-						"{" + ec.alias() + "." + parentFkCol + "} = {" + parentAlias + "." + parentIdCol + "}");
-				sqlQuery.addSubQueryJoin(JoinType.LEFT, jsonQuery.toStatement(), ec.alias(), onCondition);
-				sqlQuery.addJsonField(ec.field().getName(), SqlExpression.sql("{" + ec.alias() + ".json} FORMAT JSON"));
+					"{" + jtec.alias() + "." + parentFkCol + "} = {" + parentAlias + "." + parentIdCol + "}");
+				System.out.println(">>> JOIN CONDITION: " + onCondition.getSql());
+				System.out.println(">>> PROP CONDITION: " + jtec.join().childKey().joinCondition().getSql());
+				System.out.println(">>> PROP CONDITION: " + jtec.join().parentKey().joinCondition().getSql());
+				
+				sqlQuery.addSubQueryJoin(JoinType.LEFT, jsonQuery.toStatement(), jtec.alias(), onCondition);
+				sqlQuery.addJsonField(jtec.field().getName(), SqlExpression.sql("{" + jtec.alias() + ".json} FORMAT JSON"));
+				
 			}
 		}
 	}
@@ -362,7 +378,7 @@ public class TestJsonMultisets {
 				User.class);
 
 		RootNode tree = userQuery.getTree();
-		JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), "");
+		JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault());
 		toJsonQuery(tree, jsonQuery);
 		String sql = jsonQuery.toStatement().getSql();
 		System.out.println(sql);
@@ -413,7 +429,7 @@ public class TestJsonMultisets {
 				TransformPipeline.defaultPipeline(),
 				TpsRoom.class);
 
-		JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), "");
+		JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault());
 		toJsonQuery(roomQuery.getTree(), jsonQuery);
 		String sql = jsonQuery.toStatement().getSql();
 		System.out.println(sql);
@@ -500,7 +516,7 @@ public class TestJsonMultisets {
 				TransformPipeline.defaultPipeline(),
 				ApartmentWithRooms.class);
 
-		JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), "");
+		JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault());
 		toJsonQuery(aptQuery.getTree(), jsonQuery);
 		String sql = jsonQuery.toStatement().getSql();
 		System.out.println(sql);
@@ -528,7 +544,7 @@ public class TestJsonMultisets {
 				TransformPipeline.defaultPipeline(),
 				StiRoom.class);
 
-		JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault(), "");
+		JsonSqlQueryBuilder jsonQuery = new JsonSqlQueryBuilder(DbContext.getDefault());
 		toJsonQuery(roomQuery.getTree(), jsonQuery);
 		String sql = jsonQuery.toStatement().getSql();
 		System.out.println(sql);
