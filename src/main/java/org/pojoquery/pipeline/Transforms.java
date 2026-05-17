@@ -559,10 +559,12 @@ public final class Transforms {
             return transformChildren(node,
                     child -> child instanceof Join join && join.join().fkColumnName() == null &&
                         (join instanceof JoinOne || join instanceof JoinMany) &&
-                        ((FieldNode)join).field().hasAnnotation(Link.class),
+                        (((FieldNode)join).field().hasAnnotation(Link.class) || ((FieldNode)join).field().hasAnnotation(FieldName.class)),
                     (TableNode parentNode, QueryNode child) -> {
                         if (child instanceof Join join) {
                             String customLinkfield = 
+                                    join instanceof JoinOne joinOne && joinOne.field().hasAnnotation(FieldName.class) ?
+                                        joinOne.field().getAnnotationAttributeValue(FieldName.class, "value", String.class) :
                                     join instanceof JoinOne joinOne && joinOne.field().hasAnnotation(Link.class) ?
                                         joinOne.field().getAnnotationAttributeValue(Link.class, "linkfield", String.class) :
                                     join instanceof JoinMany joinMany && joinMany.field().hasAnnotation(Link.class) ?

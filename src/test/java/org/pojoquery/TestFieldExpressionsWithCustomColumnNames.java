@@ -51,6 +51,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 		@Select("LOWER({this.title})")
 		public String title;
 		
+		@FieldName("authorId")
 		public Person author;
 	}
 	
@@ -93,7 +94,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 					 "author"."last_name" AS "author.lastName",
 					 CONCAT("author"."first_name", ' ', "author"."last_name") AS "author.fullName"
 					FROM "article" AS "article"
-					 LEFT JOIN "person" AS "author" ON "article"."author_id" = "author"."person_id"
+					 LEFT JOIN "person" AS "author" ON "article"."authorId" = "author"."person_id"
 					WHERE "article"."article_id" = ?
 					"""), 
 				norm(query.toStatement().getSql()));
@@ -114,7 +115,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 					 "author"."last_name" AS "author.lastName",
 					 CONCAT("author"."first_name", ' ', "author"."last_name") AS "author.fullName"
 					FROM "article" AS "article"
-					 LEFT JOIN "person" AS "author" ON "article"."author_id" = "author"."person_id"
+					 LEFT JOIN "person" AS "author" ON "article"."authorId" = "author"."person_id"
 					WHERE LOWER("article"."title") = ?
 					"""), 
 				norm(query.toStatement().getSql()));
@@ -148,7 +149,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 					 "author"."last_name" AS "author.lastName",
 					 CONCAT("author"."first_name", ' ', "author"."last_name") AS "author.fullName"
 					FROM "article" AS "article"
-					 LEFT JOIN "person" AS "author" ON "article"."author_id" = "author"."person_id"
+					 LEFT JOIN "person" AS "author" ON "article"."authorId" = "author"."person_id"
 					WHERE CONCAT("author"."first_name", ' ', "author"."last_name") = ?
 					"""), 
 				norm(query.toStatement().getSql()));
@@ -183,7 +184,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 					 CONCAT("articles.author"."first_name", ' ', "articles.author"."last_name") AS "articles.author.fullName"
 					FROM "book" AS "book"
 					 LEFT JOIN "article" AS "articles" ON "articles"."book_id" = "book"."book_id"
-					 LEFT JOIN "person" AS "articles.author" ON "articles"."author_id" = "articles.author"."person_id"
+					 LEFT JOIN "person" AS "articles.author" ON "articles"."authorId" = "articles.author"."person_id"
 					WHERE CONCAT("articles.author"."first_name", ' ', "articles.author"."last_name") = ?
 					"""), 
 				norm(query.toStatement().getSql()));
@@ -216,7 +217,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 					 "author"."last_name" AS "author.lastName",
 					 CONCAT("author"."first_name", ' ', "author"."last_name") AS "author.fullName"
 					FROM "article" AS "article"
-					 LEFT JOIN "person" AS "author" ON "article"."author_id" = "author"."person_id"
+					 LEFT JOIN "person" AS "author" ON "article"."authorId" = "author"."person_id"
 					ORDER BY CONCAT("author"."first_name", ' ', "author"."last_name") ASC
 					"""), 
 				norm(query.toStatement().getSql()));
@@ -251,7 +252,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 					 CONCAT("articles.author"."first_name", ' ', "articles.author"."last_name") AS "articles.author.fullName"
 					FROM "book" AS "book"
 					 LEFT JOIN "article" AS "articles" ON "articles"."book_id" = "book"."book_id"
-					 LEFT JOIN "person" AS "articles.author" ON "articles"."author_id" = "articles.author"."person_id"
+					 LEFT JOIN "person" AS "articles.author" ON "articles"."authorId" = "articles.author"."person_id"
 					ORDER BY CONCAT("articles.author"."first_name", ' ', "articles.author"."last_name") DESC
 					"""), 
 				norm(query.toStatement().getSql()));
@@ -290,7 +291,7 @@ public class TestFieldExpressionsWithCustomColumnNames {
 					 "author"."last_name" AS "author.lastName",
 					 CONCAT("author"."first_name", ' ', "author"."last_name") AS "author.fullName"
 					FROM "article" AS "article"
-					 LEFT JOIN "person" AS "author" ON "article"."author_id" = "author"."person_id"
+					 LEFT JOIN "person" AS "author" ON "article"."authorId" = "author"."person_id"
 					 LEFT JOIN "audit_log" AS "audit" ON "audit"."entity_name" = CONCAT("author"."first_name", ' ', "author"."last_name")
 					WHERE "audit"."date" < ?
 					"""), 
