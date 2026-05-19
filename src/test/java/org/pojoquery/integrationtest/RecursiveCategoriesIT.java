@@ -31,13 +31,11 @@ public class RecursiveCategoriesIT {
 	}
 
 	static class CategoryWithAncestors extends CategoryWithParent {
-
 		@Recursive(parentLink = "parent_id", direction = Direction.UP)
 		List<Category> ancestors;
 	}
 
 	static class CategoryWithDescendants extends CategoryWithParent {
-
 		@Recursive(parentLink = "parent_id", direction = Direction.DOWN)
 		List<Category> descendants;
 	}
