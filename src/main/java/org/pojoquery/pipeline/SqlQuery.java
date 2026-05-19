@@ -29,7 +29,22 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 	private List<SqlExpression> wheres = new ArrayList<SqlExpression>();
 	private List<String> groupBy = new ArrayList<String>();
 	private List<String> orderBy = new ArrayList<String>();
+	private List<WithClause> withClauses = new ArrayList<WithClause>();
 	private final DbContext dbContext;
+
+	public static class WithClause {
+		public final String alias;
+		public final List<String> columnNames;
+		public final SqlExpression body;
+		public final boolean recursive;
+
+		public WithClause(String alias, List<String> columnNames, SqlExpression body, boolean recursive) {
+			this.alias = alias;
+			this.columnNames = columnNames;
+			this.body = body;
+			this.recursive = recursive;
+		}
+	}
 
 	public static class SqlField {
 		public final String alias;
@@ -254,6 +269,9 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 			List<String> orderBy, int offset, int rowCount) {
 
 		List<Object> params = new ArrayList<Object>();
+
+		SqlExpression withPreamble = buildWithPreamble();
+		Iterables.addAll(params, withPreamble.getParameters());
 		Iterables.addAll(params, selectClause.getParameters());
 
 		SqlExpression whereClause = buildWhereClause(wheres);
@@ -287,6 +305,7 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 		Iterables.addAll(params, joinsClause.getParameters());
 
 		String sql = implode(" ", Arrays.asList(
+					withPreamble.getSql(),
 					selectClause.getSql(), 
 					"\nFROM", DB.prefixAndQuoteTableName(dbContext, schema, from), "AS", dbContext.quoteAlias(from), "\n",
 					joinsClause.getSql(), 
@@ -296,6 +315,29 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 					limitClause
 				));
 
+		return new SqlExpression(sql, params);
+	}
+
+	private SqlExpression buildWithPreamble() {
+		if (withClauses.isEmpty()) {
+			return new SqlExpression("", new ArrayList<>());
+		}
+		boolean anyRecursive = withClauses.stream().anyMatch(w -> w.recursive);
+		List<Object> params = new ArrayList<>();
+		List<String> parts = new ArrayList<>();
+		for (WithClause w : withClauses) {
+			String header = dbContext.quoteAlias(w.alias);
+			if (w.columnNames != null && !w.columnNames.isEmpty()) {
+				List<String> quoted = new ArrayList<>();
+				for (String col : w.columnNames) {
+					quoted.add(dbContext.quoteObjectNames(col));
+				}
+				header += " (" + implode(", ", quoted) + ")";
+			}
+			parts.add(header + " AS (" + w.body.getSql() + ")");
+			Iterables.addAll(params, w.body.getParameters());
+		}
+		String sql = "WITH " + (anyRecursive ? "RECURSIVE " : "") + implode(",\n ", parts) + "\n";
 		return new SqlExpression(sql, params);
 	}
 
@@ -407,6 +449,10 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 	 */
 	public void addSubqueryJoin(JoinType type, SqlExpression subquery, String alias, SqlExpression joinCondition) {
 		joins.add(new SqlJoin(type, subquery, alias, joinCondition));
+	}
+
+	public void addWithClause(String alias, List<String> columnNames, SqlExpression body, boolean recursive) {
+		withClauses.add(new WithClause(alias, columnNames, body, recursive));
 	}
 
 	public void setTable(String schemaName, String tableName) {

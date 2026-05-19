@@ -2,7 +2,9 @@ package org.pojoquery.pipeline;
 
 import java.util.List;
 
+import org.pojoquery.DbContext;
 import org.pojoquery.SqlExpression;
+import org.pojoquery.annotations.Recursive;
 import org.pojoquery.pipeline.AbstractQueryTree.AggregateScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.CustomJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.CustomQueryNode;
@@ -12,6 +14,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.Join;
 import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
+import org.pojoquery.pipeline.AbstractQueryTree.RecursiveCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
@@ -83,6 +86,22 @@ public class AQTTransformer {
 				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, jte.tableInfo().schemaName(), jte.tableInfo().tableName(), jte.alias(),
 						jte.join().childKey().joinCondition());
 				toSql((TableNode) jte, sqlQuery);
+			} else if (child instanceof RecursiveCollection rc) {
+				String cteAlias = rc.alias() + "_cte";
+				SqlExpression cte = buildRecursiveCteSubquery(rc, sqlQuery.getDbContext(), node.alias());
+				sqlQuery.addWithClause(cteAlias, List.of("root_id", "id", "depth"), cte, true);
+
+				SqlExpression cteJoinCondition = SqlExpression.sql(
+						"{" + cteAlias + ".root_id} = {" + node.alias() + "."
+								+ PojoMetadata.determineIdField(node.type()).getName() + "}");
+				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, null, cteAlias, cteAlias, cteJoinCondition);
+
+				String elementIdName = PojoMetadata.determineIdField(rc.type()).getName();
+				SqlExpression elementJoinCondition = SqlExpression.sql(
+						"{" + rc.alias() + "." + elementIdName + "} = {" + cteAlias + ".id}");
+				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, rc.tableInfo().schemaName(), rc.tableInfo().tableName(),
+						rc.alias(), elementJoinCondition);
+				toSql((TableNode) rc, sqlQuery);
 			} else if (child instanceof TPSSubClassNode subClass) {
 				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, subClass.join().referringTable().schemaName(), subClass.join().referringTable().tableName(), subClass.alias(),
 						subClass.join().joinCondition());
@@ -108,6 +127,42 @@ public class AQTTransformer {
 		TypeModel transformedType = new TransformedTypeModel(rootType, List.of(new JakartaAnnotations(), new JavaxAnnotations()));
 		RootNode initialTree = RootNode.createEmptyRootNode(transformedType);
 		return pipeline.apply(initialTree);
+	}
+
+	private static SqlExpression buildRecursiveCteSubquery(RecursiveCollection rc, DbContext db, String parentAlias) {
+		String tableQ = db.quoteObjectNames(rc.tableInfo().tableName());
+		String pkColumn = columnNameOf(PojoMetadata.determineIdField(rc.type()));
+		String pkQ = db.quoteObjectNames(pkColumn);
+		String parentLinkQ = db.quoteObjectNames(rc.parentLinkColumn());
+
+		String rootIdQ = db.quoteObjectNames("root_id");
+		String idQ = db.quoteObjectNames("id");
+		String depthQ = db.quoteObjectNames("depth");
+		String cteAliasQ = db.quoteAlias(rc.alias() + "_cte");
+
+		String anchor;
+		String step;
+		if (rc.direction() == Recursive.Direction.UP) {
+			anchor = "SELECT c." + pkQ + ", c." + parentLinkQ + ", 1"
+					+ " FROM " + tableQ + " c WHERE c." + parentLinkQ + " IS NOT NULL";
+			step = "SELECT r." + rootIdQ + ", c." + parentLinkQ + ", r." + depthQ + " + 1"
+					+ " FROM " + tableQ + " c JOIN " + cteAliasQ + " r ON r." + idQ + " = c." + pkQ
+					+ " WHERE c." + parentLinkQ + " IS NOT NULL";
+		} else {
+			anchor = "SELECT c." + parentLinkQ + ", c." + pkQ + ", 1"
+					+ " FROM " + tableQ + " c WHERE c." + parentLinkQ + " IS NOT NULL";
+			step = "SELECT r." + rootIdQ + ", c." + pkQ + ", r." + depthQ + " + 1"
+					+ " FROM " + tableQ + " c JOIN " + cteAliasQ + " r ON r." + idQ + " = c." + parentLinkQ;
+		}
+
+		String sql = anchor + "\n  UNION ALL\n  " + step;
+		return SqlExpression.sql(sql);
+	}
+
+	private static String columnNameOf(org.pojoquery.typemodel.FieldModel field) {
+		String custom = field.getAnnotationAttributeValue(
+				org.pojoquery.annotations.FieldName.class, "value", String.class);
+		return (custom != null && !custom.isEmpty()) ? custom : field.getName();
 	}
 
 }

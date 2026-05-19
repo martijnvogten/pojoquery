@@ -24,6 +24,7 @@ import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Joins;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.OrderBy;
+import org.pojoquery.annotations.Recursive;
 import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.internal.MappingException;
@@ -48,6 +49,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.JoinTableInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.JoinTableJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
+import org.pojoquery.pipeline.AbstractQueryTree.RecursiveCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarNode;
@@ -334,6 +336,36 @@ public final class Transforms {
                                 tableInfo, alias, idField);
                         return EntityCollection.fromEmptyFieldNode(emptyFieldNode, alias, componentType, tableInfo,
                                 parentNode.alias(), join);
+                    });
+        }
+    }
+
+    public static class AddRecursiveCollections implements RecursiveTransform {
+        @Override
+        public QueryNode transform(QueryNode node) {
+            return transformChildren(node,
+                    child -> child instanceof EmptyFieldNode emptyFieldNode
+                            && emptyFieldNode.field().hasAnnotation(Recursive.class)
+                            && isEntityCollection(emptyFieldNode.field().getType()),
+                    (TableNode parentNode, EmptyFieldNode emptyFieldNode) -> {
+                        FieldModel field = emptyFieldNode.field();
+                        TypeModel componentType = getCollectionComponentType(field.getType());
+                        TableInfo tableInfo = determineTableInfo(componentType);
+                        String alias = AliasNaming.childAlias(node instanceof RootNode, parentNode.alias(),
+                                field.getName());
+
+                        String parentLink = field.getAnnotationAttributeValue(Recursive.class, "parentLink", String.class);
+                        List<String> directionValues = field.getAnnotation(Recursive.class)
+                                .map(am -> am.getEnumValues("direction"))
+                                .orElse(List.of());
+                        Recursive.Direction direction = directionValues.isEmpty()
+                                ? Recursive.Direction.DOWN
+                                : Recursive.Direction.valueOf(directionValues.get(0));
+
+                        // children = null: AddDeclaredFields will populate on a later fixpoint pass,
+                        // then AddIdFields / AddEntityReferences / AddEntityCollections / ... run on it.
+                        return new RecursiveCollection(alias, componentType, tableInfo, null, field,
+                                parentNode.alias(), parentLink, direction);
                     });
         }
     }

@@ -55,6 +55,7 @@ public class TransformPipeline {
             Transforms.AddSubQueryEntityCollections.class,
             Transforms.AddValueCollections.class,
             Transforms.AddJoinTableEntityCollections.class,
+            Transforms.AddRecursiveCollections.class,
             Transforms.AddEntityCollections.class,
             Transforms.AddSubQueryEntityReferences.class,
             Transforms.AddEntityReferences.class,

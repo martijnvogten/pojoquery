@@ -19,6 +19,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.Join;
 import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKeyField;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
+import org.pojoquery.pipeline.AbstractQueryTree.RecursiveCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
@@ -219,6 +220,9 @@ public class AQTSchemaGenerator {
 				collector.registerForeignKey(jte.join().childKey());
 				collector.registerPrimaryKeyColumn(jte.join().joinTableInfo().tableInfo(), jte.join().parentKey().fkColumnName(), null, false);
 				collector.registerPrimaryKeyColumn(jte.join().joinTableInfo().tableInfo(), jte.join().childKey().fkColumnName(), null, false);
+			} else if (child instanceof RecursiveCollection) {
+				// Recursive collections are derived from the element table itself; they do not
+				// add columns or tables to the schema.
 			}
 		}
 	}

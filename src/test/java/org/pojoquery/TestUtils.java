@@ -12,6 +12,8 @@ public class TestUtils {
 	/** normalize SQL into a nicely readable format */
 	public static String norm(String str) {
 		return str.replaceAll("\\s+", " ").trim()
+				.replaceAll("\\(\\s+", "(")
+				.replaceAll("\\s+\\)", ")")
 				.replaceAll("(SELECT|,)", "$1\n")
 				.replaceAll(" (WHERE|FROM|HAVING|GROUP BY|ORDER BY)", "\n$1")
 				.replaceAll(" (LEFT JOIN|INNER JOIN)", "\n $1");

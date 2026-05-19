@@ -6,6 +6,7 @@ import java.util.Objects;
 
 import org.pojoquery.JdbcValueMapper;
 import org.pojoquery.SqlExpression;
+import org.pojoquery.annotations.Recursive;
 import org.pojoquery.typemodel.FieldModel;
 import org.pojoquery.typemodel.TypeModel;
 
@@ -148,6 +149,7 @@ public class AbstractQueryTree {
 	public sealed interface TableNode
 			extends QueryNode
 			permits Embedding, RootNode, EntityNode, EntityCollection, JoinTableEntityCollection, SubQueryCollection,
+			RecursiveCollection,
 			SuperClassNode, SubClassNode {
 		/** SQL alias used to reference this table in the query. */
 		String alias();
@@ -824,6 +826,31 @@ public class AbstractQueryTree {
 					joinCondition);
 		}
 
+	}
+
+	/**
+	 * A one-to-many collection populated via a recursive CTE.
+	 *
+	 * <p>The CTE acts as a junction: it emits {@code (root_id, id, depth)} tuples
+	 * that map each driving row to all reachable descendants or ancestors. The
+	 * element type is joined as a normal table to that CTE, so the rest of the
+	 * pipeline (declared fields, nested joins, sub-collections) expands the
+	 * element type the same way it would for an {@link EntityCollection}.
+	 */
+	public record RecursiveCollection(
+			String alias,
+			TypeModel type,
+			TableInfo tableInfo,
+			List<QueryNode> children,
+			FieldModel field,
+			String parentAlias,
+			String parentLinkColumn,
+			Recursive.Direction direction) implements TableNode, FieldNode {
+
+		public TableNode withChildren(List<? extends QueryNode> newChildren) {
+			return new RecursiveCollection(alias, type, tableInfo, List.copyOf(newChildren),
+					field, parentAlias, parentLinkColumn, direction);
+		}
 	}
 
 
