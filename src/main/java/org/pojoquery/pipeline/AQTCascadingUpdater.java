@@ -285,9 +285,14 @@ public class AQTCascadingUpdater {
 					Map.of(fkColumn, parentId, vc.fetchColumn(), toStorableValue(item)));
 			}
 		} else if (child instanceof EntityReference ref) {
-			Object childEntity = getFieldValue(parentEntity, ref.field());
-			if (childEntity != null) {
-				updateNode(ref, childEntity, null, null, db);
+			// Only cascade-update a referenced entity when the field is explicitly
+			// marked with @Cascade. Otherwise the reference is treated as a pure FK
+			// and the referenced row is left untouched.
+			if (ref.field().hasAnnotation(org.pojoquery.annotations.Cascade.class)) {
+				Object childEntity = getFieldValue(parentEntity, ref.field());
+				if (childEntity != null) {
+					updateNode(ref, childEntity, null, null, db);
+				}
 			}
 		}
 	}

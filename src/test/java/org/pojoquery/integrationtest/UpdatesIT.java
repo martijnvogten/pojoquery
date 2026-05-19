@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
+import org.pojoquery.annotations.Cascade;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
@@ -34,6 +35,15 @@ public class UpdatesIT {
 	static class Article {
 		@Id
 		Long id;
+		User author;
+		String title;
+	}
+
+	@Table("article")
+	static class ArticleCascadeAuthor {
+		@Id
+		Long id;
+		@Cascade
 		User author;
 		String title;
 	}
@@ -112,5 +122,59 @@ public class UpdatesIT {
 			Assertions.assertEquals("john", loaded.username);
 		});
 	}
-	
+
+	@Test
+	public void testUpdateDoesNotCascadeToReferencedEntityByDefault() {
+		DataSource db = TestDatabaseProvider.getDataSource();
+		SchemaGenerator.createTables(db, User.class, Article.class);
+
+		DB.withConnection(db, (Connection c) -> {
+			User author = new User();
+			author.username = "alice";
+			PojoQuery.insert(c, author);
+
+			Article a = new Article();
+			a.author = author;
+			a.title = "Original title";
+			PojoQuery.insert(c, a);
+
+			// Mutate both the article and the referenced author
+			a.title = "New title";
+			a.author.username = "alice-MODIFIED";
+			PojoQuery.update(c, a);
+
+			// Article itself should be updated
+			Article reloaded = PojoQuery.build(Article.class).findById(c, a.id).orElseThrow();
+			Assertions.assertEquals("New title", reloaded.title);
+
+			// But the referenced author should NOT have been cascade-updated
+			User loadedAuthor = PojoQuery.build(User.class).findById(c, author.id).orElseThrow();
+			Assertions.assertEquals("alice", loadedAuthor.username,
+				"Referenced entity must not be updated unless @Cascade is present on the reference field");
+		});
+	}
+
+	@Test
+	public void testUpdateCascadesToReferencedEntityWhenAnnotated() {
+		DataSource db = TestDatabaseProvider.getDataSource();
+		SchemaGenerator.createTables(db, User.class, ArticleCascadeAuthor.class);
+
+		DB.withConnection(db, (Connection c) -> {
+			User author = new User();
+			author.username = "bob";
+			PojoQuery.insert(c, author);
+
+			ArticleCascadeAuthor a = new ArticleCascadeAuthor();
+			a.author = author;
+			a.title = "Title";
+			PojoQuery.insert(c, a);
+
+			a.author.username = "bob-updated";
+			PojoQuery.update(c, a);
+
+			User loadedAuthor = PojoQuery.build(User.class).findById(c, author.id).orElseThrow();
+			Assertions.assertEquals("bob-updated", loadedAuthor.username,
+				"Referenced entity should be updated when @Cascade is present");
+		});
+	}
 }
