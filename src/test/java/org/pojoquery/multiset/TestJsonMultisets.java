@@ -335,9 +335,6 @@ public class TestJsonMultisets {
 
 				SqlExpression onCondition = SqlExpression.sql(
 					"{" + jtec.alias() + "." + parentFkCol + "} = {" + parentAlias + "." + parentIdCol + "}");
-				System.out.println(">>> JOIN CONDITION: " + onCondition.getSql());
-				System.out.println(">>> PROP CONDITION: " + jtec.join().childKey().joinCondition().getSql());
-				System.out.println(">>> PROP CONDITION: " + jtec.join().parentKey().joinCondition().getSql());
 				
 				sqlQuery.addSubQueryJoin(JoinType.LEFT, jsonQuery.toStatement(), jtec.alias(), onCondition);
 				sqlQuery.addJsonField(jtec.field().getName(), SqlExpression.sql("{" + jtec.alias() + ".json} FORMAT JSON"));
@@ -565,16 +562,8 @@ public class TestJsonMultisets {
 				TransformPipeline.defaultPipeline(), 
 				User.class);
 
-		RootNode tree = userQuery.getTree();
-
-
-		DefaultSqlQuery sqlQuery = new DefaultSqlQuery(DbContext.getDefault());
-		// AQTTransformer.toJsonObjectSql(tree, sqlQuery);
-
-
 		System.out.println(
 			userQuery.toSql());
-
 
 		String expectedSql = """
 					SELECT
