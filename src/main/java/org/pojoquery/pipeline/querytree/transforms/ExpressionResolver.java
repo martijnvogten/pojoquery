@@ -2,7 +2,6 @@ package org.pojoquery.pipeline.querytree.transforms;
 
 import java.util.Set;
 
-import org.pojoquery.SqlExpression;
 import org.pojoquery.util.CurlyMarkers;
 
 /**

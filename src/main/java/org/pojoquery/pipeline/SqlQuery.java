@@ -19,7 +19,7 @@ import org.pojoquery.util.CurlyMarkers;
 import org.pojoquery.util.Iterables;
 
 @SuppressWarnings("unchecked")
-public abstract class SqlQuery<SQ extends SqlQuery<?>> {
+public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer.PlainQueryBuilder {
 	private int offset = -1;
 	private int rowCount = -1;
 	private String schema;
@@ -153,9 +153,9 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 		return orderBy;
 	}
 
-	public SQ setOrderBy(List<String> orderBy) {
+	@Override
+	public void setOrderBy(List<String> orderBy) {
 		this.orderBy = orderBy;
-		return (SQ) this;
 	}
 
 	public SQ addField(SqlExpression expression) {
@@ -163,9 +163,9 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 		return (SQ)this;
 	}
 	
-	public SQ addField(SqlExpression expression, String alias) {
+	@Override
+	public void addField(SqlExpression expression, String alias) {
 		fields.add(new SqlField(expression, alias));
-		return (SQ)this;
 	}
 
 	public SQ addGroupBy(String group) {
@@ -173,9 +173,9 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 		return (SQ)this;
 	}
 
-	public SQ addWhere(SqlExpression where) {
+	@Override
+	public void addWhere(SqlExpression where) {
 		wheres.add(where);
-		return (SQ)this;
 	}
 
 	public SQ addWhere(String sql, Object... params) {
@@ -453,6 +453,11 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> {
 
 	public void addWithClause(String alias, List<String> columnNames, SqlExpression body, boolean recursive) {
 		withClauses.add(new WithClause(alias, columnNames, body, recursive));
+	}
+
+	@Override
+	public AQTTransformer.PlainQueryBuilder startSubQuery() {
+		return new DefaultSqlQuery(dbContext);
 	}
 
 	public void setTable(String schemaName, String tableName) {

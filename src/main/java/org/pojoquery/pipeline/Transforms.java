@@ -362,10 +362,28 @@ public final class Transforms {
                                 ? Recursive.Direction.DOWN
                                 : Recursive.Direction.valueOf(directionValues.get(0));
 
+                        FieldModel idField = PojoMetadata.determineIdField(componentType);
+                        String idColumn = idField.hasAnnotation(FieldName.class)
+                                ? idField.getAnnotationAttributeValue(FieldName.class, "value", String.class)
+                                : idField.getName();
+
+                        String override = field.getAnnotationAttributeValue(Recursive.class,
+                                "recursionJoinCondition", String.class);
+                        SqlExpression recursionJoinCondition;
+                        if (override != null && !override.isEmpty()) {
+                            recursionJoinCondition = SqlExpression.sql(override);
+                        } else if (direction == Recursive.Direction.UP) {
+                            recursionJoinCondition = SqlExpression.sql(
+                                    "{r.id} = {this." + idColumn + "}");
+                        } else {
+                            recursionJoinCondition = SqlExpression.sql(
+                                    "{r.id} = {this." + parentLink + "}");
+                        }
+
                         // children = null: AddDeclaredFields will populate on a later fixpoint pass,
                         // then AddIdFields / AddEntityReferences / AddEntityCollections / ... run on it.
                         return new RecursiveCollection(alias, componentType, tableInfo, null, field,
-                                parentNode.alias(), parentLink, direction);
+                                parentNode.alias(), parentLink, idColumn, recursionJoinCondition, direction);
                     });
         }
     }

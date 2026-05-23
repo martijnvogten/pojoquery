@@ -23,7 +23,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.CustomQueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.EmptyFieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
-import org.pojoquery.pipeline.SqlQuery;
+import org.pojoquery.pipeline.AQTTransformer;
 import org.pojoquery.pipeline.TransformPipeline;
 import org.pojoquery.pipeline.TransformPipeline.RecursiveTransform;
 import org.pojoquery.pipeline.Transforms;
@@ -62,7 +62,7 @@ public class OtherIT {
 					if ("room".equals(tableNode.tableInfo().tableName())) {
 						return new CustomQueryNode() {
 							@Override
-							public void applyToSqlQuery(TableNode parentNode, SqlQuery<?> sqlQuery) {
+							public void applyToSqlQuery(TableNode parentNode, AQTTransformer.PlainQueryBuilder sqlQuery) {
 								sqlQuery.addField(new SqlExpression("{" + parentNode.alias() + ".area}"), parentNode.alias() + ".area");
 							}
 

@@ -77,7 +77,7 @@ public class AbstractQueryTree {
 	 */
 	public non-sealed interface CustomQueryNode extends QueryNode {
 		/** Adds custom SQL expressions, joins, or conditions to the query. */
-		void applyToSqlQuery(TableNode parentNode, SqlQuery<?> sqlQuery);
+		void applyToSqlQuery(TableNode parentNode, AQTTransformer.PlainQueryBuilder sqlQuery);
 
 		/**
 		 * Extracts custom values from the result row and applies them to the entity.
@@ -98,7 +98,7 @@ public class AbstractQueryTree {
 	 */
 	public sealed interface ScalarNode
 			extends FieldNode
-			permits PrimaryKeyField, ScalarValue, AggregateScalarValue, JoinTableValueCollection {
+			permits PrimaryKeyField, ScalarValue, AggregateScalarValue {
 	}
 
 	/**
@@ -762,7 +762,7 @@ public class AbstractQueryTree {
 	 * This is a specialized case for collecting non-entity values through a
 	 * junction table, less common than {@link JoinTableEntityCollection}.
 	 */
-	public non-sealed interface JoinTableValueCollection extends ScalarNode, HasJoinTableJoin {
+	public non-sealed interface JoinTableValueCollection extends HasJoinTableJoin {
 		/** Column names to select from the junction table. */
 		String[] fieldsToSelect();
 
@@ -845,11 +845,13 @@ public class AbstractQueryTree {
 			FieldModel field,
 			String parentAlias,
 			String parentLinkColumn,
+			String idColumn,
+			SqlExpression recursionJoinCondition,
 			Recursive.Direction direction) implements TableNode, FieldNode {
 
 		public TableNode withChildren(List<? extends QueryNode> newChildren) {
 			return new RecursiveCollection(alias, type, tableInfo, List.copyOf(newChildren),
-					field, parentAlias, parentLinkColumn, direction);
+					field, parentAlias, parentLinkColumn, idColumn, recursionJoinCondition, direction);
 		}
 	}
 

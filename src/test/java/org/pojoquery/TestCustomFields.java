@@ -12,12 +12,12 @@ import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.pipeline.AQTRowProcessor;
+import org.pojoquery.pipeline.AQTTransformer;
 import org.pojoquery.pipeline.AbstractQueryTree;
 import org.pojoquery.pipeline.AbstractQueryTree.CustomQueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.EmptyFieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
-import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.pipeline.TransformPipeline;
 import org.pojoquery.pipeline.TransformPipeline.RecursiveTransform;
 import org.pojoquery.pipeline.Transforms;
@@ -56,7 +56,7 @@ public class TestCustomFields {
 					if (tableNode.type().isSameType(User.class)) {
 						CustomQueryNode customNode = new AbstractQueryTree.CustomQueryNode() {
 							@Override
-							public void applyToSqlQuery(TableNode parentNode, SqlQuery<?> sqlQuery) {
+							public void applyToSqlQuery(TableNode parentNode, AQTTransformer.PlainQueryBuilder sqlQuery) {
 								sqlQuery.addField(new SqlExpression("{" + parentNode.alias() + ".custom_linkedInUrl}"), parentNode.alias() + ".linkedInUrl");
 							}
 

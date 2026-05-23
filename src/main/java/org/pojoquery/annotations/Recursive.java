@@ -15,4 +15,11 @@ public @interface Recursive {
 
 	/** UP = walk toward roots (ancestors); DOWN = walk toward leaves (descendants). */
 	Direction direction() default Direction.DOWN;
+
+	/**
+	 * Overrides the join condition between the previous CTE row (alias {@code r}) and the
+	 * current element row (alias {@code c}) used in the recursive step. Empty means use the
+	 * default based on {@link #direction()}.
+	 */
+	String recursionJoinCondition() default "";
 }

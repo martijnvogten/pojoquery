@@ -354,7 +354,7 @@ public class SingleTableInheritanceIT {
 					if (tableNode.type().isSameType(Vehicle.class)) {
 						CustomQueryNode customNode = new CustomQueryNode() {
 							@Override
-							public void applyToSqlQuery(TableNode parentNode, SqlQuery<?> sqlQuery) {
+							public void applyToSqlQuery(TableNode parentNode, AQTTransformer.PlainQueryBuilder sqlQuery) {
 								for (String extraField : extraFields) {
 									sqlQuery.addField(new SqlExpression("{" + parentNode.alias() + "." + extraField + "}"), parentNode.alias() + "." + extraField);
 								}

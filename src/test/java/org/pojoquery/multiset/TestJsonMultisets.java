@@ -27,7 +27,6 @@ import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
-import org.pojoquery.pipeline.DefaultSqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.TransformPipeline;
 import org.pojoquery.schema.SchemaGenerator;

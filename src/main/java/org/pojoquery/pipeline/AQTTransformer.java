@@ -2,7 +2,6 @@ package org.pojoquery.pipeline;
 
 import java.util.List;
 
-import org.pojoquery.DbContext;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Recursive;
 import org.pojoquery.pipeline.AbstractQueryTree.AggregateScalarValue;
@@ -23,6 +22,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.SubQueryJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
+import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.typemodel.JakartaAnnotations;
 import org.pojoquery.typemodel.JavaxAnnotations;
 import org.pojoquery.typemodel.ReflectionTypeModel;
@@ -35,7 +35,20 @@ public class AQTTransformer {
 		toSql(node, sqlQuery, false);
 	}
 
-	public static void toSql(TableNode node, SqlQuery<?> sqlQuery, boolean useShortFieldAliases) {
+	public interface PlainQueryBuilder {
+		void setTable(String schemaName, String tableName);
+		void addWithClause(String cteAlias, List<String> of, SqlExpression cte, boolean b);
+		void addField(SqlExpression expression, String alias);
+		void addJoin(JoinType joinType, String schemaName, String tableName, String alias, SqlExpression joinCondition);
+		void addSubqueryJoin(JoinType joinType, SqlExpression statement, String alias, SqlExpression joinCondition);
+		void addWhere(SqlExpression where);
+		void setGroupBy(List<String> groupBy);
+		void setOrderBy(List<String> orderBy);
+		PlainQueryBuilder startSubQuery();
+		SqlExpression toStatement();
+	}
+
+	public static void toSql(TableNode node, PlainQueryBuilder sqlQuery, boolean useShortFieldAliases) {
 		if (node instanceof RootNode rootNode) {
 			sqlQuery.setTable(node.tableInfo().schemaName(), node.tableInfo().tableName());
 			if (rootNode.groupBy() != null) {
@@ -60,36 +73,77 @@ public class AQTTransformer {
 				sqlQuery.addField(pk.expression(), useShortFieldAliases ? pk.field().getName() : node.alias() + "." + pk.field().getName());
 			} else if (child instanceof STISubClassNode stiSubClass) {
 				sqlQuery.addField(SqlExpression.sql("{" + node.alias() + "." + stiSubClass.discriminatorColumn() + "}"), stiSubClass.alias() + "._discriminator");
-				toSql((TableNode) stiSubClass, sqlQuery);
+				toSql((TableNode) stiSubClass, sqlQuery, false);
 			} else if (child instanceof SubQueryJoin subQuery) {
-				DefaultSqlQuery subSqlQuery = new DefaultSqlQuery(sqlQuery.getDbContext());
+				PlainQueryBuilder subSqlQuery = sqlQuery.startSubQuery();
 				toSql(subQuery.subQueryTree(), subSqlQuery, true);
 				sqlQuery.addSubqueryJoin(subQuery.joinType(), subSqlQuery.toStatement(), subQuery.alias(), subQuery.joinCondition());
-				toSql((TableNode) subQuery, sqlQuery);
+				toSql((TableNode) subQuery, sqlQuery, false);
 			} else if (child instanceof Embedding embedded) {
-				toSql((TableNode) embedded, sqlQuery);
+				toSql((TableNode) embedded, sqlQuery, false);
 			} else if (child instanceof SubQueryCollection col) {
-				DefaultSqlQuery subSqlQuery = new DefaultSqlQuery(sqlQuery.getDbContext());
+				PlainQueryBuilder subSqlQuery = sqlQuery.startSubQuery();
 				toSql(col.subQueryTree(), subSqlQuery, true);
 				sqlQuery.addSubqueryJoin(col.joinType(), subSqlQuery.toStatement(), col.alias(), col.joinCondition());
-				toSql((TableNode) col, sqlQuery);
+				toSql((TableNode) col, sqlQuery, false);
 			} else if (child instanceof ValueCollection col) {
 				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, col.joinTable().schemaName(), col.joinTable().tableName(), col.alias(), col.join().joinCondition());
 				sqlQuery.addField(col.expression(), col.alias() + ".value");
 			} else if (child instanceof EntityCollection col) {
 				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, col.tableInfo().schemaName(), col.tableInfo().tableName(), col.alias(),
 						col.join().joinCondition());
-				toSql((TableNode) col, sqlQuery);
+				toSql((TableNode) col, sqlQuery, false);
 			} else if (child instanceof JoinTableEntityCollection jte) {
 				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, jte.join().joinTableInfo().tableInfo().schemaName(), jte.join().joinTableInfo().tableInfo().tableName(),
 						jte.join().joinTableInfo().joinTableAlias(), jte.join().parentKey().joinCondition());
 				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, jte.tableInfo().schemaName(), jte.tableInfo().tableName(), jte.alias(),
 						jte.join().childKey().joinCondition());
-				toSql((TableNode) jte, sqlQuery);
+				toSql((TableNode) jte, sqlQuery, false);
 			} else if (child instanceof RecursiveCollection rc) {
 				String cteAlias = rc.alias() + "_cte";
-				SqlExpression cte = buildRecursiveCteSubquery(rc, sqlQuery.getDbContext(), node.alias());
-				sqlQuery.addWithClause(cteAlias, List.of("root_id", "id", "depth"), cte, true);
+				String tbl = rc.tableInfo().tableName();
+				String idCol = rc.idColumn();
+				String parentCol = rc.parentLinkColumn();
+
+				// Anchor subquery
+				PlainQueryBuilder anchor = sqlQuery.startSubQuery();
+				anchor.setTable(rc.tableInfo().schemaName(), tbl);
+				if (rc.direction() == Recursive.Direction.UP) {
+					// Anchor row = each child's parent (the first ancestor).
+					anchor.addField(SqlExpression.sql("{" + tbl + "." + idCol + "}"), "root_id");
+					anchor.addField(SqlExpression.sql("{" + tbl + "." + parentCol + "}"), "id");
+					anchor.addWhere(SqlExpression.sql("{" + tbl + "." + parentCol + "} IS NOT NULL"));
+				} else {
+					// Anchor row = each parent's immediate child (the first descendant).
+					// Self-join the table as `child` so that "root_id" is the parent
+					// and "id" is its direct child; this excludes the root itself.
+					anchor.addJoin(SqlQuery.JoinType.INNER, rc.tableInfo().schemaName(), tbl, "child",
+							SqlExpression.sql("{child." + parentCol + "} = {" + tbl + "." + idCol + "}"));
+					anchor.addField(SqlExpression.sql("{" + tbl + "." + idCol + "}"), "root_id");
+					anchor.addField(SqlExpression.sql("{child." + idCol + "}"), "id");
+				}
+				anchor.addField(SqlExpression.sql("1"), "depth");
+
+				// Step subquery: current element row is the FROM table (alias = table name),
+				// previous CTE row is joined as alias `r`.
+				PlainQueryBuilder step = sqlQuery.startSubQuery();
+				step.setTable(rc.tableInfo().schemaName(), tbl);
+				SqlExpression joinCond = new SqlExpression(
+						org.pojoquery.pipeline.querytree.transforms.ExpressionResolver.resolve(
+								rc.recursionJoinCondition().getSql(), tbl),
+						rc.recursionJoinCondition().getParameters());
+				step.addJoin(SqlQuery.JoinType.INNER, null, cteAlias, "r", joinCond);
+				step.addField(SqlExpression.sql("{r.root_id}"), "root_id");
+				if (rc.direction() == Recursive.Direction.UP) {
+					step.addField(SqlExpression.sql("{" + tbl + "." + parentCol + "}"), "id");
+					step.addWhere(SqlExpression.sql("{" + tbl + "." + parentCol + "} IS NOT NULL"));
+				} else {
+					step.addField(SqlExpression.sql("{" + tbl + "." + idCol + "}"), "id");
+				}
+				step.addField(SqlExpression.sql("{r.depth} + 1"), "depth");
+
+				sqlQuery.addWithClause(cteAlias, List.of("root_id", "id", "depth"),
+						SqlExpression.implode("\n   UNION ALL\n   ", List.of(anchor.toStatement(), step.toStatement())), true);
 
 				SqlExpression cteJoinCondition = SqlExpression.sql(
 						"{" + cteAlias + ".root_id} = {" + node.alias() + "."
@@ -101,15 +155,15 @@ public class AQTTransformer {
 						"{" + rc.alias() + "." + elementIdName + "} = {" + cteAlias + ".id}");
 				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, rc.tableInfo().schemaName(), rc.tableInfo().tableName(),
 						rc.alias(), elementJoinCondition);
-				toSql((TableNode) rc, sqlQuery);
+				toSql((TableNode) rc, sqlQuery, false);
 			} else if (child instanceof TPSSubClassNode subClass) {
 				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, subClass.join().referringTable().schemaName(), subClass.join().referringTable().tableName(), subClass.alias(),
 						subClass.join().joinCondition());
-				toSql((TableNode) subClass, sqlQuery);
+				toSql((TableNode) subClass, sqlQuery, false);
 			} else if (child instanceof Join ref) {
 				sqlQuery.addJoin(SqlQuery.JoinType.LEFT, ref.join().targetTable().schemaName(), ref.join().targetTable().tableName(), ref.join().targetAlias(),
 						ref.join().joinCondition());
-				toSql((TableNode) ref, sqlQuery);
+				toSql((TableNode) ref, sqlQuery, false);
 			}
 		}
 	}
@@ -128,41 +182,4 @@ public class AQTTransformer {
 		RootNode initialTree = RootNode.createEmptyRootNode(transformedType);
 		return pipeline.apply(initialTree);
 	}
-
-	private static SqlExpression buildRecursiveCteSubquery(RecursiveCollection rc, DbContext db, String parentAlias) {
-		String tableQ = db.quoteObjectNames(rc.tableInfo().tableName());
-		String pkColumn = columnNameOf(PojoMetadata.determineIdField(rc.type()));
-		String pkQ = db.quoteObjectNames(pkColumn);
-		String parentLinkQ = db.quoteObjectNames(rc.parentLinkColumn());
-
-		String rootIdQ = db.quoteObjectNames("root_id");
-		String idQ = db.quoteObjectNames("id");
-		String depthQ = db.quoteObjectNames("depth");
-		String cteAliasQ = db.quoteAlias(rc.alias() + "_cte");
-
-		String anchor;
-		String step;
-		if (rc.direction() == Recursive.Direction.UP) {
-			anchor = "SELECT c." + pkQ + ", c." + parentLinkQ + ", 1"
-					+ " FROM " + tableQ + " c WHERE c." + parentLinkQ + " IS NOT NULL";
-			step = "SELECT r." + rootIdQ + ", c." + parentLinkQ + ", r." + depthQ + " + 1"
-					+ " FROM " + tableQ + " c JOIN " + cteAliasQ + " r ON r." + idQ + " = c." + pkQ
-					+ " WHERE c." + parentLinkQ + " IS NOT NULL";
-		} else {
-			anchor = "SELECT c." + parentLinkQ + ", c." + pkQ + ", 1"
-					+ " FROM " + tableQ + " c WHERE c." + parentLinkQ + " IS NOT NULL";
-			step = "SELECT r." + rootIdQ + ", c." + pkQ + ", r." + depthQ + " + 1"
-					+ " FROM " + tableQ + " c JOIN " + cteAliasQ + " r ON r." + idQ + " = c." + parentLinkQ;
-		}
-
-		String sql = anchor + "\n  UNION ALL\n  " + step;
-		return SqlExpression.sql(sql);
-	}
-
-	private static String columnNameOf(org.pojoquery.typemodel.FieldModel field) {
-		String custom = field.getAnnotationAttributeValue(
-				org.pojoquery.annotations.FieldName.class, "value", String.class);
-		return (custom != null && !custom.isEmpty()) ? custom : field.getName();
-	}
-
 }
