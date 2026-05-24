@@ -287,7 +287,8 @@ public final class Transforms {
                     child -> child instanceof EmptyFieldNode emptyFieldNode &&
                             isEntityCollection(emptyFieldNode.field().getType()) &&
                             !Strings.isNullOrEmpty(emptyFieldNode.field().getAnnotationAttributeValue(Link.class,
-                                    "linktable", String.class)),
+                                    "linktable", String.class)) &&
+                            !emptyFieldNode.field().hasAnnotation(Recursive.class),
                     (TableNode parentNode, EmptyFieldNode emptyFieldNode) -> {
                         TypeModel componentType = getCollectionComponentType(emptyFieldNode.field().getType());
                         String alias = AliasNaming.childAlias(node instanceof RootNode, parentNode.alias(),
@@ -367,11 +368,32 @@ public final class Transforms {
                                 ? idField.getAnnotationAttributeValue(FieldName.class, "value", String.class)
                                 : idField.getName();
 
+                        String linkTableName = field.getAnnotationAttributeValue(Link.class, "linktable", String.class);
+                        AbstractQueryTree.RecursiveLinkTable linkTable = null;
+                        if (linkTableName != null && !linkTableName.isEmpty()) {
+                            String linkSchema = field.getAnnotationAttributeValue(Link.class, "linkschema", String.class);
+                            String linkfield = field.getAnnotationAttributeValue(Link.class, "linkfield", String.class);
+                            String foreignlinkfield = field.getAnnotationAttributeValue(Link.class, "foreignlinkfield", String.class);
+                            if (linkfield == null || linkfield.isEmpty() || foreignlinkfield == null || foreignlinkfield.isEmpty()) {
+                                throw new MappingException("@Recursive with @Link(linktable=...) on " + field.getName()
+                                        + " requires both linkfield and foreignlinkfield to be specified");
+                            }
+                            linkTable = new AbstractQueryTree.RecursiveLinkTable(
+                                    isNullOrEmpty(linkSchema) ? null : linkSchema,
+                                    linkTableName, linkfield, foreignlinkfield);
+                        } else if (parentLink == null || parentLink.isEmpty()) {
+                            throw new MappingException("@Recursive on " + field.getName()
+                                    + " requires either parentLink or a @Link(linktable=...) annotation");
+                        }
+
                         String override = field.getAnnotationAttributeValue(Recursive.class,
                                 "recursionJoinCondition", String.class);
                         SqlExpression recursionJoinCondition;
                         if (override != null && !override.isEmpty()) {
                             recursionJoinCondition = SqlExpression.sql(override);
+                        } else if (linkTable != null) {
+                            // Junction-mode default: handled directly in AQTTransformer; the value is unused.
+                            recursionJoinCondition = SqlExpression.sql("");
                         } else if (direction == Recursive.Direction.UP) {
                             recursionJoinCondition = SqlExpression.sql(
                                     "{r.id} = {this." + idColumn + "}");
@@ -383,7 +405,7 @@ public final class Transforms {
                         // children = null: AddDeclaredFields will populate on a later fixpoint pass,
                         // then AddIdFields / AddEntityReferences / AddEntityCollections / ... run on it.
                         return new RecursiveCollection(alias, componentType, tableInfo, null, field,
-                                parentNode.alias(), parentLink, idColumn, recursionJoinCondition, direction);
+                                parentNode.alias(), parentLink, idColumn, recursionJoinCondition, direction, linkTable);
                     });
         }
     }

@@ -103,44 +103,74 @@ public class AQTTransformer {
 				String cteAlias = rc.alias() + "_cte";
 				String tbl = rc.tableInfo().tableName();
 				String idCol = rc.idColumn();
-				String parentCol = rc.parentLinkColumn();
 
-				// Anchor subquery
 				PlainQueryBuilder anchor = sqlQuery.startSubQuery();
-				anchor.setTable(rc.tableInfo().schemaName(), tbl);
-				if (rc.direction() == Recursive.Direction.UP) {
-					// Anchor row = each child's parent (the first ancestor).
-					anchor.addField(SqlExpression.sql("{" + tbl + "." + idCol + "}"), "root_id");
-					anchor.addField(SqlExpression.sql("{" + tbl + "." + parentCol + "}"), "id");
-					anchor.addWhere(SqlExpression.sql("{" + tbl + "." + parentCol + "} IS NOT NULL"));
-				} else {
-					// Anchor row = each parent's immediate child (the first descendant).
-					// Self-join the table as `child` so that "root_id" is the parent
-					// and "id" is its direct child; this excludes the root itself.
-					anchor.addJoin(SqlQuery.JoinType.INNER, rc.tableInfo().schemaName(), tbl, "child",
-							SqlExpression.sql("{child." + parentCol + "} = {" + tbl + "." + idCol + "}"));
-					anchor.addField(SqlExpression.sql("{" + tbl + "." + idCol + "}"), "root_id");
-					anchor.addField(SqlExpression.sql("{child." + idCol + "}"), "id");
-				}
-				anchor.addField(SqlExpression.sql("1"), "depth");
-
-				// Step subquery: current element row is the FROM table (alias = table name),
-				// previous CTE row is joined as alias `r`.
 				PlainQueryBuilder step = sqlQuery.startSubQuery();
-				step.setTable(rc.tableInfo().schemaName(), tbl);
-				SqlExpression joinCond = new SqlExpression(
-						org.pojoquery.pipeline.querytree.transforms.ExpressionResolver.resolve(
-								rc.recursionJoinCondition().getSql(), tbl),
-						rc.recursionJoinCondition().getParameters());
-				step.addJoin(SqlQuery.JoinType.INNER, null, cteAlias, "r", joinCond);
-				step.addField(SqlExpression.sql("{r.root_id}"), "root_id");
-				if (rc.direction() == Recursive.Direction.UP) {
-					step.addField(SqlExpression.sql("{" + tbl + "." + parentCol + "}"), "id");
-					step.addWhere(SqlExpression.sql("{" + tbl + "." + parentCol + "} IS NOT NULL"));
+				anchor.setTable(rc.tableInfo().schemaName(), tbl);
+
+				if (rc.linkTable() != null) {
+					// Junction-mode: walk through a many-to-many link table.
+					String linkTbl = rc.linkTable().tableName();
+					String linkSchema = rc.linkTable().schemaName();
+					String srcCol = rc.linkTable().sourceColumn();
+					String tgtCol = rc.linkTable().targetColumn();
+					boolean down = rc.direction() != Recursive.Direction.UP;
+					String anchorLinkJoin = down
+							? "{link." + srcCol + "} = {" + tbl + "." + idCol + "}"
+							: "{link." + tgtCol + "} = {" + tbl + "." + idCol + "}";
+					anchor.addJoin(SqlQuery.JoinType.INNER, linkSchema, linkTbl, "link",
+							SqlExpression.sql(anchorLinkJoin));
+					anchor.addField(SqlExpression.sql("{" + tbl + "." + idCol + "}"), "root_id");
+					anchor.addField(SqlExpression.sql(down ? "{link." + tgtCol + "}" : "{link." + srcCol + "}"), "id");
+					anchor.addField(SqlExpression.sql("1"), "depth");
+
+					step.setTable(linkSchema, linkTbl);
+					String stepCteJoin = down
+							? "{r.id} = {" + linkTbl + "." + srcCol + "}"
+							: "{r.id} = {" + linkTbl + "." + tgtCol + "}";
+					step.addJoin(SqlQuery.JoinType.INNER, null, cteAlias, "r", SqlExpression.sql(stepCteJoin));
+					step.addField(SqlExpression.sql("{r.root_id}"), "root_id");
+					step.addField(SqlExpression.sql(down
+							? "{" + linkTbl + "." + tgtCol + "}"
+							: "{" + linkTbl + "." + srcCol + "}"), "id");
+					step.addField(SqlExpression.sql("{r.depth} + 1"), "depth");
 				} else {
-					step.addField(SqlExpression.sql("{" + tbl + "." + idCol + "}"), "id");
+					String parentCol = rc.parentLinkColumn();
+
+					// Anchor subquery
+					if (rc.direction() == Recursive.Direction.UP) {
+						// Anchor row = each child's parent (the first ancestor).
+						anchor.addField(SqlExpression.sql("{" + tbl + "." + idCol + "}"), "root_id");
+						anchor.addField(SqlExpression.sql("{" + tbl + "." + parentCol + "}"), "id");
+						anchor.addWhere(SqlExpression.sql("{" + tbl + "." + parentCol + "} IS NOT NULL"));
+					} else {
+						// Anchor row = each parent's immediate child (the first descendant).
+						// Self-join the table as `child` so that "root_id" is the parent
+						// and "id" is its direct child; this excludes the root itself.
+						anchor.addJoin(SqlQuery.JoinType.INNER, rc.tableInfo().schemaName(), tbl, "child",
+								SqlExpression.sql("{child." + parentCol + "} = {" + tbl + "." + idCol + "}"));
+						anchor.addField(SqlExpression.sql("{" + tbl + "." + idCol + "}"), "root_id");
+						anchor.addField(SqlExpression.sql("{child." + idCol + "}"), "id");
+					}
+					anchor.addField(SqlExpression.sql("1"), "depth");
+
+					// Step subquery: current element row is the FROM table (alias = table name),
+					// previous CTE row is joined as alias `r`.
+					step.setTable(rc.tableInfo().schemaName(), tbl);
+					SqlExpression joinCond = new SqlExpression(
+							org.pojoquery.pipeline.querytree.transforms.ExpressionResolver.resolve(
+									rc.recursionJoinCondition().getSql(), tbl),
+							rc.recursionJoinCondition().getParameters());
+					step.addJoin(SqlQuery.JoinType.INNER, null, cteAlias, "r", joinCond);
+					step.addField(SqlExpression.sql("{r.root_id}"), "root_id");
+					if (rc.direction() == Recursive.Direction.UP) {
+						step.addField(SqlExpression.sql("{" + tbl + "." + parentCol + "}"), "id");
+						step.addWhere(SqlExpression.sql("{" + tbl + "." + parentCol + "} IS NOT NULL"));
+					} else {
+						step.addField(SqlExpression.sql("{" + tbl + "." + idCol + "}"), "id");
+					}
+					step.addField(SqlExpression.sql("{r.depth} + 1"), "depth");
 				}
-				step.addField(SqlExpression.sql("{r.depth} + 1"), "depth");
 
 				sqlQuery.addWithClause(cteAlias, List.of("root_id", "id", "depth"),
 						SqlExpression.implode("\n   UNION ALL\n   ", List.of(anchor.toStatement(), step.toStatement())), true);

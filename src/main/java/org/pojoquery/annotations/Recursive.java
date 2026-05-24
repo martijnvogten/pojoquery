@@ -10,8 +10,8 @@ import java.lang.annotation.Target;
 public @interface Recursive {
 	enum Direction { UP, DOWN }
 
-	/** Column on the element table that points to its parent row. */
-	String parentLink();
+	/** Column on the element table that points to its parent row. Leave empty when using a junction table via {@link Link}. */
+	String parentLink() default "";
 
 	/** UP = walk toward roots (ancestors); DOWN = walk toward leaves (descendants). */
 	Direction direction() default Direction.DOWN;

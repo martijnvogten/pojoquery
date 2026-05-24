@@ -847,13 +847,17 @@ public class AbstractQueryTree {
 			String parentLinkColumn,
 			String idColumn,
 			SqlExpression recursionJoinCondition,
-			Recursive.Direction direction) implements TableNode, FieldNode {
+			Recursive.Direction direction,
+			RecursiveLinkTable linkTable) implements TableNode, FieldNode {
 
 		public TableNode withChildren(List<? extends QueryNode> newChildren) {
 			return new RecursiveCollection(alias, type, tableInfo, List.copyOf(newChildren),
-					field, parentAlias, parentLinkColumn, idColumn, recursionJoinCondition, direction);
+					field, parentAlias, parentLinkColumn, idColumn, recursionJoinCondition, direction, linkTable);
 		}
 	}
+
+	/** Junction-table descriptor for many-to-many recursive collections. */
+	public record RecursiveLinkTable(String schemaName, String tableName, String sourceColumn, String targetColumn) {}
 
 
 	/**
