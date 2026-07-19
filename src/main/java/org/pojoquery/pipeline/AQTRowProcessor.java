@@ -18,7 +18,6 @@ import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.MappedFieldNode;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
-import org.pojoquery.pipeline.AbstractQueryTree.RecursiveCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarNode;
@@ -105,8 +104,6 @@ public class AQTRowProcessor<R> {
 				addToCollection(entity, ec.field(), entitiesOnThisRow.get(ec.alias()), ec.valueMapper(), ec.type());
 			} else if (child instanceof JoinTableEntityCollection jtec) {
 				addToCollection(entity, jtec.field(), entitiesOnThisRow.get(jtec.alias()), jtec.valueMapper(), jtec.type());
-			} else if (child instanceof RecursiveCollection rc) {
-				addToCollection(entity, rc.field(), entitiesOnThisRow.get(rc.alias()), value -> value, rc.type());
 			} else if (child instanceof ValueCollection vc) {
 				addToCollection(entity, vc.field(), row.get(vc.alias() + ".value"), vc.valueMapper(), vc.componentType());
 			} else if (child instanceof MappedFieldNode mappedFieldNode) {

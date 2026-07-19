@@ -49,7 +49,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.JoinTableInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.JoinTableJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
-import org.pojoquery.pipeline.AbstractQueryTree.RecursiveCollection;
+import org.pojoquery.pipeline.AbstractQueryTree.RecursionInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarNode;
@@ -369,18 +369,14 @@ public final class Transforms {
                                 : idField.getName();
 
                         String linkTableName = field.getAnnotationAttributeValue(Link.class, "linktable", String.class);
-                        AbstractQueryTree.RecursiveLinkTable linkTable = null;
-                        if (linkTableName != null && !linkTableName.isEmpty()) {
-                            String linkSchema = field.getAnnotationAttributeValue(Link.class, "linkschema", String.class);
+                        boolean junctionMode = linkTableName != null && !linkTableName.isEmpty();
+                        if (junctionMode) {
                             String linkfield = field.getAnnotationAttributeValue(Link.class, "linkfield", String.class);
                             String foreignlinkfield = field.getAnnotationAttributeValue(Link.class, "foreignlinkfield", String.class);
-                            if (linkfield == null || linkfield.isEmpty() || foreignlinkfield == null || foreignlinkfield.isEmpty()) {
+                            if (isNullOrEmpty(linkfield) || isNullOrEmpty(foreignlinkfield)) {
                                 throw new MappingException("@Recursive with @Link(linktable=...) on " + field.getName()
                                         + " requires both linkfield and foreignlinkfield to be specified");
                             }
-                            linkTable = new AbstractQueryTree.RecursiveLinkTable(
-                                    isNullOrEmpty(linkSchema) ? null : linkSchema,
-                                    linkTableName, linkfield, foreignlinkfield);
                         } else if (parentLink == null || parentLink.isEmpty()) {
                             throw new MappingException("@Recursive on " + field.getName()
                                     + " requires either parentLink or a @Link(linktable=...) annotation");
@@ -391,8 +387,8 @@ public final class Transforms {
                         SqlExpression recursionJoinCondition;
                         if (override != null && !override.isEmpty()) {
                             recursionJoinCondition = SqlExpression.sql(override);
-                        } else if (linkTable != null) {
-                            // Junction-mode default: handled directly in AQTTransformer; the value is unused.
+                        } else if (junctionMode) {
+                            // Junction-mode: the link joins are built directly in AQTTransformer; the value is unused.
                             recursionJoinCondition = SqlExpression.sql("");
                         } else if (direction == Recursive.Direction.UP) {
                             recursionJoinCondition = SqlExpression.sql(
@@ -404,8 +400,31 @@ public final class Transforms {
 
                         // children = null: AddDeclaredFields will populate on a later fixpoint pass,
                         // then AddIdFields / AddEntityReferences / AddEntityCollections / ... run on it.
-                        return new RecursiveCollection(alias, componentType, tableInfo, null, field,
-                                parentNode.alias(), parentLink, idColumn, recursionJoinCondition, direction, linkTable);
+                        if (junctionMode) {
+                            String linkSchema = field.getAnnotationAttributeValue(Link.class, "linkschema", String.class);
+                            String joinTableAlias = AliasNaming.childAlias(false, alias, linkTableName);
+                            TableInfo joinTable = new TableInfo(isNullOrEmpty(linkSchema) ? null : linkSchema,
+                                    linkTableName);
+                            JoinTableInfo joinTableInfo = new JoinTableInfo(joinTable, joinTableAlias);
+                            // The fk column names (linkfield/foreignlinkfield) are filled in by
+                            // ApplyCustomJoinTableColumnNames, like any other @Link collection.
+                            JoinTableJoin join = new JoinTableJoin(
+                                    joinTableInfo,
+                                    ForeignKeyInfo.fkInChild(parentNode.tableInfo(), parentNode.alias(), joinTable,
+                                            joinTableAlias, PojoMetadata.determineIdField(parentNode.type())),
+                                    ForeignKeyInfo.fkInChild(tableInfo, alias, joinTable, joinTableAlias, idField));
+                            return ((JoinTableEntityCollection) JoinTableEntityCollection.fromEmptyFieldNode(
+                                    emptyFieldNode, alias, componentType, tableInfo, join, parentNode.alias()))
+                                    .withRecursionInfo(new RecursionInfo(null, idColumn, recursionJoinCondition, direction));
+                        } else {
+                            // The parentLink column is the FK on the element table pointing to its parent row.
+                            ForeignKeyInfo join = ForeignKeyInfo.fkInChild(parentNode.tableInfo(), parentNode.alias(),
+                                    tableInfo, alias, PojoMetadata.determineIdField(parentNode.type()))
+                                    .withFkColumnName(parentLink);
+                            return ((EntityCollection) EntityCollection.fromEmptyFieldNode(emptyFieldNode, alias,
+                                    componentType, tableInfo, parentNode.alias(), join))
+                                    .withRecursionInfo(new RecursionInfo(parentLink, idColumn, recursionJoinCondition, direction));
+                        }
                     });
         }
     }

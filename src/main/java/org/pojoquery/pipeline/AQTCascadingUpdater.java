@@ -137,6 +137,11 @@ public class AQTCascadingUpdater {
 	}
 
 	private static void processChildForInsert(QueryNode child, Object parentEntity, Object parentId, DatabaseOperations db) {
+		// Recursive collections hold the transitive closure, not owned direct children;
+		// they are read-only and never cascaded.
+		if (child instanceof AbstractQueryTree.HasRecursionInfo rec && rec.recursionInfo() != null) {
+			return;
+		}
 		if (child instanceof EntityCollection coll) {
 			Object childValue = getFieldValue(parentEntity, coll.field());
 			if (childValue instanceof Collection<?> items) {
@@ -229,6 +234,10 @@ public class AQTCascadingUpdater {
 	}
 
 	private static void processChildForUpdate(TableNode parentNode, QueryNode child, Object parentEntity, Object parentId, DatabaseOperations db) {
+		// Recursive collections are read-only projections; never cascade them.
+		if (child instanceof AbstractQueryTree.HasRecursionInfo rec && rec.recursionInfo() != null) {
+			return;
+		}
 		if (child instanceof EntityCollection coll) {
 			Object childValue = getFieldValue(parentEntity, coll.field());
 			Collection<?> items = childValue instanceof Collection<?> c ? c : List.of();
@@ -339,6 +348,10 @@ public class AQTCascadingUpdater {
 	}
 
 	private static void processChildForDelete(QueryNode child, Object parentEntity, Object parentId, DatabaseOperations db) {
+		// Recursive collections are read-only projections; never cascade them.
+		if (child instanceof AbstractQueryTree.HasRecursionInfo rec && rec.recursionInfo() != null) {
+			return;
+		}
 		if (child instanceof EntityCollection coll) {
 			String fkColumn = coll.join().fkColumnName();
 			String idColumn = findIdColumnName(coll);
@@ -371,7 +384,7 @@ public class AQTCascadingUpdater {
 	 */
 	private static void deleteDescendants(TableNode node, FkPath parentPath, Object rootValue, DatabaseOperations db) {
 		for (QueryNode child : node.children()) {
-			if (child instanceof EntityCollection childColl) {
+			if (child instanceof EntityCollection childColl && childColl.recursionInfo() == null) {
 				String childFkColumn = childColl.join().fkColumnName();
 				
 				FkPath childPath = new FkPath(

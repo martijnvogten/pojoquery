@@ -19,7 +19,6 @@ import org.pojoquery.pipeline.AbstractQueryTree.Join;
 import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKeyField;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
-import org.pojoquery.pipeline.AbstractQueryTree.RecursiveCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
@@ -220,25 +219,6 @@ public class AQTSchemaGenerator {
 				collector.registerForeignKey(jte.join().childKey());
 				collector.registerPrimaryKeyColumn(jte.join().joinTableInfo().tableInfo(), jte.join().parentKey().fkColumnName(), null, false);
 				collector.registerPrimaryKeyColumn(jte.join().joinTableInfo().tableInfo(), jte.join().childKey().fkColumnName(), null, false);
-			} else if (child instanceof RecursiveCollection rc) {
-				// Recursive collections over a parent-link column add nothing new to the schema
-				// (the FK column lives on the element table itself). Recursive collections that
-				// traverse a junction table (@Link(linktable=...)) must emit that junction table.
-				AbstractQueryTree.RecursiveLinkTable linkTable = rc.linkTable();
-				if (linkTable != null) {
-					TableInfo junctionTable = new TableInfo(linkTable.schemaName(), linkTable.tableName());
-					FieldModel elementIdField = PojoMetadata.determineIdField(rc.type());
-					ForeignKeyInfo sourceFk = new ForeignKeyInfo(
-							junctionTable, null, rc.tableInfo(), rc.alias(),
-							null, linkTable.sourceColumn(), elementIdField, rc.idColumn(), null);
-					ForeignKeyInfo targetFk = new ForeignKeyInfo(
-							junctionTable, null, rc.tableInfo(), rc.alias(),
-							null, linkTable.targetColumn(), elementIdField, rc.idColumn(), null);
-					collector.registerForeignKey(sourceFk);
-					collector.registerForeignKey(targetFk);
-					collector.registerPrimaryKeyColumn(junctionTable, linkTable.sourceColumn(), null, false);
-					collector.registerPrimaryKeyColumn(junctionTable, linkTable.targetColumn(), null, false);
-				}
 			}
 		}
 	}

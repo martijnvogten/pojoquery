@@ -149,7 +149,6 @@ public class AbstractQueryTree {
 	public sealed interface TableNode
 			extends QueryNode
 			permits Embedding, RootNode, EntityNode, EntityCollection, JoinTableEntityCollection, SubQueryCollection,
-			RecursiveCollection,
 			SuperClassNode, SubClassNode {
 		/** SQL alias used to reference this table in the query. */
 		String alias();
@@ -720,8 +719,8 @@ public class AbstractQueryTree {
 	 * The @Link annotation typically creates this node type.
 	 */
 	public record JoinTableEntityCollection(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children,
-			FieldModel field, JoinTableJoin join, String parentAlias, JdbcValueMapper valueMapper)
-			implements TableNode, HasJoinTableJoin, FieldNode {
+			FieldModel field, JoinTableJoin join, String parentAlias, JdbcValueMapper valueMapper, RecursionInfo recursionInfo)
+			implements TableNode, HasJoinTableJoin, HasRecursionInfo, FieldNode {
 
 		public static QueryNode fromEmptyFieldNode(EmptyFieldNode emptyFieldNode, String alias, TypeModel componentType,
 				TableInfo tableInfo, JoinTableJoin join, String parentAlias) {
@@ -733,25 +732,30 @@ public class AbstractQueryTree {
 					emptyFieldNode.field(),
 					join,
 					parentAlias,
+					null,
 					null);
 		}
 
 		@Override
 		public TableNode withChildren(List<? extends QueryNode> newChildren) {
 			return new JoinTableEntityCollection(alias, type, tableInfo, List.copyOf(newChildren), field, join,
-					parentAlias, valueMapper);
+					parentAlias, valueMapper, recursionInfo);
 		}
 
 		public JoinTableEntityCollection withJoinTableJoin(JoinTableJoin joinTableJoin) {
 			return new JoinTableEntityCollection(alias, type, tableInfo, children, field, joinTableJoin, parentAlias,
-					valueMapper);
+					valueMapper, recursionInfo);
 		}
 
 		public JoinTableEntityCollection withValueMapper(JdbcValueMapper valueMapper) {
 			return new JoinTableEntityCollection(alias, type, tableInfo, children, field, join, parentAlias,
-					valueMapper);
+					valueMapper, recursionInfo);
 		}
 
+		public JoinTableEntityCollection withRecursionInfo(RecursionInfo recursionInfo) {
+			return new JoinTableEntityCollection(alias, type, tableInfo, children, field, join, parentAlias,
+					valueMapper, recursionInfo);
+		}
 	}
 
 	/**
@@ -829,35 +833,39 @@ public class AbstractQueryTree {
 	}
 
 	/**
-	 * A one-to-many collection populated via a recursive CTE.
+	 * Recursion metadata for collections populated via a recursive CTE.
 	 *
 	 * <p>The CTE acts as a junction: it emits {@code (root_id, id, depth)} tuples
 	 * that map each driving row to all reachable descendants or ancestors. The
 	 * element type is joined as a normal table to that CTE, so the rest of the
 	 * pipeline (declared fields, nested joins, sub-collections) expands the
-	 * element type the same way it would for an {@link EntityCollection}.
+	 * element type the same way it would for a plain collection.
+	 *
+	 * @param parentLinkColumn       column on the element table pointing to its
+	 *                               parent row; {@code null} in junction-table mode,
+	 *                               where the link columns come from the node's
+	 *                               {@link JoinTableJoin}
+	 * @param idColumn               primary key column of the element table
+	 * @param recursionJoinCondition join condition between the previous CTE row
+	 *                               (alias {@code r}) and the current element row
+	 * @param direction              UP walks toward roots (ancestors), DOWN toward
+	 *                               leaves (descendants)
 	 */
-	public record RecursiveCollection(
-			String alias,
-			TypeModel type,
-			TableInfo tableInfo,
-			List<QueryNode> children,
-			FieldModel field,
-			String parentAlias,
-			String parentLinkColumn,
-			String idColumn,
-			SqlExpression recursionJoinCondition,
-			Recursive.Direction direction,
-			RecursiveLinkTable linkTable) implements TableNode, FieldNode {
-
-		public TableNode withChildren(List<? extends QueryNode> newChildren) {
-			return new RecursiveCollection(alias, type, tableInfo, List.copyOf(newChildren),
-					field, parentAlias, parentLinkColumn, idColumn, recursionJoinCondition, direction, linkTable);
-		}
+	public record RecursionInfo(String parentLinkColumn, String idColumn,
+			SqlExpression recursionJoinCondition, Recursive.Direction direction) {
 	}
 
-	/** Junction-table descriptor for many-to-many recursive collections. */
-	public record RecursiveLinkTable(String schemaName, String tableName, String sourceColumn, String targetColumn) {}
+	/**
+	 * A collection node that may be populated via a recursive CTE instead of a
+	 * direct join.
+	 */
+	public sealed interface HasRecursionInfo permits EntityCollection, JoinTableEntityCollection {
+		/** Recursion metadata, or null for a plain (non-recursive) collection. */
+		RecursionInfo recursionInfo();
+
+		/** Returns a copy with the given recursion info. */
+		QueryNode withRecursionInfo(RecursionInfo recursionInfo);
+	}
 
 
 	/**
@@ -869,28 +877,34 @@ public class AbstractQueryTree {
 	 * row processing to build the collection.
 	 */
 	public record EntityCollection(String alias, TypeModel type, TableInfo tableInfo, List<QueryNode> children,
-			FieldModel field, String parentAlias, String columnName, ForeignKeyInfo join, JdbcValueMapper valueMapper)
-			implements TableNode, JoinMany {
+			FieldModel field, String parentAlias, String columnName, ForeignKeyInfo join, JdbcValueMapper valueMapper,
+			RecursionInfo recursionInfo)
+			implements TableNode, JoinMany, HasRecursionInfo {
 
 		public static TableNode fromEmptyFieldNode(EmptyFieldNode emptyFieldNode, String alias,
 				TypeModel componentType, TableInfo tableInfo, String parentAlias, ForeignKeyInfo join) {
 			return new EntityCollection(alias, componentType, tableInfo, null, emptyFieldNode.field(), parentAlias,
-					null, join, null);
+					null, join, null, null);
 		}
 
 		public TableNode withChildren(List<? extends QueryNode> newChildren) {
 			return new EntityCollection(alias, type, tableInfo, List.copyOf(newChildren), field, parentAlias,
-					columnName, join, valueMapper);
+					columnName, join, valueMapper, recursionInfo);
 		}
 
 		public QueryNode withJoin(ForeignKeyInfo newJoin) {
 			return new EntityCollection(alias, type, tableInfo, children, field, parentAlias, columnName, newJoin,
-					valueMapper);
+					valueMapper, recursionInfo);
 		}
 
 		public EntityCollection withValueMapper(JdbcValueMapper valueMapper) {
 			return new EntityCollection(alias, type, tableInfo, children, field, parentAlias, columnName, join,
-					valueMapper);
+					valueMapper, recursionInfo);
+		}
+
+		public EntityCollection withRecursionInfo(RecursionInfo recursionInfo) {
+			return new EntityCollection(alias, type, tableInfo, children, field, parentAlias, columnName, join,
+					valueMapper, recursionInfo);
 		}
 	}
 	public record TableInfo(
