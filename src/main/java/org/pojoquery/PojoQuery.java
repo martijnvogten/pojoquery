@@ -23,10 +23,12 @@ import javax.sql.DataSource;
 import org.pojoquery.internal.MappingException;
 import org.pojoquery.internal.TableMapping;
 import org.pojoquery.pipeline.AQTCascadingUpdater;
+import org.pojoquery.pipeline.AQTJsonDirectTransformer;
 import org.pojoquery.pipeline.AQTRowProcessor;
 import org.pojoquery.pipeline.AQTTransformer;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
+import org.pojoquery.pipeline.JsonSqlQuery;
 import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.SqlQuery;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
@@ -414,6 +416,86 @@ public class PojoQuery<T> {
 		}
 	}
 
+	/**
+	 * Builds a SELECT statement that returns each result entity as a single JSON
+	 * document, assembled by the database itself using its native JSON functions.
+	 *
+	 * <p>The statement produces one row per root entity with a single column
+	 * named {@code json}. Scalar fields become JSON properties, references and
+	 * embedded objects become nested objects, and collections become nested
+	 * arrays (empty collections yield {@code []}). Polymorphic entities carry a
+	 * {@code _type} property with the concrete type's simple name.</p>
+	 *
+	 * <p>WHERE conditions, ORDER BY clauses and limits added to this query apply
+	 * to the root entity. Conditions may only reference the root table and
+	 * joined references, not collection contents (collections are evaluated in
+	 * derived tables).</p>
+	 *
+	 * @return the JSON SQL statement
+	 * @see #executeJson(DataSource)
+	 */
+	public SqlExpression toJsonStatement() {
+		JsonSqlQuery jsonQuery = new JsonSqlQuery(dbContext);
+		AQTJsonDirectTransformer.toSql(tree, jsonQuery);
+		for (SqlExpression where : query.getWheres()) {
+			jsonQuery.addWhere(where);
+		}
+		if (!query.getOrderBy().isEmpty()) {
+			jsonQuery.setOrderBy(query.getOrderBy());
+		}
+		jsonQuery.setLimit(query.getOffset(), query.getRowCount());
+		return jsonQuery.toStatement();
+	}
+
+	/**
+	 * Converts the query to a JSON-producing SQL string.
+	 *
+	 * @return the SQL string
+	 * @see #toJsonStatement()
+	 */
+	public String toJsonSql() {
+		return toJsonStatement().getSql();
+	}
+
+	/**
+	 * Executes the JSON variant of this query, returning one JSON document per
+	 * result entity.
+	 *
+	 * @param db the DataSource
+	 * @return one JSON document string per root entity
+	 * @see #toJsonStatement()
+	 */
+	public List<String> executeJson(DataSource db) {
+		SqlExpression stmt = toJsonStatement();
+		LOG.debug("Executing JSON query: {}", stmt.getSql());
+		return extractJsonColumn(DB.queryRows(db, stmt));
+	}
+
+	/**
+	 * Executes the JSON variant of this query, returning one JSON document per
+	 * result entity.
+	 *
+	 * @param connection the database connection
+	 * @return one JSON document string per root entity
+	 * @see #toJsonStatement()
+	 */
+	public List<String> executeJson(Connection connection) {
+		SqlExpression stmt = toJsonStatement();
+		LOG.debug("Executing JSON query: {}", stmt.getSql());
+		return extractJsonColumn(DB.queryRows(connection, stmt));
+	}
+
+	private static List<String> extractJsonColumn(List<Map<String, Object>> rows) {
+		List<String> result = new ArrayList<>(rows.size());
+		for (Map<String, Object> row : rows) {
+			Object value = row.containsKey(JsonSqlQuery.JSON_COLUMN)
+					? row.get(JsonSqlQuery.JSON_COLUMN)
+					: row.values().iterator().next();
+			result.add(value == null ? null : value.toString());
+		}
+		return result;
+	}
+
 
 	/**
 	 * Executes the query in streaming mode, calling the consumer for each completed entity.
@@ -502,6 +584,11 @@ public class PojoQuery<T> {
 		@Override
 		public <PK> PK insert(String table, String schema, Map<String, Object> values) {
 			return DB.insert(context, connection, schema, table, values);
+		}
+
+		@Override
+		public <PK> PK insert(String table, String schema, Map<String, Object> values, String generatedKeyColumn) {
+			return DB.insert(context, connection, schema, table, values, generatedKeyColumn);
 		}
 
 		@Override

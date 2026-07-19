@@ -537,8 +537,33 @@ public interface DB {
 	 * @return           The primary key of the newly inserted record.
 	 */
 	public static <PK> PK insert(DbContext context, Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values) {
+		return insert(context, connection, schemaName, tableName, values, null);
+	}
+
+	/**
+	 * Inserts a new record into the specified table, requesting the generated key
+	 * from a specific column.
+	 *
+	 * <p>Pass the primary key column as {@code generatedKeyColumn} whenever it is
+	 * known: on PostgreSQL, {@link Statement#RETURN_GENERATED_KEYS} returns every
+	 * column of the inserted row, so reading the key positionally picks an
+	 * arbitrary column. Naming the key column makes all databases return just
+	 * that column.</p>
+	 *
+	 * @param <PK>               The type of the primary key that will be returned.
+	 * @param context            The database context.
+	 * @param connection         The database connection.
+	 * @param schemaName         The schema name.
+	 * @param tableName          The name of the table where the record will be inserted.
+	 * @param values             A map containing the column names as keys and their corresponding values.
+	 * @param generatedKeyColumn The primary key column to return, or null to fall
+	 *                           back to the driver's default generated-keys behavior.
+	 * @return                   The primary key of the newly inserted record.
+	 */
+	public static <PK> PK insert(DbContext context, Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values, String generatedKeyColumn) {
 		SqlExpression insertSql = SqlStatementBuilder.buildInsert(context, schemaName, tableName, values);
-		return execute(connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
+		return execute(context, connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null,
+				generatedKeyColumn == null ? null : new String[] { generatedKeyColumn });
 	}
 	
 	/**
@@ -870,8 +895,19 @@ public interface DB {
      * @param processor the processor to handle the result set
      * @return the processed result
      */
-	@SuppressWarnings("unchecked")
 	public static <T> T execute(DbContext context, Connection connection, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor) {
+		return execute(context, connection, type, sql, params, processor, null);
+	}
+
+	/**
+	 * Executes a query, optionally requesting generated keys from specific columns.
+	 *
+	 * @param generatedKeyColumns for INSERT statements, the columns to return as
+	 *                            generated keys, or null to use the driver's
+	 *                            default generated-keys behavior
+	 */
+	@SuppressWarnings("unchecked")
+	public static <T> T execute(DbContext context, Connection connection, QueryType type, String sql, Iterable<Object> params, ResultSetProcessor<T> processor, String[] generatedKeyColumns) {
 		long startTime = 0;
 		String connId = null;
 		if (LOG.isDebugEnabled()) {
@@ -882,12 +918,14 @@ public interface DB {
 			}
 			startTime = System.nanoTime();
 		}
-		try (PreparedStatement stmt = connection.prepareStatement(
-				sql,
-				type == QueryType.INSERT
-					? Statement.RETURN_GENERATED_KEYS
-					: Statement.NO_GENERATED_KEYS
-			)) {
+		try (PreparedStatement stmt = type == QueryType.INSERT && generatedKeyColumns != null
+				? connection.prepareStatement(sql, generatedKeyColumns)
+				: connection.prepareStatement(
+					sql,
+					type == QueryType.INSERT
+						? Statement.RETURN_GENERATED_KEYS
+						: Statement.NO_GENERATED_KEYS
+				)) {
 			if (params != null) {
 				applyParameters(context, params, stmt);
 			}

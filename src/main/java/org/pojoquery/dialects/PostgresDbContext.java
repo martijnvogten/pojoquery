@@ -7,11 +7,14 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
+import org.pojoquery.SqlExpression;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumnMetadata;
 import org.pojoquery.pipeline.SimpleFieldMapping;
 
@@ -144,5 +147,59 @@ public class PostgresDbContext implements DbContext {
     @Override
     public int getStreamingFetchSize() {
         return 100; // Reasonable default for PostgreSQL
+    }
+
+    @Override
+    public SqlExpression jsonObject(List<JsonProperty> properties) {
+        List<SqlExpression> parts = new ArrayList<>();
+        for (JsonProperty property : properties) {
+            parts.add(SqlExpression.implode("", List.of(
+                    SqlExpression.sql("'" + DbContext.escapeSqlStringLiteral(property.name()) + "', "),
+                    property.value())));
+        }
+        return SqlExpression.implode("", List.of(
+                SqlExpression.sql("JSONB_BUILD_OBJECT(\n  "),
+                SqlExpression.implode(",\n  ", parts),
+                SqlExpression.sql("\n )")));
+    }
+
+    /**
+     * Polymorphic objects concatenate the base object with a CASE over the
+     * variant objects: {@code (base || CASE WHEN ... THEN variant ... ELSE '{}'::jsonb END)}.
+     * Variant properties with NULL values are stripped with jsonb_strip_nulls,
+     * mirroring the absent-on-null behavior of the other dialects.
+     */
+    @Override
+    public SqlExpression jsonObjectWithVariants(List<JsonProperty> baseProperties, List<JsonVariant> variants) {
+        if (variants.isEmpty()) {
+            return jsonObject(baseProperties);
+        }
+        List<SqlExpression> parts = new ArrayList<>();
+        parts.add(SqlExpression.sql("("));
+        parts.add(jsonObject(baseProperties));
+        parts.add(SqlExpression.sql(" || CASE"));
+        for (JsonVariant variant : variants) {
+            parts.add(SqlExpression.implode("", List.of(
+                    SqlExpression.sql(" WHEN "),
+                    variant.condition(),
+                    SqlExpression.sql(" THEN JSONB_STRIP_NULLS("),
+                    jsonObject(variant.properties()),
+                    SqlExpression.sql(")"))));
+        }
+        parts.add(SqlExpression.sql(" ELSE '{}'::jsonb END)"));
+        return SqlExpression.implode("", parts);
+    }
+
+    @Override
+    public SqlExpression jsonArrayAgg(SqlExpression element) {
+        return SqlExpression.implode("", List.of(
+                SqlExpression.sql("JSONB_AGG(\n  "),
+                element,
+                SqlExpression.sql("\n )")));
+    }
+
+    @Override
+    public SqlExpression emptyJsonArray() {
+        return SqlExpression.sql("'[]'::jsonb");
     }
 }

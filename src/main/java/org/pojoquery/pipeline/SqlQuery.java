@@ -250,6 +250,14 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 	}
 
 	private String quoteObjectNames(String sql) {
+		return quoteMarkers(dbContext, sql);
+	}
+
+	/**
+	 * Resolves {@code {alias.column}} and {@code {name}} markers in a SQL string
+	 * to properly quoted identifiers for the given context.
+	 */
+	public static String quoteMarkers(DbContext dbContext, String sql) {
 		return CurlyMarkers.processMarkers(sql, marker -> {
 			if (marker.contains(".")) {
 				List<String> parts = Arrays.asList(marker.split("\\."));
@@ -341,7 +349,7 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 		return new SqlExpression(sql, params);
 	}
 
-	private static String buildLimitClause(int offset, int rowCount) {
+	static String buildLimitClause(int offset, int rowCount) {
 		String limitClause = "";
 		if (offset > -1 || rowCount > -1) {
 			if (rowCount < 0) {

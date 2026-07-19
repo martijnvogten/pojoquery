@@ -7,10 +7,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 import org.pojoquery.DbContext;
 import org.pojoquery.FieldMapping;
+import org.pojoquery.SqlExpression;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumnMetadata;
 import org.pojoquery.pipeline.SimpleFieldMapping;
 
@@ -133,5 +136,67 @@ public class HsqldbDbContext implements DbContext {
     @Override
     public int getStreamingFetchSize() {
         return 0; // HSQLDB default
+    }
+
+    @Override
+    public SqlExpression jsonObject(List<JsonProperty> properties) {
+        return jsonObject(properties, false);
+    }
+
+    /**
+     * HSQLDB's JSON_ARRAYAGG parser does not accept a CASE returning JSON_OBJECT
+     * (it collapses to VARCHAR and gets escaped) and does not allow FORMAT JSON
+     * on its argument. So we keep a single JSON_OBJECT and push the polymorphism
+     * into property values:
+     * <pre>
+     *   'subclassField': CASE WHEN &lt;condition&gt; THEN &lt;expr&gt; END   -- NULL otherwise
+     * </pre>
+     * The JSON_OBJECT uses ABSENT ON NULL so the irrelevant subclass properties
+     * are stripped from the output. Note this also strips base properties whose
+     * value is legitimately NULL.
+     */
+    @Override
+    public SqlExpression jsonObjectWithVariants(List<JsonProperty> baseProperties, List<JsonVariant> variants) {
+        if (variants.isEmpty()) {
+            return jsonObject(baseProperties);
+        }
+        List<JsonProperty> merged = new ArrayList<>(baseProperties);
+        for (JsonVariant variant : variants) {
+            for (JsonProperty property : variant.properties()) {
+                SqlExpression guarded = SqlExpression.implode("", List.of(
+                        SqlExpression.sql("CASE WHEN "),
+                        variant.condition(),
+                        SqlExpression.sql(" THEN "),
+                        property.value(),
+                        SqlExpression.sql(" END")));
+                merged.add(new JsonProperty(property.name(), guarded));
+            }
+        }
+        return jsonObject(merged, true);
+    }
+
+    private SqlExpression jsonObject(List<JsonProperty> properties, boolean absentOnNull) {
+        List<SqlExpression> parts = new ArrayList<>();
+        for (JsonProperty property : properties) {
+            parts.add(SqlExpression.implode("", List.of(
+                    SqlExpression.sql("'" + DbContext.escapeSqlStringLiteral(property.name()) + "': "),
+                    property.value())));
+        }
+        return SqlExpression.implode("", List.of(
+                SqlExpression.sql("JSON_OBJECT(\n  "),
+                SqlExpression.implode(",\n  ", parts),
+                SqlExpression.sql((absentOnNull ? "\n  ABSENT ON NULL" : "") + "\n )")));
+    }
+
+    @Override
+    public SqlExpression jsonValueRef(SqlExpression jsonValue) {
+        return SqlExpression.implode("", List.of(jsonValue, SqlExpression.sql(" FORMAT JSON")));
+    }
+
+    @Override
+    public String stringLiteralExpression(String value) {
+        // Plain literals are CHAR-typed; a CASE over CHAR literals of different
+        // lengths unifies to CHAR(max) and pads shorter values with spaces.
+        return "CAST('" + DbContext.escapeSqlStringLiteral(value) + "' AS VARCHAR(" + Math.max(1, value.length()) + "))";
     }
 }

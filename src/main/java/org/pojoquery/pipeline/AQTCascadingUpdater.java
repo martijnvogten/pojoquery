@@ -23,6 +23,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.typemodel.FieldModel;
+import org.pojoquery.typemodel.TypeModel;
 
 /**
  * Cascading insert/update/delete for the AbstractQueryTree model.
@@ -35,7 +36,16 @@ public class AQTCascadingUpdater {
 	public interface DatabaseOperations {
 		/** Returns generated ID (or null if no auto-generated key) */
 		<PK> PK insert(String table, String schema, Map<String, Object> values);
-		
+
+		/**
+		 * Insert requesting the generated key from a specific column. Naming the
+		 * key column is required for PostgreSQL, where the driver's default
+		 * generated-keys behavior returns every column of the inserted row.
+		 */
+		default <PK> PK insert(String table, String schema, Map<String, Object> values, String generatedKeyColumn) {
+			return insert(table, schema, values);
+		}
+
 		int update(String table, String schema, Map<String, Object> values, Map<String, Object> where);
 		
 		int delete(String table, String schema, Map<String, Object> where);
@@ -102,6 +112,9 @@ public class AQTCascadingUpdater {
 		// Collect FK values from EntityReference children (FK in parent)
 		collectEntityReferenceValues(node, entity, values);
 
+		// Single table inheritance: record the concrete type in the discriminator column
+		addDiscriminatorValue(node, values);
+
 		// Add FK to parent if this is a child in a one-to-many
 		if (parentId != null && parentFkColumn != null) {
 			values.put(parentFkColumn, parentId);
@@ -117,7 +130,9 @@ public class AQTCascadingUpdater {
 			generatedId = inheritedId;
 		} else {
 			// Normal insert with auto-generated ID
-			generatedId = db.insert(node.tableInfo().tableName(), node.tableInfo().schemaName(), values);
+			PrimaryKeyField primaryKey = findPrimaryKeyField(node);
+			String keyColumn = primaryKey != null ? primaryKey.columnName() : null;
+			generatedId = db.insert(node.tableInfo().tableName(), node.tableInfo().schemaName(), values, keyColumn);
 			// Set auto-generated ID back on entity
 			if (fields.autoGenIdField() != null && generatedId != null) {
 				setFieldValue(entity, findPrimaryKeyField(node, fields.autoGenIdField()).field(), generatedId);
@@ -462,6 +477,30 @@ public class AQTCascadingUpdater {
 				} else {
 					values.put(fkColumn, null);
 				}
+			}
+		}
+	}
+
+	/**
+	 * For single table inheritance, adds the discriminator value for the node's
+	 * concrete type to the insert values. The discriminator column is declared
+	 * with {@code @DiscriminatorColumn} on the (transitive) superclass; the value
+	 * defaults to the concrete type's simple name unless overridden with
+	 * {@code @DiscriminatorValue}.
+	 */
+	private static void addDiscriminatorValue(TableNode node, Map<String, Object> values) {
+		TypeModel type = node.type();
+		for (TypeModel current = type; current != null; current = current.getSuperclass()) {
+			if (current.hasAnnotation(org.pojoquery.annotations.DiscriminatorColumn.class)) {
+				String column = current.getAnnotationAttributeValue(
+						org.pojoquery.annotations.DiscriminatorColumn.class, "name", String.class);
+				String value = type.getAnnotationAttributeValue(
+						org.pojoquery.annotations.DiscriminatorValue.class, "value", String.class);
+				if (value == null || value.isEmpty()) {
+					value = type.getSimpleName();
+				}
+				values.putIfAbsent(column, value);
+				return;
 			}
 		}
 	}

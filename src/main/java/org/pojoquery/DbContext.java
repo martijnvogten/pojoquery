@@ -7,7 +7,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 
 import org.pojoquery.dialects.HsqldbDbContext;
@@ -338,6 +340,143 @@ public interface DbContext {
 	 * @param value the parameter value to convert (may be null)
 	 * @return the JDBC-compatible value
 	 */
+	/**
+	 * A single property inside a JSON object expression: the JSON property name
+	 * and the SQL expression producing its value.
+	 */
+	public record JsonProperty(String name, SqlExpression value) {
+	}
+
+	/**
+	 * A conditional set of JSON properties, used for polymorphic results.
+	 * When {@code condition} holds for a row, {@code properties} are added to
+	 * the JSON object; for rows where it does not hold, they are absent.
+	 */
+	public record JsonVariant(SqlExpression condition, List<JsonProperty> properties) {
+	}
+
+	/**
+	 * Escapes a string for use inside a single-quoted SQL string literal.
+	 */
+	static String escapeSqlStringLiteral(String value) {
+		return value.replace("'", "''");
+	}
+
+	/**
+	 * Renders a string constant for use in a SELECT expression.
+	 *
+	 * <p>The default implementation returns a plain quoted literal. HSQLDB
+	 * overrides this with a VARCHAR cast, because CASE expressions over plain
+	 * literals of different lengths unify to CHAR and pad shorter values with
+	 * spaces.</p>
+	 */
+	default String stringLiteralExpression(String value) {
+		return "'" + escapeSqlStringLiteral(value) + "'";
+	}
+
+	/**
+	 * Builds a JSON object expression from the given properties.
+	 *
+	 * <p>The default implementation emits MySQL syntax:
+	 * {@code JSON_OBJECT('name', value, ...)}.</p>
+	 *
+	 * @param properties the properties of the object, in order
+	 * @return the JSON object expression
+	 */
+	default SqlExpression jsonObject(List<JsonProperty> properties) {
+		List<SqlExpression> parts = new ArrayList<>();
+		for (JsonProperty property : properties) {
+			parts.add(SqlExpression.implode("", List.of(
+					SqlExpression.sql("'" + escapeSqlStringLiteral(property.name()) + "', "),
+					property.value())));
+		}
+		return SqlExpression.implode("", List.of(
+				SqlExpression.sql("JSON_OBJECT(\n  "),
+				SqlExpression.implode(",\n  ", parts),
+				SqlExpression.sql("\n )")));
+	}
+
+	/**
+	 * Builds a JSON object expression for a polymorphic entity: the base
+	 * properties are always present, and each variant's properties are only
+	 * present in rows where the variant's condition holds.
+	 *
+	 * <p>The default implementation emits MySQL syntax using
+	 * {@code JSON_MERGE_PATCH} with a {@code CASE} over the variant objects.
+	 * Note that variant properties whose value is NULL are removed by
+	 * JSON_MERGE_PATCH, mirroring the absent-on-null behavior of the other
+	 * dialects.</p>
+	 *
+	 * @param baseProperties properties present for every row
+	 * @param variants       conditional property sets (mutually exclusive conditions)
+	 * @return the JSON object expression
+	 */
+	default SqlExpression jsonObjectWithVariants(List<JsonProperty> baseProperties, List<JsonVariant> variants) {
+		if (variants.isEmpty()) {
+			return jsonObject(baseProperties);
+		}
+		List<SqlExpression> caseParts = new ArrayList<>();
+		caseParts.add(SqlExpression.sql("CASE"));
+		for (JsonVariant variant : variants) {
+			caseParts.add(SqlExpression.implode("", List.of(
+					SqlExpression.sql(" WHEN "),
+					variant.condition(),
+					SqlExpression.sql(" THEN "),
+					jsonObject(variant.properties()))));
+		}
+		caseParts.add(SqlExpression.sql(" ELSE JSON_OBJECT() END"));
+		return SqlExpression.implode("", List.of(
+				SqlExpression.sql("JSON_MERGE_PATCH(\n "),
+				jsonObject(baseProperties),
+				SqlExpression.sql(",\n "),
+				SqlExpression.implode("", caseParts),
+				SqlExpression.sql("\n )")));
+	}
+
+	/**
+	 * Builds a JSON array aggregate over the given element expression, one
+	 * element per row in the group.
+	 *
+	 * <p>The default implementation emits {@code JSON_ARRAYAGG(element)}.</p>
+	 *
+	 * @param element the expression producing each array element
+	 * @return the aggregate expression
+	 */
+	default SqlExpression jsonArrayAgg(SqlExpression element) {
+		return SqlExpression.implode("", List.of(
+				SqlExpression.sql("JSON_ARRAYAGG(\n  "),
+				element,
+				SqlExpression.sql("\n )")));
+	}
+
+	/**
+	 * Marks an expression that already produces JSON (e.g. a reference to a
+	 * subquery's JSON column) for use as a JSON object property value, so the
+	 * value is embedded as JSON rather than escaped as a string.
+	 *
+	 * <p>Most databases carry the JSON type through expressions, so the default
+	 * implementation returns the expression unchanged. HSQLDB requires a
+	 * {@code FORMAT JSON} suffix. Only use the result in property-value
+	 * position inside {@link #jsonObject(List)}.</p>
+	 *
+	 * @param jsonValue an expression that produces a JSON document
+	 * @return the expression, marked as JSON if the dialect requires it
+	 */
+	default SqlExpression jsonValueRef(SqlExpression jsonValue) {
+		return jsonValue;
+	}
+
+	/**
+	 * Returns the expression for an empty JSON array, used as the COALESCE
+	 * fallback so entities without collection elements get {@code []} rather
+	 * than {@code null}.
+	 *
+	 * @return the empty JSON array expression
+	 */
+	default SqlExpression emptyJsonArray() {
+		return SqlExpression.sql("JSON_ARRAY()");
+	}
+
 	default Object convertParameterForJdbc(Object value) {
 		if (value == null) {
 			return null;
