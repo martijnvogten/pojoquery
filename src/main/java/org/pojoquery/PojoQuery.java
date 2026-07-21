@@ -28,6 +28,7 @@ import org.pojoquery.pipeline.AQTRowProcessor;
 import org.pojoquery.pipeline.AQTTransformer;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
+import org.pojoquery.pipeline.ExistsSubqueryBuilder;
 import org.pojoquery.pipeline.JsonSqlQuery;
 import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.SqlQuery;
@@ -316,6 +317,87 @@ public class PojoQuery<T> {
 	public PojoQuery<T> addWhere(String sql, Object... params) {
 		query.addWhere(sql, params);
 		return this;
+	}
+
+	/**
+	 * Adds a semi-join {@code EXISTS} condition that keeps only root rows for which
+	 * the given collection contains at least one element matching {@code sql}.
+	 *
+	 * <p>
+	 * Unlike {@link #addWhere(String, Object...)} against a joined collection alias
+	 * (which both filters the root rows and truncates the hydrated collection), this
+	 * condition only decides whether a root row is returned; the collection itself is
+	 * still loaded in full.
+	 *
+	 * @param collectionAlias the alias of the collection to test
+	 * @param sql             the condition applied inside the sub-query, using
+	 *                        {@code {alias.column}} markers
+	 * @param params          the parameters for {@code sql}
+	 * @return the current PojoQuery instance
+	 */
+	public PojoQuery<T> whereExists(String collectionAlias, String sql, Object... params) {
+		return whereExists(collectionAlias, SqlExpression.sql(sql, params));
+	}
+
+	/**
+	 * Adds a semi-join {@code EXISTS} condition using a prepared {@link SqlExpression}.
+	 *
+	 * @param collectionAlias the alias of the collection to test
+	 * @param condition       the condition applied inside the sub-query
+	 * @return the current PojoQuery instance
+	 */
+	public PojoQuery<T> whereExists(String collectionAlias, SqlExpression condition) {
+		query.addWhere(ExistsSubqueryBuilder.buildExists(dbContext, tree, collectionAlias, condition, false));
+		return this;
+	}
+
+	/**
+	 * Adds a semi-join {@code EXISTS} condition that keeps only root rows whose
+	 * collection is non-empty.
+	 *
+	 * @param collectionAlias the alias of the collection to test
+	 * @return the current PojoQuery instance
+	 */
+	public PojoQuery<T> whereExists(String collectionAlias) {
+		return whereExists(collectionAlias, (SqlExpression) null);
+	}
+
+	/**
+	 * Adds a semi-join {@code NOT EXISTS} condition that keeps only root rows for
+	 * which the given collection contains no element matching {@code sql}.
+	 *
+	 * @param collectionAlias the alias of the collection to test
+	 * @param sql             the condition applied inside the sub-query, using
+	 *                        {@code {alias.column}} markers
+	 * @param params          the parameters for {@code sql}
+	 * @return the current PojoQuery instance
+	 */
+	public PojoQuery<T> whereNotExists(String collectionAlias, String sql, Object... params) {
+		return whereNotExists(collectionAlias, SqlExpression.sql(sql, params));
+	}
+
+	/**
+	 * Adds a semi-join {@code NOT EXISTS} condition using a prepared
+	 * {@link SqlExpression}.
+	 *
+	 * @param collectionAlias the alias of the collection to test
+	 * @param condition       the condition applied inside the sub-query
+	 * @return the current PojoQuery instance
+	 */
+	public PojoQuery<T> whereNotExists(String collectionAlias, SqlExpression condition) {
+		query.addWhere(ExistsSubqueryBuilder.buildExists(dbContext, tree, collectionAlias, condition, true));
+		return this;
+	}
+
+	/**
+	 * Adds a semi-join {@code NOT EXISTS} condition that keeps only root rows whose
+	 * collection is empty.
+	 *
+	 * @param collectionAlias the alias of the collection to test
+	 * @return the current PojoQuery instance
+	 */
+	public PojoQuery<T> whereNotExists(String collectionAlias) {
+		return whereNotExists(collectionAlias, (SqlExpression) null);
 	}
 
 	/**
