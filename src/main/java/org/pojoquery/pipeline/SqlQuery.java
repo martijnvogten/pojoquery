@@ -183,6 +183,54 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 		return (SQ)this;
 	}
 
+	/**
+	 * Adds a semi-join (or anti-join) condition of the form
+	 * {@code {table.id} [NOT] IN (SELECT table.id FROM <table> <joins> WHERE <condition>)}.
+	 *
+	 * <p>
+	 * The sub-query replicates this query's FROM table and joins, so the condition
+	 * uses exactly the same {@code {alias.column}} markers as
+	 * {@link #addWhere(String, Object...)}. Unlike a plain {@code addWhere} against
+	 * a LEFT-joined collection alias (which both filters the root rows <em>and</em>
+	 * truncates the hydrated collection), this condition only decides whether a
+	 * root row is returned; the collections are still loaded in full by the outer
+	 * LEFT JOINs.
+	 *
+	 * <p>
+	 * Because all generated joins are LEFT JOINs, joins the condition does not
+	 * reference can never change the set of returned ids; they are pruned from the
+	 * sub-query (see {@link #pruneUnusedJoins()}). A single condition may reference
+	 * collections on different paths, or correlate two collections with each
+	 * other; the sub-query then ranges over the join product.
+	 *
+	 * @param idColumns the primary key column(s) of the FROM table
+	 * @param condition the condition applied inside the sub-query
+	 * @param negate    {@code true} to emit {@code NOT IN}, {@code false} for
+	 *                  {@code IN}
+	 */
+	public SQ addWhereExists(List<String> idColumns, SqlExpression condition, boolean negate) {
+		DefaultSqlQuery sub = new DefaultSqlQuery(dbContext);
+		sub.setTable(schema, table);
+		// Copy: pruning inside toStatement() must not affect this query.
+		sub.setJoins(new ArrayList<>(joins));
+		List<String> markers = new ArrayList<>();
+		for (String idColumn : idColumns) {
+			String marker = "{" + table + "." + idColumn + "}";
+			markers.add(marker);
+			// Pre-resolve the id markers: markers in this query's own WHERE clause are
+			// post-processed, but field expressions of the embedded sub-select are
+			// emitted verbatim.
+			sub.addField(new SqlExpression(quoteObjectNames(marker)));
+		}
+		sub.addWhere(condition);
+		SqlExpression subStatement = sub.toStatement();
+
+		String left = markers.size() == 1 ? markers.get(0) : "(" + String.join(", ", markers) + ")";
+		String sql = left + (negate ? " NOT IN (" : " IN (") + subStatement.getSql() + ")";
+		wheres.add(new SqlExpression(sql, subStatement.getParameters()));
+		return (SQ)this;
+	}
+
 	public SQ addOrderBy(String order) {
 		orderBy.add(order);
 		return (SQ)this;
@@ -201,6 +249,11 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 	public SqlExpression toListIdsStatement(SqlExpression idFieldExpression) {
 		SqlExpression resolved = new SqlExpression(quoteObjectNames(resolveExpression(idFieldExpression.getSql(), table)), idFieldExpression.getParameters());
 		return toStatement(new SqlExpression("SELECT\n DISTINCT " + resolved.getSql()), schema, table, joins, wheres, groupBy, orderBy, offset, rowCount);
+	}
+
+	public SqlExpression toCountStatement(SqlExpression idFieldExpression) {
+		SqlExpression resolved = new SqlExpression(quoteObjectNames(resolveExpression(idFieldExpression.getSql(), table)), idFieldExpression.getParameters());
+		return toStatement(new SqlExpression("SELECT COUNT(DISTINCT " + resolved.getSql() + ") "), schema, table, joins, wheres, null, null, -1, -1);
 	}
 
 	private Map<String, String> buildFieldsExpressionMapping(SqlField excludeField) {

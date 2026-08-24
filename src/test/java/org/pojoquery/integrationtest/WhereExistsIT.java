@@ -19,10 +19,10 @@ import org.pojoquery.schema.SchemaGenerator;
 
 /**
  * Exercises {@link PojoQuery#whereExists} and {@link PojoQuery#whereNotExists}.
- * The distinguishing behaviour under test is that an EXISTS semi-join filters
- * root rows by collection contents <em>without</em> truncating the eagerly
- * loaded collection, in contrast to a plain {@code addWhere} against a
- * LEFT-joined collection alias which both filters and truncates.
+ * The distinguishing behaviour under test is that a semi-join filters root rows
+ * by collection contents <em>without</em> truncating the eagerly loaded
+ * collection, in contrast to a plain {@code addWhere} against a LEFT-joined
+ * collection alias which both filters and truncates.
  */
 public class WhereExistsIT {
 
@@ -69,14 +69,14 @@ public class WhereExistsIT {
 		DataSource db = initDatabase();
 
 		List<User> result = PojoQuery.build(User.class)
-				.whereExists("roles", "{roles.rolename} = ?", "admin")
+				.whereExists("{roles.rolename} = ?", "admin")
 				.addOrderBy("{app_user.username}")
 				.execute(db);
 
 		Assertions.assertEquals(List.of("joe"), usernames(result),
 				"only the user holding the admin role must match");
 		Assertions.assertEquals(List.of("admin", "editor"), rolenames(result.get(0)),
-				"the eagerly loaded roles collection must NOT be truncated by the EXISTS filter");
+				"the eagerly loaded roles collection must NOT be truncated by the semi-join filter");
 	}
 
 	@Test
@@ -84,7 +84,7 @@ public class WhereExistsIT {
 		DataSource db = initDatabase();
 
 		List<AuthorWithBooks> result = PojoQuery.build(AuthorWithBooks.class)
-				.whereExists("books", "{books.title} = ?", "Book One")
+				.whereExists("{books.title} = ?", "Book One")
 				.execute(db);
 
 		Assertions.assertEquals(List.of("alice"), authorNames(result));
@@ -97,7 +97,7 @@ public class WhereExistsIT {
 		DataSource db = initDatabase();
 
 		List<User> result = PojoQuery.build(User.class)
-				.whereNotExists("roles", "{roles.rolename} = ?", "admin")
+				.whereNotExists("{roles.rolename} = ?", "admin")
 				.addOrderBy("{app_user.username}")
 				.execute(db);
 
@@ -106,17 +106,17 @@ public class WhereExistsIT {
 	}
 
 	@Test
-	public void whereExistsZeroConditionTestsMereCollectionMembership() {
+	public void whereExistsLoneMarkerTestsMereCollectionMembership() {
 		DataSource db = initDatabase();
 
 		List<User> withAnyRole = PojoQuery.build(User.class)
-				.whereExists("roles")
+				.whereExists("{roles.id} IS NOT NULL")
 				.addOrderBy("{app_user.username}")
 				.execute(db);
 		Assertions.assertEquals(List.of("jane", "joe"), usernames(withAnyRole));
 
 		List<AuthorWithBooks> withoutAnyBook = PojoQuery.build(AuthorWithBooks.class)
-				.whereNotExists("books")
+				.whereNotExists("{books.id}")
 				.execute(db);
 		Assertions.assertEquals(List.of("bob-author"), authorNames(withoutAnyBook));
 	}
@@ -126,7 +126,7 @@ public class WhereExistsIT {
 		DataSource db = initDatabase();
 
 		List<User> result = PojoQuery.build(User.class)
-				.whereExists("roles.permissions", "{roles.permissions.permissionname} = ?", "write")
+				.whereExists("{roles.permissions.permissionname} = ?", "write")
 				.execute(db);
 
 		Assertions.assertEquals(List.of("joe"), usernames(result),
@@ -141,7 +141,7 @@ public class WhereExistsIT {
 
 		List<User> result = PojoQuery.build(User.class)
 				.addWhere("{app_user.username} = ?", "joe")
-				.whereExists("roles", "{roles.rolename} = ?", "admin")
+				.whereExists("{roles.rolename} = ?", "admin")
 				.execute(db);
 
 		Assertions.assertEquals(List.of("joe"), usernames(result));
@@ -150,7 +150,9 @@ public class WhereExistsIT {
 	@Test
 	public void unknownAliasThrowsMappingException() {
 		Assertions.assertThrows(MappingException.class,
-				() -> PojoQuery.build(User.class).whereExists("nonexistent", "1=1"));
+				() -> PojoQuery.build(User.class).whereExists("{nonexistent.x} = 1"));
+		Assertions.assertThrows(MappingException.class,
+				() -> PojoQuery.build(User.class).whereExists("{nonexistent.id}"));
 	}
 
 	@Test
@@ -168,7 +170,7 @@ public class WhereExistsIT {
 
 		// whereExists filters the same root rows but leaves the collection whole.
 		List<User> viaExists = PojoQuery.build(User.class)
-				.whereExists("roles", "{roles.rolename} = ?", "admin")
+				.whereExists("{roles.rolename} = ?", "admin")
 				.execute(db);
 		Assertions.assertEquals(List.of("joe"), usernames(viaExists));
 		Assertions.assertEquals(List.of("admin", "editor"), rolenames(viaExists.get(0)),

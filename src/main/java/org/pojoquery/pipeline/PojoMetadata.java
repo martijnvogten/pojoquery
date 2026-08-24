@@ -193,12 +193,13 @@ public final class PojoMetadata {
 	}
 
 	/**
-	 * Builds a list of qualified field names (table.fieldName).
+	 * Builds a list of qualified field names in curly-marker form ({table.fieldName}),
+	 * so the query pipeline resolves them to properly quoted identifiers.
 	 */
 	public static List<String> getFieldNames(String table, List<FieldModel> fields) {
 		List<String> fieldNames = new ArrayList<>();
 		for (FieldModel f : fields) {
-			fieldNames.add(table + "." + f.getName());
+			fieldNames.add("{" + table + "." + f.getName() + "}");
 		}
 		return fieldNames;
 	}
