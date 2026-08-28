@@ -16,11 +16,26 @@ import java.util.List;
  * <p>Numbers and booleans are returned as their source text rather than parsed,
  * which keeps one conversion path for every value and cannot round a decimal on
  * the way through.</p>
+ *
+ * <p>The reader is fed documents the database built, but their string content is
+ * whatever was stored, so it must not be possible for a value to alter the
+ * structure. Escapes are consumed symmetrically to the way the database writes
+ * them, which is what keeps a value containing {@code "], [} inside its slot.
+ * Nesting depth is capped so a malformed or hostile document fails with an
+ * exception rather than exhausting the stack.</p>
  */
 public final class JsonArrayReader {
 
+	/**
+	 * Maximum array nesting. Documents nest one level per collection in the query
+	 * tree, so a real document is shallow; the cap turns a hostile or corrupt one
+	 * into an exception instead of a {@link StackOverflowError}.
+	 */
+	private static final int MAX_DEPTH = 256;
+
 	private final String json;
 	private int position;
+	private int depth;
 
 	private JsonArrayReader(String json) {
 		this.json = json;
@@ -61,11 +76,15 @@ public final class JsonArrayReader {
 	}
 
 	private List<Object> readArray() {
+		if (++depth > MAX_DEPTH) {
+			throw error("nesting deeper than " + MAX_DEPTH + " levels");
+		}
 		position++; // '['
 		List<Object> values = new ArrayList<>();
 		skipWhitespace();
 		if (position < json.length() && json.charAt(position) == ']') {
 			position++;
+			depth--;
 			return values;
 		}
 		while (true) {
@@ -76,6 +95,7 @@ public final class JsonArrayReader {
 			}
 			char c = json.charAt(position++);
 			if (c == ']') {
+				depth--;
 				return values;
 			}
 			if (c != ',') {
@@ -111,13 +131,26 @@ public final class JsonArrayReader {
 					if (position + 4 > json.length()) {
 						throw error("truncated unicode escape");
 					}
-					value.append((char) Integer.parseInt(json.substring(position, position + 4), 16));
+					value.append(readCodeUnit(json.substring(position, position + 4)));
 					position += 4;
 				}
 				default -> throw error("unknown escape '\\" + escaped + "'");
 			}
 		}
 		throw error("unterminated string");
+	}
+
+	/** Four hex digits exactly - not what {@code Integer.parseInt} alone accepts. */
+	private char readCodeUnit(String hex) {
+		int codeUnit = 0;
+		for (int i = 0; i < 4; i++) {
+			int digit = Character.digit(hex.charAt(i), 16);
+			if (digit < 0) {
+				throw error("invalid unicode escape '\\u" + hex + "'");
+			}
+			codeUnit = codeUnit * 16 + digit;
+		}
+		return (char) codeUnit;
 	}
 
 	/** A number, {@code true}, {@code false} or {@code null}. */
