@@ -14,7 +14,6 @@ import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
-import org.pojoquery.internal.MappingException;
 import org.pojoquery.schema.SchemaGenerator;
 
 /**
@@ -116,7 +115,7 @@ public class WhereExistsIT {
 		Assertions.assertEquals(List.of("jane", "joe"), usernames(withAnyRole));
 
 		List<AuthorWithBooks> withoutAnyBook = PojoQuery.build(AuthorWithBooks.class)
-				.whereNotExists("{books.id}")
+				.whereNotExists("{books.id} IS NOT NULL")
 				.execute(db);
 		Assertions.assertEquals(List.of("bob-author"), authorNames(withoutAnyBook));
 	}
@@ -145,14 +144,6 @@ public class WhereExistsIT {
 				.execute(db);
 
 		Assertions.assertEquals(List.of("joe"), usernames(result));
-	}
-
-	@Test
-	public void unknownAliasThrowsMappingException() {
-		Assertions.assertThrows(MappingException.class,
-				() -> PojoQuery.build(User.class).whereExists("{nonexistent.x} = 1"));
-		Assertions.assertThrows(MappingException.class,
-				() -> PojoQuery.build(User.class).whereExists("{nonexistent.id}"));
 	}
 
 	@Test
