@@ -188,6 +188,33 @@ public class HsqldbDbContext implements DbContext {
                 SqlExpression.sql((absentOnNull ? "\n  ABSENT ON NULL" : "") + "\n )")));
     }
 
+    /**
+     * HSQLDB rejects an untyped NULL in array element position, so callers must
+     * pass typed expressions; {@code NULL ON NULL} is stated explicitly so a
+     * future parser change to the standard's ABSENT ON NULL default cannot
+     * silently drop a slot.
+     */
+    @Override
+    public SqlExpression jsonArray(List<SqlExpression> elements) {
+        return SqlExpression.implode("", List.of(
+                SqlExpression.sql("JSON_ARRAY(\n  "),
+                SqlExpression.implode(",\n  ", elements),
+                SqlExpression.sql("\n  NULL ON NULL\n )")));
+    }
+
+    /** A length-less {@code VARCHAR} cast is accepted and never truncates. */
+    @Override
+    public SqlExpression castToStringExpression(SqlExpression value) {
+        return SqlExpression.implode("", List.of(
+                SqlExpression.sql("CAST("), value, SqlExpression.sql(" AS VARCHAR)")));
+    }
+
+    /** {@code FORMAT JSON} is not accepted in array element position on HSQLDB. */
+    @Override
+    public boolean jsonArrayNestsDocuments() {
+        return false;
+    }
+
     @Override
     public SqlExpression jsonValueRef(SqlExpression jsonValue) {
         return SqlExpression.implode("", List.of(jsonValue, SqlExpression.sql(" FORMAT JSON")));

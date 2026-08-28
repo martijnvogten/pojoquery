@@ -7,6 +7,8 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext.Dialect;
+import org.pojoquery.annotations.DiscriminatorColumn;
+import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
@@ -14,6 +16,9 @@ import org.pojoquery.annotations.Recursive;
 import org.pojoquery.annotations.Recursive.Direction;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.pipeline.AQTJsonDirectTransformer;
+import org.pojoquery.pipeline.AQTTransformer;
+import org.pojoquery.pipeline.JsonSqlQuery;
 
 /**
  * SQL generation tests for JSON document queries
@@ -230,6 +235,63 @@ public class TestJsonQueries {
 				"""), norm(sql));
 	}
 
+	@Table("article")
+	public static class Article {
+		@Id
+		public Long id;
+		public String title;
+		@Embedded
+		public Author author;
+		@Link(linktable = "article_tag", fetchColumn = "tag")
+		public List<String> tags;
+	}
+
+	public static class Author {
+		public String name;
+		public String email;
+	}
+
+	@Table("sti_room")
+	@DiscriminatorColumn
+	@SubClasses({ StiBedRoom.class })
+	public static class StiRoom {
+		@Id
+		public Long id;
+		public Double area;
+	}
+
+	@Table("sti_room")
+	public static class StiBedRoom extends StiRoom {
+		public Integer numberOfBeds;
+	}
+
+	// ========== Document layout ==========
+
+	/**
+	 * The layout is a projection of the same walk that emits the SQL, so slot
+	 * order matches the document's value positions. Asserted as a golden string:
+	 * {@code name} is a scalar, {@code name:…} a nested document, {@code name[]:…}
+	 * an array of them.
+	 */
+	@Test
+	public void testDocumentLayoutFollowsTreeOrder() {
+		assertEquals("user{id, username, roles[]:roles{id, rolename}}", layoutOf(User.class));
+		assertEquals("category{id, name, parent:parent{id, name}, descendants[]:descendants{id, name}}",
+				layoutOf(CategoryWithDescendants.class));
+		assertEquals("topic{id, name, related[]:related{id, name}}", layoutOf(TopicWithRelated.class));
+		// An embedded object nests a document under its own alias; a value
+		// collection is an array of scalars, addressed by "tags.value".
+		assertEquals("article{id, title, author:author{name, email}, tags[]}", layoutOf(Article.class));
+		// Subclass-specific fields are conditional per row, so they are not slots
+		// of the layout - only the base class fields are.
+		assertEquals("room{id, area}", layoutOf(Room.class));
+	}
+
+	private static String layoutOf(Class<?> type) {
+		JsonSqlQuery query = new JsonSqlQuery(DbContext.forDialect(Dialect.HSQLDB));
+		return AQTJsonDirectTransformer.toSql(AQTTransformer.buildQueryTreeForType(type), query).toString();
+	}
+
 	// ========== @Recursive collections ==========
 
 	@Table("category")
@@ -417,5 +479,120 @@ public class TestJsonQueries {
 				 GROUP BY "related_cte_distinct"."root_id"
 				) AS "related" ON "related"."root_id" = "topic"."id"
 				"""), norm(sql));
+	}
+
+	// ========== Array shape ==========
+
+	/**
+	 * The same walk, assembled positionally: no property names in the payload,
+	 * one slot per value, and the layout says what each position means. Non-text
+	 * values are cast to text so nothing is lost to JSON's number type; the
+	 * reader converts back using the layout's java types. HSQLDB
+	 * cannot mark a nested document as JSON inside an array, so the nested
+	 * collection is embedded as JSON text there.
+	 */
+	@Test
+	public void testArrayShapeHsqldb() {
+		PojoQuery.JsonArrayQuery query = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), User.class)
+				.toJsonArrayStatement();
+		assertEquals("user{id, username, roles[]:roles{id, rolename}}", query.layout().toString());
+		assertEquals(norm("""
+				SELECT
+				 JSON_ARRAY(
+				  CAST("user"."id" AS VARCHAR),
+				  "user"."username",
+				  COALESCE("roles"."json", JSON_ARRAY())
+				  NULL ON NULL
+				 ) AS "json"
+				FROM "user" AS "user"
+				LEFT JOIN (
+				 SELECT
+				  "roles.user_role"."user_id" AS "user_id",
+				  JSON_ARRAYAGG(
+				   JSON_ARRAY(
+				    CAST("roles"."id" AS VARCHAR),
+				    "roles"."rolename"
+				    NULL ON NULL
+				   )
+				  ) AS "json"
+				 FROM "user_role" AS "roles.user_role"
+				 LEFT JOIN "role" AS "roles" ON "roles.user_role"."role_id" = "roles"."id"
+				 GROUP BY "roles.user_role"."user_id"
+				) AS "roles" ON "roles"."user_id" = "user"."id"
+				"""), norm(query.statement().getSql()));
+	}
+
+	@Test
+	public void testArrayShapePostgres() {
+		PojoQuery.JsonArrayQuery query = PojoQuery.build(DbContext.forDialect(Dialect.POSTGRES), User.class)
+				.toJsonArrayStatement();
+		assertEquals(norm("""
+				SELECT
+				 JSONB_BUILD_ARRAY(
+				  CAST("user"."id" AS TEXT),
+				  "user"."username",
+				  COALESCE("roles"."json", '[]'::jsonb)
+				 ) AS "json"
+				FROM "user" AS "user"
+				LEFT JOIN (
+				 SELECT
+				  "roles.user_role"."user_id" AS "user_id",
+				  JSONB_AGG(
+				   JSONB_BUILD_ARRAY(
+				    CAST("roles"."id" AS TEXT),
+				    "roles"."rolename"
+				   )
+				  ) AS "json"
+				 FROM "user_role" AS "roles.user_role"
+				 LEFT JOIN "role" AS "roles" ON "roles.user_role"."role_id" = "roles"."id"
+				 GROUP BY "roles.user_role"."user_id"
+				) AS "roles" ON "roles"."user_id" = "user"."id"
+				"""), norm(query.statement().getSql()));
+	}
+
+	/**
+	 * Subclass fields are unconditional slots in array shape: table-per-subclass
+	 * columns are already NULL for other subclasses, so the hydrator identifies
+	 * a row by the subclass primary key exactly as in a flat query.
+	 */
+	@Test
+	public void testArrayShapeTablePerSubclass() {
+		PojoQuery.JsonArrayQuery query = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), Room.class)
+				.toJsonArrayStatement();
+		assertEquals("room{id, area, room.bedroom.id, room.bedroom.numberOfBeds}", query.layout().toString());
+		assertEquals(norm("""
+				SELECT
+				 JSON_ARRAY(
+				  CAST("room"."id" AS VARCHAR),
+				  CAST("room"."area" AS VARCHAR),
+				  CAST("room.bedroom"."id" AS VARCHAR),
+				  CAST("room.bedroom"."numberOfBeds" AS VARCHAR)
+				  NULL ON NULL
+				 ) AS "json"
+				FROM "room" AS "room"
+				LEFT JOIN "bedroom" AS "room.bedroom" ON "room.bedroom"."id" = "room"."id"
+				"""), norm(query.statement().getSql()));
+	}
+
+	/**
+	 * Single-table inheritance carries a discriminator slot rather than a
+	 * {@code _type} property, under the row key the hydrator reads.
+	 */
+	@Test
+	public void testArrayShapeSingleTableInheritance() {
+		PojoQuery.JsonArrayQuery query = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), StiRoom.class)
+				.toJsonArrayStatement();
+		// No subclass primary key slot: single-table subclasses share the base
+		// table's key, and the hydrator keys off the discriminator - as in the flat query.
+		assertEquals("sti_room{id, area, sti_room.stibedroom._discriminator, sti_room.stibedroom.numberOfBeds}",
+				query.layout().toString());
+	}
+
+	/** Object shape is unaffected: still named properties, still a _type. */
+	@Test
+	public void testObjectShapeStillNamesProperties() {
+		String sql = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), User.class).toJsonSql();
+		assertEquals(true, sql.contains("JSON_OBJECT("));
+		assertEquals(false, sql.contains("JSON_ARRAY(\n"));
 	}
 }

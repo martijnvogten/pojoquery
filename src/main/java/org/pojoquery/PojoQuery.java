@@ -30,6 +30,9 @@ import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKeyField;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.DefaultSqlQuery;
+import org.pojoquery.pipeline.DocumentLayout;
+import org.pojoquery.pipeline.DocumentShape;
+import org.pojoquery.pipeline.JsonDocumentFlattener;
 import org.pojoquery.pipeline.JsonSqlQuery;
 import org.pojoquery.pipeline.PojoMetadata;
 import org.pojoquery.pipeline.SqlQuery;
@@ -539,6 +542,41 @@ public class PojoQuery<T> {
 	}
 
 	/**
+	 * A JSON statement whose documents are positional arrays, together with the
+	 * layout that says what each position means.
+	 *
+	 * @param statement the SQL statement
+	 * @param layout    the slot layout of the root document
+	 */
+	public record JsonArrayQuery(SqlExpression statement, DocumentLayout layout) {
+	}
+
+	/**
+	 * Builds the JSON variant of this query with documents shaped as positional
+	 * arrays rather than named objects.
+	 *
+	 * <p>Every document of a node has the same arity in every row - the slot
+	 * count of its layout - so a reader can address values by index and flatten
+	 * them into the rows the object hydrator consumes. The payload carries no
+	 * property names, which is most of its size once collections are wide.</p>
+	 *
+	 * @return the statement and the layout of the root document
+	 * @see #toJsonStatement()
+	 */
+	public JsonArrayQuery toJsonArrayStatement() {
+		JsonSqlQuery jsonQuery = new JsonSqlQuery(dbContext, DocumentShape.ARRAY);
+		DocumentLayout layout = AQTJsonDirectTransformer.toSql(tree, jsonQuery);
+		for (SqlExpression where : query.getWheres()) {
+			jsonQuery.addWhere(where);
+		}
+		if (!query.getOrderBy().isEmpty()) {
+			jsonQuery.setOrderBy(query.getOrderBy());
+		}
+		jsonQuery.setLimit(query.getOffset(), query.getRowCount());
+		return new JsonArrayQuery(jsonQuery.toStatement(), layout);
+	}
+
+	/**
 	 * Converts the query to a JSON-producing SQL string.
 	 *
 	 * @return the SQL string
@@ -546,6 +584,49 @@ public class PojoQuery<T> {
 	 */
 	public String toJsonSql() {
 		return toJsonStatement().getSql();
+	}
+
+	/**
+	 * Executes this query by fetching one JSON document per result entity and
+	 * hydrating the entities from those documents.
+	 *
+	 * <p>The result is the same object graph {@link #execute(DataSource)}
+	 * returns, fetched differently: collections travel as nested arrays instead
+	 * of as a join product, so a root with several collections costs the sum of
+	 * their sizes in rows rather than the product. Values travel as text and are
+	 * converted back to the field's type, so nothing is lost to JSON's number
+	 * type.</p>
+	 *
+	 * @param db the DataSource
+	 * @return the hydrated result entities
+	 * @see #toJsonArrayStatement()
+	 */
+	public List<T> executeMultiSet(DataSource db) {
+		JsonArrayQuery arrayQuery = toJsonArrayStatement();
+		LOG.debug("Executing multiset query: {}", arrayQuery.statement().getSql());
+		return hydrateDocuments(arrayQuery, DB.queryRows(db, arrayQuery.statement()));
+	}
+
+	/**
+	 * Executes this query by fetching one JSON document per result entity and
+	 * hydrating the entities from those documents.
+	 *
+	 * @param connection the database connection
+	 * @return the hydrated result entities
+	 * @see #executeMultiSet(DataSource)
+	 */
+	public List<T> executeMultiSet(Connection connection) {
+		JsonArrayQuery arrayQuery = toJsonArrayStatement();
+		LOG.debug("Executing multiset query: {}", arrayQuery.statement().getSql());
+		return hydrateDocuments(arrayQuery, DB.queryRows(connection, arrayQuery.statement()));
+	}
+
+	private List<T> hydrateDocuments(JsonArrayQuery arrayQuery, List<Map<String, Object>> rows) {
+		try {
+			return JsonDocumentFlattener.hydrate(tree, arrayQuery.layout(), extractJsonColumn(rows));
+		} catch (SQLException e) {
+			throw new RuntimeException("Failed to hydrate JSON documents", e);
+		}
 	}
 
 	/**

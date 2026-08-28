@@ -450,6 +450,59 @@ public interface DbContext {
 	}
 
 	/**
+	 * Builds a positional JSON array from the given element expressions.
+	 *
+	 * <p>Used for documents whose value positions are addressed by index rather
+	 * than by name, so every element must keep its position: a NULL element is
+	 * emitted as JSON {@code null}, never dropped. The default implementation
+	 * emits MySQL syntax, {@code JSON_ARRAY(a, b, c)}, which keeps NULLs.</p>
+	 *
+	 * @param elements the array elements, in order
+	 * @return the array expression
+	 */
+	default SqlExpression jsonArray(List<SqlExpression> elements) {
+		return SqlExpression.implode("", List.of(
+				SqlExpression.sql("JSON_ARRAY(\n  "),
+				SqlExpression.implode(",\n  ", elements),
+				SqlExpression.sql("\n )")));
+	}
+
+	/**
+	 * Casts an expression to character data, so a JSON document can carry the
+	 * value as text instead of as a JSON number, boolean or dialect-formatted
+	 * literal.
+	 *
+	 * <p>Positional documents are hydrated back into entities, so values must
+	 * survive the round trip exactly: a JSON number would round a
+	 * {@code DECIMAL} or lose precision beyond 2^53. Text is lossless, and the
+	 * reader converts it to the target field's type. The default implementation
+	 * emits MySQL syntax, {@code CAST(x AS CHAR)}, which is variable-length and
+	 * does not pad.</p>
+	 *
+	 * @param value the expression to cast
+	 * @return the expression as character data
+	 */
+	default SqlExpression castToStringExpression(SqlExpression value) {
+		return SqlExpression.implode("", List.of(
+				SqlExpression.sql("CAST("), value, SqlExpression.sql(" AS CHAR)")));
+	}
+
+	/**
+	 * Whether a JSON document produced elsewhere in the statement (a subquery's
+	 * JSON column) can be embedded inside {@link #jsonArray(List)} as JSON.
+	 *
+	 * <p>True for dialects that carry a JSON type through expressions. HSQLDB has
+	 * no way to say it - {@code FORMAT JSON} is rejected in array element
+	 * position - so nested documents are embedded there as JSON <em>text</em> and
+	 * readers must parse one level per nesting depth.</p>
+	 *
+	 * @return true if nested documents stay JSON inside a JSON array
+	 */
+	default boolean jsonArrayNestsDocuments() {
+		return true;
+	}
+
+	/**
 	 * Marks an expression that already produces JSON (e.g. a reference to a
 	 * subquery's JSON column) for use as a JSON object property value, so the
 	 * value is embedded as JSON rather than escaped as a string.

@@ -191,6 +191,25 @@ public class PostgresDbContext implements DbContext {
     }
 
     @Override
+    public SqlExpression castToStringExpression(SqlExpression value) {
+        return SqlExpression.implode("", List.of(
+                SqlExpression.sql("CAST("), value, SqlExpression.sql(" AS TEXT)")));
+    }
+
+    /**
+     * {@code JSONB_BUILD_ARRAY} keeps NULL elements. The SQL/JSON
+     * {@code JSON_ARRAY} of PostgreSQL 16+ defaults to ABSENT ON NULL, which
+     * would shift every later slot, so it is deliberately not used.
+     */
+    @Override
+    public SqlExpression jsonArray(List<SqlExpression> elements) {
+        return SqlExpression.implode("", List.of(
+                SqlExpression.sql("JSONB_BUILD_ARRAY(\n  "),
+                SqlExpression.implode(",\n  ", elements),
+                SqlExpression.sql("\n )")));
+    }
+
+    @Override
     public SqlExpression jsonArrayAgg(SqlExpression element) {
         return SqlExpression.implode("", List.of(
                 SqlExpression.sql("JSONB_AGG(\n  "),

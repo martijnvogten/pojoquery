@@ -11,7 +11,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 
 import org.pojoquery.FieldMapping;
 import org.pojoquery.internal.MappingException;
@@ -44,7 +44,18 @@ public class SimpleFieldMapping implements FieldMapping {
 				value = ((Timestamp)value).toLocalDateTime();
 			}
 			if (value instanceof LocalDateTime && (f.getType().equals(Instant.class))) {
-				value = ((LocalDateTime)value).atZone(ZoneOffset.UTC).toInstant();
+				// Same policy as the Timestamp branch above: a zone-less value is
+				// resolved in the JVM's default zone, whichever shape the driver gave.
+				value = ((LocalDateTime)value).atZone(ZoneId.systemDefault()).toInstant();
+			}
+			if (value instanceof LocalDateTime && (f.getType().equals(Timestamp.class))) {
+				value = Timestamp.valueOf((LocalDateTime)value);
+			}
+			if (value instanceof LocalDate && (f.getType().equals(Date.class))) {
+				value = Date.valueOf((LocalDate)value);
+			}
+			if (value instanceof LocalTime && (f.getType().equals(java.sql.Time.class))) {
+				value = java.sql.Time.valueOf((LocalTime)value);
 			}
 			if (value instanceof Timestamp && (f.getType().equals(Instant.class))) {
 				value = ((Timestamp)value).toInstant();

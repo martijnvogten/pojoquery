@@ -1,7 +1,7 @@
 package org.pojoquery.multiset;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -10,7 +10,7 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
 import org.pojoquery.PojoQuery;
@@ -26,6 +26,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
+import org.pojoquery.pipeline.AbstractQueryTree.ScalarNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.TableInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
@@ -47,6 +48,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * repeated rows. Sibling collections are unioned (not crossed), so the
  * number of expanded rows is {@code sum(|coll_i|)} instead of
  * {@code prod(|coll_i|)}.
+ *
+ * The array layout needs no separate schema description: every child node of
+ * an AQT node gets exactly one slot, in child order, and children that carry
+ * no value get a literal NULL. Slot index therefore equals child index, so the
+ * flattener reads the arrays back by walking the same tree the builder walked.
  */
 public class MultiSetResultSetFlattenerTest {
 
@@ -87,13 +93,27 @@ public class MultiSetResultSetFlattenerTest {
 		String title;
 	}
 
-	// ---------------------------------------------------------------------
-	// Schema describing positions of fields/collections in the JSON arrays.
-	// ---------------------------------------------------------------------
+	@Table("publisher")
+	static class Publisher {
+		@Id Long id;
+		String name;
+	}
 
-	record MultiSetCollection(String alias, MultiSetSchema childSchema) {}
+	@Table("magazine")
+	static class Magazine {
+		@Id Long id;
+		String title;
+		// Many-to-one: not projected into the JSON array, so it occupies a NULL slot
+		// between "title" and "articles".
+		Publisher publisher;
+		List<Article> articles;
+	}
 
-	record MultiSetSchema(String alias, List<String> fieldNames, List<MultiSetCollection> collections) {}
+	@Table("article")
+	static class Article {
+		@Id Long id;
+		String headline;
+	}
 
 	// ---------------------------------------------------------------------
 	// Builder: emits a derived-table tree that materializes positional JSON
@@ -101,8 +121,6 @@ public class MultiSetResultSetFlattenerTest {
 	// ---------------------------------------------------------------------
 
 	static class MultiSetSqlQueryBuilder {
-		record FieldExpr(String name, SqlExpression expression) {}
-
 		record CollectionSubQuery(String alias, SqlExpression subquery, SqlExpression joinCondition) {}
 
 		record TableJoin(TableInfo table, String alias, SqlExpression joinCondition) {}
@@ -114,7 +132,8 @@ public class MultiSetResultSetFlattenerTest {
 		TableInfo table;
 		String tableAlias;
 
-		final List<FieldExpr> scalarFields = new ArrayList<>();
+		/** One positional slot per child node of the AQT node, in child order. */
+		final List<SqlExpression> slots = new ArrayList<>();
 		final List<TableJoin> tableJoins = new ArrayList<>();
 		final List<CollectionSubQuery> collectionJoins = new ArrayList<>();
 
@@ -137,12 +156,23 @@ public class MultiSetResultSetFlattenerTest {
 			this.tableAlias = alias;
 		}
 
-		void addScalar(String name, SqlExpression expression) {
-			scalarFields.add(new FieldExpr(name, expression));
+		void addScalar(SqlExpression expression) {
+			slots.add(resolve(expression));
+		}
+
+		/**
+		 * Slot for a child node this POC does not project; keeps slot indices
+		 * aligned. Cast because HSQLDB rejects an untyped NULL literal inside a
+		 * JSON_ARRAY argument list.
+		 */
+		void addNullSlot() {
+			slots.add(SqlExpression.sql("CAST(NULL AS VARCHAR(1))"));
 		}
 
 		void addCollection(String alias, SqlExpression subquery, SqlExpression joinCondition) {
 			collectionJoins.add(new CollectionSubQuery(alias, subquery, joinCondition));
+			slots.add(SqlExpression.sql(
+					dbContext.quoteAlias(alias) + "." + dbContext.quoteObjectNames("json")));
 		}
 
 		void addTableJoin(TableInfo joinTable, String alias, SqlExpression joinCondition) {
@@ -150,26 +180,22 @@ public class MultiSetResultSetFlattenerTest {
 		}
 
 		/**
-		 * Build the JSON expression for one row: positional layout
-		 * [scalar0, scalar1, ..., coll0_json, coll1_json, ...].
+		 * Build the JSON expression for one row: one slot per child node of the
+		 * AQT node, in child order (see the class javadoc).
 		 *
 		 * Child-collection slots come back as JSON-text strings (we deliberately
 		 * do not use FORMAT JSON: HSQLDB rejects it inside JSON_ARRAY arg lists,
 		 * and skipping it keeps the SQL portable). The flattener re-parses those
 		 * string slots recursively.
+		 *
+		 * Positional alignment relies on NULL elements being kept in the array;
+		 * engines whose JSON_ARRAY defaults to ABSENT ON NULL (e.g. PostgreSQL 16+)
+		 * need an explicit NULL ON NULL here.
 		 */
 		SqlExpression buildRowJsonExpression() {
-			List<SqlExpression> elements = new ArrayList<>();
-			for (FieldExpr f : scalarFields) {
-				elements.add(resolve(f.expression()));
-			}
-			for (CollectionSubQuery c : collectionJoins) {
-				elements.add(SqlExpression.sql(
-						dbContext.quoteAlias(c.alias()) + "." + dbContext.quoteObjectNames("json")));
-			}
 			return SqlExpression.implode("", List.of(
 					SqlExpression.sql("JSON_ARRAY("),
-					SqlExpression.implode(", ", elements),
+					SqlExpression.implode(", ", slots),
 					SqlExpression.sql(")")));
 		}
 
@@ -248,37 +274,25 @@ public class MultiSetResultSetFlattenerTest {
 
 	// ---------------------------------------------------------------------
 	// Transformer: walks the AQT and populates a MultiSetSqlQueryBuilder.
-	// Returns a schema mapping JSON array positions back to field names.
 	// ---------------------------------------------------------------------
 
-	public static MultiSetSchema toMultiSetQuery(TableNode node, MultiSetSqlQueryBuilder builder) {
+	public static void toMultiSetQuery(TableNode node, MultiSetSqlQueryBuilder builder) {
 		if (node instanceof RootNode) {
 			builder.setTable(node.tableInfo(), node.tableInfo().tableName());
 		}
 
-		List<String> fieldNames = new ArrayList<>();
-		List<MultiSetCollection> collections = new ArrayList<>();
-
 		for (QueryNode child : node.children()) {
-			if (child instanceof PrimaryKey pk) {
-				builder.addScalar(pk.field().getName(), pk.expression());
-				fieldNames.add(pk.field().getName());
-			} else if (child instanceof AggregateScalarValue agg) {
-				builder.addScalar(agg.field().getName(), agg.expression());
-				fieldNames.add(agg.field().getName());
-			} else if (child instanceof ScalarValue scalar) {
-				builder.addScalar(scalar.field().getName(), scalar.expression());
-				fieldNames.add(scalar.field().getName());
+			if (child instanceof ScalarNode scalar) {
+				builder.addScalar(scalarExpression(scalar));
 			} else if (child instanceof EntityCollection ec) {
 				MultiSetSqlQueryBuilder inner = new MultiSetSqlQueryBuilder(builder.dbContext,
 						builder.getNestLevel() + 1);
 				inner.setTable(ec.tableInfo(), ec.alias());
-				MultiSetSchema childSchema = toMultiSetQuery(ec, inner);
+				toMultiSetQuery(ec, inner);
 
 				String parentFkCol = ec.join().fkColumnName();
-				SqlExpression subQuery = inner.toAggregatedStatement(ec.alias(), parentFkCol);
-				builder.addCollection(ec.alias(), subQuery, ec.join().joinCondition());
-				collections.add(new MultiSetCollection(ec.alias(), childSchema));
+				builder.addCollection(ec.alias(), inner.toAggregatedStatement(ec.alias(), parentFkCol),
+						ec.join().joinCondition());
 			} else if (child instanceof JoinTableEntityCollection jtec) {
 				MultiSetSqlQueryBuilder inner = new MultiSetSqlQueryBuilder(builder.dbContext,
 						builder.getNestLevel() + 1);
@@ -292,64 +306,85 @@ public class MultiSetResultSetFlattenerTest {
 				inner.setTable(junctionTable, junctionAlias);
 				inner.addTableJoin(jtec.join().childKey().targetTable(), jtec.alias(),
 						jtec.join().childKey().joinCondition());
-				MultiSetSchema childSchema = toMultiSetQuery(jtec, inner);
+				toMultiSetQuery(jtec, inner);
 
-				SqlExpression subQuery = inner.toAggregatedStatement(junctionAlias, parentFkCol);
 				SqlExpression onCondition = SqlExpression.sql("{" + jtec.alias() + "." + parentFkCol + "} = {"
 						+ node.alias() + "." + parentIdCol + "}");
-
-				builder.addCollection(jtec.alias(), subQuery, onCondition);
-				collections.add(new MultiSetCollection(jtec.alias(), childSchema));
+				builder.addCollection(jtec.alias(), inner.toAggregatedStatement(junctionAlias, parentFkCol),
+						onCondition);
+			} else {
+				// Not projected (many-to-one join, embedded entity, ...): emit a
+				// NULL slot so the remaining slots stay at their child index.
+				builder.addNullSlot();
 			}
 		}
+	}
 
-		return new MultiSetSchema(node.alias(), fieldNames, collections);
+	private static SqlExpression scalarExpression(ScalarNode scalar) {
+		if (scalar instanceof PrimaryKey pk) {
+			return pk.expression();
+		}
+		if (scalar instanceof AggregateScalarValue agg) {
+			return agg.expression();
+		}
+		if (scalar instanceof ScalarValue value) {
+			return value.expression();
+		}
+		throw new IllegalArgumentException("Unsupported scalar node: " + scalar);
 	}
 
 	// ---------------------------------------------------------------------
 	// Flattener: expand the JSON tree back into the row shape AQTRowProcessor
-	// consumes. Sibling collections are unioned, not crossed.
+	// consumes, by walking the same AQT. Sibling collections are unioned, not
+	// crossed.
 	// ---------------------------------------------------------------------
 
-	static List<Map<String, Object>> flatten(List<Map<String, Object>> jsonRows, MultiSetSchema schema)
-			throws Exception {
+	static List<Map<String, Object>> flatten(List<Map<String, Object>> jsonRows, TableNode tree) throws Exception {
 		List<Map<String, Object>> out = new ArrayList<>();
 		for (Map<String, Object> r : jsonRows) {
-			JsonNode root = JSON.readTree(String.valueOf(r.get("json")));
-			expand(root, schema, new HashMap<>(), out);
+			expand(JSON.readTree(String.valueOf(r.get("json"))), tree, new HashMap<>(), out);
 		}
 		return out;
 	}
 
-	private static void expand(JsonNode array, MultiSetSchema schema, Map<String, Object> parentCtx,
+	private static void expand(JsonNode array, TableNode node, Map<String, Object> parentCtx,
 			List<Map<String, Object>> out) throws Exception {
-		Map<String, Object> base = new HashMap<>(parentCtx);
-		for (int i = 0; i < schema.fieldNames().size(); i++) {
-			base.put(schema.alias() + "." + schema.fieldNames().get(i),
-					jsonToValue(array.path(i)));
-		}
+		List<QueryNode> children = node.children();
 
-		if (schema.collections().isEmpty()) {
-			out.add(base);
-			return;
+		Map<String, Object> base = new HashMap<>(parentCtx);
+		for (int i = 0; i < children.size(); i++) {
+			if (children.get(i) instanceof ScalarNode scalar) {
+				base.put(node.alias() + "." + scalar.field().getName(), jsonToValue(array.path(i)));
+			}
 		}
 
 		boolean anyEmitted = false;
-		for (int ci = 0; ci < schema.collections().size(); ci++) {
-			MultiSetCollection coll = schema.collections().get(ci);
-			JsonNode slot = array.path(schema.fieldNames().size() + ci);
-			JsonNode items = slot.isTextual() ? JSON.readTree(slot.asText()) : slot;
-			if (items != null && items.isArray() && items.size() > 0) {
-				for (JsonNode item : items) {
-					JsonNode itemNode = item.isTextual() ? JSON.readTree(item.asText()) : item;
-					expand(itemNode, coll.childSchema(), base, out);
-					anyEmitted = true;
-				}
+		for (int i = 0; i < children.size(); i++) {
+			QueryNode child = children.get(i);
+			if (!(child instanceof EntityCollection) && !(child instanceof JoinTableEntityCollection)) {
+				continue;
+			}
+			for (JsonNode item : items(array.path(i))) {
+				expand(item, (TableNode) child, base, out);
+				anyEmitted = true;
 			}
 		}
 		if (!anyEmitted) {
 			out.add(base);
 		}
+	}
+
+	/** A NULL or absent slot yields no items; JSON-text slots are re-parsed. */
+	private static List<JsonNode> items(JsonNode slot) throws Exception {
+		JsonNode array = slot.isTextual() ? JSON.readTree(slot.asText()) : slot;
+		if (array == null || !array.isArray()) {
+			return List.of();
+		}
+		List<JsonNode> items = new ArrayList<>();
+		for (JsonNode item : array) {
+			items.add(item.isTextual() ? JSON.readTree(item.asText()) : item);
+		}
+		return items;
 	}
 
 	private static Object jsonToValue(JsonNode n) {
@@ -375,14 +410,14 @@ public class MultiSetResultSetFlattenerTest {
 		RootNode tree = query.getTree();
 
 		MultiSetSqlQueryBuilder builder = new MultiSetSqlQueryBuilder(DbContext.getDefault());
-		MultiSetSchema schema = toMultiSetQuery(tree, builder);
+		toMultiSetQuery(tree, builder);
 		String sql = builder.toRootStatement().getSql();
 		System.out.println(sql);
 
 		List<Map<String, Object>> jsonRows = DB.queryRows(db, sql);
 		jsonRows.forEach(row -> System.out.println(row));
 
-		List<Map<String, Object>> flat = flatten(jsonRows, schema);
+		List<Map<String, Object>> flat = flatten(jsonRows, tree);
 		flat.forEach(row -> System.out.println(row));
 
 		List<User> users = AQTRowProcessor.processRows(tree, flat);
@@ -459,8 +494,9 @@ public class MultiSetResultSetFlattenerTest {
 			PojoQuery.insert(connection, bob);
 
 			// Orphan book with author_id = NULL — not reachable via any Author.
-			DB.update(connection, SqlExpression.sql(
-					"INSERT INTO \"book\" (\"title\", \"author_id\") VALUES ('Orphan', NULL)"));
+			Book authorless = new Book();
+			authorless.title = "Orphan";
+			PojoQuery.insert(connection, authorless);
 		});
 
 		PojoQuery<Author> query = PojoQuery.build(DbContext.getDefault(),
@@ -468,7 +504,7 @@ public class MultiSetResultSetFlattenerTest {
 		RootNode tree = query.getTree();
 
 		MultiSetSqlQueryBuilder builder = new MultiSetSqlQueryBuilder(DbContext.getDefault());
-		MultiSetSchema schema = toMultiSetQuery(tree, builder);
+		toMultiSetQuery(tree, builder);
 		String sql = builder.toRootStatement().getSql();
 		System.out.println("--- SQL ---");
 		System.out.println(sql);
@@ -478,7 +514,7 @@ public class MultiSetResultSetFlattenerTest {
 		jsonRows.forEach(row -> System.out.println(row.get("json")));
 
 		// Confirm the round-trip still hydrates correctly even with a null books slot.
-		List<Map<String, Object>> flat = flatten(jsonRows, schema);
+		List<Map<String, Object>> flat = flatten(jsonRows, tree);
 		List<Author> authors = AQTRowProcessor.processRows(tree, flat);
 		assertEquals(2, authors.size());
 
@@ -489,5 +525,52 @@ public class MultiSetResultSetFlattenerTest {
 		if (bob.books != null) {
 			assertEquals(0, bob.books.size());
 		}
+	}
+
+	/**
+	 * A child node the builder does not project (here a many-to-one
+	 * {@code publisher} reference) still occupies a slot, filled with NULL. That
+	 * is what keeps {@code articles} at its child index so the flattener finds
+	 * it without any separate schema description.
+	 */
+	@Test
+	public void testUnprojectedChildOccupiesNullSlot() throws Exception {
+		DataSource db = TestDatabaseProvider.getDataSource();
+		SchemaGenerator.createTables(db, Publisher.class, Magazine.class, Article.class);
+
+		DB.runInTransaction(db, connection -> {
+			Publisher publisher = new Publisher();
+			publisher.name = "Acme Press";
+			PojoQuery.insert(connection, publisher);
+
+			Article first = new Article();
+			first.headline = "Hello";
+			Article second = new Article();
+			second.headline = "World";
+
+			Magazine magazine = new Magazine();
+			magazine.title = "Weekly";
+			magazine.publisher = publisher;
+			magazine.articles = List.of(first, second);
+			PojoQuery.insert(connection, magazine);
+		});
+
+		PojoQuery<Magazine> query = PojoQuery.build(DbContext.getDefault(),
+				TransformPipeline.defaultPipeline(), Magazine.class);
+		RootNode tree = query.getTree();
+
+		MultiSetSqlQueryBuilder builder = new MultiSetSqlQueryBuilder(DbContext.getDefault());
+		toMultiSetQuery(tree, builder);
+		String sql = builder.toRootStatement().getSql();
+		System.out.println(sql);
+
+		List<Map<String, Object>> jsonRows = DB.queryRows(db, sql);
+		jsonRows.forEach(row -> System.out.println(row.get("json")));
+
+		List<Magazine> magazines = AQTRowProcessor.processRows(tree,
+				flatten(jsonRows, tree));
+		assertEquals(1, magazines.size());
+		assertEquals("Weekly", magazines.get(0).title);
+		assertEquals(2, magazines.get(0).articles.size());
 	}
 }

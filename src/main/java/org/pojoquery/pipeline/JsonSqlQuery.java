@@ -53,6 +53,7 @@ public class JsonSqlQuery {
 	}
 
 	private final DbContext dbContext;
+	private final DocumentShape documentShape;
 	private final JsonSqlQuery parent;
 
 	private TableInfo table;
@@ -69,16 +70,26 @@ public class JsonSqlQuery {
 	private int rowCount = -1;
 
 	public JsonSqlQuery(DbContext dbContext) {
-		this(dbContext, null);
+		this(dbContext, DocumentShape.OBJECT);
 	}
 
-	private JsonSqlQuery(DbContext dbContext, JsonSqlQuery parent) {
+	public JsonSqlQuery(DbContext dbContext, DocumentShape documentShape) {
+		this(dbContext, documentShape, null);
+	}
+
+	private JsonSqlQuery(DbContext dbContext, DocumentShape documentShape, JsonSqlQuery parent) {
 		this.dbContext = dbContext;
+		this.documentShape = documentShape;
 		this.parent = parent;
 	}
 
 	public JsonSqlQuery startSubQuery() {
-		return new JsonSqlQuery(dbContext, this);
+		return new JsonSqlQuery(dbContext, documentShape, this);
+	}
+
+	/** The shape every document of this statement is assembled in. */
+	public DocumentShape getDocumentShape() {
+		return documentShape;
 	}
 
 	public DbContext getDbContext() {

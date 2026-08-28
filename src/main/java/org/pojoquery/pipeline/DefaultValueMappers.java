@@ -10,7 +10,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -45,12 +45,24 @@ public class DefaultValueMappers {
 		else if (targetType.equals(LocalDate.class)) {
 			return value -> value instanceof Date ? ((Date)value).toLocalDate() : value;
 		}
+		else if (targetType.equals(Timestamp.class)) {
+			// Connector/J answers DATETIME with a LocalDateTime.
+			return value -> value instanceof LocalDateTime ? Timestamp.valueOf((LocalDateTime)value) : value;
+		}
+		else if (targetType.equals(Date.class)) {
+			return value -> value instanceof LocalDate ? Date.valueOf((LocalDate)value) : value;
+		}
+		else if (targetType.equals(java.sql.Time.class)) {
+			return value -> value instanceof LocalTime ? java.sql.Time.valueOf((LocalTime)value) : value;
+		}
 		else if (targetType.equals(LocalDateTime.class)) {
 			return value -> value instanceof Timestamp ? ((Timestamp)value).toLocalDateTime() : value;
 		}
 		else if (targetType.equals(Instant.class)) {
+			// Both shapes occur - a driver may answer a zone-less column with either -
+			// so both resolve it the same way: in the JVM's default zone.
 			return value -> value instanceof Timestamp ? ((Timestamp)value).toInstant() :
-			                value instanceof LocalDateTime ? ((LocalDateTime)value).atZone(ZoneOffset.UTC).toInstant() : value;
+			                value instanceof LocalDateTime ? ((LocalDateTime)value).atZone(ZoneId.systemDefault()).toInstant() : value;
 		}
 		else if (targetType.equals(LocalTime.class)) {
 			return value -> value instanceof java.sql.Time ? ((java.sql.Time)value).toLocalTime() : value;

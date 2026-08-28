@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import javax.sql.DataSource;
 
@@ -568,6 +569,79 @@ public class JsonQueryIT {
 		category.parent = parent;
 		PojoQuery.insert(connection, category);
 		return category;
+	}
+
+	// ========== Array shape ==========
+
+	/**
+	 * Executes the positional shape and checks the documents against the layout:
+	 * every document has exactly the arity its layout declares, in every row.
+	 *
+	 * <p>Nested documents arrive as JSON on MySQL and PostgreSQL and as JSON
+	 * <em>text</em> on HSQLDB, which cannot mark a value as JSON inside an array;
+	 * {@link #asArray} tolerates both, as a reader must.</p>
+	 */
+	@Test
+	public void testArrayShapeDocuments() throws Exception {
+		DataSource db = TestDatabaseProvider.getDataSource();
+		DbContext context = TestDatabaseProvider.getDbContext();
+		SchemaGenerator.createTables(db, User.class, Role.class, Permission.class);
+		DB.runInTransaction(db, connection -> {
+			Permission read = new Permission();
+			read.permissionname = "read";
+			PojoQuery.insert(connection, read);
+
+			Role admin = new Role();
+			admin.rolename = "admin";
+			admin.permissions = List.of(read);
+			PojoQuery.insert(connection, admin);
+
+			User joe = new User();
+			joe.username = "joe";
+			joe.roles = List.of(admin);
+			PojoQuery.insert(connection, joe);
+
+			User nora = new User();      // no roles: an empty array, not a null slot
+			nora.username = "nora";
+			PojoQuery.insert(connection, nora);
+		});
+
+		PojoQuery.JsonArrayQuery query = PojoQuery.build(context, User.class)
+				.addOrderBy("{this.username}")
+				.toJsonArrayStatement();
+		assertEquals("user{id, username, roles[]:roles{id, rolename, permissions[]:roles.permissions{id, permissionname}}}",
+				query.layout().toString());
+
+		List<JsonNode> documents = new ArrayList<>();
+		for (Map<String, Object> row : DB.queryRows(db, query.statement())) {
+			documents.add(MAPPER.readTree(String.valueOf(row.get("json"))));
+		}
+		assertEquals(2, documents.size());
+
+		JsonNode joe = documents.get(0);
+		assertEquals(3, joe.size());                       // id, username, roles
+		assertEquals("joe", joe.get(1).asText());
+		JsonNode roles = asArray(joe.get(2));
+		assertEquals(1, roles.size());
+		JsonNode admin = asArray(roles.get(0));
+		assertEquals(3, admin.size());                     // id, rolename, permissions
+		assertEquals("admin", admin.get(1).asText());
+		JsonNode permissions = asArray(admin.get(2));
+		assertEquals(1, permissions.size());
+		assertEquals("read", asArray(permissions.get(0)).get(1).asText());
+
+		JsonNode nora = documents.get(1);
+		assertEquals(3, nora.size());                      // same arity, empty collection
+		assertEquals("nora", nora.get(1).asText());
+		assertEquals(0, asArray(nora.get(2)).size());
+	}
+
+	/**
+	 * A nested document is JSON where the dialect can say so, and JSON text where
+	 * it cannot (HSQLDB inside an array).
+	 */
+	private static JsonNode asArray(JsonNode node) throws Exception {
+		return node.isTextual() ? MAPPER.readTree(node.asText()) : node;
 	}
 
 	// ========== Helpers ==========

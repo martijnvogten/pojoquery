@@ -28,6 +28,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.SqlQuery.WithClause;
+import org.pojoquery.typemodel.FieldModel;
 
 /**
  * Transforms an Abstract Query Tree into a {@link JsonSqlQuery} that returns
@@ -58,10 +59,66 @@ public class AQTJsonDirectTransformer {
 	/** Property name carrying the concrete type of a polymorphic entity. */
 	public static final String TYPE_PROPERTY = "_type";
 
-	private record SubClassVariant(SqlExpression condition, String typeName, List<JsonProperty> properties) {
+	/**
+	 * Slot name carrying a single-table-inheritance discriminator value in
+	 * {@link DocumentShape#ARRAY} documents. Its row key is the one
+	 * {@link AQTRowProcessor} reads to decide a row's concrete subclass.
+	 */
+	public static final String DISCRIMINATOR_PROPERTY = "_discriminator";
+
+	/**
+	 * A subclass encountered while walking a polymorphic node, in both
+	 * representations: conditional properties for {@link DocumentShape#OBJECT},
+	 * unconditional slots for {@link DocumentShape#ARRAY}.
+	 */
+	private record SubClassVariant(SqlExpression condition, String typeName, List<JsonProperty> properties,
+			List<DocumentSlot> slots) {
 	}
 
-	public static void toSql(RootNode tree, JsonSqlQuery query) {
+	/**
+	 * One value position of a document: the SQL that fills it, plus what it means
+	 * to a reader. Collected once per node, in tree order; the document
+	 * expression and the {@link DocumentLayout} are both projections of this
+	 * list, so the two can never disagree about slot order.
+	 */
+	private record DocumentSlot(JsonProperty property, DocumentLayout.Slot layoutSlot) {
+
+		static DocumentSlot scalar(String alias, String name, SqlExpression value, Class<?> javaType) {
+			return new DocumentSlot(new JsonProperty(name, value),
+					DocumentLayout.Slot.scalar(name, alias + "." + name, javaType));
+		}
+
+		static DocumentSlot nested(String name, SqlExpression value, DocumentLayout nested) {
+			return new DocumentSlot(new JsonProperty(name, value), DocumentLayout.Slot.nested(name, nested));
+		}
+
+		static DocumentSlot collection(String name, SqlExpression value, DocumentLayout nested) {
+			return new DocumentSlot(new JsonProperty(name, value), DocumentLayout.Slot.collection(name, nested));
+		}
+
+		static DocumentSlot discriminator(String alias, SqlExpression value) {
+			String rowKey = alias + "." + DISCRIMINATOR_PROPERTY;
+			return new DocumentSlot(new JsonProperty(DISCRIMINATOR_PROPERTY, value),
+					DocumentLayout.Slot.discriminator(DISCRIMINATOR_PROPERTY, rowKey));
+		}
+
+		static DocumentSlot valueCollection(String alias, String name, SqlExpression value, Class<?> javaType) {
+			return new DocumentSlot(new JsonProperty(name, value),
+					DocumentLayout.Slot.valueCollection(name, alias + ".value", javaType));
+		}
+	}
+
+	/** The two products of building one document: its SQL expression and its slot layout. */
+	private record Document(SqlExpression value, DocumentLayout layout) {
+	}
+
+	/**
+	 * Builds the JSON statement for {@code tree} into {@code query}.
+	 *
+	 * @return the layout of the root document; readers of named JSON objects can
+	 *         ignore it
+	 */
+	public static DocumentLayout toSql(RootNode tree, JsonSqlQuery query) {
 		query.setTable(tree.tableInfo(), tree.alias());
 		if (tree.groupBy() != null) {
 			query.setGroupBy(tree.groupBy());
@@ -69,82 +126,107 @@ public class AQTJsonDirectTransformer {
 		if (tree.orderBy() != null) {
 			query.setOrderBy(tree.orderBy());
 		}
-		query.setJsonValue(buildJsonValue(tree, query));
+		Document document = buildDocument(tree, query);
+		query.setJsonValue(document.value());
+		return document.layout();
 	}
 
 	/**
-	 * Builds the JSON object expression for one row of {@code node}, adding any
-	 * joins the object's properties need to {@code query}.
+	 * Builds the document for one row of {@code node}, adding any joins its slots
+	 * need to {@code query}.
 	 */
-	private static SqlExpression buildJsonValue(TableNode node, JsonSqlQuery query) {
-		List<JsonProperty> properties = new ArrayList<>();
+	private static Document buildDocument(TableNode node, JsonSqlQuery query) {
+		List<DocumentSlot> slots = new ArrayList<>();
 		List<SubClassVariant> variants = new ArrayList<>();
-		processChildren(node, query, properties, variants);
+		processChildren(node, query, slots, variants);
+
 		DbContext context = query.getDbContext();
+		if (query.getDocumentShape() == DocumentShape.ARRAY) {
+			// Subclass fields are slots of the layout, not conditional properties:
+			// the hydrator decides a row's type from the discriminator or the
+			// subclass primary key, exactly as it does for a flat query.
+			for (SubClassVariant variant : variants) {
+				slots.addAll(variant.slots());
+			}
+			return new Document(context.jsonArray(slots.stream().map(slot -> slot.property().value()).toList()),
+					layoutOf(node, slots));
+		}
+
+		List<JsonProperty> properties = new ArrayList<>();
+		for (DocumentSlot slot : slots) {
+			properties.add(slot.property());
+		}
+		DocumentLayout layout = layoutOf(node, slots);
 		if (variants.isEmpty()) {
-			return context.jsonObject(properties);
+			return new Document(context.jsonObject(properties), layout);
 		}
 		properties.add(new JsonProperty(TYPE_PROPERTY, buildTypeCase(context, variants, node.type().getSimpleName())));
-		return context.jsonObjectWithVariants(properties,
-				variants.stream().map(v -> new JsonVariant(v.condition(), v.properties())).toList());
+		return new Document(context.jsonObjectWithVariants(properties,
+				variants.stream().map(v -> new JsonVariant(v.condition(), v.properties())).toList()), layout);
 	}
 
-	private static void processChildren(TableNode node, JsonSqlQuery query, List<JsonProperty> properties,
+	private static DocumentLayout layoutOf(TableNode node, List<DocumentSlot> slots) {
+		return new DocumentLayout(node.alias(), slots.stream().map(DocumentSlot::layoutSlot).toList());
+	}
+
+	private static void processChildren(TableNode node, JsonSqlQuery query, List<DocumentSlot> slots,
 			List<SubClassVariant> variants) {
 		for (QueryNode child : node.children()) {
 			if (child instanceof PrimaryKey pk) {
-				properties.add(new JsonProperty(pk.field().getName(), pk.expression()));
+				slots.add(scalarSlot(query, node.alias(), pk.field(), pk.expression()));
 			} else if (child instanceof AggregateScalarValue agg) {
-				properties.add(new JsonProperty(agg.field().getName(), agg.expression()));
+				slots.add(scalarSlot(query, node.alias(), agg.field(), agg.expression()));
 			} else if (child instanceof ScalarValue scalar) {
-				properties.add(new JsonProperty(scalar.field().getName(), scalar.expression()));
+				slots.add(scalarSlot(query, node.alias(), scalar.field(), scalar.expression()));
 			} else if (child instanceof EmbeddedEntity embedded) {
 				// Embedded fields live in the parent's table: a nested object, no join.
-				properties.add(new JsonProperty(embedded.field().getName(), buildJsonValue(embedded, query)));
+				Document document = buildDocument(embedded, query);
+				slots.add(DocumentSlot.nested(embedded.field().getName(), document.value(), document.layout()));
 			} else if (child instanceof TPSSuperClassNode superClass) {
 				// Inherited fields from the superclass table are plain properties.
 				query.addTableJoin(JoinType.LEFT, superClass.tableInfo(), superClass.alias(),
 						superClass.join().joinCondition());
-				processChildren(superClass, query, properties, variants);
+				processChildren(superClass, query, slots, variants);
 			} else if (child instanceof STISuperClassNode superClass) {
 				// Same table as the subclass; fields are plain properties.
-				processChildren(superClass, query, properties, variants);
+				processChildren(superClass, query, slots, variants);
 			} else if (child instanceof TPSSubClassNode tps) {
 				// LEFT JOIN the subclass table; a row is of this subclass when its
 				// primary key in that table is non-null.
 				query.addTableJoin(JoinType.LEFT, tps.tableInfo(), tps.alias(), tps.join().joinCondition());
 				List<JsonProperty> extras = new ArrayList<>();
-				SqlExpression pkExpression = collectSubClassProperties(tps, extras);
+				List<DocumentSlot> extraSlots = new ArrayList<>();
+				SqlExpression pkExpression = collectSubClassProperties(tps, query, extras, extraSlots);
 				if (pkExpression == null) {
 					throw new IllegalStateException("Subclass table node '" + tps.alias() + "' has no primary key");
 				}
 				SqlExpression condition = SqlExpression.implode("",
 						List.of(pkExpression, SqlExpression.sql(" IS NOT NULL")));
-				variants.add(new SubClassVariant(condition, tps.type().getSimpleName(), extras));
+				variants.add(new SubClassVariant(condition, tps.type().getSimpleName(), extras, extraSlots));
 			} else if (child instanceof STISubClassNode sti) {
 				List<JsonProperty> extras = new ArrayList<>();
-				collectSubClassProperties(sti, extras);
+				List<DocumentSlot> extraSlots = new ArrayList<>();
+				extraSlots.add(DocumentSlot.discriminator(sti.alias(),
+						SqlExpression.sql("{" + sti.sourceAlias() + "." + sti.discriminatorColumn() + "}")));
+				collectSubClassProperties(sti, query, extras, extraSlots);
 				SqlExpression condition = SqlExpression.sql(
 						"{" + sti.sourceAlias() + "." + sti.discriminatorColumn() + "} = '"
 								+ DbContext.escapeSqlStringLiteral(String.valueOf(sti.discriminatorValue())) + "'");
-				variants.add(new SubClassVariant(condition, sti.type().getSimpleName(), extras));
+				variants.add(new SubClassVariant(condition, sti.type().getSimpleName(), extras, extraSlots));
 			} else if (child instanceof EntityReference reference) {
-				addEntityReference(reference, query, properties);
+				slots.add(addEntityReference(reference, query));
 			} else if (child instanceof ValueCollection collection) {
-				addValueCollection(collection, query, properties);
+				slots.add(addValueCollection(collection, query));
 			} else if (child instanceof EntityCollection collection) {
-				if (collection.recursionInfo() != null) {
-					addRecursiveCollection(node, collection, query, properties);
-				} else {
-					addEntityCollection(collection, query, properties);
-				}
+				slots.add(collection.recursionInfo() != null
+						? addRecursiveCollection(node, collection, query)
+						: addEntityCollection(collection, query));
 			} else if (child instanceof JoinTableEntityCollection collection) {
-				if (collection.recursionInfo() != null) {
-					addRecursiveCollection(node, collection, query, properties);
-				} else {
-					addJoinTableEntityCollection(node, collection, query, properties);
-				}
+				slots.add(collection.recursionInfo() != null
+						? addRecursiveCollection(node, collection, query)
+						: addJoinTableEntityCollection(node, collection, query));
 			} else if (child instanceof CustomJoin customJoin) {
+				// A join, not a value: contributes no slot.
 				query.addTableJoin(customJoin.joinType(), customJoin.joinedTable(), customJoin.alias(),
 						customJoin.joinCondition());
 			} else {
@@ -154,24 +236,49 @@ public class AQTJsonDirectTransformer {
 	}
 
 	/**
+	 * Builds a scalar slot. In {@link DocumentShape#ARRAY} the value is cast to
+	 * text unless it already is text, so no precision is lost on the way through
+	 * JSON: a JSON number would round a {@code DECIMAL} or a long beyond 2^53,
+	 * and dates would arrive in whatever shape the driver's JSON encoder picks.
+	 * The reader converts back to {@code javaType}.
+	 */
+	private static DocumentSlot scalarSlot(JsonSqlQuery query, String alias, FieldModel field,
+			SqlExpression expression) {
+		Class<?> javaType = field.getType() == null ? null : field.getType().getReflectionClass();
+		if (query.getDocumentShape() == DocumentShape.ARRAY && !isTextInJson(javaType)) {
+			if (javaType == byte[].class) {
+				throw new UnsupportedOperationException(
+						"Positional JSON documents cannot carry binary values yet (field '" + field.getName() + "')");
+			}
+			expression = query.getDbContext().castToStringExpression(expression);
+		}
+		return DocumentSlot.scalar(alias, field.getName(), expression, javaType);
+	}
+
+	/** Whether a value of this type is already character data in a JSON document. */
+	private static boolean isTextInJson(Class<?> javaType) {
+		return javaType == null || javaType == String.class || javaType.isEnum();
+	}
+
+	/**
 	 * A many-to-one reference becomes a derived table producing one JSON object
 	 * per target row, keyed by the target's id column. Joining on the original
 	 * join condition yields the nested object, or JSON {@code null} when the
 	 * reference is null.
 	 */
-	private static void addEntityReference(EntityReference reference, JsonSqlQuery query,
-			List<JsonProperty> properties) {
+	private static DocumentSlot addEntityReference(EntityReference reference, JsonSqlQuery query) {
 		JsonSqlQuery subQuery = query.startSubQuery();
 		subQuery.setTable(reference.tableInfo(), reference.alias());
 		String idColumn = reference.join().idColumnName();
 		subQuery.addField(SqlExpression.sql("{" + reference.alias() + "." + idColumn + "}"), idColumn);
-		subQuery.setJsonValue(buildJsonValue(reference, subQuery));
+		Document document = buildDocument(reference, subQuery);
+		subQuery.setJsonValue(document.value());
 
 		query.addSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), reference.alias(),
 				reference.join().joinCondition());
-		properties.add(new JsonProperty(reference.field().getName(),
-				query.getDbContext().jsonValueRef(
-						SqlExpression.sql("{" + reference.alias() + "." + JsonSqlQuery.JSON_COLUMN + "}"))));
+		return DocumentSlot.nested(reference.field().getName(),
+				jsonRef(query, SqlExpression.sql("{" + reference.alias() + "." + JsonSqlQuery.JSON_COLUMN + "}")),
+				document.layout());
 	}
 
 	/**
@@ -179,8 +286,7 @@ public class AQTJsonDirectTransformer {
 	 * subquery that groups by the FK so the outer query stays at one row per
 	 * parent.
 	 */
-	private static void addEntityCollection(EntityCollection collection, JsonSqlQuery query,
-			List<JsonProperty> properties) {
+	private static DocumentSlot addEntityCollection(EntityCollection collection, JsonSqlQuery query) {
 		JsonSqlQuery subQuery = query.startSubQuery();
 		subQuery.setTable(collection.tableInfo(), collection.alias());
 		subQuery.setAggregated(true);
@@ -189,12 +295,13 @@ public class AQTJsonDirectTransformer {
 		String fkExpression = "{" + collection.alias() + "." + fkColumn + "}";
 		subQuery.addField(SqlExpression.sql(fkExpression), fkColumn);
 		subQuery.setGroupBy(List.of(fkExpression));
-		subQuery.setJsonValue(buildJsonValue(collection, subQuery));
+		Document document = buildDocument(collection, subQuery);
+		subQuery.setJsonValue(document.value());
 
 		query.addSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), collection.alias(),
 				collection.join().joinCondition());
-		properties.add(new JsonProperty(collection.field().getName(),
-				coalesceEmptyArray(query.getDbContext(), collection.alias())));
+		return DocumentSlot.collection(collection.field().getName(),
+				coalesceEmptyArray(query, collection.alias()), document.layout());
 	}
 
 	/**
@@ -203,8 +310,8 @@ public class AQTJsonDirectTransformer {
 	 * one element per row in the parent x junction fan-out, duplicating the
 	 * parent.
 	 */
-	private static void addJoinTableEntityCollection(TableNode parent, JoinTableEntityCollection collection,
-			JsonSqlQuery query, List<JsonProperty> properties) {
+	private static DocumentSlot addJoinTableEntityCollection(TableNode parent, JoinTableEntityCollection collection,
+			JsonSqlQuery query) {
 		JsonSqlQuery subQuery = query.startSubQuery();
 		subQuery.setAggregated(true);
 
@@ -218,13 +325,14 @@ public class AQTJsonDirectTransformer {
 		String fkExpression = "{" + junctionAlias + "." + parentFkColumn + "}";
 		subQuery.addField(SqlExpression.sql(fkExpression), parentFkColumn);
 		subQuery.setGroupBy(List.of(fkExpression));
-		subQuery.setJsonValue(buildJsonValue(collection, subQuery));
+		Document document = buildDocument(collection, subQuery);
+		subQuery.setJsonValue(document.value());
 
 		SqlExpression onCondition = SqlExpression.sql(
 				"{" + collection.alias() + "." + parentFkColumn + "} = {" + parent.alias() + "." + parentIdColumn + "}");
 		query.addSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), collection.alias(), onCondition);
-		properties.add(new JsonProperty(collection.field().getName(),
-				coalesceEmptyArray(query.getDbContext(), collection.alias())));
+		return DocumentSlot.collection(collection.field().getName(),
+				coalesceEmptyArray(query, collection.alias()), document.layout());
 	}
 
 	/**
@@ -237,8 +345,7 @@ public class AQTJsonDirectTransformer {
 	 * <p>The CTE is uncorrelated with the outer query, so it is hoisted to the
 	 * top-level statement and named from inside the derived table.</p>
 	 */
-	private static void addRecursiveCollection(TableNode parent, TableNode collection, JsonSqlQuery query,
-			List<JsonProperty> properties) {
+	private static DocumentSlot addRecursiveCollection(TableNode parent, TableNode collection, JsonSqlQuery query) {
 		RecursionInfo info;
 		JoinTableJoin junctionJoin;
 		String parentIdColumn;
@@ -283,20 +390,20 @@ public class AQTJsonDirectTransformer {
 		String rootIdExpression = "{" + junctionAlias + "." + RecursionCteBuilder.ROOT_ID_COLUMN + "}";
 		subQuery.addField(SqlExpression.sql(rootIdExpression), RecursionCteBuilder.ROOT_ID_COLUMN);
 		subQuery.setGroupBy(List.of(rootIdExpression));
-		subQuery.setJsonValue(buildJsonValue(collection, subQuery));
+		Document document = buildDocument(collection, subQuery);
+		subQuery.setJsonValue(document.value());
 
 		SqlExpression onCondition = SqlExpression.sql("{" + collection.alias() + "."
 				+ RecursionCteBuilder.ROOT_ID_COLUMN + "} = {" + parent.alias() + "." + parentIdColumn + "}");
 		query.addSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), collection.alias(), onCondition);
-		properties.add(new JsonProperty(fieldName, coalesceEmptyArray(context, collection.alias())));
+		return DocumentSlot.collection(fieldName, coalesceEmptyArray(query, collection.alias()), document.layout());
 	}
 
 	/**
 	 * A collection of scalar values becomes a subquery aggregating the value
 	 * expression into a JSON array, grouped by the foreign key.
 	 */
-	private static void addValueCollection(ValueCollection collection, JsonSqlQuery query,
-			List<JsonProperty> properties) {
+	private static DocumentSlot addValueCollection(ValueCollection collection, JsonSqlQuery query) {
 		JsonSqlQuery subQuery = query.startSubQuery();
 		subQuery.setTable(collection.joinTable(), collection.alias());
 		subQuery.setAggregated(true);
@@ -309,35 +416,60 @@ public class AQTJsonDirectTransformer {
 
 		query.addSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), collection.alias(),
 				collection.join().joinCondition());
-		properties.add(new JsonProperty(collection.field().getName(),
-				coalesceEmptyArray(query.getDbContext(), collection.alias())));
+		return DocumentSlot.valueCollection(collection.alias(), collection.field().getName(),
+				coalesceEmptyArray(query, collection.alias()),
+				collection.componentType() == null ? null : collection.componentType().getReflectionClass());
 	}
 
 	/**
 	 * Wraps a subquery's JSON column in COALESCE so parents without collection
 	 * elements get {@code []} rather than {@code null}.
 	 */
-	private static SqlExpression coalesceEmptyArray(DbContext context, String subQueryAlias) {
-		return context.jsonValueRef(SqlExpression.implode("", List.of(
+	private static SqlExpression coalesceEmptyArray(JsonSqlQuery query, String subQueryAlias) {
+		DbContext context = query.getDbContext();
+		return jsonRef(query, SqlExpression.implode("", List.of(
 				SqlExpression.sql("COALESCE({" + subQueryAlias + "." + JsonSqlQuery.JSON_COLUMN + "}, "),
 				context.emptyJsonArray(),
 				SqlExpression.sql(")"))));
 	}
 
 	/**
-	 * Walks a subclass node's scalar children and appends them to
-	 * {@code properties}. Returns the subclass primary key expression, used as
-	 * the discriminator for table-per-subclass inheritance.
+	 * Marks a nested document for embedding as JSON, where the dialect can say
+	 * so in this shape's element position. HSQLDB cannot inside a JSON array, so
+	 * array-mode documents nest as JSON text there and readers parse one level
+	 * per depth.
 	 */
-	private static SqlExpression collectSubClassProperties(TableNode subClassNode, List<JsonProperty> properties) {
+	private static SqlExpression jsonRef(JsonSqlQuery query, SqlExpression jsonValue) {
+		DbContext context = query.getDbContext();
+		if (query.getDocumentShape() == DocumentShape.ARRAY && !context.jsonArrayNestsDocuments()) {
+			return jsonValue;
+		}
+		return context.jsonValueRef(jsonValue);
+	}
+
+	/**
+	 * Walks a subclass node's scalar children, appending the object-mode
+	 * properties to {@code properties} and the array-mode slots to
+	 * {@code slots}. Returns the subclass primary key expression, used as the
+	 * discriminator for table-per-subclass inheritance.
+	 *
+	 * <p>The primary key is a slot but not a property: object mode spends it on
+	 * the variant condition, while array mode needs it in the document because
+	 * the hydrator identifies subclass rows by it.</p>
+	 */
+	private static SqlExpression collectSubClassProperties(TableNode subClassNode, JsonSqlQuery query,
+			List<JsonProperty> properties, List<DocumentSlot> slots) {
 		SqlExpression pkExpression = null;
 		for (QueryNode child : subClassNode.children()) {
 			if (child instanceof PrimaryKey pk) {
 				pkExpression = pk.expression();
+				slots.add(scalarSlot(query, subClassNode.alias(), pk.field(), pk.expression()));
 			} else if (child instanceof AggregateScalarValue agg) {
 				properties.add(new JsonProperty(agg.field().getName(), agg.expression()));
+				slots.add(scalarSlot(query, subClassNode.alias(), agg.field(), agg.expression()));
 			} else if (child instanceof ScalarValue scalar) {
 				properties.add(new JsonProperty(scalar.field().getName(), scalar.expression()));
+				slots.add(scalarSlot(query, subClassNode.alias(), scalar.field(), scalar.expression()));
 			} else {
 				throw unsupported(child, "non-scalar fields on subclasses");
 			}
