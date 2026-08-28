@@ -157,6 +157,60 @@ public class MultiSetFetchIT {
 		assertTrue(bob.awards == null || bob.awards.isEmpty());
 	}
 
+	/**
+	 * A reference is a plain join, so conditions and ordering on the referenced
+	 * table work on the document paths exactly as they do on a joined query.
+	 * Collection contents still need {@code whereExists}, because a collection is
+	 * a grouped derived table whose element columns are not addressable outside
+	 * it.
+	 */
+	@Test
+	public void testConditionsOnAReferenceWork() {
+		DataSource db = TestDatabaseProvider.getDataSource();
+		DbContext context = TestDatabaseProvider.getDbContext();
+		SchemaGenerator.createTables(db, AuthorWithBooks.class, Publisher.class);
+		DB.runInTransaction(db, connection -> {
+			Publisher acme = new Publisher();
+			acme.name = "Acme";
+			PojoQuery.insert(connection, acme);
+			Publisher zenith = new Publisher();
+			zenith.name = "Zenith";
+			PojoQuery.insert(connection, zenith);
+
+			for (String[] pair : new String[][] { { "Alice", "Acme" }, { "Bob", "Zenith" }, { "Carol", null } }) {
+				AuthorWithBooks author = new AuthorWithBooks();
+				author.name = pair[0];
+				author.address = new Address();
+				author.publisher = "Acme".equals(pair[1]) ? acme : "Zenith".equals(pair[1]) ? zenith : null;
+				author.books = List.of(book("Book of " + pair[0], 1, "1.00", null, null, true));
+				PojoQuery.insert(connection, author);
+			}
+		});
+
+		// WHERE on the referenced table
+		List<AuthorWithBooks> filtered = PojoQuery.build(context, AuthorWithBooks.class)
+				.addWhere("{publisher.name} = ?", "Acme")
+				.executeMultiSet(db);
+		assertEquals(List.of("Alice"), filtered.stream().map(a -> a.name).toList());
+		assertEquals("Acme", filtered.get(0).publisher.name);
+		assertEquals(1, filtered.get(0).books.size(), "the collection must stay complete");
+
+		// ORDER BY on the referenced table, nulls aside
+		List<String> ordered = PojoQuery.build(context, AuthorWithBooks.class)
+				.addWhere("{ms_author.publisher_id} IS NOT NULL")
+				.addOrderBy("{publisher.name} DESC")
+				.executeMultiSet(db)
+				.stream().map(a -> a.name).toList();
+		assertEquals(List.of("Bob", "Alice"), ordered);
+
+		// An absent reference stays null on both paths
+		List<AuthorWithBooks> all = PojoQuery.build(context, AuthorWithBooks.class)
+				.addOrderBy("{ms_author.name}").executeMultiSet(db);
+		assertNull(all.get(2).publisher);
+		assertEquals(describe(PojoQuery.build(context, AuthorWithBooks.class)
+				.addOrderBy("{ms_author.name}").execute(db)), describe(all));
+	}
+
 	// ========== @Recursive over the document path ==========
 
 	@Table("ms_category")

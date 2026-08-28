@@ -1,6 +1,7 @@
 package org.pojoquery;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.pojoquery.TestUtils.norm;
 
 import java.util.List;
@@ -16,6 +17,7 @@ import org.pojoquery.annotations.Recursive;
 import org.pojoquery.annotations.Recursive.Direction;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
+import org.pojoquery.internal.MappingException;
 import org.pojoquery.pipeline.AQTJsonDirectTransformer;
 import org.pojoquery.pipeline.AQTTransformer;
 import org.pojoquery.pipeline.JsonSqlQuery;
@@ -330,7 +332,8 @@ public class TestJsonQueries {
 	/**
 	 * The recursive CTE is hoisted to the top-level statement and named from
 	 * inside the collection's derived table, which joins the element table onto
-	 * it like a junction table.
+	 * it like a junction table. The {@code parent} reference is a plain join, so
+	 * its columns stay addressable by WHERE and ORDER BY.
 	 */
 	@Test
 	public void testRecursiveDescendantsHsqldb() {
@@ -355,19 +358,14 @@ public class TestJsonQueries {
 				 JSON_OBJECT(
 				  'id': "category"."id",
 				  'name': "category"."name",
-				  'parent': "parent"."json" FORMAT JSON,
+				  'parent': CASE WHEN "parent"."id" IS NULL THEN NULL ELSE JSON_OBJECT(
+				   'id': "parent"."id",
+				   'name': "parent"."name"
+				  ) END FORMAT JSON,
 				  'descendants': COALESCE("descendants"."json", JSON_ARRAY()) FORMAT JSON
 				 ) AS "json"
 				FROM "category" AS "category"
-				LEFT JOIN (
-				 SELECT
-				  "parent"."id" AS "id",
-				  JSON_OBJECT(
-				   'id': "parent"."id",
-				   'name': "parent"."name"
-				  ) AS "json"
-				 FROM "category" AS "parent"
-				) AS "parent" ON "category"."parent_id" = "parent"."id"
+				LEFT JOIN "category" AS "parent" ON "category"."parent_id" = "parent"."id"
 				LEFT JOIN (
 				 SELECT
 				  "descendants_cte"."root_id" AS "root_id",
@@ -479,6 +477,65 @@ public class TestJsonQueries {
 				 GROUP BY "related_cte_distinct"."root_id"
 				) AS "related" ON "related"."root_id" = "topic"."id"
 				"""), norm(sql));
+	}
+
+	// ========== Clauses a JSON query cannot evaluate ==========
+
+	/**
+	 * A collection is aggregated in a derived table, so its element columns are
+	 * not addressable from the outer query. Saying so while building the statement
+	 * beats a bare missing-column error from the database at execution.
+	 */
+	@Test
+	public void testConditionOnCollectionContentsIsRejected() {
+		MappingException e = assertThrows(MappingException.class,
+				() -> PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), User.class)
+						.addWhere("{roles.rolename} = ?", "admin")
+						.toJsonSql());
+		assertEquals(true, e.getMessage().contains("'roles'"));
+		assertEquals(true, e.getMessage().contains("whereExists"));
+
+		// The array shape rejects it at the same point
+		assertThrows(MappingException.class,
+				() -> PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), User.class)
+						.addWhere("{roles.rolename} = ?", "admin")
+						.toJsonArrayStatement());
+	}
+
+	@Test
+	public void testOrderByCollectionContentsIsRejected() {
+		MappingException e = assertThrows(MappingException.class,
+				() -> PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), User.class)
+						.addOrderBy("{roles.rolename} DESC")
+						.toJsonSql());
+		assertEquals(true, e.getMessage().contains("'roles'"));
+		assertEquals(true, e.getMessage().contains("one row per root entity"));
+	}
+
+	/** The junction table of a many-to-many is inside the derived table too. */
+	@Test
+	public void testConditionOnJunctionTableIsRejected() {
+		assertThrows(MappingException.class,
+				() -> PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), User.class)
+						.addWhere("{roles.user_role.user_id} = ?", 1L)
+						.toJsonSql());
+	}
+
+	/** What stays allowed: the root, a reference (a plain join), and whereExists. */
+	@Test
+	public void testAddressableClausesArePreserved() {
+		String rootAndReference = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), CategoryWithDescendants.class)
+				.addWhere("{category.name} = ?", "Electronics")
+				.addWhere("{parent.name} = ?", "Root")
+				.addOrderBy("{parent.name}")
+				.toJsonSql();
+		assertEquals(true, rootAndReference.contains("\"parent\".\"name\" = ?"));
+
+		// whereExists carries its own joins, so nothing it references is hidden
+		String exists = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), User.class)
+				.whereExists("{roles.rolename} = ?", "admin")
+				.toJsonSql();
+		assertEquals(true, exists.contains(" IN (SELECT"));
 	}
 
 	// ========== Array shape ==========

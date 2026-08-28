@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -529,6 +530,7 @@ public class PojoQuery<T> {
 	 * @see #executeJson(DataSource)
 	 */
 	public SqlExpression toJsonStatement() {
+		checkClausesAddressable();
 		JsonSqlQuery jsonQuery = new JsonSqlQuery(dbContext);
 		AQTJsonDirectTransformer.toSql(tree, jsonQuery);
 		for (SqlExpression where : query.getWheres()) {
@@ -539,6 +541,44 @@ public class PojoQuery<T> {
 		}
 		jsonQuery.setLimit(query.getOffset(), query.getRowCount());
 		return jsonQuery.toStatement();
+	}
+
+	/**
+	 * Rejects WHERE and ORDER BY clauses a JSON query cannot evaluate, before the
+	 * statement is built.
+	 *
+	 * <p>Collections become derived tables that expose only their foreign key and
+	 * the aggregated document, so a clause referencing element columns would fail
+	 * in the database with nothing but a missing-column message. Failing here
+	 * instead names the alias and the way out.</p>
+	 *
+	 * @throws MappingException if a clause references a collection's contents
+	 */
+	private void checkClausesAddressable() {
+		Set<String> hidden = AQTJsonDirectTransformer.aliasesHiddenByGrouping(tree);
+		if (hidden.isEmpty()) {
+			return;
+		}
+		for (SqlExpression where : query.getWheres()) {
+			checkClauseAddressable(where.getSql(), hidden, "condition",
+					"use whereExists(...) to filter root entities on collection contents, "
+							+ "or execute() to also truncate the collection");
+		}
+		for (String orderBy : query.getOrderBy()) {
+			checkClauseAddressable(orderBy, hidden, "ORDER BY clause",
+					"a JSON query returns one row per root entity, so it can only be ordered "
+							+ "by the root entity's own fields");
+		}
+	}
+
+	private void checkClauseAddressable(String clause, Set<String> hidden, String what, String remedy) {
+		for (String alias : CurlyMarkers.extractAliases(clause)) {
+			if (hidden.contains(alias)) {
+				throw new MappingException("This " + what + " references alias '" + alias
+						+ "', whose columns a JSON query aggregates into a derived table: " + clause
+						+ ". Here, " + remedy + ".");
+			}
+		}
 	}
 
 	/**
@@ -564,6 +604,7 @@ public class PojoQuery<T> {
 	 * @see #toJsonStatement()
 	 */
 	public JsonArrayQuery toJsonArrayStatement() {
+		checkClausesAddressable();
 		JsonSqlQuery jsonQuery = new JsonSqlQuery(dbContext, DocumentShape.ARRAY);
 		DocumentLayout layout = AQTJsonDirectTransformer.toSql(tree, jsonQuery);
 		for (SqlExpression where : query.getWheres()) {

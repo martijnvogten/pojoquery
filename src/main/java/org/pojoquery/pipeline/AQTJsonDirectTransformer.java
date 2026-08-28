@@ -1,7 +1,9 @@
 package org.pojoquery.pipeline;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.pojoquery.DbContext;
 import org.pojoquery.DbContext.JsonProperty;
@@ -110,6 +112,43 @@ public class AQTJsonDirectTransformer {
 
 	/** The two products of building one document: its SQL expression and its slot layout. */
 	private record Document(SqlExpression value, DocumentLayout layout) {
+	}
+
+	/**
+	 * Aliases whose columns cannot be referenced from a WHERE or ORDER BY clause
+	 * of a JSON query: collections, the junction tables they walk through, and
+	 * everything nested inside them.
+	 *
+	 * <p>A collection is aggregated inside a derived table that exposes only its
+	 * foreign key and the JSON document, so its element columns are gone by the
+	 * time the outer query is evaluated. References, embedded objects, superclass
+	 * and subclass tables are plain joins, so those stay addressable.</p>
+	 *
+	 * @param tree the query tree
+	 * @return the aliases a clause must not reference, in encounter order
+	 */
+	public static Set<String> aliasesHiddenByGrouping(RootNode tree) {
+		Set<String> hidden = new LinkedHashSet<>();
+		collectHiddenAliases(tree, false, hidden);
+		return hidden;
+	}
+
+	private static void collectHiddenAliases(TableNode node, boolean insideCollection, Set<String> hidden) {
+		for (QueryNode child : node.children()) {
+			boolean childIsCollection = child instanceof EntityCollection || child instanceof ValueCollection
+					|| child instanceof JoinTableEntityCollection;
+			if (child instanceof JoinTableEntityCollection joinTable) {
+				hidden.add(joinTable.join().joinTableInfo().joinTableAlias());
+			}
+			if (child instanceof TableNode tableChild) {
+				if (insideCollection || childIsCollection) {
+					hidden.add(tableChild.alias());
+				}
+				collectHiddenAliases(tableChild, insideCollection || childIsCollection, hidden);
+			} else if (child instanceof ValueCollection valueCollection) {
+				hidden.add(valueCollection.alias());
+			}
+		}
 	}
 
 	/**
@@ -261,24 +300,28 @@ public class AQTJsonDirectTransformer {
 	}
 
 	/**
-	 * A many-to-one reference becomes a derived table producing one JSON object
-	 * per target row, keyed by the target's id column. Joining on the original
-	 * join condition yields the nested object, or JSON {@code null} when the
-	 * reference is null.
+	 * A many-to-one reference is a plain {@code LEFT JOIN}: it yields one row, so
+	 * nothing needs grouping, and the target's columns stay addressable by WHERE
+	 * and ORDER BY - which a derived table would hide.
+	 *
+	 * <p>In {@link DocumentShape#OBJECT} the document is guarded by the target's
+	 * primary key, so an unmatched reference reads as JSON {@code null} rather
+	 * than an object of nulls. {@link DocumentShape#ARRAY} needs no guard: a
+	 * document of all nulls is how an absent node already reaches the hydrator
+	 * from an unmatched LEFT JOIN in a flat query.</p>
 	 */
 	private static DocumentSlot addEntityReference(EntityReference reference, JsonSqlQuery query) {
-		JsonSqlQuery subQuery = query.startSubQuery();
-		subQuery.setTable(reference.tableInfo(), reference.alias());
-		String idColumn = reference.join().idColumnName();
-		subQuery.addField(SqlExpression.sql("{" + reference.alias() + "." + idColumn + "}"), idColumn);
-		Document document = buildDocument(reference, subQuery);
-		subQuery.setJsonValue(document.value());
-
-		query.addSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), reference.alias(),
+		query.addTableJoin(JoinType.LEFT, reference.tableInfo(), reference.alias(),
 				reference.join().joinCondition());
-		return DocumentSlot.nested(reference.field().getName(),
-				jsonRef(query, SqlExpression.sql("{" + reference.alias() + "." + JsonSqlQuery.JSON_COLUMN + "}")),
-				document.layout());
+		Document document = buildDocument(reference, query);
+		SqlExpression value = query.getDocumentShape() == DocumentShape.OBJECT
+				? SqlExpression.implode("", List.of(
+						SqlExpression.sql("CASE WHEN {" + reference.alias() + "." + reference.join().idColumnName()
+								+ "} IS NULL THEN NULL ELSE "),
+						document.value(),
+						SqlExpression.sql(" END")))
+				: document.value();
+		return DocumentSlot.nested(reference.field().getName(), jsonRef(query, value), document.layout());
 	}
 
 	/**
