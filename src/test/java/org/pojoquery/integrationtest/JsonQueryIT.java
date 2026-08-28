@@ -15,8 +15,11 @@ import org.pojoquery.DbContext;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Embedded;
+import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
+import org.pojoquery.annotations.Recursive;
+import org.pojoquery.annotations.Recursive.Direction;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
@@ -391,6 +394,180 @@ public class JsonQueryIT {
 		List<String> tags = new ArrayList<>();
 		tagged.get("tags").forEach(tag -> tags.add(tag.asText()));
 		assertEquals(List.of("java", "sql"), tags.stream().sorted().toList());
+	}
+
+	// ========== @Recursive: adjacency-list tree ==========
+
+	@Table("json_tree_category")
+	public static class TreeCategory {
+		@Id
+		public Long id;
+		public String name;
+	}
+
+	public static class TreeCategoryWithParent extends TreeCategory {
+		@FieldName("parent_id")
+		public TreeCategory parent;
+	}
+
+	public static class TreeCategoryWithDescendants extends TreeCategoryWithParent {
+		@Recursive(parentLink = "parent_id", direction = Direction.DOWN)
+		public List<TreeCategory> descendants;
+	}
+
+	public static class TreeCategoryWithAncestors extends TreeCategoryWithParent {
+		@Recursive(parentLink = "parent_id", direction = Direction.UP)
+		public List<TreeCategory> ancestors;
+	}
+
+	@Test
+	public void testRecursiveDescendantsAndAncestors() throws Exception {
+		DataSource db = TestDatabaseProvider.getDataSource();
+		DbContext context = TestDatabaseProvider.getDbContext();
+		SchemaGenerator.createTables(db, TreeCategoryWithParent.class);
+		DB.runInTransaction(db, connection -> {
+			// Electronics -> Audio -> Phones, plus a childless Books
+			TreeCategoryWithParent electronics = insertCategory(connection, "Electronics", null);
+			TreeCategoryWithParent audio = insertCategory(connection, "Audio", electronics);
+			insertCategory(connection, "Phones", audio);
+			insertCategory(connection, "Books", null);
+		});
+
+		List<JsonNode> withDescendants = parseAll(PojoQuery.build(context, TreeCategoryWithDescendants.class)
+				.addOrderBy("{this.name}")
+				.executeJson(db));
+		assertEquals(4, withDescendants.size());
+
+		JsonNode audio = findByProperty(withDescendants, "name", "Audio");
+		assertEquals(List.of("Phones"), sortedTexts(audio.get("descendants"), "name"));
+
+		JsonNode electronics = findByProperty(withDescendants, "name", "Electronics");
+		assertEquals(List.of("Audio", "Phones"), sortedTexts(electronics.get("descendants"), "name"));
+		// The transitive closure only, never the root itself
+		assertEquals(2, electronics.get("descendants").size());
+
+		JsonNode books = findByProperty(withDescendants, "name", "Books");
+		assertTrue(books.get("descendants").isArray());
+		assertEquals(0, books.get("descendants").size());
+
+		List<JsonNode> withAncestors = parseAll(PojoQuery.build(context, TreeCategoryWithAncestors.class)
+				.addWhere("{this.name} = ?", "Phones")
+				.executeJson(db));
+		assertEquals(1, withAncestors.size());
+		assertEquals(List.of("Audio", "Electronics"), sortedTexts(withAncestors.get(0).get("ancestors"), "name"));
+	}
+
+	@Table("json_catalog")
+	public static class Catalog {
+		@Id
+		public Long id;
+		public String name;
+	}
+
+	public static class CatalogWithCategories extends Catalog {
+		public List<TreeCategoryWithDescendants> categories;
+	}
+
+	/**
+	 * A recursive collection nested inside another collection: the CTE is hoisted
+	 * out of the inner derived table up to the top-level statement, where every
+	 * dialect accepts the {@code WITH} preamble.
+	 */
+	@Test
+	public void testRecursiveCollectionNestedInsideCollection() throws Exception {
+		DataSource db = TestDatabaseProvider.getDataSource();
+		DbContext context = TestDatabaseProvider.getDbContext();
+		SchemaGenerator.createTables(db, CatalogWithCategories.class);
+		DB.runInTransaction(db, connection -> {
+			CatalogWithCategories catalog = new CatalogWithCategories();
+			catalog.name = "main";
+			TreeCategoryWithDescendants top = new TreeCategoryWithDescendants();
+			top.name = "Top";
+			TreeCategoryWithDescendants child = new TreeCategoryWithDescendants();
+			child.name = "Child";
+			child.parent = top;
+			// Inserted in list order, so `child` sees the id `top` was given.
+			catalog.categories = List.of(top, child);
+			PojoQuery.insert(connection, catalog);
+		});
+
+		List<JsonNode> catalogs = parseAll(PojoQuery.build(context, CatalogWithCategories.class).executeJson(db));
+		assertEquals(1, catalogs.size());
+		JsonNode categories = catalogs.get(0).get("categories");
+		assertEquals(2, categories.size());
+		assertEquals(List.of("Child"), sortedTexts(findByProperty(categories, "name", "Top").get("descendants"), "name"));
+		assertEquals(0, findByProperty(categories, "name", "Child").get("descendants").size());
+	}
+
+	// ========== @Recursive: junction table over a graph ==========
+
+	@Table("json_topic")
+	public static class Topic {
+		@Id
+		public Long id;
+		public String name;
+	}
+
+	public static class TopicWithLinks extends Topic {
+		@Link(linktable = "json_topic_related", linkfield = "topic_id", foreignlinkfield = "related_id")
+		public List<Topic> related;
+	}
+
+	public static class TopicWithRelatedClosure extends Topic {
+		@Recursive
+		@Link(linktable = "json_topic_related", linkfield = "topic_id", foreignlinkfield = "related_id")
+		public List<Topic> related;
+	}
+
+	@Test
+	public void testRecursiveJunctionDeduplicatesDiamond() throws Exception {
+		DataSource db = TestDatabaseProvider.getDataSource();
+		DbContext context = TestDatabaseProvider.getDbContext();
+		SchemaGenerator.createTables(db, TopicWithLinks.class);
+		DB.runInTransaction(db, connection -> {
+			// root -> {left, right}, and both reach shared: a diamond, so the CTE
+			// produces two paths to shared.
+			Topic shared = new Topic();
+			shared.name = "shared";
+			PojoQuery.insert(connection, shared);
+
+			TopicWithLinks left = new TopicWithLinks();
+			left.name = "left";
+			left.related = List.of(shared);
+			PojoQuery.insert(connection, left);
+
+			TopicWithLinks right = new TopicWithLinks();
+			right.name = "right";
+			right.related = List.of(shared);
+			PojoQuery.insert(connection, right);
+
+			TopicWithLinks root = new TopicWithLinks();
+			root.name = "root";
+			root.related = List.of(left, right);
+			PojoQuery.insert(connection, root);
+		});
+
+		List<JsonNode> topics = parseAll(PojoQuery.build(context, TopicWithRelatedClosure.class)
+				.addOrderBy("{this.name}")
+				.executeJson(db));
+
+		JsonNode root = findByProperty(topics, "name", "root");
+		assertEquals(List.of("left", "right", "shared"), sortedTexts(root.get("related"), "name"));
+
+		JsonNode left = findByProperty(topics, "name", "left");
+		assertEquals(List.of("shared"), sortedTexts(left.get("related"), "name"));
+
+		JsonNode shared = findByProperty(topics, "name", "shared");
+		assertEquals(0, shared.get("related").size());
+	}
+
+	private static TreeCategoryWithParent insertCategory(java.sql.Connection connection, String name,
+			TreeCategory parent) {
+		TreeCategoryWithParent category = new TreeCategoryWithParent();
+		category.name = name;
+		category.parent = parent;
+		PojoQuery.insert(connection, category);
+		return category;
 	}
 
 	// ========== Helpers ==========

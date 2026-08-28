@@ -7,6 +7,7 @@ import org.pojoquery.DbContext;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.pipeline.AbstractQueryTree.TableInfo;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
+import org.pojoquery.pipeline.querytree.transforms.ExpressionResolver;
 import org.pojoquery.util.Strings;
 
 /**
@@ -22,7 +23,8 @@ import org.pojoquery.util.Strings;
  * <p>All dialect-specific JSON syntax is delegated to the {@link DbContext}
  * JSON methods. Field expressions, join conditions and clauses may contain
  * {@code {alias.column}} markers, which are resolved when the statement is
- * built.</p>
+ * built; in WHERE, GROUP BY and ORDER BY clauses, {@code {this.column}} resolves
+ * to this statement's own table alias.</p>
  *
  * @see AQTJsonDirectTransformer
  */
@@ -51,6 +53,7 @@ public class JsonSqlQuery {
 	}
 
 	private final DbContext dbContext;
+	private final JsonSqlQuery parent;
 
 	private TableInfo table;
 	private String tableAlias;
@@ -61,15 +64,21 @@ public class JsonSqlQuery {
 	private List<String> groupBy = new ArrayList<>();
 	private List<String> orderBy = new ArrayList<>();
 	private final List<SqlExpression> wheres = new ArrayList<>();
+	private final List<SqlQuery.WithClause> withClauses = new ArrayList<>();
 	private int offset = -1;
 	private int rowCount = -1;
 
 	public JsonSqlQuery(DbContext dbContext) {
+		this(dbContext, null);
+	}
+
+	private JsonSqlQuery(DbContext dbContext, JsonSqlQuery parent) {
 		this.dbContext = dbContext;
+		this.parent = parent;
 	}
 
 	public JsonSqlQuery startSubQuery() {
-		return new JsonSqlQuery(dbContext);
+		return new JsonSqlQuery(dbContext, this);
 	}
 
 	public DbContext getDbContext() {
@@ -111,6 +120,21 @@ public class JsonSqlQuery {
 		wheres.add(where);
 	}
 
+	/**
+	 * Adds a common table expression to this statement.
+	 *
+	 * <p>Clauses added to a subquery are hoisted to the outermost statement, so a
+	 * derived table can name a CTE while the {@code WITH} preamble stays where
+	 * every dialect accepts it.</p>
+	 */
+	public void addWithClause(String alias, List<String> columnNames, SqlExpression body, boolean recursive) {
+		if (parent != null) {
+			parent.addWithClause(alias, columnNames, body, recursive);
+			return;
+		}
+		withClauses.add(new SqlQuery.WithClause(alias, columnNames, body, recursive));
+	}
+
 	public void setGroupBy(List<String> groupBy) {
 		this.groupBy = new ArrayList<>(groupBy);
 	}
@@ -144,6 +168,9 @@ public class JsonSqlQuery {
 				jsonExpression,
 				SqlExpression.sql(" AS " + dbContext.quoteAlias(JSON_COLUMN)))));
 
+		if (!withClauses.isEmpty()) {
+			parts.add(SqlQuery.buildWithPreamble(dbContext, withClauses));
+		}
 		parts.add(SqlExpression.sql("SELECT\n "));
 		parts.add(SqlExpression.implode(",\n ", selectParts));
 		parts.add(SqlExpression.sql("\nFROM " + quoteTableName(table) + " AS " + dbContext.quoteAlias(tableAlias)));
@@ -165,13 +192,13 @@ public class JsonSqlQuery {
 
 		if (!wheres.isEmpty()) {
 			parts.add(SqlExpression.sql("\nWHERE "));
-			parts.add(SqlExpression.implode("\n AND ", wheres));
+			parts.add(SqlExpression.implode("\n AND ", wheres.stream().map(this::resolveThisAlias).toList()));
 		}
 		if (!groupBy.isEmpty()) {
-			parts.add(SqlExpression.sql("\nGROUP BY " + Strings.implode(", ", groupBy)));
+			parts.add(SqlExpression.sql("\nGROUP BY " + Strings.implode(", ", resolveThisAlias(groupBy))));
 		}
 		if (!orderBy.isEmpty()) {
-			parts.add(SqlExpression.sql("\nORDER BY " + Strings.implode(", ", orderBy)));
+			parts.add(SqlExpression.sql("\nORDER BY " + Strings.implode(", ", resolveThisAlias(orderBy))));
 		}
 		String limitClause = SqlQuery.buildLimitClause(offset, rowCount);
 		if (!limitClause.isEmpty()) {
@@ -180,6 +207,18 @@ public class JsonSqlQuery {
 
 		SqlExpression statement = SqlExpression.implode("", parts);
 		return new SqlExpression(SqlQuery.quoteMarkers(dbContext, statement.getSql()), statement.getParameters());
+	}
+
+	/**
+	 * Resolves {@code {this}} and {@code {this.column}} markers in a clause to
+	 * this statement's own table alias, as the flat query builder does.
+	 */
+	private SqlExpression resolveThisAlias(SqlExpression clause) {
+		return new SqlExpression(ExpressionResolver.resolve(clause.getSql(), tableAlias), clause.getParameters());
+	}
+
+	private List<String> resolveThisAlias(List<String> clauses) {
+		return clauses.stream().map(clause -> ExpressionResolver.resolve(clause, tableAlias)).toList();
 	}
 
 	private String quoteTableName(TableInfo table) {

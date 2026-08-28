@@ -13,17 +13,21 @@ import org.pojoquery.pipeline.AbstractQueryTree.EmbeddedEntity;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.EntityReference;
 import org.pojoquery.pipeline.AbstractQueryTree.JoinTableEntityCollection;
+import org.pojoquery.pipeline.AbstractQueryTree.JoinTableJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.PrimaryKey;
 import org.pojoquery.pipeline.AbstractQueryTree.QueryNode;
+import org.pojoquery.pipeline.AbstractQueryTree.RecursionInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
+import org.pojoquery.pipeline.AbstractQueryTree.TableInfo;
 import org.pojoquery.pipeline.AbstractQueryTree.TableNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ValueCollection;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
+import org.pojoquery.pipeline.SqlQuery.WithClause;
 
 /**
  * Transforms an Abstract Query Tree into a {@link JsonSqlQuery} that returns
@@ -40,9 +44,14 @@ import org.pojoquery.pipeline.SqlQuery.JoinType;
  * are only present in the JSON output for rows of that subclass, and a
  * {@code _type} property carries the concrete type's simple name.</p>
  *
+ * <p>{@code @Recursive} collections are supported through a recursive CTE that
+ * is hoisted to the top-level statement; the element array holds the transitive
+ * closure, in unspecified order (no dialect-portable {@code ORDER BY} exists
+ * inside a JSON array aggregate).</p>
+ *
  * <p>Not yet supported (throws {@link UnsupportedOperationException}):
- * recursive ({@code @Recursive}) collections, subquery joins, custom query
- * nodes, and non-scalar fields declared on subclasses.</p>
+ * subquery joins, custom query nodes, and non-scalar fields declared on
+ * subclasses.</p>
  */
 public class AQTJsonDirectTransformer {
 
@@ -125,14 +134,16 @@ public class AQTJsonDirectTransformer {
 				addValueCollection(collection, query, properties);
 			} else if (child instanceof EntityCollection collection) {
 				if (collection.recursionInfo() != null) {
-					throw unsupported(collection, "@Recursive collections");
+					addRecursiveCollection(node, collection, query, properties);
+				} else {
+					addEntityCollection(collection, query, properties);
 				}
-				addEntityCollection(collection, query, properties);
 			} else if (child instanceof JoinTableEntityCollection collection) {
 				if (collection.recursionInfo() != null) {
-					throw unsupported(collection, "@Recursive collections");
+					addRecursiveCollection(node, collection, query, properties);
+				} else {
+					addJoinTableEntityCollection(node, collection, query, properties);
 				}
-				addJoinTableEntityCollection(node, collection, query, properties);
 			} else if (child instanceof CustomJoin customJoin) {
 				query.addTableJoin(customJoin.joinType(), customJoin.joinedTable(), customJoin.alias(),
 						customJoin.joinCondition());
@@ -214,6 +225,70 @@ public class AQTJsonDirectTransformer {
 		query.addSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), collection.alias(), onCondition);
 		properties.add(new JsonProperty(collection.field().getName(),
 				coalesceEmptyArray(query.getDbContext(), collection.alias())));
+	}
+
+	/**
+	 * A {@code @Recursive} collection: a recursive CTE emits
+	 * {@code (root_id, id, depth)} tuples mapping each root row to every element
+	 * reachable from it, and then acts as the junction table of an ordinary
+	 * collection subquery. This covers both adjacency-list and junction
+	 * recursion, since the CTE has already erased the difference.
+	 *
+	 * <p>The CTE is uncorrelated with the outer query, so it is hoisted to the
+	 * top-level statement and named from inside the derived table.</p>
+	 */
+	private static void addRecursiveCollection(TableNode parent, TableNode collection, JsonSqlQuery query,
+			List<JsonProperty> properties) {
+		RecursionInfo info;
+		JoinTableJoin junctionJoin;
+		String parentIdColumn;
+		String fieldName;
+		if (collection instanceof EntityCollection entityCollection) {
+			info = entityCollection.recursionInfo();
+			junctionJoin = null;
+			parentIdColumn = entityCollection.join().idColumnName();
+			fieldName = entityCollection.field().getName();
+		} else if (collection instanceof JoinTableEntityCollection joinTableCollection) {
+			info = joinTableCollection.recursionInfo();
+			junctionJoin = joinTableCollection.join();
+			parentIdColumn = joinTableCollection.join().parentKey().idColumnName();
+			fieldName = joinTableCollection.field().getName();
+		} else {
+			throw unsupported(collection, "@Recursive collections on " + collection.getClass().getSimpleName());
+		}
+
+		DbContext context = query.getDbContext();
+		WithClause cte = RecursionCteBuilder.buildCte(collection, info, junctionJoin,
+				() -> new DefaultSqlQuery(context));
+		query.addWithClause(cte.alias, cte.columnNames, cte.body, cte.recursive);
+
+		String junctionAlias = cte.alias;
+		if (junctionJoin != null) {
+			// The CTE emits one tuple per path, so a graph that reaches the same
+			// element twice would duplicate it in the array. The object path
+			// deduplicates while collecting; here the array aggregate takes every
+			// row, so deduplicate up front.
+			WithClause distinct = RecursionCteBuilder.buildDistinctPairsCte(context, cte.alias,
+					RecursionCteBuilder.distinctCteAlias(collection));
+			query.addWithClause(distinct.alias, distinct.columnNames, distinct.body, distinct.recursive);
+			junctionAlias = distinct.alias;
+		}
+
+		JsonSqlQuery subQuery = query.startSubQuery();
+		subQuery.setTable(new TableInfo(null, junctionAlias), junctionAlias);
+		subQuery.setAggregated(true);
+		subQuery.addTableJoin(JoinType.INNER, collection.tableInfo(), collection.alias(),
+				SqlExpression.sql("{" + collection.alias() + "." + info.idColumn() + "} = {" + junctionAlias + "."
+						+ RecursionCteBuilder.ID_COLUMN + "}"));
+		String rootIdExpression = "{" + junctionAlias + "." + RecursionCteBuilder.ROOT_ID_COLUMN + "}";
+		subQuery.addField(SqlExpression.sql(rootIdExpression), RecursionCteBuilder.ROOT_ID_COLUMN);
+		subQuery.setGroupBy(List.of(rootIdExpression));
+		subQuery.setJsonValue(buildJsonValue(collection, subQuery));
+
+		SqlExpression onCondition = SqlExpression.sql("{" + collection.alias() + "."
+				+ RecursionCteBuilder.ROOT_ID_COLUMN + "} = {" + parent.alias() + "." + parentIdColumn + "}");
+		query.addSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), collection.alias(), onCondition);
+		properties.add(new JsonProperty(fieldName, coalesceEmptyArray(context, collection.alias())));
 	}
 
 	/**

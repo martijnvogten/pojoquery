@@ -1,7 +1,6 @@
 package org.pojoquery;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.pojoquery.TestUtils.norm;
 
 import java.util.List;
@@ -209,7 +208,29 @@ public class TestJsonQueries {
 				"""), norm(sql));
 	}
 
-	// ========== Unsupported node types fail loudly ==========
+	/**
+	 * {@code {this.column}} in a WHERE or ORDER BY clause resolves to the root
+	 * alias, as it does in the flat query builder.
+	 */
+	@Test
+	public void testThisAliasResolvesToRootAlias() {
+		String sql = PojoQuery.build(DbContext.forDialect(Dialect.MYSQL), Role.class)
+				.addWhere("{this.rolename} = ?", "admin")
+				.addOrderBy("{this.id} DESC")
+				.toJsonSql();
+		assertEquals(norm("""
+				SELECT
+				 JSON_OBJECT(
+				  'id', `role`.`id`,
+				  'rolename', `role`.`rolename`
+				 ) AS `json`
+				FROM `role` AS `role`
+				WHERE `role`.`rolename` = ?
+				ORDER BY `role`.`id` DESC
+				"""), norm(sql));
+	}
+
+	// ========== @Recursive collections ==========
 
 	@Table("category")
 	public static class Category {
@@ -226,12 +247,175 @@ public class TestJsonQueries {
 		public List<Category> descendants;
 	}
 
+	public static class CategoryWithAncestors extends Category {
+		@Recursive(parentLink = "parent_id", direction = Direction.UP)
+		public List<Category> ancestors;
+	}
+
+	@Table("topic")
+	public static class Topic {
+		@Id
+		public Long id;
+		public String name;
+	}
+
+	public static class TopicWithRelated extends Topic {
+		@Recursive
+		@Link(linktable = "topic_related", linkfield = "topic_id", foreignlinkfield = "related_id")
+		public List<Topic> related;
+	}
+
+	/**
+	 * The recursive CTE is hoisted to the top-level statement and named from
+	 * inside the collection's derived table, which joins the element table onto
+	 * it like a junction table.
+	 */
 	@Test
-	public void testRecursiveCollectionsAreUnsupported() {
-		PojoQuery<CategoryWithDescendants> query = PojoQuery.build(
-				DbContext.forDialect(Dialect.MYSQL), CategoryWithDescendants.class);
-		UnsupportedOperationException exception = assertThrows(UnsupportedOperationException.class,
-				query::toJsonSql);
-		assertEquals(true, exception.getMessage().contains("@Recursive"));
+	public void testRecursiveDescendantsHsqldb() {
+		String sql = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), CategoryWithDescendants.class).toJsonSql();
+		assertEquals(norm("""
+				WITH RECURSIVE "descendants_cte" ("root_id", "id", "depth") AS (
+				 SELECT
+				  "category"."id" AS "root_id",
+				  "child"."id" AS "id",
+				  1 AS "depth"
+				 FROM "category" AS "category"
+				 INNER JOIN "category" AS "child" ON "child"."parent_id" = "category"."id"
+				 UNION ALL
+				 SELECT
+				  "r"."root_id" AS "root_id",
+				  "category"."id" AS "id",
+				  "r"."depth" + 1 AS "depth"
+				 FROM "category" AS "category"
+				 INNER JOIN "descendants_cte" AS "r" ON "r"."id" = "category"."parent_id"
+				)
+				SELECT
+				 JSON_OBJECT(
+				  'id': "category"."id",
+				  'name': "category"."name",
+				  'parent': "parent"."json" FORMAT JSON,
+				  'descendants': COALESCE("descendants"."json", JSON_ARRAY()) FORMAT JSON
+				 ) AS "json"
+				FROM "category" AS "category"
+				LEFT JOIN (
+				 SELECT
+				  "parent"."id" AS "id",
+				  JSON_OBJECT(
+				   'id': "parent"."id",
+				   'name': "parent"."name"
+				  ) AS "json"
+				 FROM "category" AS "parent"
+				) AS "parent" ON "category"."parent_id" = "parent"."id"
+				LEFT JOIN (
+				 SELECT
+				  "descendants_cte"."root_id" AS "root_id",
+				  JSON_ARRAYAGG(
+				   JSON_OBJECT(
+				    'id': "descendants"."id",
+				    'name': "descendants"."name"
+				   )
+				  ) AS "json"
+				 FROM "descendants_cte" AS "descendants_cte"
+				 INNER JOIN "category" AS "descendants" ON "descendants"."id" = "descendants_cte"."id"
+				 GROUP BY "descendants_cte"."root_id"
+				) AS "descendants" ON "descendants"."root_id" = "category"."id"
+				"""), norm(sql));
+	}
+
+	@Test
+	public void testRecursiveAncestorsMysql() {
+		String sql = PojoQuery.build(DbContext.forDialect(Dialect.MYSQL), CategoryWithAncestors.class).toJsonSql();
+		assertEquals(norm("""
+				WITH RECURSIVE `ancestors_cte` (`root_id`, `id`, `depth`) AS (
+				 SELECT
+				  `category`.`id` AS `root_id`,
+				  `category`.`parent_id` AS `id`,
+				  1 AS `depth`
+				 FROM `category` AS `category`
+				 WHERE `category`.`parent_id` IS NOT NULL
+				 UNION ALL
+				 SELECT
+				  `r`.`root_id` AS `root_id`,
+				  `category`.`parent_id` AS `id`,
+				  `r`.`depth` + 1 AS `depth`
+				 FROM `category` AS `category`
+				 INNER JOIN `ancestors_cte` AS `r` ON `r`.`id` = `category`.`id`
+				 WHERE `category`.`parent_id` IS NOT NULL
+				)
+				SELECT
+				 JSON_OBJECT(
+				  'id', `category`.`id`,
+				  'name', `category`.`name`,
+				  'ancestors', COALESCE(`ancestors`.`json`, JSON_ARRAY())
+				 ) AS `json`
+				FROM `category` AS `category`
+				LEFT JOIN (
+				 SELECT
+				  `ancestors_cte`.`root_id` AS `root_id`,
+				  JSON_ARRAYAGG(
+				   JSON_OBJECT(
+				    'id', `ancestors`.`id`,
+				    'name', `ancestors`.`name`
+				   )
+				  ) AS `json`
+				 FROM `ancestors_cte` AS `ancestors_cte`
+				 INNER JOIN `category` AS `ancestors` ON `ancestors`.`id` = `ancestors_cte`.`id`
+				 GROUP BY `ancestors_cte`.`root_id`
+				) AS `ancestors` ON `ancestors`.`root_id` = `category`.`id`
+				"""), norm(sql));
+	}
+
+	/**
+	 * Junction recursion walks a link table, and a graph can reach the same
+	 * element along several paths - one CTE tuple each. The array aggregate takes
+	 * every row, so a second, non-recursive CTE reduces the tuples to distinct
+	 * {@code (root_id, id)} pairs first.
+	 */
+	@Test
+	public void testRecursiveJunctionDeduplicatesPostgres() {
+		String sql = PojoQuery.build(DbContext.forDialect(Dialect.POSTGRES), TopicWithRelated.class).toJsonSql();
+		assertEquals(norm("""
+				WITH RECURSIVE "related_cte" ("root_id", "id", "depth") AS (
+				 SELECT
+				  "topic"."id" AS "root_id",
+				  "link"."related_id" AS "id",
+				  1 AS "depth"
+				 FROM "topic" AS "topic"
+				 INNER JOIN "topic_related" AS "link" ON "link"."topic_id" = "topic"."id"
+				 UNION ALL
+				 SELECT
+				  "r"."root_id" AS "root_id",
+				  "topic_related"."related_id" AS "id",
+				  "r"."depth" + 1 AS "depth"
+				 FROM "topic_related" AS "topic_related"
+				 INNER JOIN "related_cte" AS "r" ON "r"."id" = "topic_related"."topic_id"
+				),
+				"related_cte_distinct" ("root_id", "id") AS (
+				 SELECT DISTINCT
+				  "related_cte"."root_id",
+				  "related_cte"."id"
+				 FROM "related_cte" AS "related_cte"
+				)
+				SELECT
+				 JSONB_BUILD_OBJECT(
+				  'id', "topic"."id",
+				  'name', "topic"."name",
+				  'related', COALESCE("related"."json", '[]'::jsonb)
+				 ) AS "json"
+				FROM "topic" AS "topic"
+				LEFT JOIN (
+				 SELECT
+				  "related_cte_distinct"."root_id" AS "root_id",
+				  JSONB_AGG(
+				   JSONB_BUILD_OBJECT(
+				    'id', "related"."id",
+				    'name', "related"."name"
+				   )
+				  ) AS "json"
+				 FROM "related_cte_distinct" AS "related_cte_distinct"
+				 INNER JOIN "topic" AS "related" ON "related"."id" = "related_cte_distinct"."id"
+				 GROUP BY "related_cte_distinct"."root_id"
+				) AS "related" ON "related"."root_id" = "topic"."id"
+				"""), norm(sql));
 	}
 }

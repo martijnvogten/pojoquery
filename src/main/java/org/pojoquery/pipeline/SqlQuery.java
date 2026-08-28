@@ -380,6 +380,17 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 	}
 
 	private SqlExpression buildWithPreamble() {
+		return buildWithPreamble(dbContext, withClauses);
+	}
+
+	/**
+	 * Renders the {@code WITH [RECURSIVE] ...} preamble for the given common
+	 * table expressions, or the empty expression when there are none.
+	 *
+	 * <p>A single {@code RECURSIVE} keyword covers the whole list, as the SQL
+	 * standard requires, when any of the clauses is recursive.</p>
+	 */
+	public static SqlExpression buildWithPreamble(DbContext dbContext, List<WithClause> withClauses) {
 		if (withClauses.isEmpty()) {
 			return new SqlExpression("", new ArrayList<>());
 		}
