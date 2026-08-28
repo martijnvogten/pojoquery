@@ -288,7 +288,19 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 		return resolveFieldAliases(ExpressionResolver.resolve(exp, thisAlias), buildFieldsExpressionMapping(null));
 	}
 
-	private String resolveFieldAliases(String expr, Map<String, String> mapping) {
+	/**
+	 * Rewrites {@code {alias.field}} markers that name a Java field to the
+	 * expression that field selects, so that a clause may address a column by
+	 * its field name whatever the column is actually called.
+	 *
+	 * <p>Markers with no entry in the mapping are left in place for
+	 * {@link #quoteMarkers} to quote as plain identifiers.</p>
+	 *
+	 * @param expr    the SQL fragment to rewrite
+	 * @param mapping marker to replacement expression
+	 * @return the fragment with mapped markers replaced
+	 */
+	public static String resolveFieldAliases(String expr, Map<String, String> mapping) {
 		return CurlyMarkers.processMarkers(expr, marker -> {
 				if (mapping.containsKey(marker)) {
 					String replacement = mapping.get(marker);

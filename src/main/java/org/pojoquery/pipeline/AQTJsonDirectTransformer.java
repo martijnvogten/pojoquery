@@ -283,6 +283,9 @@ public class AQTJsonDirectTransformer {
 	 */
 	private static DocumentSlot scalarSlot(JsonSqlQuery query, String alias, FieldModel field,
 			SqlExpression expression) {
+		// Register before any cast: join conditions and user clauses address the
+		// bare column through {alias.fieldName}, as they do in a flat query.
+		query.addColumnMarker(alias, field.getName(), expression);
 		Class<?> javaType = field.getType() == null ? null : field.getType().getReflectionClass();
 		if (query.getDocumentShape() == DocumentShape.ARRAY && !isTextInJson(javaType)) {
 			if (javaType == byte[].class) {

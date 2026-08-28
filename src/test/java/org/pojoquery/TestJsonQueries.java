@@ -237,6 +237,67 @@ public class TestJsonQueries {
 				"""), norm(sql));
 	}
 
+	@Table("film")
+	public static class Film {
+		@Id
+		@FieldName("film_id")
+		public Long filmId;
+		@FieldName("film_title")
+		public String title;
+	}
+
+	@Table("actor")
+	public static class Actor {
+		@Id
+		@FieldName("actor_id")
+		public Long actorId;
+	}
+
+	public static class FilmWithActors extends Film {
+		@Link(linktable = "film_actor")
+		public List<Actor> actors;
+	}
+
+	/**
+	 * A JSON query selects one document column, not one column per field, so it
+	 * cannot resolve {@code {alias.fieldName}} markers from its own select
+	 * labels the way the flat builder does. It has to carry the field-to-column
+	 * mapping separately, or every {@link FieldName}-mapped field is emitted as
+	 * an identifier under its Java name - which the database does not know.
+	 *
+	 * <p>Three places in one statement depend on it: the junction-to-element
+	 * join of a {@code @Link} collection, the join from the derived table back
+	 * to the root, and the user's WHERE clause.</p>
+	 */
+	@Test
+	public void testFieldNameMappedColumnsResolveInJsonQuery() {
+		String sql = PojoQuery.build(DbContext.forDialect(Dialect.MYSQL), FilmWithActors.class)
+				.addWhere("{this.title} = ?", "Alien")
+				.toJsonSql();
+		assertEquals(norm("""
+				SELECT
+				 JSON_OBJECT(
+				  'filmId', `film`.`film_id`,
+				  'title', `film`.`film_title`,
+				  'actors', COALESCE(`actors`.`json`, JSON_ARRAY())
+				 ) AS `json`
+				FROM `film` AS `film`
+				LEFT JOIN (
+				SELECT
+				 `actors.film_actor`.`film_id` AS `film_id`,
+				 JSON_ARRAYAGG(
+				  JSON_OBJECT(
+				  'actorId', `actors`.`actor_id`
+				 )
+				 ) AS `json`
+				FROM `film_actor` AS `actors.film_actor`
+				LEFT JOIN `actor` AS `actors` ON `actors.film_actor`.`actor_id` = `actors`.`actor_id`
+				GROUP BY `actors.film_actor`.`film_id`
+				) AS `actors` ON `actors`.`film_id` = `film`.`film_id`
+				WHERE `film`.`film_title` = ?
+				"""), norm(sql));
+	}
+
 	@Table("article")
 	public static class Article {
 		@Id

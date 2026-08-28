@@ -1,7 +1,9 @@
 package org.pojoquery.pipeline;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.pojoquery.DbContext;
 import org.pojoquery.SqlExpression;
@@ -66,6 +68,7 @@ public class JsonSqlQuery {
 	private List<String> orderBy = new ArrayList<>();
 	private final List<SqlExpression> wheres = new ArrayList<>();
 	private final List<SqlQuery.WithClause> withClauses = new ArrayList<>();
+	private final Map<String, String> columnMarkers = new HashMap<>();
 	private int offset = -1;
 	private int rowCount = -1;
 
@@ -117,6 +120,26 @@ public class JsonSqlQuery {
 	/** Adds a plain (non-JSON) select field, e.g. the join key of a subquery. */
 	public void addField(SqlExpression expression, String alias) {
 		selectFields.add(new SelectField(expression, alias));
+	}
+
+	/**
+	 * Records that {@code {alias.fieldName}} addresses the given column
+	 * expression.
+	 *
+	 * <p>A flat query resolves such a marker from its own select list, whose
+	 * labels are exactly {@code alias.fieldName}. This statement selects a single
+	 * JSON document instead, so the columns it reads never appear as select
+	 * labels and the mapping has to be recorded as the document is assembled.
+	 * Without it, a marker naming a Java field is emitted verbatim as an
+	 * identifier - wrong for every field whose column has a different name, see
+	 * {@link org.pojoquery.annotations.FieldName}.</p>
+	 *
+	 * @param alias      the table alias the field belongs to
+	 * @param fieldName  the Java field name
+	 * @param expression the expression selecting the field's column
+	 */
+	public void addColumnMarker(String alias, String fieldName, SqlExpression expression) {
+		columnMarkers.put(alias + "." + fieldName, expression.getSql());
 	}
 
 	public void addTableJoin(JoinType type, TableInfo table, String alias, SqlExpression joinCondition) {
@@ -217,7 +240,10 @@ public class JsonSqlQuery {
 		}
 
 		SqlExpression statement = SqlExpression.implode("", parts);
-		return new SqlExpression(SqlQuery.quoteMarkers(dbContext, statement.getSql()), statement.getParameters());
+		// Field-name markers first, then quoting: joins and clauses may address a
+		// column by its Java field name here, just as they may in a flat query.
+		String resolved = SqlQuery.resolveFieldAliases(statement.getSql(), columnMarkers);
+		return new SqlExpression(SqlQuery.quoteMarkers(dbContext, resolved), statement.getParameters());
 	}
 
 	/**
