@@ -122,6 +122,14 @@ public class TestDatabaseProvider {
      */
     public static DataSource getDataSource() {
         String database = System.getProperty(DATABASE_PROPERTY, "hsqldb").toLowerCase();
+
+        // Re-assert the dialect for the database we are about to hand out. The default
+        // DbContext is a process-global static, so a previously-run test class may have
+        // left a different dialect in place; handing out a connection without also
+        // establishing the matching dialect is what produces HSQLDB SQL against a MySQL
+        // container. Asking for the test datasource implies asking for its dialect.
+        DbContext.setDefault(currentContext);
+
         
         if ("hsqldb".equals(database)) {
             // Create a unique in-memory HSQLDB database for each test

@@ -1,5 +1,7 @@
 package org.pojoquery.integrationtest;
 
+import static org.pojoquery.integrationtest.TestSql.q;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -94,7 +96,7 @@ public class OtherIT {
 			Assertions.assertNotNull(u.id, "Room id should be set after insert");
 			
 			// Set the area value directly in the database
-			try (PreparedStatement ps = c.prepareStatement("UPDATE \"room\" SET \"area\" = ? WHERE \"id\" = ?")) {
+			try (PreparedStatement ps = c.prepareStatement("UPDATE " + q("room") + " SET " + q("area") + " = ? WHERE " + q("id") + " = ?")) {
 				ps.setInt(1, 25);
 				ps.setLong(2, u.id);
 				ps.executeUpdate();
@@ -125,7 +127,7 @@ public class OtherIT {
 			Assertions.assertNotNull(bedroom.id, "BedRoom id should be set after insert");
 			
 			// Set the area value directly in the database
-			try (PreparedStatement ps = c.prepareStatement("UPDATE \"room\" SET \"area\" = ? WHERE \"id\" = ?")) {
+			try (PreparedStatement ps = c.prepareStatement("UPDATE " + q("room") + " SET " + q("area") + " = ? WHERE " + q("id") + " = ?")) {
 				ps.setInt(1, 25);
 				ps.setLong(2, bedroom.id);
 				ps.executeUpdate();
@@ -149,7 +151,7 @@ public class OtherIT {
 		// BedRoom extends Room, so only pass BedRoom (Room table is created automatically)
 		SchemaGenerator.createTables(db, BedRoom.class);
 		// Add custom field 'area' as a column in the room table
-		DB.executeDDL(db, "ALTER TABLE \"room\" ADD COLUMN \"area\" INT");
+		DB.executeDDL(db, "ALTER TABLE " + q("room") + " ADD COLUMN " + q("area") + " INT");
 		return db;
 	}
 

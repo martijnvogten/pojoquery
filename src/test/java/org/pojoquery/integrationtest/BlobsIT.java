@@ -1,5 +1,7 @@
 package org.pojoquery.integrationtest;
 
+import static org.pojoquery.integrationtest.TestSql.q;
+
 import java.sql.Connection;
 
 import javax.sql.DataSource;
@@ -48,8 +50,9 @@ public class BlobsIT {
 				Assertions.assertEquals("Hello world", new String(loaded.data));
 			}
 			
-			DB.update(c, SqlExpression.sql("""
-				UPDATE "file" SET "data" = ? WHERE "id" = ?""", new byte[] {1, 2, 3}, f.id));
+			DB.update(c, SqlExpression.sql(
+				"UPDATE " + q("file") + " SET " + q("data") + " = ? WHERE " + q("id") + " = ?",
+				new byte[] {1, 2, 3}, f.id));
 			
 			{
 				File loaded = PojoQuery.build(File.class).findById(c, f.id).orElseThrow();
@@ -92,8 +95,9 @@ public class BlobsIT {
 			
 			// Update the CLOB
 			String updatedContent = "Updated content that is much shorter.";
-			DB.update(c, SqlExpression.sql("""
-				UPDATE "article" SET "content" = ? WHERE "id" = ?""", updatedContent, article.id));
+			DB.update(c, SqlExpression.sql(
+				"UPDATE " + q("article") + " SET " + q("content") + " = ? WHERE " + q("id") + " = ?",
+				updatedContent, article.id));
 			
 			Article reloaded = PojoQuery.build(Article.class).findById(c, article.id).orElseThrow();
 			Assertions.assertEquals(updatedContent, reloaded.content);

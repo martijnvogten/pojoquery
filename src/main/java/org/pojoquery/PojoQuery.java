@@ -836,7 +836,8 @@ public class PojoQuery<T> {
 				Map<String, Object> values = new LinkedHashMap<>();
 				values.put(ownerFkColumn, ownerId);
 				values.put(targetFkColumn, targetId);
-				DB.insert(context, connection, schema, table, values);
+				// A junction table has a composite key and no generated key to read back.
+				DB.insertWithoutGeneratedKeys(context, connection, schema, table, values);
 			}
 		}
 	}

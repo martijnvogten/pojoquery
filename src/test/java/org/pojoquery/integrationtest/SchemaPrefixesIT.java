@@ -1,5 +1,6 @@
 package org.pojoquery.integrationtest;
 
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import java.util.List;
 import java.util.Map;
 
@@ -7,8 +8,6 @@ import javax.sql.DataSource;
 
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
@@ -18,14 +17,9 @@ import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
+// Uses HSQLDB-specific CREATE SCHEMA syntax and builds its own HSQLDB DataSource.
+@EnabledIfSystemProperty(named = "test.database", matches = "hsqldb")
 public class SchemaPrefixesIT {
-
-	@BeforeAll
-	public static void setupDbContext() {
-		// This test uses HSQLDB-specific CREATE SCHEMA syntax
-		Assumptions.assumeTrue("hsqldb".equals(TestDatabaseProvider.getDatabaseName()), 
-			"SchemaPrefixesIT only runs with HSQLDB");
-	}
 
 	private static String[] schemas = new String[]{
 		"schema1",

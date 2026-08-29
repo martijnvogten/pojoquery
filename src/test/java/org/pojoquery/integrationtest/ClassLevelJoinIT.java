@@ -9,7 +9,6 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
-import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.GroupBy;
 import org.pojoquery.annotations.Id;
@@ -31,7 +30,6 @@ import org.pojoquery.schema.SchemaGenerator;
  * annotation processing which is documented but not yet fully implemented. See
  * {@link examples.blog.ArticleListViewExample} for the expected usage pattern.</p>
  */
-@UseDialect(Dialect.HSQLDB)
 public class ClassLevelJoinIT {
 
 	// Base entities

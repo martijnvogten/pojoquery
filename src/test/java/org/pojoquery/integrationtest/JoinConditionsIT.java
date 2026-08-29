@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.TestUtils;
+import org.pojoquery.DbContext;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.JoinCondition;
@@ -25,7 +26,6 @@ import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.schema.SchemaGenerator;
 import org.pojoquery.util.RecordIndenter;
 
-@UseDialect(Dialect.HSQLDB)
 public class JoinConditionsIT {
 
 	@Table("person")
@@ -106,7 +106,9 @@ public class JoinConditionsIT {
 	
 	@Test
 	public void testSimpleDepartmentEmployeeJoinCondition() {
-		PojoQuery<Employee> q = PojoQuery.build(Employee.class);
+		// Asserts on generated SQL text, so it needs a fixed dialect. Pass the context
+		// explicitly rather than pinning the global default for the whole class.
+		PojoQuery<Employee> q = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), Employee.class);
 		String sql = q.toSql();
 		Assertions.assertEquals(TestUtils.norm("""
 			SELECT

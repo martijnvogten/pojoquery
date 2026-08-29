@@ -1,5 +1,7 @@
 package org.pojoquery.integrationtest;
 
+import static org.pojoquery.integrationtest.TestSql.q;
+
 import java.sql.Connection;
 import java.util.List;
 import java.util.Map;
@@ -56,9 +58,8 @@ public class UpsertsIT {
 				"price", 100
 			), List.of("id"));
 
-			List<Map<String, Object>> results = DB.queryRows(c, """
-				SELECT * FROM "product" WHERE "id"=1
-				""");
+			List<Map<String, Object>> results = DB.queryRows(c,
+				"SELECT * FROM " + q("product") + " WHERE " + q("id") + "=1");
 			Assertions.assertEquals(1, results.size());
 			Assertions.assertEquals("Widget", getValue(results.get(0), "name"));
 			Assertions.assertEquals(100, getValue(results.get(0), "price"));
@@ -79,9 +80,8 @@ public class UpsertsIT {
 
 			{
 				// Verify it was inserted
-				List<Map<String, Object>> results = DB.queryRows(c, """
-					SELECT * FROM "product" WHERE "id"=1
-					""");
+				List<Map<String, Object>> results = DB.queryRows(c,
+					"SELECT * FROM " + q("product") + " WHERE " + q("id") + "=1");
 				Assertions.assertEquals(1, results.size());
 				Assertions.assertEquals("Widget", getValue(results.get(0), "name"));
 				Assertions.assertEquals(100, getValue(results.get(0), "price"));
@@ -95,17 +95,14 @@ public class UpsertsIT {
 			), List.of("id"));
 
 			// Verify it was updated
-			List<Map<String, Object>> results = DB.queryRows(c, """
-				SELECT * FROM "product" WHERE "id"=1
-				""");
+			List<Map<String, Object>> results = DB.queryRows(c,
+				"SELECT * FROM " + q("product") + " WHERE " + q("id") + "=1");
 			Assertions.assertEquals(1, results.size());
 			Assertions.assertEquals("Super Widget", getValue(results.get(0), "name"));
 			Assertions.assertEquals(150, getValue(results.get(0), "price"));
 
 			// Make sure we still only have one record
-			results = DB.queryRows(c, """
-				SELECT COUNT(*) AS cnt FROM "product"
-				""");
+			results = DB.queryRows(c, "SELECT COUNT(*) AS cnt FROM " + q("product"));
 			Assertions.assertEquals(1L, getValue(results.get(0), "cnt"));
 		});
 	}
@@ -137,9 +134,8 @@ public class UpsertsIT {
 			), List.of("id"));
 
 			// Verify both records
-			List<Map<String, Object>> results = DB.queryRows(c, """
-				SELECT * FROM "product" ORDER BY "id"
-				""");
+			List<Map<String, Object>> results = DB.queryRows(c,
+				"SELECT * FROM " + q("product") + " ORDER BY " + q("id"));
 			Assertions.assertEquals(2, results.size());
 			Assertions.assertEquals("Widget A Updated", getValue(results.get(0), "name"));
 			Assertions.assertEquals(110, getValue(results.get(0), "price"));
@@ -184,9 +180,7 @@ public class UpsertsIT {
 			Assertions.assertEquals(Integer.valueOf(75), items.get(0).quantity);
 
 			// Make sure we still only have one record
-			List<Map<String, Object>> results = DB.queryRows(c, """
-				SELECT COUNT(*) AS cnt FROM "inventory_item"
-				""");
+			List<Map<String, Object>> results = DB.queryRows(c, "SELECT COUNT(*) AS cnt FROM " + q("inventory_item"));
 			Assertions.assertEquals(1L, getValue(results.get(0), "cnt"));
 		});
 	}

@@ -1,5 +1,7 @@
 package org.pojoquery.integrationtest;
 
+import static org.pojoquery.integrationtest.TestSql.q;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -144,9 +146,7 @@ public class SingleTableInheritanceIT {
 		DataSource db = initDatabase();
 		
 		// Add a custom column 'mileage' that is not mapped to any field
-		DB.executeDDL(db, """
-			ALTER TABLE "vehicle" ADD COLUMN "mileage" INT
-			""");
+		DB.executeDDL(db, "ALTER TABLE " + q("vehicle") + " ADD COLUMN " + q("mileage") + " INT");
 		
 		DB.withConnection(db, (Connection c) -> {
 			// Insert a car with mileage
@@ -205,9 +205,7 @@ public class SingleTableInheritanceIT {
 		DataSource db = initDatabase();
 		
 		// Add a custom column 'color' that is not mapped to any field
-		DB.executeDDL(db, """
-			ALTER TABLE "vehicle" ADD COLUMN "color" VARCHAR(50)
-			""");
+		DB.executeDDL(db, "ALTER TABLE " + q("vehicle") + " ADD COLUMN " + q("color") + " VARCHAR(50)");
 		
 		DB.withConnection(db, (Connection c) -> {
 			// Insert a car with color
@@ -245,9 +243,7 @@ public class SingleTableInheritanceIT {
 		DataSource db = initDatabase();
 		
 		// Add a custom column 'notes' 
-		DB.executeDDL(db, """
-			ALTER TABLE "vehicle" ADD COLUMN "notes" VARCHAR(255)
-			""");
+		DB.executeDDL(db, "ALTER TABLE " + q("vehicle") + " ADD COLUMN " + q("notes") + " VARCHAR(255)");
 		
 		DB.withConnection(db, (Connection c) -> {
 			// Insert a base vehicle (not a subclass) with notes

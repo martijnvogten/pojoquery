@@ -1,6 +1,7 @@
 package org.pojoquery;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -11,6 +12,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 import javax.sql.DataSource;
@@ -474,8 +476,11 @@ public interface DB {
 	 */
 	@Deprecated
 	public static <PK> PK insert(DbContext context, DataSource db, String schemaName, String tableName, Map<String, ? extends Object> values) {
-		SqlExpression insertSql = SqlStatementBuilder.buildInsert(context, schemaName, tableName, values);
-		return execute(db, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null);
+		try (Connection connection = db.getConnection()) {
+			return insert(context, connection, schemaName, tableName, values);
+		} catch (SQLException e) {
+			throw new DatabaseException(e);
+		}
 	}
 
 	/**
@@ -541,6 +546,89 @@ public interface DB {
 	}
 
 	/**
+	 * Marker for {@code generatedKeyColumns} meaning "do not request generated keys
+	 * at all". Use for inserts whose generated key is of no interest, such as rows in
+	 * a junction table, where asking for keys would otherwise force the caller to be
+	 * able to name a single key column.
+	 */
+	static final String[] NO_GENERATED_KEYS = new String[0];
+
+	/**
+	 * Caches the resolved primary key column per table, keyed by catalog, schema and
+	 * table name. Schema metadata is assumed stable for the life of the JVM; call
+	 * {@link #clearPrimaryKeyCache()} after DDL that changes a table's primary key.
+	 *
+	 * <p>Held in a nested class because {@link DB} is an interface, whose fields are
+	 * implicitly public.</p>
+	 */
+	class PrimaryKeyCache {
+		static final Map<String, String> COLUMNS = new ConcurrentHashMap<>();
+		/** Marks a table known to have no single primary key column. */
+		static final String NONE = "";
+	}
+
+	/**
+	 * Clears the cached primary key column names. Intended for tests and for
+	 * applications that recreate tables at runtime.
+	 */
+	public static void clearPrimaryKeyCache() {
+		PrimaryKeyCache.COLUMNS.clear();
+	}
+
+	/**
+	 * Resolves the single primary key column of a table from JDBC metadata.
+	 *
+	 * <p>Naming the key column when preparing an INSERT is the only portable way to
+	 * read a generated key back: PostgreSQL's driver implements
+	 * {@link Statement#RETURN_GENERATED_KEYS} as {@code RETURNING *}, so an unnamed
+	 * request yields the whole inserted row and the key cannot be located by position.</p>
+	 *
+	 * @return the primary key column name, or null if the table has no primary key or
+	 *         a composite one, in which case there is no single key to return
+	 */
+	private static String resolvePrimaryKeyColumn(Connection connection, String schemaName, String tableName) {
+		try {
+			String catalog = connection.getCatalog();
+			String cacheKey = catalog + "\u0000" + schemaName + "\u0000" + tableName;
+			String cached = PrimaryKeyCache.COLUMNS.get(cacheKey);
+			if (cached != null) {
+				return PrimaryKeyCache.NONE.equals(cached) ? null : cached;
+			}
+
+			DatabaseMetaData meta = connection.getMetaData();
+			String resolved = lookupPrimaryKeyColumn(meta, catalog, schemaName, tableName);
+			if (resolved == null) {
+				// Drivers store unquoted identifiers folded to their own case. PojoQuery
+				// quotes object names, so the name as given usually matches, but retry the
+				// driver's storage case for tables created outside PojoQuery.
+				if (meta.storesUpperCaseIdentifiers()) {
+					resolved = lookupPrimaryKeyColumn(meta, catalog, schemaName, tableName.toUpperCase());
+				} else if (meta.storesLowerCaseIdentifiers()) {
+					resolved = lookupPrimaryKeyColumn(meta, catalog, schemaName, tableName.toLowerCase());
+				}
+			}
+
+			PrimaryKeyCache.COLUMNS.put(cacheKey, resolved == null ? PrimaryKeyCache.NONE : resolved);
+			return resolved;
+		} catch (SQLException e) {
+			// Metadata is unavailable; fall back to the driver's default behaviour, which
+			// execute() guards against returning an arbitrary column.
+			return null;
+		}
+	}
+
+	private static String lookupPrimaryKeyColumn(DatabaseMetaData meta, String catalog, String schemaName, String tableName)
+			throws SQLException {
+		List<String> columns = new ArrayList<>();
+		try (ResultSet rs = meta.getPrimaryKeys(catalog, schemaName, tableName)) {
+			while (rs.next()) {
+				columns.add(rs.getString("COLUMN_NAME"));
+			}
+		}
+		return columns.size() == 1 ? columns.get(0) : null;
+	}
+
+	/**
 	 * Inserts a new record into the specified table, requesting the generated key
 	 * from a specific column.
 	 *
@@ -562,10 +650,25 @@ public interface DB {
 	 */
 	public static <PK> PK insert(DbContext context, Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values, String generatedKeyColumn) {
 		SqlExpression insertSql = SqlStatementBuilder.buildInsert(context, schemaName, tableName, values);
+		String keyColumn = generatedKeyColumn != null
+				? generatedKeyColumn
+				: resolvePrimaryKeyColumn(connection, schemaName, tableName);
 		return execute(context, connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null,
-				generatedKeyColumn == null ? null : new String[] { generatedKeyColumn });
+				keyColumn == null ? null : new String[] { keyColumn });
 	}
 	
+	/**
+	 * Inserts a record without requesting a generated key.
+	 *
+	 * <p>For tables that have no single generated key to read back, such as junction
+	 * tables with a composite primary key.</p>
+	 */
+	static void insertWithoutGeneratedKeys(DbContext context, Connection connection, String schemaName, String tableName,
+			Map<String, ? extends Object> values) {
+		SqlExpression insertSql = SqlStatementBuilder.buildInsert(context, schemaName, tableName, values);
+		execute(context, connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null, NO_GENERATED_KEYS);
+	}
+
 	/**
 	 * Inserts a new record into the specified table using a connection.
 	 *
@@ -662,8 +765,11 @@ public interface DB {
      */
     @Deprecated
     public static <PK> PK upsert(DbContext context, DataSource db, String schemaName, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
-        SqlExpression upsertSql = SqlStatementBuilder.buildUpsert(context, schemaName, tableName, values, idFields);
-        return execute(db, QueryType.INSERT, upsertSql.getSql(), upsertSql.getParameters(), null);
+        try (Connection connection = db.getConnection()) {
+            return upsert(context, connection, schemaName, tableName, values, idFields);
+        } catch (SQLException e) {
+            throw new DatabaseException(e);
+        }
     }
 
 	/**
@@ -695,7 +801,12 @@ public interface DB {
      */
     public static <PK> PK upsert(DbContext context, Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values, List<String> idFields) {
         SqlExpression upsertSql = SqlStatementBuilder.buildUpsert(context, schemaName, tableName, values, idFields);
-        return execute(connection, QueryType.INSERT, upsertSql.getSql(), upsertSql.getParameters(), null);
+        // A single id field is the key column; naming it keeps the generated key readable
+        // on drivers that would otherwise return the whole row.
+        String[] keyColumns = idFields != null && idFields.size() == 1
+                ? new String[] { idFields.get(0) }
+                : null;
+        return execute(context, connection, QueryType.INSERT, upsertSql.getSql(), upsertSql.getParameters(), null, keyColumns);
     }
 
 	/**
@@ -900,6 +1011,27 @@ public interface DB {
 	}
 
 	/**
+	 * Prepares a statement, requesting generated keys only when they can actually be
+	 * identified.
+	 *
+	 * @param generatedKeyColumns null to let the driver decide, {@link #NO_GENERATED_KEYS}
+	 *                            to suppress generated keys, or the key columns to return
+	 */
+	private static PreparedStatement prepareStatement(Connection connection, QueryType type, String sql, String[] generatedKeyColumns)
+			throws SQLException {
+		if (type != QueryType.INSERT) {
+			return connection.prepareStatement(sql, Statement.NO_GENERATED_KEYS);
+		}
+		if (generatedKeyColumns == null) {
+			return connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+		}
+		if (generatedKeyColumns.length == 0) {
+			return connection.prepareStatement(sql, Statement.NO_GENERATED_KEYS);
+		}
+		return connection.prepareStatement(sql, generatedKeyColumns);
+	}
+
+	/**
 	 * Executes a query, optionally requesting generated keys from specific columns.
 	 *
 	 * @param generatedKeyColumns for INSERT statements, the columns to return as
@@ -918,14 +1050,7 @@ public interface DB {
 			}
 			startTime = System.nanoTime();
 		}
-		try (PreparedStatement stmt = type == QueryType.INSERT && generatedKeyColumns != null
-				? connection.prepareStatement(sql, generatedKeyColumns)
-				: connection.prepareStatement(
-					sql,
-					type == QueryType.INSERT
-						? Statement.RETURN_GENERATED_KEYS
-						: Statement.NO_GENERATED_KEYS
-				)) {
+		try (PreparedStatement stmt = prepareStatement(connection, type, sql, generatedKeyColumns)) {
 			if (params != null) {
 				applyParameters(context, params, stmt);
 			}
@@ -944,10 +1069,23 @@ public interface DB {
 				case INSERT:
 					stmt.executeUpdate();
 					success = true;
+					if (generatedKeyColumns != null && generatedKeyColumns.length == 0) {
+						return null;
+					}
 					try (ResultSet keysResult = stmt.getGeneratedKeys()) {
 						if (keysResult != null) {
 							try {
 								if (keysResult.next()) {
+									if (generatedKeyColumns == null && keysResult.getMetaData().getColumnCount() > 1) {
+										// The driver returned the whole inserted row (PostgreSQL does this for
+										// RETURN_GENERATED_KEYS) and no key column was named, so the key cannot
+										// be located by position. Report "no key" rather than an arbitrary
+										// column: a null id fails where it is used, a wrong id corrupts data.
+										// This is the same answer MySQL gives for a table with no generated key.
+										LOG.debug("[{}] no identifiable generated key: driver returned {} columns"
+											+ " and no key column was named", connId, keysResult.getMetaData().getColumnCount());
+										return null;
+									}
 									Object key = keysResult.getObject(1);
 									// MySQL returns BigInteger for auto-generated keys, normalize to Long
 									if (key instanceof Number) {

@@ -1,5 +1,6 @@
 package org.pojoquery.integrationtest;
 
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.util.ArrayList;
@@ -343,6 +344,9 @@ public class StatsQueriesIT {
 	}
 
 	@Test
+	// GROUP_CONCAT(... SEPARATOR ...) is MySQL syntax; PostgreSQL spells this STRING_AGG
+	// and HSQLDB GROUP_CONCAT(... SEPARATOR ...) is not supported the same way.
+	@EnabledIfSystemProperty(named = "test.database", matches = "mysql")
 	public void testFilmMultiSetStats() {
 		DataSource db = initFilmDomain();
 
