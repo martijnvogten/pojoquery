@@ -128,6 +128,126 @@ public class TestFromAnnotation {
 		});
 	}
 
+	/**
+	 * A projection that declares a field the source relation also has must not
+	 * carry both nodes: they join the same table under the same alias, which no
+	 * database accepts.
+	 */
+	@From(TeamWithMembers.class)
+	static class TeamWithMembersAndCount {
+		@Id Long id;
+		String name;
+		java.util.List<Member> members;
+	}
+
+	@Test
+	public void testDeclaredFieldReplacesSourceJoin() {
+		String sql = PojoQuery.build(TeamWithMembersAndCount.class).toSql();
+		assertEquals(1, countOccurrences(sql, "AS \"members\""),
+				"The members table must be joined exactly once:\n" + sql);
+	}
+
+	private static int countOccurrences(String haystack, String needle) {
+		int count = 0;
+		for (int i = haystack.indexOf(needle); i >= 0; i = haystack.indexOf(needle, i + needle.length())) {
+			count++;
+		}
+		return count;
+	}
+
+	/**
+	 * A {@code @From} aggregate projection nested under an ordinary root: the
+	 * root's own scalars plus the aggregates, fetched as one JSON document per
+	 * root and hydrated back into the nested projection object.
+	 */
+	@Table("department")
+	static class Department {
+		@Id Long id;
+		String name;
+		String location;
+	}
+
+	@Table("employee")
+	static class Employee {
+		@Id Long id;
+		String name;
+		BigDecimal salary;
+		Department department;
+	}
+
+	static class DepartmentWithEmployees extends Department {
+		List<Employee> employees;
+	}
+
+	@From(DepartmentWithEmployees.class)
+	static class EmployeeStats {
+		@Id Long id;
+
+		@Aggregate("COUNT({employees.id})")
+		Long headcount;
+
+		@Aggregate("AVG({employees.salary})")
+		BigDecimal avgSalary;
+
+		@Aggregate("MAX({employees.salary})")
+		BigDecimal topSalary;
+	}
+
+	static class DepartmentWithStats extends Department {
+		EmployeeStats stats;
+	}
+
+	@Test
+	public void testAggregateProjectionUnderNormalRootAsJson() {
+		JDBCDataSource ds = new JDBCDataSource();
+		ds.setURL("jdbc:hsqldb:mem:testdeptstats");
+
+		SchemaGenerator.createTables(ds, DepartmentWithEmployees.class, Employee.class);
+
+		DB.withConnection(ds, c -> {
+			Department engineering = new Department();
+			engineering.name = "Engineering";
+			engineering.location = "Utrecht";
+			PojoQuery.insert(c, engineering);
+
+			Department sales = new Department();
+			sales.name = "Sales";
+			sales.location = "Amsterdam";
+			PojoQuery.insert(c, sales);
+
+			insertEmployee(c, engineering, "Alice", "50000");
+			insertEmployee(c, engineering, "Bob", "70000");
+			insertEmployee(c, sales, "Carol", "40000");
+
+			List<DepartmentWithStats> departments = PojoQuery.build(DepartmentWithStats.class)
+				.addOrderBy("{department.name}")
+				.executeMultiSet(c);
+
+			assertEquals(2, departments.size());
+
+			DepartmentWithStats first = departments.get(0);
+			assertEquals("Engineering", first.name);
+			assertEquals("Utrecht", first.location);
+			assertNotNull(first.stats);
+			assertEquals(2L, first.stats.headcount);
+			assertEquals(0, new BigDecimal("60000").compareTo(first.stats.avgSalary));
+			assertEquals(0, new BigDecimal("70000").compareTo(first.stats.topSalary));
+
+			DepartmentWithStats second = departments.get(1);
+			assertEquals("Sales", second.name);
+			assertEquals(1L, second.stats.headcount);
+			assertEquals(0, new BigDecimal("40000").compareTo(second.stats.topSalary));
+		});
+	}
+
+	private static void insertEmployee(java.sql.Connection c, Department department, String name, String salary) {
+		Employee employee = new Employee();
+		employee.name = name;
+		employee.salary = new BigDecimal(salary);
+		employee.department = department;
+		PojoQuery.insert(c, employee);
+	}
+
 	// --- Join Pruning Test ---
 	
 	@Table("product")

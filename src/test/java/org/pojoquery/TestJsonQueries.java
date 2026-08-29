@@ -9,9 +9,11 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.DbContextBuilder;
+import org.pojoquery.annotations.Aggregate;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
+import org.pojoquery.annotations.From;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Recursive;
@@ -851,6 +853,75 @@ public class TestJsonQueries {
 					.toJsonArrayStatement().layout().toString();
 			assertEquals(grouped, correlated, dialect + " layout must not depend on the join strategy");
 		}
+	}
+
+	@Table("department")
+	public static class Department {
+		@Id
+		public Long id;
+		public String name;
+	}
+
+	@Table("employee")
+	public static class Employee {
+		@Id
+		public Long id;
+		public String name;
+		public java.math.BigDecimal salary;
+		public Department department;
+	}
+
+	public static class DepartmentWithEmployees extends Department {
+		public List<Employee> employees;
+	}
+
+	@From(DepartmentWithEmployees.class)
+	public static class EmployeeStats {
+		@Id
+		public Long id;
+
+		@Aggregate("COUNT({employees.id})")
+		public Long headcount;
+
+		@Aggregate("AVG({employees.salary})")
+		public java.math.BigDecimal avgSalary;
+	}
+
+	public static class DepartmentWithStats extends Department {
+		public EmployeeStats stats;
+	}
+
+	/**
+	 * A field whose type carries {@code @From} aggregates rows, so its subquery
+	 * stays a flat statement and is joined as a derived table. It yields one row
+	 * per parent, so the document nests it as a plain object - no array, and no
+	 * grouping in the outer query.
+	 */
+	@Test
+	public void testAggregateProjectionAsNestedObject() {
+		String sql = PojoQuery.build(grouped(Dialect.HSQLDB), DepartmentWithStats.class).toJsonSql();
+		assertEquals(norm("""
+				SELECT
+				 JSON_OBJECT(
+				  'id': "department"."id",
+				  'name': "department"."name",
+				  'stats': JSON_OBJECT(
+				   'id': "stats"."id",
+				   'headcount': "stats"."headcount",
+				   'avgSalary': "stats"."avgSalary"
+				  )
+				 ) AS "json"
+				FROM "department" AS "department"
+				LEFT JOIN (
+				 SELECT
+				  "department"."id" AS "id",
+				  COUNT("employees"."id") AS "headcount",
+				  AVG("employees"."salary") AS "avgSalary"
+				 FROM "department" AS "department"
+				 LEFT JOIN "employee" AS "employees" ON "employees"."department_id" = "department"."id"
+				 GROUP BY "department"."id"
+				) AS "stats" ON "department"."id" = "stats"."id"
+				"""), norm(sql));
 	}
 
 	/** A dialect without LATERAL keeps the grouped form. */

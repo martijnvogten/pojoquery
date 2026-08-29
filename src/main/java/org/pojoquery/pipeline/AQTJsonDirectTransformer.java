@@ -23,6 +23,7 @@ import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
+import org.pojoquery.pipeline.AbstractQueryTree.SubQueryJoin;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableInfo;
@@ -260,6 +261,8 @@ public class AQTJsonDirectTransformer {
 						"{" + sti.sourceAlias() + "." + sti.discriminatorColumn() + "} = '"
 								+ DbContext.escapeSqlStringLiteral(String.valueOf(sti.discriminatorValue())) + "'");
 				variants.add(new SubClassVariant(condition, sti.type().getSimpleName(), extras, extraSlots));
+			} else if (child instanceof SubQueryJoin subQueryJoin) {
+				slots.add(addSubQueryJoin(subQueryJoin, query));
 			} else if (child instanceof EntityReference reference) {
 				slots.add(addEntityReference(reference, query));
 			} else if (child instanceof ValueCollection collection) {
@@ -321,6 +324,25 @@ public class AQTJsonDirectTransformer {
 	 * document of all nulls is how an absent node already reaches the hydrator
 	 * from an unmatched LEFT JOIN in a flat query.</p>
 	 */
+	/**
+	 * A field whose type carries {@code @From}: an aggregate projection over its
+	 * own source relation, joined as a derived table on the parent's key.
+	 *
+	 * <p>The subquery aggregates rows, not documents, so it is built as a flat
+	 * statement by {@link AQTTransformer} and joined here unchanged. It yields one
+	 * row per parent, so nothing needs grouping in the outer query and its columns
+	 * stay addressable by WHERE and ORDER BY - the projection's fields nest as a
+	 * plain object, exactly as a many-to-one reference does.</p>
+	 */
+	private static DocumentSlot addSubQueryJoin(SubQueryJoin subQueryJoin, JsonSqlQuery query) {
+		DefaultSqlQuery plainSubQuery = new DefaultSqlQuery(query.getDbContext());
+		AQTTransformer.toSql(subQueryJoin.subQueryTree(), plainSubQuery, true);
+		query.addSubQueryJoin(subQueryJoin.joinType(), plainSubQuery.toStatement(), subQueryJoin.alias(),
+				subQueryJoin.joinCondition());
+		Document document = buildDocument(subQueryJoin, query);
+		return DocumentSlot.nested(subQueryJoin.field().getName(), document.value(), document.layout());
+	}
+
 	private static DocumentSlot addEntityReference(EntityReference reference, JsonSqlQuery query) {
 		query.addTableJoin(JoinType.LEFT, reference.tableInfo(), reference.alias(),
 				reference.join().joinCondition());
