@@ -5,8 +5,6 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import org.pojoquery.DbContext.Dialect;
-import org.pojoquery.DbContext.JsonProperty;
-import org.pojoquery.DbContext.JsonVariant;
 import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumnMetadata;
 import org.pojoquery.pipeline.SimpleFieldMapping;

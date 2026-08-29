@@ -1,6 +1,5 @@
 package org.pojoquery.integrationtest;
 
-import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import java.util.List;
 import java.util.Map;
 
@@ -9,12 +8,12 @@ import javax.sql.DataSource;
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.pojoquery.DB;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.SqlExpression;
 import org.pojoquery.annotations.Id;
 import org.pojoquery.annotations.Table;
-import org.pojoquery.integrationtest.db.TestDatabaseProvider;
 import org.pojoquery.schema.SchemaGenerator;
 
 // Uses HSQLDB-specific CREATE SCHEMA syntax and builds its own HSQLDB DataSource.

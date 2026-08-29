@@ -8,7 +8,6 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext.Dialect;
-import org.pojoquery.DbContextBuilder;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
