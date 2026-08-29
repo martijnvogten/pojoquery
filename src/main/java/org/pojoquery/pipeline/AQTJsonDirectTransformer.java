@@ -39,9 +39,17 @@ import org.pojoquery.typemodel.FieldModel;
  * <p>This is the JSON counterpart of {@link AQTTransformer#toSql}. Scalar
  * fields become JSON object properties, references and embedded entities
  * become nested objects, and collections become nested arrays. Collections are
- * pushed into derived-table joins that group by the foreign key, so the outer
- * query stays at one row per root entity and multiple collections don't
- * multiply into a cross product.</p>
+ * pushed into derived-table joins, so the outer query stays at one row per root
+ * entity and multiple collections don't multiply into a cross product.</p>
+ *
+ * <p>A collection's derived table is correlated with the outer row through
+ * {@code LATERAL} where the dialect has it, and otherwise aggregates the whole
+ * child table grouped by the foreign key. The two produce identical documents;
+ * they differ in cost. The grouped form's work is independent of how many roots
+ * the WHERE selects, so fetching one root still aggregates every child row,
+ * while the correlated form reaches the child by its foreign key index - the
+ * access path a joined query uses, without the fan-out. See
+ * {@link DbContext#supportsLateralJoins()}.</p>
  *
  * <p>Inheritance is supported for both strategies: subclass-specific fields
  * are only present in the JSON output for rows of that subclass, and a
@@ -328,24 +336,70 @@ public class AQTJsonDirectTransformer {
 	}
 
 	/**
-	 * One-to-many: the foreign key lives in the child table. Wrap the child in a
-	 * subquery that groups by the FK so the outer query stays at one row per
-	 * parent.
+	 * Ties a collection's subquery to its parent, correlated where the dialect
+	 * has {@code LATERAL} and grouped otherwise.
+	 *
+	 * <p>Both forms leave the outer query at one row per parent; they differ in
+	 * what the database does to get there. Grouped, the subquery aggregates the
+	 * whole child table and the join picks out the matching group, so its cost
+	 * does not fall when the WHERE selects fewer parents. Correlated, the
+	 * aggregate runs per parent row and reaches the child through its foreign
+	 * key index - the access path a joined query uses, without the fan-out.</p>
+	 *
+	 * <p>Both forms keep the {@code GROUP BY}. It is not there to separate
+	 * parents in the correlated form - the WHERE has already done that - but to
+	 * make an empty collection produce <em>no row</em>, so the outer
+	 * {@link #coalesceEmptyArray} sees SQL NULL and yields {@code []}. Without
+	 * it the aggregate runs over an empty set, and dialects disagree about what
+	 * that returns: HSQLDB gives JSON {@code null}, which is not SQL NULL and so
+	 * passes straight through COALESCE.</p>
+	 *
+	 * @param correlation relates child to parent: the ON condition of the
+	 *                    grouped form, the WHERE of the correlated one
+	 * @param fkColumn    the foreign key, which only the grouped form selects -
+	 *                    the correlated form's parent is already known
+	 */
+	private static void correlateOrGroup(JsonSqlQuery subQuery, SqlExpression correlation, String fkColumn,
+			String fkExpression, boolean lateral) {
+		if (lateral) {
+			subQuery.addWhere(correlation);
+		} else {
+			subQuery.addField(SqlExpression.sql(fkExpression), fkColumn);
+		}
+		subQuery.setGroupBy(List.of(fkExpression));
+	}
+
+	/** Joins a built collection subquery, matching the strategy chosen above. */
+	private static void attachCollection(JsonSqlQuery query, JsonSqlQuery subQuery, String alias,
+			SqlExpression joinCondition, boolean lateral) {
+		if (lateral) {
+			query.addLateralSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), alias);
+		} else {
+			query.addSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), alias, joinCondition);
+		}
+	}
+
+	/**
+	 * One-to-many: the foreign key lives in the child table.
+	 *
+	 * <p>The join condition reads {@code {child.fk} = {parent.id}} and the
+	 * subquery's own table alias <em>is</em> {@code child}, so the same
+	 * expression serves as the correlated WHERE and as the grouped form's ON
+	 * condition.</p>
 	 */
 	private static DocumentSlot addEntityCollection(EntityCollection collection, JsonSqlQuery query) {
+		boolean lateral = query.getDbContext().supportsLateralJoins();
 		JsonSqlQuery subQuery = query.startSubQuery();
 		subQuery.setTable(collection.tableInfo(), collection.alias());
 		subQuery.setAggregated(true);
 
 		String fkColumn = collection.join().fkColumnName();
-		String fkExpression = "{" + collection.alias() + "." + fkColumn + "}";
-		subQuery.addField(SqlExpression.sql(fkExpression), fkColumn);
-		subQuery.setGroupBy(List.of(fkExpression));
+		correlateOrGroup(subQuery, collection.join().joinCondition(), fkColumn,
+				"{" + collection.alias() + "." + fkColumn + "}", lateral);
 		Document document = buildDocument(collection, subQuery);
 		subQuery.setJsonValue(document.value());
 
-		query.addSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), collection.alias(),
-				collection.join().joinCondition());
+		attachCollection(query, subQuery, collection.alias(), collection.join().joinCondition(), lateral);
 		return DocumentSlot.collection(collection.field().getName(),
 				coalesceEmptyArray(query, collection.alias()), document.layout());
 	}
@@ -358,6 +412,7 @@ public class AQTJsonDirectTransformer {
 	 */
 	private static DocumentSlot addJoinTableEntityCollection(TableNode parent, JoinTableEntityCollection collection,
 			JsonSqlQuery query) {
+		boolean lateral = query.getDbContext().supportsLateralJoins();
 		JsonSqlQuery subQuery = query.startSubQuery();
 		subQuery.setAggregated(true);
 
@@ -368,15 +423,21 @@ public class AQTJsonDirectTransformer {
 		subQuery.setTable(collection.join().joinTableInfo().tableInfo(), junctionAlias);
 		subQuery.addTableJoin(JoinType.LEFT, collection.join().childKey().targetTable(), collection.alias(),
 				collection.join().childKey().joinCondition());
-		String fkExpression = "{" + junctionAlias + "." + parentFkColumn + "}";
-		subQuery.addField(SqlExpression.sql(fkExpression), parentFkColumn);
-		subQuery.setGroupBy(List.of(fkExpression));
+
+		// The two conditions differ in which table carries the parent's key.
+		// Outside, the derived table republishes it under the collection alias;
+		// inside, it is still a column of the junction table.
+		SqlExpression onCondition = SqlExpression.sql(
+				"{" + collection.alias() + "." + parentFkColumn + "} = {" + parent.alias() + "." + parentIdColumn + "}");
+		SqlExpression correlation = SqlExpression.sql(
+				"{" + junctionAlias + "." + parentFkColumn + "} = {" + parent.alias() + "." + parentIdColumn + "}");
+
+		correlateOrGroup(subQuery, correlation, parentFkColumn,
+				"{" + junctionAlias + "." + parentFkColumn + "}", lateral);
 		Document document = buildDocument(collection, subQuery);
 		subQuery.setJsonValue(document.value());
 
-		SqlExpression onCondition = SqlExpression.sql(
-				"{" + collection.alias() + "." + parentFkColumn + "} = {" + parent.alias() + "." + parentIdColumn + "}");
-		query.addSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), collection.alias(), onCondition);
+		attachCollection(query, subQuery, collection.alias(), onCondition, lateral);
 		return DocumentSlot.collection(collection.field().getName(),
 				coalesceEmptyArray(query, collection.alias()), document.layout());
 	}
@@ -450,18 +511,17 @@ public class AQTJsonDirectTransformer {
 	 * expression into a JSON array, grouped by the foreign key.
 	 */
 	private static DocumentSlot addValueCollection(ValueCollection collection, JsonSqlQuery query) {
+		boolean lateral = query.getDbContext().supportsLateralJoins();
 		JsonSqlQuery subQuery = query.startSubQuery();
 		subQuery.setTable(collection.joinTable(), collection.alias());
 		subQuery.setAggregated(true);
 
 		String fkColumn = collection.join().fkColumnName();
-		String fkExpression = "{" + collection.alias() + "." + fkColumn + "}";
-		subQuery.addField(SqlExpression.sql(fkExpression), fkColumn);
-		subQuery.setGroupBy(List.of(fkExpression));
+		correlateOrGroup(subQuery, collection.join().joinCondition(), fkColumn,
+				"{" + collection.alias() + "." + fkColumn + "}", lateral);
 		subQuery.setJsonValue(collection.expression());
 
-		query.addSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), collection.alias(),
-				collection.join().joinCondition());
+		attachCollection(query, subQuery, collection.alias(), collection.join().joinCondition(), lateral);
 		return DocumentSlot.valueCollection(collection.alias(), collection.field().getName(),
 				coalesceEmptyArray(query, collection.alias()),
 				collection.componentType() == null ? null : collection.componentType().getReflectionClass());

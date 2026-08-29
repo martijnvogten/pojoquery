@@ -50,8 +50,13 @@ public class JsonSqlQuery {
 			implements JsonJoin {
 	}
 
-	public static record SubQueryJoin(JoinType type, SqlExpression subquery, String alias, SqlExpression joinCondition)
-			implements JsonJoin {
+	/**
+	 * @param lateral whether the subquery is correlated with the rows of the
+	 *                statement it is joined to, and so must be introduced with
+	 *                {@code LATERAL}
+	 */
+	public static record SubQueryJoin(JoinType type, SqlExpression subquery, String alias,
+			SqlExpression joinCondition, boolean lateral) implements JsonJoin {
 	}
 
 	private final DbContext dbContext;
@@ -147,7 +152,25 @@ public class JsonSqlQuery {
 	}
 
 	public void addSubQueryJoin(JoinType type, SqlExpression subquery, String alias, SqlExpression joinCondition) {
-		joins.add(new SubQueryJoin(type, subquery, alias, joinCondition));
+		joins.add(new SubQueryJoin(type, subquery, alias, joinCondition, false));
+	}
+
+	/**
+	 * Joins a subquery that is correlated with this statement's rows.
+	 *
+	 * <p>It needs no join condition: an aggregate without {@code GROUP BY}
+	 * produces exactly one row even over an empty correlated set, so the join
+	 * matches every parent row and the correlation lives in the subquery's own
+	 * WHERE. A parent with no elements gets a NULL aggregate, which the caller
+	 * coalesces to an empty array exactly as it does for an unmatched grouped
+	 * subquery.</p>
+	 *
+	 * @param type     the join type
+	 * @param subquery the correlated subquery
+	 * @param alias    the alias to expose it under
+	 */
+	public void addLateralSubQueryJoin(JoinType type, SqlExpression subquery, String alias) {
+		joins.add(new SubQueryJoin(type, subquery, alias, SqlExpression.sql("TRUE"), true));
 	}
 
 	public void addWhere(SqlExpression where) {
@@ -213,7 +236,7 @@ public class JsonSqlQuery {
 			List<SqlExpression> joinParts = new ArrayList<>();
 			joinParts.add(SqlExpression.sql("\n" + join.type().name() + " JOIN "));
 			if (join instanceof SubQueryJoin subQueryJoin) {
-				joinParts.add(SqlExpression.sql("(\n"));
+				joinParts.add(SqlExpression.sql(subQueryJoin.lateral() ? "LATERAL (\n" : "(\n"));
 				joinParts.add(subQueryJoin.subquery());
 				joinParts.add(SqlExpression.sql("\n)"));
 			} else if (join instanceof TableJoin tableJoin) {

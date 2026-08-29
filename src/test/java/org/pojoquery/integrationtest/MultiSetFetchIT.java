@@ -18,6 +18,7 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DB;
 import org.pojoquery.DbContext;
+import org.pojoquery.DbContextBuilder;
 import org.pojoquery.PojoQuery;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
@@ -293,6 +294,61 @@ public class MultiSetFetchIT {
 				.map(m -> m.movieId + "|" + m.title + "|"
 						+ (m.stars == null ? "" : m.stars.stream().map(s -> s.name).sorted().toList()))
 				.toList().toString();
+	}
+
+	/**
+	 * A collection can be fetched two ways: correlated through {@code LATERAL},
+	 * or aggregated over the whole child table and grouped by the foreign key.
+	 * They differ only in what the database is asked to do, so all three fetches
+	 * here must return the same object graph - scalars, nested references,
+	 * embedded objects, value collections and empty collections alike.
+	 */
+	@Test
+	public void testCorrelatedAndGroupedCollectionsAgree() {
+		DataSource db = TestDatabaseProvider.getDataSource();
+		DbContext context = TestDatabaseProvider.getDbContext();
+		DbContext correlated = new DbContextBuilder().dialect(context.getDialect()).lateralJoins(true).build();
+		DbContext grouped = new DbContextBuilder().dialect(context.getDialect()).lateralJoins(false).build();
+
+		SchemaGenerator.createTables(db, AuthorWithBooks.class, Publisher.class);
+		DB.runInTransaction(db, connection -> {
+			Publisher acme = new Publisher();
+			acme.name = "Acme";
+			PojoQuery.insert(connection, acme);
+
+			AuthorWithBooks alice = new AuthorWithBooks();
+			alice.name = "Alice";
+			alice.address = new Address();
+			alice.address.city = "Utrecht";
+			alice.address.country = "NL";
+			alice.publisher = acme;
+			alice.books = List.of(book("Dune", 1, "12.3456", LocalDate.of(1965, 6, 1),
+					LocalDateTime.of(2024, 1, 2, 3, 4, 5), true),
+					book("Ubik", null, "9.99", null, null, false));
+			alice.awards = List.of("hugo", "nebula");
+			PojoQuery.insert(connection, alice);
+
+			AuthorWithBooks bob = new AuthorWithBooks();   // empty collections, no publisher
+			bob.name = "Bob";
+			bob.address = new Address();
+			bob.books = List.of();
+			bob.awards = List.of();
+			PojoQuery.insert(connection, bob);
+		});
+
+		String joined = describe(PojoQuery.build(context, AuthorWithBooks.class)
+				.addOrderBy("{this.name}").execute(db));
+		String viaLateral = describe(PojoQuery.build(correlated, AuthorWithBooks.class)
+				.addOrderBy("{this.name}").executeMultiSet(db));
+		String viaGrouping = describe(PojoQuery.build(grouped, AuthorWithBooks.class)
+				.addOrderBy("{this.name}").executeMultiSet(db));
+
+		assertEquals(joined, viaLateral, "correlated fetch must match the joined fetch");
+		assertEquals(joined, viaGrouping, "grouped fetch must match the joined fetch");
+
+		// The strategies really are different statements, not the same one twice.
+		assertTrue(PojoQuery.build(correlated, AuthorWithBooks.class).toJsonSql().contains("LATERAL"));
+		assertTrue(!PojoQuery.build(grouped, AuthorWithBooks.class).toJsonSql().contains("LATERAL"));
 	}
 
 	// ========== @Recursive over the document path ==========

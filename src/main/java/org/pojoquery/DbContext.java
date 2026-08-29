@@ -503,6 +503,26 @@ public interface DbContext {
 	}
 
 	/**
+	 * Whether the dialect accepts a {@code LATERAL} derived table in a join.
+	 *
+	 * <p>A JSON query fetches each collection through a derived table. Grouped,
+	 * that table aggregates the <em>whole</em> child table and the join picks out
+	 * the matching group, so its cost does not fall when the WHERE selects fewer
+	 * roots. Correlated through {@code LATERAL}, the aggregate runs per root row
+	 * and reaches the child by its foreign key index - the same access path a
+	 * joined query uses, without the fan-out.</p>
+	 *
+	 * <p>PostgreSQL, HSQLDB and MySQL 8.0.14+ accept it. Older MySQL does not;
+	 * point such a connection at a context built with
+	 * {@code DbContextBuilder.lateralJoins(false)} to keep the grouped form.</p>
+	 *
+	 * @return true if collection subqueries may be correlated
+	 */
+	default boolean supportsLateralJoins() {
+		return true;
+	}
+
+	/**
 	 * Marks an expression that already produces JSON (e.g. a reference to a
 	 * subquery's JSON column) for use as a JSON object property value, so the
 	 * value is embedded as JSON rather than escaped as a string.

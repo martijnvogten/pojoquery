@@ -8,6 +8,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.pojoquery.DbContext.Dialect;
+import org.pojoquery.DbContextBuilder;
 import org.pojoquery.annotations.DiscriminatorColumn;
 import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
@@ -60,9 +61,20 @@ public class TestJsonQueries {
 		public Integer numberOfBeds;
 	}
 
+	/**
+	 * A context that keeps collection subqueries grouped rather than correlated,
+	 * so the tests below pin the SQL of the form a dialect without
+	 * {@code LATERAL} gets. The correlated form is pinned by
+	 * {@code testLateral*} and the two are compared in
+	 * {@link #testBothCollectionStrategiesAgreeOnLayout()}.
+	 */
+	private static DbContext grouped(Dialect dialect) {
+		return new DbContextBuilder().dialect(dialect).lateralJoins(false).build();
+	}
+
 	@Test
 	public void testCollectionHsqldb() {
-		String sql = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), User.class).toJsonSql();
+		String sql = PojoQuery.build(grouped(Dialect.HSQLDB), User.class).toJsonSql();
 		assertEquals(norm("""
 				SELECT
 				 JSON_OBJECT(
@@ -89,7 +101,7 @@ public class TestJsonQueries {
 
 	@Test
 	public void testCollectionMysql() {
-		String sql = PojoQuery.build(DbContext.forDialect(Dialect.MYSQL), User.class).toJsonSql();
+		String sql = PojoQuery.build(grouped(Dialect.MYSQL), User.class).toJsonSql();
 		assertEquals(norm("""
 				SELECT
 				 JSON_OBJECT(
@@ -116,7 +128,7 @@ public class TestJsonQueries {
 
 	@Test
 	public void testCollectionPostgres() {
-		String sql = PojoQuery.build(DbContext.forDialect(Dialect.POSTGRES), User.class).toJsonSql();
+		String sql = PojoQuery.build(grouped(Dialect.POSTGRES), User.class).toJsonSql();
 		assertEquals(norm("""
 				SELECT
 				 JSONB_BUILD_OBJECT(
@@ -271,7 +283,7 @@ public class TestJsonQueries {
 	 */
 	@Test
 	public void testFieldNameMappedColumnsResolveInJsonQuery() {
-		String sql = PojoQuery.build(DbContext.forDialect(Dialect.MYSQL), FilmWithActors.class)
+		String sql = PojoQuery.build(grouped(Dialect.MYSQL), FilmWithActors.class)
 				.addWhere("{this.title} = ?", "Alien")
 				.toJsonSql();
 		assertEquals(norm("""
@@ -611,7 +623,7 @@ public class TestJsonQueries {
 	 */
 	@Test
 	public void testArrayShapeHsqldb() {
-		PojoQuery.JsonArrayQuery query = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), User.class)
+		PojoQuery.JsonArrayQuery query = PojoQuery.build(grouped(Dialect.HSQLDB), User.class)
 				.toJsonArrayStatement();
 		assertEquals("user{id, username, roles[]:roles{id, rolename}}", query.layout().toString());
 		assertEquals(norm("""
@@ -642,7 +654,7 @@ public class TestJsonQueries {
 
 	@Test
 	public void testArrayShapePostgres() {
-		PojoQuery.JsonArrayQuery query = PojoQuery.build(DbContext.forDialect(Dialect.POSTGRES), User.class)
+		PojoQuery.JsonArrayQuery query = PojoQuery.build(grouped(Dialect.POSTGRES), User.class)
 				.toJsonArrayStatement();
 		assertEquals(norm("""
 				SELECT
@@ -712,5 +724,141 @@ public class TestJsonQueries {
 		String sql = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), User.class).toJsonSql();
 		assertEquals(true, sql.contains("JSON_OBJECT("));
 		assertEquals(false, sql.contains("JSON_ARRAY(\n"));
+	}
+
+	// ========== Correlated collections (LATERAL) ==========
+
+	@Table("screening")
+	public static class Screening {
+		@Id
+		public Long id;
+		public String room;
+	}
+
+	public static class FilmWithScreenings extends Film {
+		public List<Screening> screenings;
+	}
+
+	/**
+	 * The default where the dialect has {@code LATERAL}: the collection subquery
+	 * is correlated rather than grouped, so it aggregates only the rows of the
+	 * parent at hand. The junction's foreign key is no longer selected and no
+	 * longer grouped by, and the condition that was the join's ON clause becomes
+	 * the subquery's WHERE - naming the junction table, which is where the
+	 * parent's key lives inside the subquery.
+	 */
+	@Test
+	public void testLateralCollectionMysql() {
+		String sql = PojoQuery.build(DbContext.forDialect(Dialect.MYSQL), User.class).toJsonSql();
+		assertEquals(norm("""
+				SELECT
+				 JSON_OBJECT(
+				  'id', `user`.`id`,
+				  'username', `user`.`username`,
+				  'roles', COALESCE(`roles`.`json`, JSON_ARRAY())
+				 ) AS `json`
+				FROM `user` AS `user`
+				LEFT JOIN LATERAL (
+				 SELECT
+				  JSON_ARRAYAGG(
+				   JSON_OBJECT(
+				    'id', `roles`.`id`,
+				    'rolename', `roles`.`rolename`
+				   )
+				  ) AS `json`
+				 FROM `user_role` AS `roles.user_role`
+				 LEFT JOIN `role` AS `roles` ON `roles.user_role`.`role_id` = `roles`.`id`
+				 WHERE `roles.user_role`.`user_id` = `user`.`id`
+				 GROUP BY `roles.user_role`.`user_id`
+				) AS `roles` ON TRUE
+				"""), norm(sql));
+	}
+
+	/** The array shape correlates identically: document shape and join strategy are independent. */
+	@Test
+	public void testLateralArrayShapePostgres() {
+		PojoQuery.JsonArrayQuery query = PojoQuery.build(DbContext.forDialect(Dialect.POSTGRES), User.class)
+				.toJsonArrayStatement();
+		assertEquals("user{id, username, roles[]:roles{id, rolename}}", query.layout().toString());
+		assertEquals(norm("""
+				SELECT
+				 JSONB_BUILD_ARRAY(
+				  CAST("user"."id" AS TEXT),
+				  "user"."username",
+				  COALESCE("roles"."json", '[]'::jsonb)
+				 ) AS "json"
+				FROM "user" AS "user"
+				LEFT JOIN LATERAL (
+				 SELECT
+				  JSONB_AGG(
+				   JSONB_BUILD_ARRAY(
+				    CAST("roles"."id" AS TEXT),
+				    "roles"."rolename"
+				   )
+				  ) AS "json"
+				 FROM "user_role" AS "roles.user_role"
+				 LEFT JOIN "role" AS "roles" ON "roles.user_role"."role_id" = "roles"."id"
+				 WHERE "roles.user_role"."user_id" = "user"."id"
+				 GROUP BY "roles.user_role"."user_id"
+				) AS "roles" ON TRUE
+				"""), norm(query.statement().getSql()));
+	}
+
+	/**
+	 * One-to-many needs no second alias: the subquery's own table is the child,
+	 * so the join condition serves unchanged as the correlation. Both sides of it
+	 * are {@link FieldName}-mapped here, which only resolves because the primary
+	 * key column name is derived from the annotation.
+	 */
+	@Test
+	public void testLateralOneToManyHsqldb() {
+		String sql = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), FilmWithScreenings.class).toJsonSql();
+		assertEquals(norm("""
+				SELECT
+				 JSON_OBJECT(
+				  'filmId': "film"."film_id",
+				  'title': "film"."film_title",
+				  'screenings': COALESCE("screenings"."json", JSON_ARRAY()) FORMAT JSON
+				 ) AS "json"
+				FROM "film" AS "film"
+				LEFT JOIN LATERAL (
+				 SELECT
+				  JSON_ARRAYAGG(
+				   JSON_OBJECT(
+				    'id': "screenings"."id",
+				    'room': "screenings"."room"
+				   )
+				  ) AS "json"
+				 FROM "screening" AS "screenings"
+				 WHERE "screenings"."film_id" = "film"."film_id"
+				 GROUP BY "screenings"."film_id"
+				) AS "screenings" ON TRUE
+				"""), norm(sql));
+	}
+
+	/**
+	 * The two strategies differ only in how the database is asked to produce a
+	 * collection, never in what the document contains. If that ever stopped
+	 * holding, the reader would have to know which strategy built its input.
+	 */
+	@Test
+	public void testBothCollectionStrategiesAgreeOnLayout() {
+		for (Dialect dialect : List.of(Dialect.MYSQL, Dialect.POSTGRES, Dialect.HSQLDB)) {
+			String correlated = PojoQuery
+					.build(new DbContextBuilder().dialect(dialect).lateralJoins(true).build(), User.class)
+					.toJsonArrayStatement().layout().toString();
+			String grouped = PojoQuery.build(grouped(dialect), User.class)
+					.toJsonArrayStatement().layout().toString();
+			assertEquals(grouped, correlated, dialect + " layout must not depend on the join strategy");
+		}
+	}
+
+	/** A dialect without LATERAL keeps the grouped form. */
+	@Test
+	public void testLateralCanBeTurnedOff() {
+		assertEquals(true, PojoQuery.build(DbContext.forDialect(Dialect.MYSQL), User.class)
+				.toJsonSql().contains("LEFT JOIN LATERAL ("));
+		assertEquals(false, PojoQuery.build(grouped(Dialect.MYSQL), User.class)
+				.toJsonSql().contains("LATERAL"));
 	}
 }

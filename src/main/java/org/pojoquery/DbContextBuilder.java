@@ -32,6 +32,24 @@ public class DbContextBuilder {
     private QuoteStyle quoteStyle = null; // null means use dialect default
     private Boolean quoteObjects = null; // null means use dialect default
     private FieldMappingFactory fieldMappingFactory = SimpleFieldMapping::new;
+    private Boolean lateralJoins = null; // null means use dialect default
+
+    /**
+     * Overrides whether collection subqueries in JSON queries may be correlated
+     * through {@code LATERAL}.
+     *
+     * <p>Set this false for a MySQL older than 8.0.14, which has no
+     * {@code LATERAL}, or to compare the two fetch strategies against each
+     * other.</p>
+     *
+     * @param lateralJoins whether LATERAL may be used
+     * @return This builder for method chaining
+     * @see DbContext#supportsLateralJoins()
+     */
+    public DbContextBuilder lateralJoins(boolean lateralJoins) {
+        this.lateralJoins = lateralJoins;
+        return this;
+    }
 
     /**
      * Sets the SQL dialect. This determines the default settings for quoting,
@@ -102,12 +120,14 @@ public class DbContextBuilder {
         boolean hasCustomQuoteStyle = quoteStyle != null && quoteStyle != baseContext.getQuoteStyle();
         boolean hasCustomQuoteObjects = quoteObjects != null;
         boolean hasCustomFieldMapping = !(fieldMappingFactory instanceof SimpleFieldMapping);
-        
-        if (!hasCustomQuoteStyle && !hasCustomQuoteObjects && !hasCustomFieldMapping) {
+        boolean hasCustomLateralJoins = lateralJoins != null
+                && lateralJoins != baseContext.supportsLateralJoins();
+
+        if (!hasCustomQuoteStyle && !hasCustomQuoteObjects && !hasCustomFieldMapping && !hasCustomLateralJoins) {
             return baseContext;
         }
-        
-        return new CustomDbContext(baseContext, quoteStyle, quoteObjects, fieldMappingFactory);
+
+        return new CustomDbContext(baseContext, quoteStyle, quoteObjects, fieldMappingFactory, lateralJoins);
     }
 
     /**
@@ -126,12 +146,20 @@ public class DbContextBuilder {
         private final QuoteStyle quoteStyle;
         private final Boolean quoteObjects;
         private final FieldMappingFactory fieldMappingFactory;
+        private final Boolean lateralJoins;
 
-        private CustomDbContext(DbContext base, QuoteStyle quoteStyle, Boolean quoteObjects, FieldMappingFactory fieldMappingFactory) {
+        private CustomDbContext(DbContext base, QuoteStyle quoteStyle, Boolean quoteObjects,
+                FieldMappingFactory fieldMappingFactory, Boolean lateralJoins) {
             this.base = base;
             this.quoteStyle = quoteStyle;
             this.quoteObjects = quoteObjects;
             this.fieldMappingFactory = fieldMappingFactory;
+            this.lateralJoins = lateralJoins;
+        }
+
+        @Override
+        public boolean supportsLateralJoins() {
+            return lateralJoins != null ? lateralJoins : base.supportsLateralJoins();
         }
 
         @Override
