@@ -4,8 +4,10 @@ import static org.pojoquery.util.Strings.isNullOrEmpty;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -115,31 +117,57 @@ public final class Transforms {
     
     // ========== Structure Building Transforms ==========
 
+	/**
+	 * Replaces a {@code @From} projection's own (absent) table mapping with the
+	 * source relation's table and joins, so that {@code {alias.field}} markers in
+	 * the projection's {@code @Select} and {@code @Aggregate} expressions resolve
+	 * against the source's aliases.
+	 *
+	 * <p>The projection's declared fields win over the source's node of the same
+	 * name: the rest of the pipeline expands the projection's field into a result
+	 * node, and keeping the source's node beside it would join the same table
+	 * under the same alias twice. The source's remaining children are carried over
+	 * as joins only - their scalars are stripped, so they select nothing and the
+	 * ones no expression references are pruned when the statement is built.</p>
+	 */
 	public static class ProcessFromAnnotation implements TransformPipeline.TreeTransform {
 		@Override
 		public RootNode transform(RootNode rootNode) {
-			if (rootNode.type().hasAnnotation(From.class) && rootNode.tableInfo() == null) {
-				Class<?> sourceClass = rootNode.type().getAnnotationAttributeValue(From.class, "value", Class.class);
-				TypeModel sourceType = new ReflectionTypeModel(sourceClass);
-				RootNode sourceTree = removeScalarNodesFromTree(AQTTransformer.buildQueryTreeForType(sourceType, TransformPipeline.defaultPipeline()));
-
-                List<QueryNode> children = new ArrayList<>(PojoMetadata.collectFieldsOfClass(rootNode.type(), null).stream()
-                        .<QueryNode>map(fieldModel -> new EmptyFieldNodeImpl(fieldModel))
-                        .toList()); // use the source's children (joins)
-
-                children.addAll(sourceTree.children());
-
-				// Merge sourceTree into rootNode, replacing rootNode's table info and children with sourceTree's
-				return new RootNode(
-					sourceTree.alias(),
-					rootNode.type(),
-					sourceTree.tableInfo(),
-                    children,
-					null,
-					null
-				);
+			if (!rootNode.type().hasAnnotation(From.class) || rootNode.tableInfo() != null) {
+				return rootNode;
 			}
-			return rootNode;
+			Class<?> sourceClass = rootNode.type().getAnnotationAttributeValue(From.class, "value", Class.class);
+			TypeModel sourceType = new ReflectionTypeModel(sourceClass);
+			RootNode sourceTree = removeScalarNodesFromTree(
+					AQTTransformer.buildQueryTreeForType(sourceType, TransformPipeline.defaultPipeline()));
+
+			List<QueryNode> children = new ArrayList<>();
+			Set<String> declaredFieldNames = new HashSet<>();
+			for (FieldModel field : PojoMetadata.collectFieldsOfClass(rootNode.type(), null)) {
+				declaredFieldNames.add(field.getName());
+				children.add(new EmptyFieldNodeImpl(field));
+			}
+			for (QueryNode sourceChild : sourceTree.children()) {
+				String fieldName = fieldNameOf(sourceChild);
+				if (fieldName == null || !declaredFieldNames.contains(fieldName)) {
+					children.add(sourceChild);
+				}
+			}
+
+			return new RootNode(
+				sourceTree.alias(),
+				rootNode.type(),
+				sourceTree.tableInfo(),
+				children,
+				null,
+				null
+			);
+		}
+
+		/** The name of the Java field a node maps to, or null for a node that maps to none. */
+		private static String fieldNameOf(QueryNode node) {
+			FieldModel field = node instanceof FieldNode fieldNode ? fieldNode.field() : null;
+			return field == null ? null : field.getName();
 		}
 	}
 
