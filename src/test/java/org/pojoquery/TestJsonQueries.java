@@ -963,6 +963,10 @@ public class TestJsonQueries {
 	 * <p>Note the two {@code "department"} aliases. The inner one belongs to the
 	 * projection's own join and is not visible outside its derived table, so the
 	 * correlating WHERE names the root.</p>
+	 *
+	 * <p>The {@code HAVING} suppresses the row an aggregate returns over an empty
+	 * set, so a parent with no elements reaches the outer query as a NULL the
+	 * COALESCE can turn into {@code []}.</p>
 	 */
 	@Test
 	public void testAggregateProjectionCollectionNestsDerivedTables() {
@@ -996,6 +1000,7 @@ public class TestJsonQueries {
 				  GROUP BY "employee"."id", "department"."id"
 				 ) AS "employeeStats"
 				 WHERE "department"."id" = "employeeStats"."departmentId"
+				 HAVING COUNT(*) > 0
 				) AS "employeeStats" ON TRUE
 				"""), norm(sql));
 	}
