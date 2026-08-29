@@ -23,7 +23,9 @@ import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.STISuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.ScalarValue;
+import org.pojoquery.pipeline.AbstractQueryTree.SubQueryCollection;
 import org.pojoquery.pipeline.AbstractQueryTree.SubQueryJoin;
+import org.pojoquery.pipeline.querytree.transforms.ExpressionResolver;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSubClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TPSSuperClassNode;
 import org.pojoquery.pipeline.AbstractQueryTree.TableInfo;
@@ -145,7 +147,7 @@ public class AQTJsonDirectTransformer {
 	private static void collectHiddenAliases(TableNode node, boolean insideCollection, Set<String> hidden) {
 		for (QueryNode child : node.children()) {
 			boolean childIsCollection = child instanceof EntityCollection || child instanceof ValueCollection
-					|| child instanceof JoinTableEntityCollection;
+					|| child instanceof JoinTableEntityCollection || child instanceof SubQueryCollection;
 			if (child instanceof JoinTableEntityCollection joinTable) {
 				hidden.add(joinTable.join().joinTableInfo().joinTableAlias());
 			}
@@ -263,6 +265,8 @@ public class AQTJsonDirectTransformer {
 				variants.add(new SubClassVariant(condition, sti.type().getSimpleName(), extras, extraSlots));
 			} else if (child instanceof SubQueryJoin subQueryJoin) {
 				slots.add(addSubQueryJoin(subQueryJoin, query));
+			} else if (child instanceof SubQueryCollection subQueryCollection) {
+				slots.add(addSubQueryCollection(subQueryCollection, query));
 			} else if (child instanceof EntityReference reference) {
 				slots.add(addEntityReference(reference, query));
 			} else if (child instanceof ValueCollection collection) {
@@ -341,6 +345,52 @@ public class AQTJsonDirectTransformer {
 				subQueryJoin.joinCondition());
 		Document document = buildDocument(subQueryJoin, query);
 		return DocumentSlot.nested(subQueryJoin.field().getName(), document.value(), document.layout());
+	}
+
+	/**
+	 * A collection of an aggregate projection: one element per group the
+	 * projection produces, restricted to the parent by the collection's join
+	 * condition.
+	 *
+	 * <p>Two derived tables, nested. The inner one is the projection's own flat
+	 * statement, which does the grouping; the outer one selects from it and
+	 * aggregates the surviving rows into an array.</p>
+	 *
+	 * <p>This shape requires {@code LATERAL}. The grouped fallback would have to
+	 * {@code GROUP BY} the parent's key inside the subquery, and the key is only
+	 * known when the join condition is the default {@code {parent.id} =
+	 * {child.id}} - a {@link org.pojoquery.annotations.JoinCondition} may relate
+	 * the two on anything at all. Rather than guess at the key, the correlated
+	 * form puts the condition in the subquery's WHERE, where its shape does not
+	 * matter.</p>
+	 */
+	private static DocumentSlot addSubQueryCollection(SubQueryCollection collection, JsonSqlQuery query) {
+		if (!query.getDbContext().supportsLateralJoins()) {
+			throw new UnsupportedOperationException(
+					"A JSON query cannot gather a collection of an @From projection without LATERAL (field '"
+							+ collection.field().getName() + "'). The grouped form would have to GROUP BY the "
+							+ "parent's key inside the subquery, and a @JoinCondition need not expose one. "
+							+ "Use a context whose dialect has LATERAL, or execute() this query instead.");
+		}
+		DefaultSqlQuery plainSubQuery = new DefaultSqlQuery(query.getDbContext());
+		AQTTransformer.toSql(collection.subQueryTree(), plainSubQuery, true);
+
+		JsonSqlQuery subQuery = query.startSubQuery();
+		subQuery.setTable(plainSubQuery.toStatement(), collection.alias());
+		subQuery.setAggregated(true);
+		// The condition is written against the outer query, where {this} is the
+		// parent. Inside the subquery {this} would name the collection itself, so
+		// it is resolved here rather than by the subquery that carries it.
+		subQuery.addWhere(new SqlExpression(
+				ExpressionResolver.resolve(collection.joinCondition().getSql(), collection.parentAlias()),
+				collection.joinCondition().getParameters()));
+
+		Document document = buildDocument(collection, subQuery);
+		subQuery.setJsonValue(document.value());
+
+		query.addLateralSubQueryJoin(JoinType.LEFT, subQuery.toStatement(), collection.alias());
+		return DocumentSlot.collection(collection.field().getName(),
+				coalesceEmptyArray(query, collection.alias()), document.layout());
 	}
 
 	private static DocumentSlot addEntityReference(EntityReference reference, JsonSqlQuery query) {

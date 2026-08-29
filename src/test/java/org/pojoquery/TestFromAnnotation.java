@@ -13,6 +13,8 @@ import org.pojoquery.DbContext.Dialect;
 import org.pojoquery.annotations.Aggregate;
 import org.pojoquery.annotations.From;
 import org.pojoquery.annotations.Id;
+import org.pojoquery.annotations.JoinCondition;
+import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.integrationtest.UseDialect;
 import org.pojoquery.pipeline.AbstractQueryTree.RootNode;
@@ -240,16 +242,116 @@ public class TestFromAnnotation {
 		});
 	}
 
-	private static void insertEmployee(java.sql.Connection c, Department department, String name, String salary) {
+	private static Employee insertEmployee(java.sql.Connection c, Department department, String name, String salary) {
 		Employee employee = new Employee();
 		employee.name = name;
 		employee.salary = new BigDecimal(salary);
 		employee.department = department;
 		PojoQuery.insert(c, employee);
+		return employee;
+	}
+
+	/**
+	 * A collection of an aggregate projection: per-employee sales figures,
+	 * gathered under the department they belong to. The projection reaches the
+	 * parent's key through its own source relation, and the collection relates
+	 * the two on it.
+	 */
+	@Table("sale")
+	static class Sale {
+		@Id Long id;
+		BigDecimal amount;
+		Employee employee;
+	}
+
+	static class EmployeeWithSales extends Employee {
+		List<Sale> sales;
+	}
+
+	@From(EmployeeWithSales.class)
+	static class EmployeeSalesStats {
+		@Id Long id;
+		String name;
+
+		@Select("{department.id}")
+		Long departmentId;
+
+		@Aggregate("COUNT({sales.id})")
+		Long saleCount;
+
+		@Aggregate("SUM({sales.amount})")
+		BigDecimal totalSales;
+	}
+
+	static class DepartmentWithEmployeeStats extends Department {
+		@JoinCondition("{this.id} = {employeeStats.departmentId}")
+		List<EmployeeSalesStats> employeeStats;
+	}
+
+	@Test
+	public void testAggregateProjectionCollectionAsJson() {
+		JDBCDataSource ds = new JDBCDataSource();
+		ds.setURL("jdbc:hsqldb:mem:testdeptsalestats");
+
+		SchemaGenerator.createTables(ds, DepartmentWithEmployees.class, EmployeeWithSales.class, Sale.class);
+
+		DB.withConnection(ds, c -> {
+			Department engineering = new Department();
+			engineering.name = "Engineering";
+			engineering.location = "Utrecht";
+			PojoQuery.insert(c, engineering);
+
+			Department sales = new Department();
+			sales.name = "Sales";
+			sales.location = "Amsterdam";
+			PojoQuery.insert(c, sales);
+
+			Employee alice = insertEmployee(c, engineering, "Alice", "50000");
+			Employee bob = insertEmployee(c, engineering, "Bob", "70000");
+			Employee carol = insertEmployee(c, sales, "Carol", "40000");
+
+			insertSale(c, alice, "100.00");
+			insertSale(c, alice, "250.00");
+			insertSale(c, bob, "70.00");
+			insertSale(c, carol, "500.00");
+
+			List<DepartmentWithEmployeeStats> departments = PojoQuery.build(DepartmentWithEmployeeStats.class)
+				.addOrderBy("{department.name}")
+				.executeMultiSet(c);
+
+			assertEquals(2, departments.size());
+
+			DepartmentWithEmployeeStats engineeringRow = departments.get(0);
+			assertEquals("Engineering", engineeringRow.name);
+			assertEquals(2, engineeringRow.employeeStats.size(),
+					"Engineering must gather exactly its own two employees");
+
+			EmployeeSalesStats aliceStats = engineeringRow.employeeStats.stream()
+					.filter(s -> "Alice".equals(s.name)).findFirst().orElseThrow();
+			assertEquals(2L, aliceStats.saleCount);
+			assertEquals(0, new BigDecimal("350.00").compareTo(aliceStats.totalSales));
+
+			EmployeeSalesStats bobStats = engineeringRow.employeeStats.stream()
+					.filter(s -> "Bob".equals(s.name)).findFirst().orElseThrow();
+			assertEquals(1L, bobStats.saleCount);
+			assertEquals(0, new BigDecimal("70.00").compareTo(bobStats.totalSales));
+
+			DepartmentWithEmployeeStats salesRow = departments.get(1);
+			assertEquals("Sales", salesRow.name);
+			assertEquals(1, salesRow.employeeStats.size());
+			assertEquals(0, new BigDecimal("500.00").compareTo(salesRow.employeeStats.get(0).totalSales));
+		});
+	}
+
+	private static void insertSale(java.sql.Connection c, Employee employee, String amount) {
+		Sale sale = new Sale();
+		sale.amount = new BigDecimal(amount);
+		sale.employee = employee;
+		PojoQuery.insert(c, sale);
 	}
 
 	// --- Join Pruning Test ---
-	
+
 	@Table("product")
 	static class Product {
 		@Id Long id;
