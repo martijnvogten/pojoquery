@@ -804,23 +804,35 @@ public final class Transforms {
     // ========== Default Value Transforms ==========
     
     public static class ApplyDefaultIdFieldNames implements RecursiveTransform {
+
+        /**
+         * The primary key's <em>column</em>, which is the field's name only when
+         * no {@link FieldName} overrides it. This value ends up in join
+         * conditions and in generated foreign key constraints, so taking the
+         * field name unconditionally names a column that need not exist.
+         */
+        private static String idColumnOf(ForeignKeyInfo fk) {
+            FieldModel idField = fk.idField();
+            return idField.hasAnnotation(FieldName.class)
+                    ? idField.getAnnotationAttributeValue(FieldName.class, "value", String.class)
+                    : idField.getName();
+        }
+
         @Override
         public QueryNode transform(QueryNode node) {
             if (node instanceof HasJoinTableJoin jtj && (jtj.join().parentKey().idColumnName() == null
                     || jtj.join().childKey().idColumnName() == null)) {
                 ForeignKeyInfo parentKey = jtj.join().parentKey();
-                parentKey = parentKey.idColumnName() == null ? parentKey.withIdColumnName(parentKey.idField().getName())
+                parentKey = parentKey.idColumnName() == null ? parentKey.withIdColumnName(idColumnOf(parentKey))
                         : parentKey;
                 ForeignKeyInfo childKey = jtj.join().childKey();
-                childKey = childKey.idColumnName() == null ? childKey.withIdColumnName(childKey.idField().getName())
+                childKey = childKey.idColumnName() == null ? childKey.withIdColumnName(idColumnOf(childKey))
                         : childKey;
 
-                return jtj.withJoinTableJoin(jtj.join().withJoinForeignKeyInfo(
-                        parentKey.withIdColumnName(parentKey.idField().getName()),
-                        childKey.withIdColumnName(childKey.idField().getName())));
+                return jtj.withJoinTableJoin(jtj.join().withJoinForeignKeyInfo(parentKey, childKey));
             } else if (node instanceof Join join && join.join().idColumnName() == null) {
                 ForeignKeyInfo fk = join.join();
-                return join.withJoin(fk.withIdColumnName(fk.idField().getName()));
+                return join.withJoin(fk.withIdColumnName(idColumnOf(fk)));
             }
             return node;
         }

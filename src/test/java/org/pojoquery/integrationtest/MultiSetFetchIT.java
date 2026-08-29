@@ -211,6 +211,90 @@ public class MultiSetFetchIT {
 				.addOrderBy("{ms_author.name}").execute(db)), describe(all));
 	}
 
+	@Table("ms_movie")
+	public static class Movie {
+		@Id
+		@FieldName("movie_id")
+		public Long movieId;
+		@FieldName("movie_title")
+		public String title;
+	}
+
+	@Table("ms_star")
+	public static class Star {
+		@Id
+		@FieldName("star_id")
+		public Long starId;
+		@FieldName("star_name")
+		public String name;
+	}
+
+	public static class MovieWithStars extends Movie {
+		@Link(linktable = "ms_movie_star")
+		public List<Star> stars;
+	}
+
+	/**
+	 * Every column here is reached through {@link FieldName}, so nothing in the
+	 * statement can fall back to a Java field name and still find a column.
+	 *
+	 * <p>A JSON query selects one document column rather than one column per
+	 * field, so it cannot resolve {@code {alias.fieldName}} markers from its own
+	 * select labels the way the flat builder does; it has to carry the mapping
+	 * separately. Three places in this one query depend on that: the junction to
+	 * element join of the {@code @Link} collection, the join from the collection's
+	 * derived table back to the root, and the WHERE clause below.</p>
+	 */
+	@Test
+	public void testFieldNameMappedColumnsOnTheDocumentPath() {
+		DataSource db = TestDatabaseProvider.getDataSource();
+		DbContext context = TestDatabaseProvider.getDbContext();
+		SchemaGenerator.createTables(db, MovieWithStars.class, Star.class);
+		DB.runInTransaction(db, connection -> {
+			MovieWithStars alien = new MovieWithStars();
+			alien.title = "Alien";
+			alien.stars = List.of(star("Weaver"), star("Skerritt"));
+			PojoQuery.insert(connection, alien);
+
+			MovieWithStars solo = new MovieWithStars();   // a root with an empty collection
+			solo.title = "Solaris";
+			solo.stars = List.of();
+			PojoQuery.insert(connection, solo);
+		});
+
+		List<MovieWithStars> joined = PojoQuery.build(context, MovieWithStars.class)
+				.addOrderBy("{this.title}").execute(db);
+		List<MovieWithStars> documents = PojoQuery.build(context, MovieWithStars.class)
+				.addOrderBy("{this.title}").executeMultiSet(db);
+		assertEquals(describeMovies(joined), describeMovies(documents));
+
+		assertEquals("Alien", documents.get(0).title);
+		assertEquals(List.of("Skerritt", "Weaver"),
+				documents.get(0).stars.stream().map(s -> s.name).sorted().toList());
+		assertNotNull(documents.get(0).movieId);
+		assertTrue(documents.get(1).stars == null || documents.get(1).stars.isEmpty());
+
+		// A WHERE naming the Java field, not the column, has to reach movie_title.
+		List<MovieWithStars> filtered = PojoQuery.build(context, MovieWithStars.class)
+				.addWhere("{this.title} = ?", "Alien")
+				.executeMultiSet(db);
+		assertEquals(1, filtered.size());
+		assertEquals(2, filtered.get(0).stars.size(), "the collection must stay complete");
+	}
+
+	private static Star star(String name) {
+		Star star = new Star();
+		star.name = name;
+		return star;
+	}
+
+	private static String describeMovies(List<MovieWithStars> movies) {
+		return movies.stream()
+				.map(m -> m.movieId + "|" + m.title + "|"
+						+ (m.stars == null ? "" : m.stars.stream().map(s -> s.name).sorted().toList()))
+				.toList().toString();
+	}
+
 	// ========== @Recursive over the document path ==========
 
 	@Table("ms_category")
