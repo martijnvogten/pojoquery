@@ -2,6 +2,7 @@ package org.pojoquery;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.pojoquery.TestUtils.norm;
 
 import java.util.List;
@@ -15,9 +16,11 @@ import org.pojoquery.annotations.Embedded;
 import org.pojoquery.annotations.FieldName;
 import org.pojoquery.annotations.From;
 import org.pojoquery.annotations.Id;
+import org.pojoquery.annotations.JoinCondition;
 import org.pojoquery.annotations.Link;
 import org.pojoquery.annotations.Recursive;
 import org.pojoquery.annotations.Recursive.Direction;
+import org.pojoquery.annotations.Select;
 import org.pojoquery.annotations.SubClasses;
 import org.pojoquery.annotations.Table;
 import org.pojoquery.internal.MappingException;
@@ -922,6 +925,104 @@ public class TestJsonQueries {
 				 GROUP BY "department"."id"
 				) AS "stats" ON "department"."id" = "stats"."id"
 				"""), norm(sql));
+	}
+
+	@Table("sale")
+	public static class Sale {
+		@Id
+		public Long id;
+		public java.math.BigDecimal amount;
+		public Employee employee;
+	}
+
+	public static class EmployeeWithSales extends Employee {
+		public List<Sale> sales;
+	}
+
+	@From(EmployeeWithSales.class)
+	public static class EmployeeSalesStats {
+		@Id
+		public Long id;
+
+		@Select("{department.id}")
+		public Long departmentId;
+
+		@Aggregate("SUM({sales.amount})")
+		public java.math.BigDecimal totalSales;
+	}
+
+	public static class DepartmentWithEmployeeStats extends Department {
+		@JoinCondition("{this.id} = {employeeStats.departmentId}")
+		public List<EmployeeSalesStats> employeeStats;
+	}
+
+	/**
+	 * A collection of an aggregate projection nests two derived tables: the
+	 * projection's own flat statement does the grouping, and the wrapper
+	 * aggregates the rows the correlation leaves into an array.
+	 *
+	 * <p>Note the two {@code "department"} aliases. The inner one belongs to the
+	 * projection's own join and is not visible outside its derived table, so the
+	 * correlating WHERE names the root.</p>
+	 */
+	@Test
+	public void testAggregateProjectionCollectionNestsDerivedTables() {
+		String sql = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), DepartmentWithEmployeeStats.class)
+				.toJsonSql();
+		assertEquals(norm("""
+				SELECT
+				 JSON_OBJECT(
+				  'id': "department"."id",
+				  'name': "department"."name",
+				  'employeeStats': COALESCE("employeeStats"."json", JSON_ARRAY()) FORMAT JSON
+				 ) AS "json"
+				FROM "department" AS "department"
+				LEFT JOIN LATERAL (
+				 SELECT
+				  JSON_ARRAYAGG(
+				   JSON_OBJECT(
+				    'id': "employeeStats"."id",
+				    'departmentId': "employeeStats"."departmentId",
+				    'totalSales': "employeeStats"."totalSales"
+				   )
+				  ) AS "json"
+				 FROM (
+				  SELECT
+				   "employee"."id" AS "id",
+				   "department"."id" AS "departmentId",
+				   SUM("sales"."amount") AS "totalSales"
+				  FROM "employee" AS "employee"
+				  LEFT JOIN "department" AS "department" ON "employee"."department_id" = "department"."id"
+				  LEFT JOIN "sale" AS "sales" ON "sales"."employee_id" = "employee"."id"
+				  GROUP BY "employee"."id", "department"."id"
+				 ) AS "employeeStats"
+				 WHERE "department"."id" = "employeeStats"."departmentId"
+				) AS "employeeStats" ON TRUE
+				"""), norm(sql));
+	}
+
+	/**
+	 * The grouped fallback cannot express this shape, so it says so rather than
+	 * guessing at a grouping key the join condition may not contain.
+	 */
+	@Test
+	public void testAggregateProjectionCollectionNeedsLateral() {
+		UnsupportedOperationException thrown = assertThrows(UnsupportedOperationException.class,
+				() -> PojoQuery.build(grouped(Dialect.HSQLDB), DepartmentWithEmployeeStats.class).toJsonSql());
+		assertTrue(thrown.getMessage().contains("without LATERAL"), thrown.getMessage());
+	}
+
+	/**
+	 * Its elements are aggregated into a derived table like any other
+	 * collection's, so a clause naming their columns is refused up front.
+	 */
+	@Test
+	public void testAggregateProjectionCollectionColumnsAreNotAddressable() {
+		MappingException thrown = assertThrows(MappingException.class,
+				() -> PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), DepartmentWithEmployeeStats.class)
+						.addWhere("{employeeStats.totalSales} > ?", 1)
+						.toJsonSql());
+		assertTrue(thrown.getMessage().contains("employeeStats"), thrown.getMessage());
 	}
 
 	/** A dialect without LATERAL keeps the grouped form. */

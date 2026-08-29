@@ -64,6 +64,7 @@ public class JsonSqlQuery {
 	private final JsonSqlQuery parent;
 
 	private TableInfo table;
+	private SqlExpression tableSubQuery;
 	private String tableAlias;
 	private SqlExpression jsonValue;
 	private boolean aggregated;
@@ -106,6 +107,21 @@ public class JsonSqlQuery {
 
 	public void setTable(TableInfo table, String alias) {
 		this.table = table;
+		this.tableAlias = alias;
+	}
+
+	/**
+	 * Selects from a derived table rather than a named one.
+	 *
+	 * <p>Used where the rows to aggregate into a document are themselves the
+	 * result of a query - an aggregate projection, whose columns exist only in
+	 * its own select list.</p>
+	 *
+	 * @param subQuery the statement producing the rows
+	 * @param alias    the alias to expose it under
+	 */
+	public void setTable(SqlExpression subQuery, String alias) {
+		this.tableSubQuery = subQuery;
 		this.tableAlias = alias;
 	}
 
@@ -206,7 +222,7 @@ public class JsonSqlQuery {
 	}
 
 	public SqlExpression toStatement() {
-		if (table == null) {
+		if (table == null && tableSubQuery == null) {
 			throw new IllegalStateException("No table set");
 		}
 		if (jsonValue == null) {
@@ -230,7 +246,13 @@ public class JsonSqlQuery {
 		}
 		parts.add(SqlExpression.sql("SELECT\n "));
 		parts.add(SqlExpression.implode(",\n ", selectParts));
-		parts.add(SqlExpression.sql("\nFROM " + quoteTableName(table) + " AS " + dbContext.quoteAlias(tableAlias)));
+		if (tableSubQuery != null) {
+			parts.add(SqlExpression.sql("\nFROM (\n"));
+			parts.add(tableSubQuery);
+			parts.add(SqlExpression.sql("\n) AS " + dbContext.quoteAlias(tableAlias)));
+		} else {
+			parts.add(SqlExpression.sql("\nFROM " + quoteTableName(table) + " AS " + dbContext.quoteAlias(tableAlias)));
+		}
 
 		for (JsonJoin join : joins) {
 			List<SqlExpression> joinParts = new ArrayList<>();
