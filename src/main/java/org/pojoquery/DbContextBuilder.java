@@ -1,9 +1,12 @@
 package org.pojoquery;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.stream.Stream;
 
 import org.pojoquery.DbContext.Dialect;
+import org.pojoquery.DbContext.JsonProperty;
+import org.pojoquery.DbContext.JsonVariant;
 import org.pojoquery.DbContext.QuoteStyle;
 import org.pojoquery.pipeline.AQTSchemaGenerator.DDLColumnMetadata;
 import org.pojoquery.pipeline.SimpleFieldMapping;
@@ -189,6 +192,68 @@ public class DbContextBuilder {
         @Override
         public int getDefaultVarcharLength() {
             return base.getDefaultVarcharLength();
+        }
+
+        // Everything below is dialect behaviour this builder does not customize.
+        // It has to be forwarded explicitly: DbContext declares these as default
+        // methods, so an unforwarded one silently resolves to the interface
+        // default rather than to the dialect - which is how a POSTGRES context
+        // built here came to emit MySQL's CAST(x AS CHAR), truncating every
+        // value to one character.
+
+        @Override
+        public String getAutoIncrementKeyColumnType() {
+            return base.getAutoIncrementKeyColumnType();
+        }
+
+        @Override
+        public String stringLiteralExpression(String value) {
+            return base.stringLiteralExpression(value);
+        }
+
+        @Override
+        public Object convertParameterForJdbc(Object value) {
+            return base.convertParameterForJdbc(value);
+        }
+
+        @Override
+        public SqlExpression castToStringExpression(SqlExpression value) {
+            return base.castToStringExpression(value);
+        }
+
+        @Override
+        public SqlExpression jsonObject(List<JsonProperty> properties) {
+            return base.jsonObject(properties);
+        }
+
+        @Override
+        public SqlExpression jsonObjectWithVariants(List<JsonProperty> properties, List<JsonVariant> variants) {
+            return base.jsonObjectWithVariants(properties, variants);
+        }
+
+        @Override
+        public SqlExpression jsonArray(List<SqlExpression> elements) {
+            return base.jsonArray(elements);
+        }
+
+        @Override
+        public SqlExpression jsonArrayAgg(SqlExpression element) {
+            return base.jsonArrayAgg(element);
+        }
+
+        @Override
+        public SqlExpression jsonValueRef(SqlExpression value) {
+            return base.jsonValueRef(value);
+        }
+
+        @Override
+        public SqlExpression emptyJsonArray() {
+            return base.emptyJsonArray();
+        }
+
+        @Override
+        public boolean jsonArrayNestsDocuments() {
+            return base.jsonArrayNestsDocuments();
         }
     }
 } 
