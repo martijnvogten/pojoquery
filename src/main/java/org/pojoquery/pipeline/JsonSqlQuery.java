@@ -71,6 +71,7 @@ public class JsonSqlQuery {
 	private final List<SelectField> selectFields = new ArrayList<>();
 	private final List<JsonJoin> joins = new ArrayList<>();
 	private List<String> groupBy = new ArrayList<>();
+	private final List<SqlExpression> havings = new ArrayList<>();
 	private List<String> orderBy = new ArrayList<>();
 	private final List<SqlExpression> wheres = new ArrayList<>();
 	private final List<SqlQuery.WithClause> withClauses = new ArrayList<>();
@@ -212,6 +213,16 @@ public class JsonSqlQuery {
 		this.groupBy = new ArrayList<>(groupBy);
 	}
 
+	/**
+	 * Adds a HAVING condition.
+	 *
+	 * <p>Useful without a GROUP BY as well: an aggregate query returns one row
+	 * over an empty set, and a HAVING is the portable way to suppress it.</p>
+	 */
+	public void addHaving(SqlExpression having) {
+		havings.add(having);
+	}
+
 	public void setOrderBy(List<String> orderBy) {
 		this.orderBy = new ArrayList<>(orderBy);
 	}
@@ -275,6 +286,10 @@ public class JsonSqlQuery {
 		}
 		if (!groupBy.isEmpty()) {
 			parts.add(SqlExpression.sql("\nGROUP BY " + Strings.implode(", ", resolveThisAlias(groupBy))));
+		}
+		if (!havings.isEmpty()) {
+			parts.add(SqlExpression.sql("\nHAVING "));
+			parts.add(SqlExpression.implode("\n AND ", havings.stream().map(this::resolveThisAlias).toList()));
 		}
 		if (!orderBy.isEmpty()) {
 			parts.add(SqlExpression.sql("\nORDER BY " + Strings.implode(", ", resolveThisAlias(orderBy))));

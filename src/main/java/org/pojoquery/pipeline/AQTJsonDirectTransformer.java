@@ -384,6 +384,13 @@ public class AQTJsonDirectTransformer {
 		subQuery.addWhere(new SqlExpression(
 				ExpressionResolver.resolve(collection.joinCondition().getSql(), collection.parentAlias()),
 				collection.joinCondition().getParameters()));
+		// An aggregate over an empty set still returns a row, and what its JSON
+		// aggregate holds there is a dialect's own business - HSQLDB yields the
+		// text 'null', which COALESCE would not catch. Suppressing the row instead
+		// makes the outer LEFT JOIN produce a real NULL, the one thing every
+		// dialect agrees on. The collections that group by a foreign key get this
+		// for free; this one has no key to group by.
+		subQuery.addHaving(SqlExpression.sql("COUNT(*) > 0"));
 
 		Document document = buildDocument(collection, subQuery);
 		subQuery.setJsonValue(document.value());
