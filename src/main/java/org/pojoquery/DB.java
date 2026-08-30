@@ -1,7 +1,6 @@
 package org.pojoquery;
 
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -12,7 +11,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 import javax.sql.DataSource;
@@ -525,13 +524,20 @@ public interface DB {
 	 * @param tableName  The name of the table where the record will be inserted.
 	 * @param values     A map containing the column names as keys and their corresponding values.
 	 * @return           The primary key of the newly inserted record.
+	 * @deprecated Use {@link #insert(Connection, String, String, Map, List)} and name
+	 *             the auto-increment columns; this overload reads the key by position.
 	 */
+	@Deprecated
 	public static <PK> PK insert(Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values) {
 		return insert(DbContext.getDefault(), connection, schemaName, tableName, values);
 	}
 
 	/**
 	 * Inserts a new record into the specified table using a connection and schema name with explicit DbContext.
+	 *
+	 * <p>The key is read from the first column the driver returns, which is the key
+	 * only by luck: on PostgreSQL {@link Statement#RETURN_GENERATED_KEYS} returns the
+	 * whole inserted row, so this yields whichever column comes first in the table.</p>
 	 *
 	 * @param <PK>       The type of the primary key that will be returned.
 	 * @param context    The database context.
@@ -540,9 +546,13 @@ public interface DB {
 	 * @param tableName  The name of the table where the record will be inserted.
 	 * @param values     A map containing the column names as keys and their corresponding values.
 	 * @return           The primary key of the newly inserted record.
+	 * @deprecated Use {@link #insert(DbContext, Connection, String, String, Map, List)}
+	 *             and name the auto-increment columns.
 	 */
+	@Deprecated
 	public static <PK> PK insert(DbContext context, Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values) {
-		return insert(context, connection, schemaName, tableName, values, null);
+		SqlExpression insertSql = SqlStatementBuilder.buildInsert(context, schemaName, tableName, values);
+		return execute(context, connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null, null);
 	}
 
 	/**
@@ -554,119 +564,52 @@ public interface DB {
 	static final String[] NO_GENERATED_KEYS = new String[0];
 
 	/**
-	 * Caches the resolved primary key column per table, keyed by catalog, schema and
-	 * table name. Schema metadata is assumed stable for the life of the JVM; call
-	 * {@link #clearPrimaryKeyCache()} after DDL that changes a table's primary key.
+	 * Inserts a new record and reads back the key the database generated for it.
 	 *
-	 * <p>Held in a nested class because {@link DB} is an interface, whose fields are
-	 * implicitly public.</p>
-	 */
-	class PrimaryKeyCache {
-		static final Map<String, String> COLUMNS = new ConcurrentHashMap<>();
-		/** Marks a table known to have no single primary key column. */
-		static final String NONE = "";
-	}
-
-	/**
-	 * Clears the cached primary key column names. Intended for tests and for
-	 * applications that recreate tables at runtime.
-	 */
-	public static void clearPrimaryKeyCache() {
-		PrimaryKeyCache.COLUMNS.clear();
-	}
-
-	/**
-	 * Resolves the single primary key column of a table from JDBC metadata.
-	 *
-	 * <p>Naming the key column when preparing an INSERT is the only portable way to
-	 * read a generated key back: PostgreSQL's driver implements
+	 * <p>Name the auto-increment columns: it is the only portable way to read a
+	 * generated key back. PostgreSQL's driver implements
 	 * {@link Statement#RETURN_GENERATED_KEYS} as {@code RETURNING *}, so an unnamed
-	 * request yields the whole inserted row and the key cannot be located by position.</p>
+	 * request yields every column of the inserted row and the key cannot be located
+	 * by position. Naming the columns makes every database return just those.</p>
 	 *
-	 * @return the primary key column name, or null if the table has no primary key or
-	 *         a composite one, in which case there is no single key to return
+	 * @param <PK>                 The type of the primary key that will be returned.
+	 * @param context              The database context.
+	 * @param connection           The database connection.
+	 * @param schemaName           The schema name, or null.
+	 * @param tableName            The name of the table where the record will be inserted.
+	 * @param values               A map containing the column names as keys and their corresponding values.
+	 * @param autoIncrementColumns The columns the database generates values for. Pass an
+	 *                             empty list for a table that has none - a junction table
+	 *                             with a composite key, say - and no key is requested.
+	 * @return                     The generated key, or null if {@code autoIncrementColumns} is empty.
 	 */
-	private static String resolvePrimaryKeyColumn(Connection connection, String schemaName, String tableName) {
-		try {
-			String catalog = connection.getCatalog();
-			String cacheKey = catalog + "\u0000" + schemaName + "\u0000" + tableName;
-			String cached = PrimaryKeyCache.COLUMNS.get(cacheKey);
-			if (cached != null) {
-				return PrimaryKeyCache.NONE.equals(cached) ? null : cached;
-			}
-
-			DatabaseMetaData meta = connection.getMetaData();
-			String resolved = lookupPrimaryKeyColumn(meta, catalog, schemaName, tableName);
-			if (resolved == null) {
-				// Drivers store unquoted identifiers folded to their own case. PojoQuery
-				// quotes object names, so the name as given usually matches, but retry the
-				// driver's storage case for tables created outside PojoQuery.
-				if (meta.storesUpperCaseIdentifiers()) {
-					resolved = lookupPrimaryKeyColumn(meta, catalog, schemaName, tableName.toUpperCase());
-				} else if (meta.storesLowerCaseIdentifiers()) {
-					resolved = lookupPrimaryKeyColumn(meta, catalog, schemaName, tableName.toLowerCase());
-				}
-			}
-
-			PrimaryKeyCache.COLUMNS.put(cacheKey, resolved == null ? PrimaryKeyCache.NONE : resolved);
-			return resolved;
-		} catch (SQLException e) {
-			// Metadata is unavailable; fall back to the driver's default behaviour, which
-			// execute() guards against returning an arbitrary column.
-			return null;
-		}
-	}
-
-	private static String lookupPrimaryKeyColumn(DatabaseMetaData meta, String catalog, String schemaName, String tableName)
-			throws SQLException {
-		List<String> columns = new ArrayList<>();
-		try (ResultSet rs = meta.getPrimaryKeys(catalog, schemaName, tableName)) {
-			while (rs.next()) {
-				columns.add(rs.getString("COLUMN_NAME"));
-			}
-		}
-		return columns.size() == 1 ? columns.get(0) : null;
-	}
-
-	/**
-	 * Inserts a new record into the specified table, requesting the generated key
-	 * from a specific column.
-	 *
-	 * <p>Pass the primary key column as {@code generatedKeyColumn} whenever it is
-	 * known: on PostgreSQL, {@link Statement#RETURN_GENERATED_KEYS} returns every
-	 * column of the inserted row, so reading the key positionally picks an
-	 * arbitrary column. Naming the key column makes all databases return just
-	 * that column.</p>
-	 *
-	 * @param <PK>               The type of the primary key that will be returned.
-	 * @param context            The database context.
-	 * @param connection         The database connection.
-	 * @param schemaName         The schema name.
-	 * @param tableName          The name of the table where the record will be inserted.
-	 * @param values             A map containing the column names as keys and their corresponding values.
-	 * @param generatedKeyColumn The primary key column to return, or null to fall
-	 *                           back to the driver's default generated-keys behavior.
-	 * @return                   The primary key of the newly inserted record.
-	 */
-	public static <PK> PK insert(DbContext context, Connection connection, String schemaName, String tableName, Map<String, ? extends Object> values, String generatedKeyColumn) {
+	public static <PK> PK insert(DbContext context, Connection connection, String schemaName, String tableName,
+			Map<String, ? extends Object> values, List<String> autoIncrementColumns) {
+		Objects.requireNonNull(autoIncrementColumns,
+				"autoIncrementColumns must not be null; pass an empty list for a table that has none");
 		SqlExpression insertSql = SqlStatementBuilder.buildInsert(context, schemaName, tableName, values);
-		String keyColumn = generatedKeyColumn != null
-				? generatedKeyColumn
-				: resolvePrimaryKeyColumn(connection, schemaName, tableName);
 		return execute(context, connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null,
-				keyColumn == null ? null : new String[] { keyColumn });
+				autoIncrementColumns.toArray(NO_GENERATED_KEYS));
 	}
-	
+
 	/**
-	 * Inserts a record without requesting a generated key.
+	 * Inserts a new record and reads back the key the database generated for it.
 	 *
-	 * <p>For tables that have no single generated key to read back, such as junction
-	 * tables with a composite primary key.</p>
+	 * @see #insert(DbContext, Connection, String, String, Map, List)
 	 */
-	static void insertWithoutGeneratedKeys(DbContext context, Connection connection, String schemaName, String tableName,
-			Map<String, ? extends Object> values) {
-		SqlExpression insertSql = SqlStatementBuilder.buildInsert(context, schemaName, tableName, values);
-		execute(context, connection, QueryType.INSERT, insertSql.getSql(), insertSql.getParameters(), null, NO_GENERATED_KEYS);
+	public static <PK> PK insert(Connection connection, String tableName, Map<String, ? extends Object> values,
+			List<String> autoIncrementColumns) {
+		return insert(DbContext.getDefault(), connection, null, tableName, values, autoIncrementColumns);
+	}
+
+	/**
+	 * Inserts a new record and reads back the key the database generated for it.
+	 *
+	 * @see #insert(DbContext, Connection, String, String, Map, List)
+	 */
+	public static <PK> PK insert(Connection connection, String schemaName, String tableName,
+			Map<String, ? extends Object> values, List<String> autoIncrementColumns) {
+		return insert(DbContext.getDefault(), connection, schemaName, tableName, values, autoIncrementColumns);
 	}
 
 	/**
@@ -677,7 +620,10 @@ public interface DB {
 	 * @param tableName  The name of the table where the record will be inserted.
 	 * @param values     A map containing the column names as keys and their corresponding values.
 	 * @return           The primary key of the newly inserted record.
+	 * @deprecated Use {@link #insert(Connection, String, Map, List)} and name the
+	 *             auto-increment columns; this overload reads the key by position.
 	 */
+	@Deprecated
 	public static <PK> PK insert(Connection connection, String tableName, Map<String, ? extends Object> values) {
 		return insert(DbContext.getDefault(), connection, null, tableName, values);
 	}
@@ -691,7 +637,10 @@ public interface DB {
 	 * @param tableName  The name of the table where the record will be inserted.
 	 * @param values     A map containing the column names as keys and their corresponding values.
 	 * @return           The primary key of the newly inserted record.
+	 * @deprecated Use {@link #insert(DbContext, Connection, String, String, Map, List)}
+	 *             and name the auto-increment columns.
 	 */
+	@Deprecated
 	public static <PK> PK insert(DbContext context, Connection connection, String tableName, Map<String, ? extends Object> values) {
 		return insert(context, connection, null, tableName, values);
 	}
@@ -1076,16 +1025,6 @@ public interface DB {
 						if (keysResult != null) {
 							try {
 								if (keysResult.next()) {
-									if (generatedKeyColumns == null && keysResult.getMetaData().getColumnCount() > 1) {
-										// The driver returned the whole inserted row (PostgreSQL does this for
-										// RETURN_GENERATED_KEYS) and no key column was named, so the key cannot
-										// be located by position. Report "no key" rather than an arbitrary
-										// column: a null id fails where it is used, a wrong id corrupts data.
-										// This is the same answer MySQL gives for a table with no generated key.
-										LOG.debug("[{}] no identifiable generated key: driver returned {} columns"
-											+ " and no key column was named", connId, keysResult.getMetaData().getColumnCount());
-										return null;
-									}
 									Object key = keysResult.getObject(1);
 									// MySQL returns BigInteger for auto-generated keys, normalize to Long
 									if (key instanceof Number) {

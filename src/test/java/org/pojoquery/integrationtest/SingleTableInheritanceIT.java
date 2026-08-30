@@ -284,7 +284,7 @@ public class SingleTableInheritanceIT {
 				"year", 2025,
 				"vehicle_type", "Car",
 				"numberOfDoors", 4
-			));
+			), List.of("id"));
 			
 			// Insert a Motorcycle with explicit discriminator
 			Long motoId = DB.insert(c, "vehicle", Map.of(
@@ -292,7 +292,7 @@ public class SingleTableInheritanceIT {
 				"year", 2025,
 				"vehicle_type", "Motorcycle",
 				"engineCC", 1200
-			));
+			), List.of("id"));
 
 			assertNotNull(carId);
 			

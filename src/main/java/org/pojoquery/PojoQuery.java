@@ -795,13 +795,8 @@ public class PojoQuery<T> {
 		}
 
 		@Override
-		public <PK> PK insert(String table, String schema, Map<String, Object> values) {
-			return DB.insert(context, connection, schema, table, values);
-		}
-
-		@Override
-		public <PK> PK insert(String table, String schema, Map<String, Object> values, String generatedKeyColumn) {
-			return DB.insert(context, connection, schema, table, values, generatedKeyColumn);
+		public <PK> PK insert(String table, String schema, Map<String, Object> values, List<String> autoIncrementColumns) {
+			return DB.insert(context, connection, schema, table, values, autoIncrementColumns);
 		}
 
 		@Override
@@ -837,7 +832,7 @@ public class PojoQuery<T> {
 				values.put(ownerFkColumn, ownerId);
 				values.put(targetFkColumn, targetId);
 				// A junction table has a composite key and no generated key to read back.
-				DB.insertWithoutGeneratedKeys(context, connection, schema, table, values);
+				DB.insert(context, connection, schema, table, values, List.of());
 			}
 		}
 	}

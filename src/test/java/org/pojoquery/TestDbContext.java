@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.pojoquery.TestUtils.norm;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -159,7 +160,7 @@ public class TestDbContext {
 			Map<String, Object> values = new HashMap<>();
 			values.put("name", "Low Level Product");
 			values.put("price", 200);
-			Long id = DB.insert(hsqldbContext, c, "product", values);
+			Long id = DB.insert(hsqldbContext, c, null, "product", values, List.of("id"));
 			
 			assertNotNull(id, "Insert should return generated ID");
 		});
@@ -176,7 +177,7 @@ public class TestDbContext {
 			Map<String, Object> values = new HashMap<>();
 			values.put("name", "Original");
 			values.put("price", 100);
-			Long id = DB.insert(hsqldbContext, c, "product", values);
+			Long id = DB.insert(hsqldbContext, c, null, "product", values, List.of("id"));
 			
 			// Update with explicit context
 			Map<String, Object> updateValues = new HashMap<>();

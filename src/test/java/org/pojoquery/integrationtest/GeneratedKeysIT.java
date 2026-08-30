@@ -23,6 +23,10 @@ import org.pojoquery.schema.SchemaGenerator;
  * inserted row back and cannot locate the key by position. Since
  * {@code SchemaGenerator} emits the id column <em>last</em>, position 1 is never the key
  * there — which is why these tests deliberately put other columns in front of the id.</p>
+ *
+ * <p>Naming the auto-increment columns is what makes it work, so these tests use the
+ * overloads that take them. The deprecated overloads that do not are what
+ * {@link #testDeprecatedInsertStillInsertsTheRow()} covers.</p>
  */
 public class GeneratedKeysIT {
 
@@ -56,7 +60,7 @@ public class GeneratedKeysIT {
 		DB.withConnection(db, (Connection c) -> {
 			// 4242 is a value a positional read could plausibly return as if it were the
 			// key, which is exactly the failure this guards against.
-			Long key = DB.insert(c, "gk_widget", Map.of("label", "first", "quantity", 4242));
+			Long key = DB.insert(c, "gk_widget", Map.of("label", "first", "quantity", 4242), List.of("id"));
 
 			Assertions.assertNotNull(key, "insert should return the generated key");
 
@@ -78,8 +82,8 @@ public class GeneratedKeysIT {
 		DataSource db = initDatabase();
 
 		DB.withConnection(db, (Connection c) -> {
-			Long first = DB.insert(c, "gk_widget", Map.of("label", "a", "quantity", 7));
-			Long second = DB.insert(c, "gk_widget", Map.of("label", "b", "quantity", 7));
+			Long first = DB.insert(c, "gk_widget", Map.of("label", "a", "quantity", 7), List.of("id"));
+			Long second = DB.insert(c, "gk_widget", Map.of("label", "b", "quantity", 7), List.of("id"));
 
 			Assertions.assertNotNull(first);
 			Assertions.assertNotNull(second);
@@ -101,9 +105,9 @@ public class GeneratedKeysIT {
 		DataSource db = initDatabase();
 
 		DB.withConnection(db, (Connection c) -> {
-			Object key = DB.insert(c, "gk_pair", Map.of("left_id", 1L, "right_id", 2L));
+			Object key = DB.insert(c, "gk_pair", Map.of("left_id", 1L, "right_id", 2L), List.of());
 
-			Assertions.assertNull(key, "a composite-key table has no single generated key to report");
+			Assertions.assertNull(key, "a composite-key table has no generated key to report");
 
 			Assertions.assertEquals(1, PojoQuery.build(Pair.class).execute(c).size(),
 					"the row should still have been inserted");
@@ -131,11 +135,29 @@ public class GeneratedKeysIT {
 		});
 	}
 
+	/**
+	 * The deprecated overload keeps its old behaviour: it reads the key by position,
+	 * which is the real key on HSQLDB and MySQL and the table's first column on
+	 * PostgreSQL. Only the insert itself is worth asserting across dialects - that
+	 * the returned value cannot be trusted is why the overload is deprecated.
+	 */
+	@Test
+	@SuppressWarnings("deprecation")
+	public void testDeprecatedInsertStillInsertsTheRow() {
+		DataSource db = initDatabase();
+
+		DB.withConnection(db, (Connection c) -> {
+			DB.insert(c, "gk_widget", Map.of("label", "legacy", "quantity", 1));
+
+			List<Widget> all = PojoQuery.build(Widget.class).execute(c);
+			Assertions.assertEquals(1, all.size());
+			Assertions.assertEquals("legacy", all.get(0).label);
+			return null;
+		});
+	}
+
 	private DataSource initDatabase() {
 		DataSource db = TestDatabaseProvider.getDataSource();
-		// Tables are recreated per test, so drop any primary key resolved for a previous
-		// incarnation of these table names.
-		DB.clearPrimaryKeyCache();
 		SchemaGenerator.createTables(db, Widget.class, Pair.class);
 		return db;
 	}
