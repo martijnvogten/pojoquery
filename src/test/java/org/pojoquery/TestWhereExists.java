@@ -99,7 +99,7 @@ public class TestWhereExists {
 				.toStatement();
 
 		// The sub-query must not drag in the permissions or devices joins.
-		String subquery = stmt.getSql().substring(stmt.getSql().indexOf("IN (SELECT"));
+		String subquery = stmt.getSql().substring(stmt.getSql().indexOf("IN ("));
 		assertFalse(subquery.contains("role_permission"), subquery);
 		assertFalse(subquery.contains("`device`"), subquery);
 	}
@@ -155,7 +155,7 @@ public class TestWhereExists {
 				.whereExists("{roles.rolename} = ? AND {devices.name} = ?", "admin", "laptop")
 				.toStatement();
 
-		String subquery = norm(stmt.getSql().substring(stmt.getSql().indexOf("IN (SELECT")));
+		String subquery = norm(stmt.getSql().substring(stmt.getSql().indexOf("IN (")));
 		assertTrue(subquery.contains(norm(
 				"LEFT JOIN `role` AS `roles` ON `roles.user_role`.`role_id` = `roles`.`id`")), subquery);
 		assertTrue(subquery.contains(norm(
@@ -170,7 +170,7 @@ public class TestWhereExists {
 				.whereExists("{books.publisher.name} = ?", "Acme")
 				.toStatement();
 
-		String subquery = norm(stmt.getSql().substring(stmt.getSql().indexOf("IN (SELECT")));
+		String subquery = norm(stmt.getSql().substring(stmt.getSql().indexOf("IN (")));
 		assertTrue(subquery.contains(norm(
 				"LEFT JOIN `book` AS `books` ON `books`.`author_id` = `author`.`id`")), subquery);
 		assertTrue(subquery.contains(norm(

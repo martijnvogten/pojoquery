@@ -158,9 +158,9 @@ public class PostgresDbContext implements DbContext {
                     property.value())));
         }
         return SqlExpression.implode("", List.of(
-                SqlExpression.sql("JSONB_BUILD_OBJECT(\n  "),
-                SqlExpression.implode(",\n  ", parts),
-                SqlExpression.sql("\n )")));
+                SqlExpression.sql("JSONB_BUILD_OBJECT(\n"),
+                SqlExpression.implode(",\n", parts),
+                SqlExpression.sql("\n)")));
     }
 
     /**
@@ -204,17 +204,17 @@ public class PostgresDbContext implements DbContext {
     @Override
     public SqlExpression jsonArray(List<SqlExpression> elements) {
         return SqlExpression.implode("", List.of(
-                SqlExpression.sql("JSONB_BUILD_ARRAY(\n  "),
-                SqlExpression.implode(",\n  ", elements),
-                SqlExpression.sql("\n )")));
+                SqlExpression.sql("JSONB_BUILD_ARRAY(\n"),
+                SqlExpression.implode(",\n", elements),
+                SqlExpression.sql("\n)")));
     }
 
     @Override
     public SqlExpression jsonArrayAgg(SqlExpression element) {
         return SqlExpression.implode("", List.of(
-                SqlExpression.sql("JSONB_AGG(\n  "),
+                SqlExpression.sql("JSONB_AGG(\n"),
                 element,
-                SqlExpression.sql("\n )")));
+                SqlExpression.sql("\n)")));
     }
 
     @Override

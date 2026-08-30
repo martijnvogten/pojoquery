@@ -10,6 +10,7 @@ import org.pojoquery.SqlExpression;
 import org.pojoquery.pipeline.AbstractQueryTree.TableInfo;
 import org.pojoquery.pipeline.SqlQuery.JoinType;
 import org.pojoquery.pipeline.querytree.transforms.ExpressionResolver;
+import org.pojoquery.util.SqlIndenter;
 import org.pojoquery.util.Strings;
 
 /**
@@ -255,8 +256,8 @@ public class JsonSqlQuery {
 		if (!withClauses.isEmpty()) {
 			parts.add(SqlQuery.buildWithPreamble(dbContext, withClauses));
 		}
-		parts.add(SqlExpression.sql("SELECT\n "));
-		parts.add(SqlExpression.implode(",\n ", selectParts));
+		parts.add(SqlExpression.sql("SELECT\n"));
+		parts.add(SqlExpression.implode(",\n", selectParts));
 		if (tableSubQuery != null) {
 			parts.add(SqlExpression.sql("\nFROM (\n"));
 			parts.add(tableSubQuery);
@@ -282,14 +283,14 @@ public class JsonSqlQuery {
 
 		if (!wheres.isEmpty()) {
 			parts.add(SqlExpression.sql("\nWHERE "));
-			parts.add(SqlExpression.implode("\n AND ", wheres.stream().map(this::resolveThisAlias).toList()));
+			parts.add(SqlExpression.implode("\nAND ", wheres.stream().map(this::resolveThisAlias).toList()));
 		}
 		if (!groupBy.isEmpty()) {
 			parts.add(SqlExpression.sql("\nGROUP BY " + Strings.implode(", ", resolveThisAlias(groupBy))));
 		}
 		if (!havings.isEmpty()) {
 			parts.add(SqlExpression.sql("\nHAVING "));
-			parts.add(SqlExpression.implode("\n AND ", havings.stream().map(this::resolveThisAlias).toList()));
+			parts.add(SqlExpression.implode("\nAND ", havings.stream().map(this::resolveThisAlias).toList()));
 		}
 		if (!orderBy.isEmpty()) {
 			parts.add(SqlExpression.sql("\nORDER BY " + Strings.implode(", ", resolveThisAlias(orderBy))));
@@ -303,7 +304,8 @@ public class JsonSqlQuery {
 		// Field-name markers first, then quoting: joins and clauses may address a
 		// column by its Java field name here, just as they may in a flat query.
 		String resolved = SqlQuery.resolveFieldAliases(statement.getSql(), columnMarkers);
-		return new SqlExpression(SqlQuery.quoteMarkers(dbContext, resolved), statement.getParameters());
+		String quoted = SqlQuery.quoteMarkers(dbContext, resolved);
+		return new SqlExpression(SqlIndenter.indent(quoted), statement.getParameters());
 	}
 
 	/**
