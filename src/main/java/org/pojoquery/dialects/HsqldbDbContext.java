@@ -183,9 +183,9 @@ public class HsqldbDbContext implements DbContext {
                     property.value())));
         }
         return SqlExpression.implode("", List.of(
-                SqlExpression.sql("JSON_OBJECT(\n  "),
-                SqlExpression.implode(",\n  ", parts),
-                SqlExpression.sql((absentOnNull ? "\n  ABSENT ON NULL" : "") + "\n )")));
+                SqlExpression.sql("JSON_OBJECT(\n"),
+                SqlExpression.implode(",\n", parts),
+                SqlExpression.sql((absentOnNull ? "\nABSENT ON NULL" : "") + "\n)")));
     }
 
     /**
@@ -197,9 +197,9 @@ public class HsqldbDbContext implements DbContext {
     @Override
     public SqlExpression jsonArray(List<SqlExpression> elements) {
         return SqlExpression.implode("", List.of(
-                SqlExpression.sql("JSON_ARRAY(\n  "),
-                SqlExpression.implode(",\n  ", elements),
-                SqlExpression.sql("\n  NULL ON NULL\n )")));
+                SqlExpression.sql("JSON_ARRAY(\n"),
+                SqlExpression.implode(",\n", elements),
+                SqlExpression.sql("\nNULL ON NULL\n)")));
     }
 
     /** A length-less {@code VARCHAR} cast is accepted and never truncates. */

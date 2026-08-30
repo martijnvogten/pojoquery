@@ -612,7 +612,7 @@ public class TestJsonQueries {
 		String exists = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), User.class)
 				.whereExists("{roles.rolename} = ?", "admin")
 				.toJsonSql();
-		assertEquals(true, exists.contains(" IN (SELECT"));
+		assertEquals(true, norm(exists).contains("IN (SELECT"));
 	}
 
 	// ========== Array shape ==========
@@ -1004,6 +1004,51 @@ public class TestJsonQueries {
 				) AS "employeeStats" ON TRUE
 				"""), norm(sql));
 	}
+
+	/**
+	 * The layout of the statement above, pinned exactly rather than through
+	 * {@link TestUtils#norm}: this is the deepest nesting the generator produces
+	 * - a JSON object inside an array aggregate inside a lateral join over a
+	 * derived table - and indentation is what makes it readable. Every other SQL
+	 * assertion here compares whitespace-insensitively, so without this one a
+	 * regression in {@link org.pojoquery.util.SqlIndenter} would pass unnoticed.
+	 */
+	@Test
+	public void testNestedStatementIsIndentedByNesting() {
+		String sql = PojoQuery.build(DbContext.forDialect(Dialect.HSQLDB), DepartmentWithEmployeeStats.class)
+				.toJsonSql();
+		assertEquals("""
+				SELECT
+				  JSON_OBJECT(
+				    'id': "department"."id",
+				    'name': "department"."name",
+				    'employeeStats': COALESCE("employeeStats"."json", JSON_ARRAY()) FORMAT JSON
+				  ) AS "json"
+				FROM "department" AS "department"
+				LEFT JOIN LATERAL (
+				  SELECT
+				    JSON_ARRAYAGG(
+				      JSON_OBJECT(
+				        'id': "employeeStats"."id",
+				        'departmentId': "employeeStats"."departmentId",
+				        'totalSales': "employeeStats"."totalSales"
+				      )
+				    ) AS "json"
+				  FROM (
+				    SELECT
+				      "employee"."id" AS "id",
+				      "department"."id" AS "departmentId",
+				      SUM("sales"."amount") AS "totalSales"
+				    FROM "employee" AS "employee"
+				    LEFT JOIN "department" AS "department" ON "employee"."department_id" = "department"."id"
+				    LEFT JOIN "sale" AS "sales" ON "sales"."employee_id" = "employee"."id"
+				    GROUP BY "employee"."id", "department"."id"
+				  ) AS "employeeStats"
+				  WHERE "department"."id" = "employeeStats"."departmentId"
+				  HAVING COUNT(*) > 0
+				) AS "employeeStats" ON TRUE""", sql);
+	}
+
 
 	/**
 	 * The grouped fallback cannot express this shape, so it says so rather than

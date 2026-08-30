@@ -391,9 +391,9 @@ public interface DbContext {
 					property.value())));
 		}
 		return SqlExpression.implode("", List.of(
-				SqlExpression.sql("JSON_OBJECT(\n  "),
-				SqlExpression.implode(",\n  ", parts),
-				SqlExpression.sql("\n )")));
+				SqlExpression.sql("JSON_OBJECT(\n"),
+				SqlExpression.implode(",\n", parts),
+				SqlExpression.sql("\n)")));
 	}
 
 	/**
@@ -426,11 +426,11 @@ public interface DbContext {
 		}
 		caseParts.add(SqlExpression.sql(" ELSE JSON_OBJECT() END"));
 		return SqlExpression.implode("", List.of(
-				SqlExpression.sql("JSON_MERGE_PATCH(\n "),
+				SqlExpression.sql("JSON_MERGE_PATCH(\n"),
 				jsonObject(baseProperties),
-				SqlExpression.sql(",\n "),
+				SqlExpression.sql(",\n"),
 				SqlExpression.implode("", caseParts),
-				SqlExpression.sql("\n )")));
+				SqlExpression.sql("\n)")));
 	}
 
 	/**
@@ -444,9 +444,9 @@ public interface DbContext {
 	 */
 	default SqlExpression jsonArrayAgg(SqlExpression element) {
 		return SqlExpression.implode("", List.of(
-				SqlExpression.sql("JSON_ARRAYAGG(\n  "),
+				SqlExpression.sql("JSON_ARRAYAGG(\n"),
 				element,
-				SqlExpression.sql("\n )")));
+				SqlExpression.sql("\n)")));
 	}
 
 	/**
@@ -462,9 +462,9 @@ public interface DbContext {
 	 */
 	default SqlExpression jsonArray(List<SqlExpression> elements) {
 		return SqlExpression.implode("", List.of(
-				SqlExpression.sql("JSON_ARRAY(\n  "),
-				SqlExpression.implode(",\n  ", elements),
-				SqlExpression.sql("\n )")));
+				SqlExpression.sql("JSON_ARRAY(\n"),
+				SqlExpression.implode(",\n", elements),
+				SqlExpression.sql("\n)")));
 	}
 
 	/**

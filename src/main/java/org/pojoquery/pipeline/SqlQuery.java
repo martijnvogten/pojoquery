@@ -17,6 +17,7 @@ import org.pojoquery.SqlExpression;
 import org.pojoquery.pipeline.querytree.transforms.ExpressionResolver;
 import org.pojoquery.util.CurlyMarkers;
 import org.pojoquery.util.Iterables;
+import org.pojoquery.util.SqlIndenter;
 
 @SuppressWarnings("unchecked")
 public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer.PlainQueryBuilder {
@@ -226,7 +227,7 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 		SqlExpression subStatement = sub.toStatement();
 
 		String left = markers.size() == 1 ? markers.get(0) : "(" + String.join(", ", markers) + ")";
-		String sql = left + (negate ? " NOT IN (" : " IN (") + subStatement.getSql() + ")";
+		String sql = left + (negate ? " NOT IN (\n" : " IN (\n") + subStatement.getSql() + "\n)";
 		wheres.add(new SqlExpression(sql, subStatement.getParameters()));
 		return (SQ)this;
 	}
@@ -248,7 +249,7 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 
 	public SqlExpression toListIdsStatement(SqlExpression idFieldExpression) {
 		SqlExpression resolved = new SqlExpression(quoteObjectNames(resolveExpression(idFieldExpression.getSql(), table)), idFieldExpression.getParameters());
-		return toStatement(new SqlExpression("SELECT\n DISTINCT " + resolved.getSql()), schema, table, joins, wheres, groupBy, orderBy, offset, rowCount);
+		return toStatement(new SqlExpression("SELECT DISTINCT\n" + resolved.getSql()), schema, table, joins, wheres, groupBy, orderBy, offset, rowCount);
 	}
 
 	public SqlExpression toCountStatement(SqlExpression idFieldExpression) {
@@ -280,8 +281,8 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 				fieldExpressions.add(new SqlExpression(sql, field.expression.getParameters()));
 			}
 		}
-		SqlExpression fieldsExp = SqlExpression.implode(",\n ", fieldExpressions);
-		return toStatement(new SqlExpression("SELECT\n " + fieldsExp.getSql(), fieldsExp.getParameters()), schema, table, joins, wheres, groupBy, orderBy, offset, rowCount);
+		SqlExpression fieldsExp = SqlExpression.implode(",\n", fieldExpressions);
+		return toStatement(new SqlExpression("SELECT\n" + fieldsExp.getSql(), fieldsExp.getParameters()), schema, table, joins, wheres, groupBy, orderBy, offset, rowCount);
 	}
 
 	private String resolveExpression(String exp, String thisAlias) {
@@ -360,7 +361,7 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 			List<Object> joinParams = new ArrayList<>();
 			if (j.isSubquery()) {
 				// Derived table join: LEFT JOIN (SELECT ...) AS alias ON ...
-				sql = j.joinType.name() + " JOIN (" + j.subquery.getSql() + ") AS " + dbContext.quoteAlias(j.alias);
+				sql = j.joinType.name() + " JOIN (\n" + j.subquery.getSql() + "\n) AS " + dbContext.quoteAlias(j.alias);
 				Iterables.addAll(joinParams, j.subquery.getParameters());
 			} else {
 				sql = j.joinType.name() + " JOIN " + DB.prefixAndQuoteTableName(dbContext, j.schema, j.table) + " AS " + dbContext.quoteAlias(j.alias);
@@ -373,7 +374,7 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 			SqlExpression expr = new SqlExpression(quoteObjectNames(sql), joinParams);
 			joinExpressions.add(expr);
 		}
-		SqlExpression joinsClause = SqlExpression.implode("\n ", joinExpressions);
+		SqlExpression joinsClause = SqlExpression.implode("\n", joinExpressions);
 		
 		Iterables.addAll(params, joinsClause.getParameters());
 
@@ -388,7 +389,7 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 					limitClause
 				));
 
-		return new SqlExpression(sql, params);
+		return new SqlExpression(SqlIndenter.indent(sql), params);
 	}
 
 	private SqlExpression buildWithPreamble() {
@@ -418,10 +419,10 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 				}
 				header += " (" + implode(", ", quoted) + ")";
 			}
-			parts.add(header + " AS (" + w.body.getSql() + ")");
+			parts.add(header + " AS (\n" + w.body.getSql() + "\n)");
 			Iterables.addAll(params, w.body.getParameters());
 		}
-		String sql = "WITH " + (anyRecursive ? "RECURSIVE " : "") + implode(",\n ", parts) + "\n";
+		String sql = "WITH " + (anyRecursive ? "RECURSIVE " : "") + implode(",\n", parts) + "\n";
 		return new SqlExpression(sql, params);
 	}
 
@@ -452,7 +453,7 @@ public abstract class SqlQuery<SQ extends SqlQuery<?>> implements AQTTransformer
 					parameters.add(o);
 				}
 			}
-			whereClause = "\nWHERE " + implode("\n AND ", clauses);
+			whereClause = "\nWHERE " + implode("\nAND ", clauses);
 		}
 		return new SqlExpression(whereClause, parameters);
 	}

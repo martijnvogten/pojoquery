@@ -140,7 +140,7 @@ public final class RecursionCteBuilder {
 		}
 
 		return new WithClause(cteAlias, CTE_COLUMNS,
-				SqlExpression.implode("\n   UNION ALL\n   ", List.of(anchor.toStatement(), step.toStatement())), true);
+				SqlExpression.implode("\nUNION ALL\n", List.of(anchor.toStatement(), step.toStatement())), true);
 	}
 
 	/**
