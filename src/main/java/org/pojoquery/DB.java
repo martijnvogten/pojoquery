@@ -614,22 +614,27 @@ public interface DB {
 
 	/**
 	 * Inserts a new record into the specified table using a connection.
+	 * Note that this method does not allow specifying auto-increment columns explicitly.
+	 * Instead, the return value depends on the database driver used:
+	 * - for postgresql this returns the first column of the inserted row.
+	 * - for mysql this returns the generated auto-increment value.
 	 *
 	 * @param <PK>       The type of the primary key that will be returned.
 	 * @param connection The database connection.
 	 * @param tableName  The name of the table where the record will be inserted.
 	 * @param values     A map containing the column names as keys and their corresponding values.
-	 * @return           The primary key of the newly inserted record.
-	 * @deprecated Use {@link #insert(Connection, String, Map, List)} and name the
-	 *             auto-increment columns; this overload reads the key by position.
+	 * @return           The primary key of the newly inserted record, or the first column of the inserted row
 	 */
-	@Deprecated
 	public static <PK> PK insert(Connection connection, String tableName, Map<String, ? extends Object> values) {
 		return insert(DbContext.getDefault(), connection, null, tableName, values);
 	}
 
 	/**
 	 * Inserts a new record into the specified table using a connection with explicit DbContext.
+	 * Note that this method does not allow specifying auto-increment columns explicitly.
+	 * Instead, the return value depends on the database driver used:
+	 * - for postgresql this returns the first column of the inserted row.
+	 * - for mysql this returns the generated auto-increment value.
 	 *
 	 * @param <PK>       The type of the primary key that will be returned.
 	 * @param context    The database context.
@@ -637,10 +642,7 @@ public interface DB {
 	 * @param tableName  The name of the table where the record will be inserted.
 	 * @param values     A map containing the column names as keys and their corresponding values.
 	 * @return           The primary key of the newly inserted record.
-	 * @deprecated Use {@link #insert(DbContext, Connection, String, String, Map, List)}
-	 *             and name the auto-increment columns.
 	 */
-	@Deprecated
 	public static <PK> PK insert(DbContext context, Connection connection, String tableName, Map<String, ? extends Object> values) {
 		return insert(context, connection, null, tableName, values);
 	}
